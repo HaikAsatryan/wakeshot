@@ -2437,3 +2437,42 @@ Card `p2-core-lid`, section "Power review fixes (2026-11-03)". Pure core code; n
   step back", survived the first run and is killed by a test added for it.
 - **The 5 s lock check rests on one reading, not verified beyond it:** in the lid spike the session read locked 1 s
   after `LockWorkStation` ("Lock" above). How long `WTS_SESSION_LOCK` takes on a slow or busy PC: not verified.
+
+## Folder watch checks
+
+Checked 2026-11-04 for card `docs/tasks/p4-watch-folders.md`, by the tests in `watch::dir::tests` (Windows 11 Pro
+10.0.26300, NTFS, folders in `%TEMP%`; test runner elevated, High) unless a line names another source. No check here
+depends on elevation (the Medium case is in "Reading elevated Claude Code sessions").
+
+- **Microsoft docs, read 2026-11-04** (`ReadDirectoryChangesW`, "Synchronization and Overlapped Input and Output"):
+  the system keeps a buffer per directory handle from the first call, so changes between two calls come with the
+  next one; an overflow gives a zero-byte result or `ERROR_NOTIFY_ENUM_DIR`, and the caller should list the folder;
+  the buffer must be DWORD aligned; over the network a buffer above 64 KB fails with `ERROR_INVALID_PARAMETER`; the
+  folder's own changes are not reported; a name can come back in its short (8.3) form when the writer opened the file
+  by it. Each `OVERLAPPED` of several reads waited on together needs its own manual-reset event; with an auto-reset
+  one, a waiting `GetOverlappedResult` can block for good.
+- **Latency.** A create, an append, a delete and a rename into place came back in 0.3 to 2.6 ms (`latency` lines of
+  the test output, one run, several tests at once); a file one level down in a subtree watch in 0.7 to 1 ms.
+- **Names.** A rename into place gives the temp name and the final name. A subtree watch gives `sess-1` (the new
+  folder) and `sess-1\events.jsonl`; a one-level watch never gave the deeper name. An Armenian, a Russian and an
+  unpaired-surrogate name came back exactly (`names_come_back_as_given`).
+- **Overflow.** 5,000 new files (written in about 0.8 s) against a 4 KB buffer: the first read gave 1 name, the next
+  an overflow, so `Rescan`; the watch went on after it (`a_burst_that_overflows_the_buffer_gives_rescan`).
+- **The watched folder deleted.** After `DeleteFileW` of its file and `RemoveDirectoryW` of the folder, both `Ok`
+  while the watch held it, the queued read ended with `ERROR_ACCESS_DENIED` (`0x80070005`). The same name could be
+  made again at once, even before the watch closed its handle, and `RemoveDirectoryW` of the parent right after the
+  watched folder worked too: on this build a deleted folder leaves its name at once (POSIX-style delete; which Windows
+  build made that the default for `RemoveDirectoryW`: not verified).
+- **Renames.** With a subtree watch open, a file rename and delete, a subfolder rename and delete, and a rename of the
+  watched folder itself and back all worked. A rename of the folder above a watched one failed with 5 (Access
+  denied). A probe with an ordinary open file instead (`.NET File.Open` with read, write and delete sharing, two
+  levels down, pwsh) failed the same way and worked once the file was closed: Windows blocks renaming a folder that
+  holds any open handle below it, whatever the sharing. Deleting that folder with `remove_dir_all` worked.
+- **A read belongs to its thread.** A read queued by a thread that then ended completed with
+  `ERROR_OPERATION_ABORTED` (the watch reports `Rescan` and queues a new one;
+  `a_read_cancelled_by_its_thread_ending_gives_rescan_and_goes_on`).
+- **A path that is a file.** `CreateFileW` with `FILE_FLAG_BACKUP_SEMANTICS` opens it; `ReadDirectoryChangesW` then
+  fails with `ERROR_INVALID_PARAMETER` (`0x80070057`).
+- **No handle leak.** 1,000 cycles of add and remove (each with a missing folder too; every 10th with a completed
+  read nobody took, every 20th with one taken and queued again), in a child test process of its own: 122 handles
+  before and after (`GetProcessHandleCount`).

@@ -110,14 +110,14 @@ Notes 7, 8 and 9 apply after v1: Codex and Copilot moved there (Haik, 2026-11-03
 | `p4-claude-status` | no | contracts card | done (21:37): 34 tests |
 | `p4-claude-live-shapes` | no; runs Claude Code test sessions (Haiku); agent-session lane | contracts card | done (18:47): 27 fixtures; resume and rule 3, 5 changes in the signals doc |
 | `p4-codex-source` | no | contracts card | later (after v1, Haik 2026-11-03) |
-| `p4-watch-folders` | no | contracts card | in progress |
+| `p4-watch-folders` | no | contracts card | done (00:26): 20 tests, no handle leak in 1,000 cycles |
 | `p4-watch-reads` | no | contracts card | done (21:12): 18 tests; `names` returns `io::Result` |
 | `p4-cli-args` | no | contracts card | ready |
 | `p4-claude-transcript` | no | `p4-claude-status`, `p4-cron`, `p4-claude-live-shapes` | done (22:35): 46 tests; no contract change |
 | `p4-copilot-source` | no | `p4-cron` | later (after v1, Haik 2026-11-03) |
 | `p4-watch-data` | no | `p4-hold-files`, `p4-watch-reads` | done (21:12): 19 tests |
 | `p4-watch-agents` | no | `p4-watch-reads` | done (22:43): 19 tests; API changes for `p4-watch-thread` in its Result |
-| `p4-watch-thread` | no | `p4-watch-folders`, `p4-watch-data`, `p4-watch-agents`, `p3-process` | ready |
+| `p4-watch-thread` | no | `p4-watch-folders`, `p4-watch-data`, `p4-watch-agents`, `p3-process` | in progress |
 | `p4-cli-run` | no | `p4-cli-args`, `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | ready |
 | `p4-cli-commands` | no; screen once (opens one file in the default app; global lane, review M6) | `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | in progress |
 | `p4-cli-restore` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09; nothing to add) | `p3-journal`, `p3-power-plan`, `p2-ownership-restore`, `p3-store`, `p3-process`, `p3-log` | in progress |
@@ -234,3 +234,4 @@ limit; Copilot waiting does not hold. The cards build these.
 - 2026-11-03 23:56: Claude parsing review done (`docs/reviews/p4-claude-parsing.md`): 1 blocker, 1 major, 8 minors; no `.key` open, no prompt text stored or logged. B1: a task stopped with `TaskStop` (or `KillShell`, `KillBash`) never closes, so VS Code and SDK sessions hold until the chat closes. M1 (known item 1, confirmed): a Monitor that times out holds until the session ends. Routing: B1, M1, m1, m2, m3, m4, m5, m7 and m8's third bullet to a Claude fix worker at the next free build slot (it reads `p4-claude-transcript`'s Log); m8's first two bullets to the running docs pass; m6 to `p4-live-claude` (its Log). Then the same review brief checks B1 and M1 only; that check gates `p4-live-claude`.
 - 2026-11-04 00:02: Claude fix worker running (`p4-claude-fixes`, Log in `p4-claude-transcript`): B1, M1, m1 to m5, m7, m8 rule 3.
 - 2026-11-04 00:06: `p4-watch-folders` and the `p4-cli-commands` + `p4-cli-restore` bundle running (the bundle holds the screen lane for its one file open).
+- 2026-11-04 00:26: `p4-watch-folders` done and committed; `p4-watch-thread` starts. Decided by the worker, for Haik's review: watches stay open all the time, so renaming a watched folder's parent (for example `~/.claude`) fails with Access denied while the tray runs; deleting still works. For the next docs pass: `architecture.md` section 5 "Folder changes" row still says several folders on one thread are not tested; this card tested it.
