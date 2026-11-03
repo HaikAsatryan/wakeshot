@@ -167,12 +167,12 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   user's own lid action for the new power source. Haik's battery sleep is now 4 h (set 20:41). Running at 21:24:
   `p2-core-lid`, `p4-claude-status`, `p4-cron`, `p3-stop-points` (laptop lane). Not pushed: 391 commits since
   `0f9960a`; push after a track passes its review.
-- Next (orchestrator): fill each free slot from every track. Ready now: `p2-ownership-props`, `p3-harness`,
-  `p4-watch-agents`, `p4-watch-folders`, the `p4-cli-args` + `p4-cli-run` and `p4-cli-commands` + `p4-cli-restore`
-  bundles, `p5-theme` + `p5-menu-paint`, `p5-icon-art`, `p5-text`, `p6-login-and-path` + `p6-update-schedule`; laptop
-  lane after `p3-stop-points`: `p6-velopack-facts`; then `p4-claude-transcript` (after status and cron), `p2-core-props`
-  (after lid). The power safety review starts when `p2-core-lid`, `p2-ownership-props` and `p3-stop-points` are done;
-  give it the open items logged in `02-core.md` and `03-windows-power.md` (the `Leftover` restore answer goes to its
-  fix round). The open doc items go to one docs pass. Power: the SYSTEM request (pwsh PID 12276, old scratchpad
-  `away-system-holder.ps1`, copied to this session's scratchpad) runs until about 00:15; start a new one before then
-  if work goes on.
+- 2026-11-03 22:18: more done and committed: `p2-core-lid` (settle 30 s, countdown rule), `p3-stop-points` (3142 real
+  cases, Haik's values same), `p4-claude-status`, `p4-cron`, `p6-velopack-facts`. Running: `p2-ownership-props`,
+  `p6-int-dispatch`, `p4-claude-transcript`, `p3-harness` (laptop lane). Two questions with Haik (asked 21:52): the
+  battery floor exception for a user whose own battery lid action is Do nothing, and when the closed-lid report shows.
+- Next (orchestrator): the continuation prompt of session `wakeshot-91` (its scratchpad, `continuation.md`) lists the
+  running cards and their files, the ready cards, both reviews and the open items. Ready now: `p2-core-props`,
+  `p4-watch-agents`, `p4-watch-folders`, `p6-int-window`, `p6-int-startup`, the CLI bundles, the tray cards,
+  `p6-login-and-path` + `p6-update-schedule`. The power safety review starts when `p2-ownership-props` is done. Power:
+  the SYSTEM request (pwsh PID 12276) runs until about 00:15; start a new one before then if work goes on.

@@ -207,7 +207,7 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
 - 2026-11-03: Haik signed off the five track plans with every default (18:09); `p1-close-contracts` wrote the answers
   into this file and the cards, added `Event::Updated` and `Notice::Updated`, gave the clang install an owner
   (`p6-velopack-dependency` step 0) and settled `velo::feed()` (verify review Minor 5).
-- 2026-11-03 22:16: `p6-velopack-facts` done and committed. For `p6-velopack-dependency`: its Result recommends`
+- 2026-11-03 22:16: `p6-velopack-facts` done and committed. For `p6-velopack-dependency`: its Result recommends
   `set_auto_apply_on_startup(false)` in `velo.rs` and a 10 s inner limit for the updated hook (Velopack gives 15 s).
   Open, for a docs pass: `architecture.md` section 6 still calls two now-checked facts unverified; this file's Updates
   part should say Velopack kills a tray that has not quit 60 s after `wait_exit_then_apply_updates`. Optional cleanup
