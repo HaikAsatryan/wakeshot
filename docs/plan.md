@@ -143,8 +143,13 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   18:52: `p3-store`, `p3-log`, `p3-process`, `p2-ownership-restore`.
 - 2026-11-03 19:15: Phase 1 pushed (CI green) and signed off by Haik (19:13). Wave 1 done and committed.
   `p6-int-skeleton` runs alone (it also runs the whole-workspace checks that close wave 1).
-- Next (orchestrator): the card tables in the phase files 02 to 06 and `06-integration.md` hold the build state from
-  now on. (1) `p6-int-skeleton` ends: commit; (2) wave 2, the core chain first (the integration critical path):
+- 2026-11-03 19:46: `p6-int-skeleton` done (19:28). Wave 2 (`p2-policy-holds`, `p2-policy-power`, `p2-present`,
+  `p4-hold-files`) started 19:29 and was stopped by Haik about 19:45, before any code; cards back to ready. A second
+  session (`wakeshot-9d`) is making Phases 2 to 6 lighter for Haik (merge small cards, fewer reviews, Codex and
+  Copilot after v1, lid-closed mode stays); it sends its merge plan before it edits cards or phase files. The
+  orchestrator starts no card until that plan is applied and Haik confirms the three decisions in its own chat.
+- Next (orchestrator), before the re-plan: the card tables in the phase files 02 to 06 and `06-integration.md` hold
+  the build state from now on. (1) `p6-int-skeleton` ends: commit; (2) wave 2, the core chain first (the integration critical path):
   `p2-policy-holds`, `p2-policy-power`, `p2-present`, `p4-hold-files`; then fill free slots from `p2-core-holds`,
   `p2-ownership-apply`, `p3-journal`, `p4-watch-reads`, and the rest in each track's order (laptop cards one at a
   time, at most four building cards at once); (3) push after each track phase passes review. Power: a SYSTEM request
