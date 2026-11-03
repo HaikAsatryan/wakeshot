@@ -3081,8 +3081,8 @@ table: `docs/research/claude-code-signals.md`, "Phase 4 end to end".
 
 ## Tray UX: chimes
 
-Card `docs/tasks/p5-sounds.md`, 2026-11-04. Part A: code and reads only, no sound played. Part B adds the loopback
-results to this section.
+Card `docs/tasks/p5-sounds.md`, 2026-11-04. Part A: code and reads only, no sound played. Part B (02:31 to 02:33):
+each chime played through `examples/ux_sounds.rs` with a loopback capture running, reads before and after.
 
 - **The "No Sounds" scheme's key name is `.None`** (read on this PC, 2026-11-04 before 01:54, registry reads only):
   `HKCU\AppEvents\Schemes` default value `.Default`; `Schemes\Names` holds `.Default` = `@mmres.dll,-800` and
@@ -3098,6 +3098,45 @@ results to this section.
 - **windows-rs 0.62.2** (read in the crate source): `PROPVARIANT` has no `Drop`, so each `IPropertyStore::GetValue`
   result needs `PropVariantClear` (the lid spike's name read never cleared it; spike only); `WAVEFORMATEX` is
   `repr(C, packed(1))`, so the mix format is read with `read_unaligned`.
+- **Shapes** (`sound/chime.rs`; each has 150 ms lead and 100 ms tail silence, raised-cosine fades): lid closed
+  1046.5 Hz 160 ms then 1568 Hz 340 ms, rising, -6 dBFS, 750 ms in all; going to sleep the same two notes falling
+  (170 ms, 380 ms), -9 dBFS, 800 ms; battery floor two 130 ms pulses on 659.25 Hz, 100 ms apart, -6 dBFS, 610 ms.
+- **Part B setup** (2026-11-04 02:31 to 02:33): session locked since 02:00:38 (screen off, then the lock), on AC, lid
+  open. The DELL's two endpoints read unplugged (state 8), so Speakers (Realtek) was the only active endpoint and the
+  default for all three roles (67.33%, not muted, System Sounds session 100%), scheme `.Default`. Harness
+  `ux_sounds` (debug build). Loopback: a scratch tool outside the repo, ported from the lid spike's listener, sample
+  by sample: -50 dBFS threshold, a sound ends after 300 ms of quiet, notes split at 40 ms of quiet, pitch from rising
+  zero crossings of channel 0 per 50 ms, times from each packet's QPC position. Logs stayed in the worker's
+  scratchpad.
+- **A chime plays and reaches loopback in a locked session.** Every one of the nine chimes below did. Agrees with
+  Phase 1 close 1 (the chime after the lock was heard).
+- **Per cue, seen in the Speakers' loopback** (three runs each: `play` alone, `--all`, `--wait` alone; "warm" is the
+  2nd or 3rd stream of one `--all` process):
+
+  | Cue | Stream running after the call | Call to first sound in loopback | Length (tone) | Peak, loopback (PCM) | Pitch seen |
+  |---|---|---|---|---|---|
+  | lid closed | 416, 369, 384 ms | 614, 567, 582 ms | 501, 502, 502 ms (500) | -0.2 dBFS (-6) | 1020 to 1060 Hz, then 1540 to 1600 Hz: rising |
+  | going to sleep | 382, 376 ms; warm 103 | 586, 577 ms; warm 303 | 546 ms three times (550) | -2.6 dBFS (-9) | 1560 to 1580 Hz, then 1020 to 1060 Hz: falling |
+  | battery floor | 374, 377 ms; warm 102 | 573, 575 ms; warm 298 | 361, 362, 362 ms (360) | -0.1 dBFS (-6) | two pulses of 131 to 132 ms, 660 to 663 Hz, the 2nd at +229 to 230 ms |
+
+  The first sound comes 46 to 54 ms after the stream runs plus the 150 ms lead silence, in every run. The sleep
+  chime reads 4 ms short: its 30 ms fade ends below the threshold.
+- **The slow stream start is paid once per process.** The first stream of each process ran 369 to 416 ms after the
+  call (research "Lid-close sound": 290 to 570 ms, almost all in `IAudioClient::Initialize`); the 2nd and 3rd of the
+  same process, 3 s apart, ran 102 to 103 ms after it, though each sound has its own thread and COM. Why, and how
+  long it stays fast: not verified.
+- **`play_and_wait` returns after the chime**: `Ok(Played)` 1135 ms (lid), 1177 ms (sleep) and 986 ms (floor) after
+  the call, each 52 to 55 ms after the tone's last sample in loopback, so about 1.8 s under the 3 s limit. It returns
+  once the engine has taken every frame, so only part of the 100 ms tail silence is still to play then (inference
+  from the code and these times).
+- **The endpoint path adds about 6 dB**: -6 dBFS chimes peak at -0.2 and -0.1 dBFS in loopback, the -9 dBFS one at
+  -2.6 (as "Lid-close sound": -6 to -0.4). So the two -6 dBFS chimes sit within 0.2 dB of full scale there, and a
+  louder chime would gain little. Whether a limiter or the Dolby effect caps it: not verified.
+- **Not run live in Part B**: the display-audio branch of the device rule (no DELL endpoint was active; Phase 1
+  close 2 ran the same rule live) and the "No Sounds" skip (Haik's scheme stays `.Default`; unit test only).
+- **Reads before (02:31:21) and after (02:33:40) were equal**: scheme, default per role, all 14 playback endpoints
+  with state and form factor, Speakers master and channel volumes and mute, System Sounds session level and mute; 20
+  lines, compared line by line. Nothing was written.
 
 ## Hook checks
 

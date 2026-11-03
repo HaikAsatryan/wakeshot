@@ -1,6 +1,6 @@
 # Make the three chimes and the player that plays them
 
-Phase: 5. Status: blocked: waiting for the sound slot (Part A done). Needs Haik: his ears in `p5-haik-check`. "Do the chimes honor the Windows No sounds
+Phase: 5. Status: done. Needs Haik: his ears in `p5-haik-check`. "Do the chimes honor the Windows No sounds
 scheme?" (`p5-plan-tray-ux`, Questions) is answered: yes, the default (Haik 2026-11-03 18:09). Agent:
 `wakeshot-worker`. Size: about 120K tokens.
 Real laptop: **sound** in Part B (one screen or sound card at a time, across all tracks). Build folder:
@@ -141,10 +141,32 @@ Problems seen but not fixed.
   wakeshot-windows --example ux_sounds`); port the spike's `Listener` (`spikes/lid-sleep/src/sound.rs`, `listen`,
   `Segments`) into a scratch tool in the scratchpad, outside the repo, as the card says; the player's log line gives
   "stream running N ms after the call" per cue, and the example prints the picked endpoint's name and form factor.
+- 2026-11-04 02:26, worker: Part B started. Session is locked (since 02:00:38); first check is whether one cue reaches
+  a loopback capture while locked.
+- 2026-11-04 02:31, worker: scratch tool `p5-loopback` (reads and a loopback listener, ported from the spike) built
+  in `<scratchpad>\p5-sounds\loopback`. Reads before saved (`reads-before.txt`): AC, Speakers (Realtek) the only
+  active endpoint and the default for all three roles, 67.33%, not muted, System Sounds session 100%, scheme
+  `.Default`; both DELL endpoints unplugged (state 8). Lock check: the lid chime reached the Speakers' loopback while
+  locked (501 ms, peak -0.2 dBFS). So Part B goes on.
+- 2026-11-04 02:33, worker: step 7 done, 02:31:38 to 02:33:15, all in the locked session: each cue alone with `play`,
+  `--all`, and each cue alone with `--wait`; every chime in loopback on the Speakers at full length, `--wait` returned
+  `Ok(Played)` 52 to 55 ms after the tone ended in loopback (986 to 1177 ms after the call). Step 8: reads after
+  (02:33:40) equal the reads before, all 20 setting lines; every listener PID exited by itself. No bug found, no code
+  change. Next: research section, then the checks.
+- 2026-11-04 02:35, worker: research section "Tray UX: chimes" extended with the Part B facts. `rustfmt --edition
+  2024 --check` on the five owned files: clean. `cargo test --locked -p wakeshot-windows sound` does not compile, in
+  a file another card owns: `crates/wakeshot-windows/src/app/startup.rs` lines 217, 349, 850 lack the new
+  `Startup::unread` and `Event::...journal_unread` fields of the core round B card's half-done change. Not touched;
+  waiting and retrying.
+- 2026-11-04 02:38, worker: retry at 02:38:25 compiles (the other card's edit is done): 18 passed, 0 failed. Clippy
+  and release builds for both targets running.
+- 2026-11-04 02:40, worker: clippy with `-D warnings` (with and without `--all-targets`) and release builds, both
+  targets: all clean (02:38:51 to 02:39:30). Build folder deleted and checked gone (with its empty parent). Scratch
+  tool and logs kept in `<scratchpad>\p5-sounds`, outside the repo. Card done.
 
 ## Result
 
-Part A: done 2026-11-04 01:59. Part B: waiting for the sound slot.
+Part A: done 2026-11-04 01:59. Part B: done 2026-11-04 02:40.
 
 ### Part A
 
@@ -228,3 +250,62 @@ Decided by the worker, for Haik's review:
 9. The default device is the console role, the one Windows plays system sounds on (as the spike).
 
 Open items: Part B (loopback per cue, reads before and after, the `--wait` check, Part B facts in research).
+
+### Part B
+
+What was done (2026-11-04 02:26 to 02:40, session locked since 02:00:38, on AC, lid open):
+
+- Reads before (02:31:21), reads only: scheme `.Default`; Speakers (Realtek) the only active endpoint and the default
+  for console, multimedia and communications, form factor 1, 67.33%, not muted, System Sounds session 100%; the
+  DELL's two endpoints unplugged (state 8). Nothing written.
+- A scratch loopback tool, ported from the lid spike's listener and reads (`<scratchpad>\p5-sounds\loopback`,
+  outside the repo; no loopback code in `sound.rs`), ran on every active endpoint while `ux_sounds` played. First
+  check: audio reaches loopback in a locked session (it does).
+- Nine chimes, all in the Speakers' loopback at full length, all picked as "the default device":
+
+  | Cue | Stream running after the call | Call to sound in loopback | Length (tone) | Peak in loopback (PCM) |
+  |---|---|---|---|---|
+  | lid closed | 416, 369, 384 ms | 614, 567, 582 ms | 501, 502, 502 ms (500) | -0.2 dBFS (-6) |
+  | going to sleep | 382, 376 ms; 103 warm | 586, 577 ms; 303 warm | 546 ms x3 (550) | -2.6 dBFS (-9) |
+  | battery floor | 374, 377 ms; 102 warm | 573, 575 ms; 298 warm | 361, 362, 362 ms (360) | -0.1 dBFS (-6) |
+
+  Pitch in loopback: lid rising (about 1050 then 1570 Hz), sleep falling (1570 then 1050 Hz), floor two 131 to
+  132 ms pulses at 660 Hz. "Warm" is the 2nd or 3rd stream of one process (`--all`).
+- `--wait`: `Ok(Played)` after 1135 (lid), 1177 (sleep) and 986 ms (floor), each 52 to 55 ms after the tone ended in
+  loopback: after the chime, under 3 s.
+- Reads after (02:33:40): equal to the reads before, all 20 setting lines. Every process of the card (seven listener
+  PIDs, each `ux_sounds` run) exited by itself; none left.
+- `docs/research.md` "Tray UX: chimes" extended: shapes, setup, the per-cue table, the warm start, the `--wait` times,
+  the about 6 dB endpoint gain, what was not run live, reads equal.
+
+Code change: none. Part B found no bug.
+
+Files changed in Part B: this card; `docs/research.md` (section "Tray UX: chimes" only).
+
+Checks (2026-11-04, build folder `<scratchpad>\p5-sounds\target` of Part A, deleted at 02:39 and checked gone):
+
+- `cargo test --locked -p wakeshot-windows sound`: at 02:34 it did not compile in another card's file
+  (`app/startup.rs`, the core round B change half done; Log); the retry at 02:38:25 passed: 18 passed, 0 failed, the
+  same 18 names as Part A.
+- `rustfmt --edition 2024 --check` on the five owned Rust files: clean (unchanged since Part A).
+- `cargo clippy --locked -p wakeshot-windows --all-targets --target <t> -- -D warnings` and the same without
+  `--all-targets`, both targets: all four clean.
+- `cargo build --release --locked -p wakeshot-windows --target <t>`, both targets: clean.
+- Part B: each cue seen in loopback on the picked endpoint, full length; reads after equal reads before: passed.
+- Only the card and the research section changed in Part B. LF line ends.
+
+Decided by the worker, for Haik's review:
+
+1. The -6 dBFS peaks stay, though loopback shows the two -6 dBFS chimes at -0.2 and -0.1 dBFS (the endpoint path
+   adds about 6 dB). Why: the card asks for -6 and nothing clipped. Change it when Haik hears a chime as harsh or too
+   loud in `p5-haik-check`.
+2. No warm-up for the slow first stream (0.37 to 0.42 s from the call; later streams of the same process 0.1 s).
+   Why: keeping a stream ready is out of scope (track note 3.7). Change it when the lid chime comes too late after a
+   close in checklist 16.
+3. The display-audio branch of the device rule was not run live: no DELL endpoint was active. Phase 1 close 2 ran
+   the same rule live, and the unit test covers it. Change it when `p5-haik-check` runs with the DELL screen awake:
+   one `ux_sounds` run there shows the pick.
+4. "Full length" means the tone length: the lead and tail silence are below the loopback threshold by design.
+
+Open items: Haik's ears (`p5-haik-check`); the "No Sounds" skip was not run live (Haik's scheme is not changed by
+any card; unit test only).

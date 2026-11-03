@@ -189,7 +189,7 @@ own Windows settings switched and put back.
 | `p5-tray-icon` | no | screen, settings (light and dark mode) | `p5-theme`, `p5-icon-art` | blocked: waiting for the screen slot (Part A done, 16 tests; Part B partly run 02:19: launch at Medium, TaskbarCreated, leftovers passed; the session was locked) |
 | `p5-menu-view` | no (menu look answered 17:32) | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | blocked: waiting for the screen slot (Part A done, committed 02:27: 10 tests) |
 | `p5-notices` | no | screen, settings (Do not disturb) | Part A: contracts change card; Part B: `p5-tray-icon`, `p5-text`, `p5-icon-art` | blocked: waiting for the screen slot (Part A done, committed 02:07: 10 tests) |
-| `p5-sounds` | no (the "No sounds" question: honor it, Haik 2026-11-03 18:09) | sound | contracts change card | in progress (Part A done, committed 02:01: 15 new tests; Part B started 02:26, sound slot, session locked) |
+| `p5-sounds` | no (the "No sounds" question: honor it, Haik 2026-11-03 18:09) | sound | contracts change card | done (committed 02:41): Part B in a locked session: all nine chimes seen in loopback at full length; reads equal |
 | `p5-haik-check` | yes, about 25 minutes: eyes, ears, hands | screen, sound, settings | every card above, `p4-cli-commands` | ready |
 
 Sizes, one worker's context: `p5-theme` about 40K tokens, `p5-icon-art` 120K, `p5-text` 80K, `p5-menu-paint` 110K,
@@ -300,3 +300,10 @@ Bundle (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p5-th
   `&` in a status line; inferred), so the card's `strip_access_keys` is not built; command ids from a table built per
   menu; the status line is greyed out (Enter does nothing, a screen reader says "unavailable"); in high contrast the
   menu frame is left to Windows. Track note 5 now has the `?` on both `new` calls.
+- 2026-11-04 02:41 (orchestrator, session `wakeshot-46`): `p5-sounds` done and committed. Part B ran in the locked
+  session: sound still plays and loopback still sees it. All nine chimes on the Speakers (Realtek, the only active
+  endpoint), full tone length; stream start about 370 to 420 ms cold, about 100 ms warm; `--wait` returns 52 to 55 ms
+  after the tone ends (under 3 s); the 20 reads before and after are equal; no code change. Decided by the worker, for
+  Haik's review: the -6 dBFS peaks stay, though loopback shows the two -6 dBFS chimes at -0.2 and -0.1 dBFS (why is not
+  verified; Haik's ear check in `p5-haik-check` says if they are too loud); no warm-up for the slow first stream; the
+  screen-audio branch of the device rule was not run live (no DELL audio endpoint was active).
