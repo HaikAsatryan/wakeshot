@@ -3325,3 +3325,29 @@ Card `p6-int-tray-mode` Part A, 2026-11-04. No tray started, no screen, no power
   profile directory of the current user" (Node docs, fetched 2026-11-04). Claude Code 2.1.317 builds its folder from
   `homedir()` (`p4-live-claude`, Log 01:41). Whether the runtime the installed Claude Code runs on follows Node's rule
   here: not verified.
+
+Part B, 2026-11-04 02:58 to 03:01, without the picture: the session was locked (`LogonUI.exe` ran, read 03:01), so
+nothing on screen was seen. One run of the smoke test (x64 debug, `--ignored --test-threads=1 --nocapture`), the
+dry-run tray's own log printed by the test.
+
+- **The whole dry-run tray runs end to end in a locked session.** The smoke test passed in 4.1 s: the `.cmd` started
+  through Explorer ran at Medium (`S-1-16-8192` in its `whoami /groups`), `state.json` came 1.9 s after the launch, a
+  script hold with the elevated test's pid gave holding within 0.9 s, its delete gave idle within 1.0 s, `ask_quit`
+  ended the tray with exit code 0, and the dry-run journal was gone. So a Medium tray takes an elevated (High) holder as
+  alive; whether through its own open or the process list: not verified.
+- **`state.json` follows the core about 0.9 s late here, by design.** The log has "Holding starts" 156 ms after the
+  start line and "Holding ends" 1 s before the quit, while the test saw each in `state.json` 0.9 to 1.0 s after its
+  own write. `core/view.rs` writes `state.json` at most once a second and holds back a change that comes within a
+  second of the last write (read in the code).
+- **The dry run reads the real plan and writes nothing.** Its log: `would write` lid AC and DC 1 to 0 and sleep DC
+  18000 to 0 on Balanced at the hold, the reverse at its end, "RunOnce value not set", and `PowerSetRequest SYSTEM` and
+  `EXECUTION` only as dry-run lines. `powercfg /q` read 03:00 after the run: sleep AC and DC `0x4650` (18000), as the
+  dry run read. `%LocalAppData%\Wakeshot` does not exist; `Run` and `RunOnce` name no Wakeshot value (read 03:01).
+- **The shell keeps a `NotifyIconSettings` entry for a run in a locked session, and no AUMID key without a notice.**
+  After the run there was one entry with the dry-run GUID, `ExecutablePath` the build folder's exe, and an
+  `IconSnapshot` PNG of 24 by 24 px (its `IHDR`), which fits the 150% taskbar. No
+  `NotifyIconGeneratedAumid_<id>` key existed: no balloon was shown (the test writes `config.json`, so no first-run
+  notice). Exported, deleted at 03:00:17, still gone at 03:01:26.
+- **The quit is quick and the 1400 line comes once.** From the quit's restore to "Wakeshot ends with code 0" took
+  3 ms; the IO thread's one `PostMessageW` 1400 line ("as after a quit ... dropped") is Info, once, as the
+  orchestrator asked.

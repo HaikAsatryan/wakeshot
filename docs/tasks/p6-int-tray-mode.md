@@ -1,6 +1,6 @@
 # Integration: tray mode, the composition root
 
-Phase: 6. Status: blocked: waiting for the screen slot (Part A done 2026-11-04 02:55). Needs Haik: no. Agent: `wakeshot-worker`. Size: about 140K tokens.
+Phase: 6. Status: blocked: waiting for the screen slot (smoke passed; picture left). Needs Haik: no. Agent: `wakeshot-worker`. Size: about 140K tokens.
 Real laptop: Part A no. Part B: **screen**, about 10 minutes, one dry-run tray icon on the taskbar (one screen or sound
 card at a time, across all tracks); no power setting, no sound on purpose, no Haik.
 Build folder: `CARGO_TARGET_DIR=<scratchpad>\p6-int-tray-mode\target`.
@@ -96,6 +96,13 @@ Problems seen but not fixed.
 5. `docs/phases/06-integration.md` note 6 (read only for me) lists `IoThread::start` before `session::register` and
    `Dispatcher::new`, `WatchThread::start` after it, and the session registration in step 9. The built order differs
    for the three reasons in `tray_mode.rs`'s module doc (Result, choices 1 to 3); the note should follow.
+6. `power/journal.rs` (`p3-journal`), log text only: the write-ahead save before an apply prints every entry as
+   "original 1, written 0, restored", and the save after the writes drops "restored". The flag means the plan still
+   holds the original, but a reader sees "restored" before anything was written. Minor; "not yet written" or "pending"
+   would read right.
+7. Startup restore (`PowerExecutor::startup`, `p3-recovery` or `p6-int-startup`): with no journal at start it logs
+   nothing, while the restore at Quit logs "restore of every plan: found no journal entry". So a log cannot show that
+   step 6 ran. Minor; one line at start would match the Quit one.
 
 ## Log
 
@@ -126,15 +133,45 @@ Problems seen but not fixed.
   tray with `FindWindowW` instead of `ask_quit`, which would have closed a tray it did not start.
 - 2026-11-04 02:55: all Part A checks pass (Result). Status `blocked: waiting for the screen slot (Part A done)`.
   Build folder kept for Part B.
+- 2026-11-04 02:57: Part B started without the picture (the session is locked since 02:00, so nothing on screen can be
+  seen). No `wakeshot-tray` process runs before the run.
+- 2026-11-04 02:58: before the first run, `smoke.rs`'s `TempDir` drop now prints the tray's log (else a pass or a fail
+  removes it with the folder). Run 1 (02:58:39 to 02:58:47): passed, tray pid 30172 at Medium, exit code 0.
+- 2026-11-04 03:00: one `NotifyIconSettings` entry has the dry-run GUID (`15983757285637097514`, exe in this card's build
+  folder); no `NotifyIconGeneratedAumid_` key for it (no balloon was shown). Entry exported to the scratchpad and
+  deleted at 03:00:17; both checked gone.
+- 2026-11-04 03:01: rustfmt, the 8 clippy runs and the 11 `app::tray_mode` tests pass after the `smoke.rs` change.
+  Still gone at 03:01:26: the entry and the AUMID key; no `wakeshot-tray` process, no smoke temp folder; no
+  `%LocalAppData%\Wakeshot`, no Wakeshot value in `Run` or `RunOnce`. `docs/research.md` "Tray mode checks" extended.
+- 2026-11-04 03:02: build folder deleted and checked gone. Status `blocked: waiting for the screen slot (smoke passed;
+  picture left)`.
 
 ## Result
 
-**Part A done (2026-11-04 02:55). Part B not run** (orchestrator's scope for this round: a sound card measures
-loopback audio, and a tray balloon could play a sound into it). No tray was started, real or dry run; no power setting,
-registry key or real data folder was touched.
+**Part A done (2026-11-04 02:55). Part B done except the picture (2026-11-04 03:02)**: the session was locked
+(since 02:00), so the picture `docs/research/img/ux/int-smoke-*.png` waits for a screen slot with Haik.
 
-Files: `crates/wakeshot-windows/src/app/tray_mode.rs` (filled), `crates/wakeshot-tray/tests/smoke.rs` (new),
-`docs/research.md` (new section "Tray mode checks", addition only), this card.
+Files: `crates/wakeshot-windows/src/app/tray_mode.rs` (filled), `crates/wakeshot-tray/tests/smoke.rs` (new; Part B:
+its `TempDir` drop prints the tray's log), `docs/research.md` (section "Tray mode checks", Part A and Part B), this
+card.
+
+### Part B (2026-11-04 02:58 to 03:02, without the picture)
+
+- Smoke run 1, the only run (02:58:39 to 02:58:47): **passed** in 4.1 s. Tray pid 30172, the build folder's debug exe,
+  `.cmd` at Medium; idle at start; holding 0.9 s after the hold write; idle 1.0 s after its delete; exit code 0; the
+  dry-run journal gone. Output in `<scratchpad>\p6-int-tray-mode\smoke-run1.txt`.
+- The tray's log (printed by the test): no warning, no error, no failed post but the one expected Info line on
+  `PostMessageW` 1400 at Quit. Start line, settings mutex taken, the Claude folder line, dry-run request and plan
+  lines at the hold and at its end ("RunOnce value not set"), two journal saves, the journal deleted, the restore at
+  Quit, "Wakeshot ends with code 0". Two readability points in other cards' text (Found outside scope 6 and 7). Not
+  logged, by design (choice 13): icon added, session registered, subscriptions, the lock at start.
+- The dry run read the real Balanced plan (lid AC and DC 1, sleep DC 18000; `powercfg /q` agrees) and wrote nothing.
+- `NotifyIconSettings`: one entry with the dry-run GUID, id `15983757285637097514`; no `NotifyIconGeneratedAumid_` key
+  (no balloon was shown). Exported to `<scratchpad>\p6-int-tray-mode\notifyicon-15983757285637097514.reg`, deleted
+  03:00:17, still gone with no AUMID key at 03:01:26.
+- Left: no `wakeshot-tray` process (tray pid 30172 gone), no `%TEMP%\wakeshot-tray-smoke-*` folder, no
+  `%LocalAppData%\Wakeshot`, no Wakeshot value in `Run` or `RunOnce`, no power setting written. Build folder deleted
+  and checked gone.
 
 ### What `run` does
 
@@ -190,6 +227,7 @@ None of these makes the laptop behave differently when no work is going on.
 | 14 | A failed input idle read gives 0 (counts as input), one line per run of failures | No hibernate on a failed read (`p3-system-events` item 2) | Never |
 | 15 | The profile folder from `std::env::home_dir` (`USERPROFILE` first), the same rule as Node's `os.homedir` | Claude Code builds its folder from `homedir()` | A user's Claude folder is not found |
 | 16 | Exit code 1 for every start failure | The guard and restore mode use 1 for a give-up | The e2e cards need to tell failures apart |
+| 17 | Part B: the smoke test's `TempDir` drop prints the tray's log before it removes the folder, on a pass and a fail | The log goes with the folder; cargo shows it on a fail, `--nocapture` on a pass, so no second shell or breakpoint is needed | The log holds something that must not reach a console, or it grows too long to print |
 
 ### Checks (2026-11-04, build folder `<scratchpad>\p6-int-tray-mode\target`, no `RUSTFLAGS`, all `--locked`)
 
@@ -201,7 +239,11 @@ None of these makes the laptop behave differently when no work is going on.
 | `cargo clippy -p wakeshot-tray --all-targets --target <t> -- -D warnings` and without, x64 and ARM64 | clean (no `velopack` in the tray yet, so no clang needed) |
 | `cargo test -p wakeshot-windows -- app::tray_mode::` | 11 passed |
 | `cargo test -p wakeshot-tray --target x86_64-pc-windows-msvc --test smoke` (not `--ignored`) | 1 ignored, so it builds and is skipped |
-| Part B checks (smoke run, picture, dry-run entries, build folder deleted) | not run (Part B) |
+| Part B, after the `smoke.rs` change: rustfmt, the 8 clippy runs above, `app::tray_mode::` tests (x64) | exit 0, all clean, 11 passed |
+| Part B: `cargo test --locked -p wakeshot-tray --target x86_64-pc-windows-msvc --test smoke -- --ignored --test-threads=1` | passed, run 1 of 1 (with `--nocapture`) |
+| Part B: the picture | not taken (session locked) |
+| Part B: dry-run `NotifyIconSettings` entry and AUMID key gone a minute later | gone at 03:01:26 (deleted 03:00:17; the AUMID key never existed) |
+| Part B: no process of this card left; build folder deleted | none left (by pid 30172 and by a list); folder gone |
 
 Unit tests: `dry_run_hibernate_thread_posts_one_done_and_never_hibernates` (every check passes on `FakeHibernate`,
 the end is `Resumed`, the chime played, `SetSuspendState` only logged),
@@ -224,8 +266,10 @@ itself (order, threads, shutdown) has no unit test: the smoke test in Part B is 
 
 ### Notes for the Part B run
 
-- Build folder kept: `<scratchpad>\p6-int-tray-mode\target` holds the x64 debug builds of the tray exe and the smoke
-  test; cargo rebuilds what changed. Delete it at the end of Part B (acceptance check).
+- Left for the screen slot: only the picture. The build folder was deleted 03:02, so the next run builds the x64 debug
+  tray exe again (about a minute); delete the folder after it. The test holds for about a second only, so for the
+  picture start the tray by hand with the same `.cmd` steps and a hold file, and quit it with `ask_quit` or the menu.
+  Then the `NotifyIconSettings` clean-up below once more (the new run makes a new entry).
 - Run alone in a screen slot, session unlocked, no other dry-run tray in this session (the test checks with
   `FindWindowW` and fails at once if one runs): `$env:CARGO_TARGET_DIR = '<that folder>'; cargo test --locked -p
   wakeshot-tray --target x86_64-pc-windows-msvc --test smoke -- --ignored --test-threads=1 --nocapture`.

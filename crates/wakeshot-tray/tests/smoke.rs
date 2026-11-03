@@ -59,7 +59,13 @@ impl TempDir {
 }
 
 impl Drop for TempDir {
+    /// The tray's log goes with the folder, so it is printed first: cargo shows it when the test fails, and
+    /// `--nocapture` shows it on a pass. The tray has ended by now, as `Tray` is made later and dropped first.
     fn drop(&mut self) {
+        let log = self.dry_run().join("logs").join("wakeshot.log");
+        if let Ok(text) = fs::read_to_string(&log) {
+            println!("--- the tray's log ---\n{text}--- end of the tray's log ---");
+        }
         let _ = fs::remove_dir_all(&self.0);
     }
 }
