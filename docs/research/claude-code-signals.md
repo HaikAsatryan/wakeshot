@@ -30,7 +30,8 @@ names (like `X3e`) are from this build only and change every release.
 
 ## Status file fields
 
-File: `%USERPROFILE%\.claude\sessions\<pid>.json`. One per running session. Written by the registration function at
+File: `%USERPROFILE%\.claude\sessions\<pid>.json`, or `<CLAUDE_CONFIG_DIR>\sessions\<pid>.json` when that variable
+is set ("Phase 4 end to end"). One per running session. Written by the registration function at
 offset 285,742,500 (`jY`) and updated by `Rn` (offset 285,744,000) and `X3e` (offset 285,744,381).
 
 | Field | Meaning | Values | When written | Mark |
@@ -227,11 +228,11 @@ Run every 5 to 10 s, or on a folder change event for `sessions\` plus a slow tim
 
 | # | Rule | Signal | Confidence |
 |---|---|---|---|
-| 1 | List `%USERPROFILE%\.claude\sessions\*.json` only. Skip `*.key` and `.fleetview-heartbeat` without opening them. Parse the first JSON value; on failure retry once after 200 ms, then treat the file as "no signal" for this round | Live session list | High |
+| 1 | List `<Claude folder>\sessions\*.json` only. The Claude folder is `CLAUDE_CONFIG_DIR` when set, else `%USERPROFILE%\.claude`, as Claude Code finds it ("Phase 4 end to end"); a value set only in one shell is not seen by the tray. Skip `*.key` and `.fleetview-heartbeat` without opening them. Parse the first JSON value; on failure retry once after 200 ms, then treat the file as "no signal" for this round | Live session list | High |
 | 2 | Count a file only if the pid is alive and the process creation FILETIME equals `procStart` (or `procStartFt`). Confirmed from an unelevated (Medium) reader against elevated sessions too. Open with exactly `PROCESS_QUERY_LIMITED_INFORMATION \| SYNCHRONIZE`; one extra right fails the open. `0x80070057` means gone. `0x80070005` means no access, never dead: fall back to the system process list (create time equal to `procStart` means alive). A leftover also vanishes at the next Claude Code start | Drops crash leftovers and reused pids | High (exact match seen; unelevated check in `research.md:82-130`) |
-| 3 | `status` is `busy` or `shell`, or any value Wakeshot does not know: working while the session process lives, no cap. An unknown value also shows "update Wakeshot" (`product.md`, UX). Sessions whose `entrypoint` is not `cli` (`claude-vscode`, `sdk-*`, `claude-desktop`, `claude-desktop-3p`, `local-agent`): a tool result with `backgroundTaskId`, or a Monitor `taskId`, opens a task. A `<task-notification>` closes each task id it lists when it has a `<status>` with any value (seen: `completed`, `failed`, `stopped`; `killed` in the code); one with no `<status>` (a Monitor event) closes nothing. It counts at the start of a user line's text, of the `prompt` of an `attachment` of type `queued_command`, or of the `content` of a `queue-operation` line with `operation: "enqueue"` (written when Claude Code queues the notification, before its user line; live fixtures 01, 02, 08, 12), also after Claude Code's header (a first line `[SYSTEM NOTIFICATION - NOT USER INPUT]`, then lines up to a blank line), after which several may be joined, each after a blank line (Phase 4 rule change, "Phase 4 live shapes"; header and joined form from the 2.1.317 code, not seen live). Ends that write no notification (2.1.317 code, not verified live): a `TaskStop` call (also `KillShell`, `KillBash`), whose result `{message, task_id, task_type, command}` closes its `task_id`, as Claude Code's own resume reader does; a Monitor's timeout, so a Monitor result that is not `persistent: true` is a timer at its time plus `timeoutMs` instead of an open task (a timeout over 1 hour: a due time every hour, at most 24; no `timeoutMs`, or 0: ends after 1 hour; both named). A `TaskStop` that fails closes nothing. A stop from the UI queues a `passive` `<status>killed</status>` notification whose user line may come only at the next prompt; its `enqueue` line ends the task at once (2.1.317 code, `research.md` "Claude UI stop notice checks"; not checked live: with the remote flag `tengu_rosy_donut` off, or a hook that holds the enqueue back, the task holds until a later line or the process end). An open task (a shell, a persistent Monitor) is working while the session process lives. No time cap (Haik, 2026-11-03, `product.md:38-40`). A terminal session's status says `shell` for its shells and Monitors, so these transcript rules add nothing there | Working now | High; the ends without a notification: code only |
+| 3 | `status` is `busy` or `shell`, or any value Wakeshot does not know: working while the session process lives, no cap. An unknown value also shows "update Wakeshot" (`product.md`, UX). Sessions whose `entrypoint` is not `cli` (`claude-vscode`, `sdk-*`, `claude-desktop`, `claude-desktop-3p`, `local-agent`): a tool result with `backgroundTaskId`, or a Monitor `taskId`, opens a task. A `<task-notification>` closes each task id it lists when it has a `<status>` with any value (seen: `completed`, `failed`, `stopped`; `killed` in the code); one with no `<status>` (a Monitor event) closes nothing. It counts at the start of a user line's text, of the `prompt` of an `attachment` of type `queued_command`, or of the `content` of a `queue-operation` line with `operation: "enqueue"` (written when Claude Code queues the notification, before its user line; live fixtures 01, 02, 08, 12), also after Claude Code's header (a first line `[SYSTEM NOTIFICATION - NOT USER INPUT]`, then lines up to a blank line), after which several may be joined, each after a blank line (Phase 4 rule change, "Phase 4 live shapes"; header and joined form from the 2.1.317 code, not seen live). Ends that write no notification (2.1.317 code; both seen live, "Phase 4 end to end"): a `TaskStop` call (also `KillShell`, `KillBash`), whose result `{message, task_id, task_type, command}` closes its `task_id`, as Claude Code's own resume reader does; a Monitor's timeout, so a Monitor result that is not `persistent: true` is a timer at its time plus `timeoutMs` instead of an open task (a timeout over 1 hour: a due time every hour, at most 24; no `timeoutMs`, or 0: ends after 1 hour; both named). A `TaskStop` that fails closes nothing. A stop from the UI queues a `passive` `<status>killed</status>` notification whose user line may come only at the next prompt; its `enqueue` line ends the task at once (2.1.317 code, `research.md` "Claude UI stop notice checks"; seen live for a shell stopped from the terminal tasks panel and by an SDK `stop_task` request, "Phase 4 end to end"; with the remote flag `tengu_rosy_donut` off, or a hook that holds the enqueue back, the task holds until a later line or the process end). An open task (a shell, a persistent Monitor) is working while the session process lives. No time cap (Haik, 2026-11-03, `product.md:38-40`). A terminal session's status says `shell` for its shells and Monitors, so these transcript rules add nothing there | Working now | High; each end without a notification seen live once |
 | 4 | `status` is `waiting`. `waitingFor: "dialog open"` is a slash command dialog: treat it like `idle`. Otherwise `waiting` holds only while `bridgeSessionId` is set, for at most 1 hour (`product.md:37`) | Blocked on the user. Not working | High for meaning |
-| 5 | `status` is `idle` or missing: find the transcript as `%USERPROFILE%\.claude\projects\*\<sessionId>.jsonl` (glob, do not rebuild the folder name). Read only new bytes since the last scan; keep parser state between reads, and after a Wakeshot restart read each transcript from its start. Remember the `tool_use` ids of `CronCreate`, `CronDelete`, `ScheduleWakeup` and the background task tools. Take each result by `tool_use_id`; skip `is_error` results. Also match `scheduled_task_fire`, `session_cron_carry`, and `<task-notification>` at the start of a user line. A reminder comes as `CronCreate` with `recurring: false` or as `ScheduleWakeup`: handle both. Keep per job: id, cron, recurring, createdAt, last fire, `nextFireAt` / `scheduledFor` (both floats). Key all job state by pid, not by `sessionId`. When `sessionId` changes, read the new transcript from its start and take `session_cron_carry` (`otherArmed`, `tasks`) as the armed jobs. Drop deleted, stopped, fired one-shots, and recurring jobs older than 7 days. Drop a wakeup at its `scheduled_task_fire` (`taskKind: "loop"`), or at `scheduledFor` plus a margin of a few minutes, which also bounds the invisible Esc cancel. Never hold past that. Loop fallback: no hold (`product.md:35-36`). Resume (`claude --resume` in a new process; no line marks it): lines older than the status file's `procStart` were written by an earlier process. Read the transcript from its start as usual, then for those lines keep `CronCreate` jobs that were not deleted (recurring ones under 7 days old, their next fire counted from `procStart`; one-shots whose time has not passed) and drop every `ScheduleWakeup` wakeup and every open background task (Claude Code does not restore wakeups, and a task does not outlive its process). A reminder may also be a background shell that sleeps (rule 3). A next fire Wakeshot computes, not read from `nextFireAt` or `scheduledFor`, is reported twice: as Claude Code's built-in scheduler values give it and as the latest any value of its remote flag `tengu_kairos_cron_config` allows, so a changed flag never makes the PC sleep through a fire; the fire line then moves the job on. A recurring job fired again after the built-in 7 days comes back, and from then on only its fire lines end it | Pending timer and its next fire time | Medium. Misses: Esc cancel of a dynamic loop (maybe), loop fallback wakeup, tasks restored after resume under a new session id |
+| 5 | `status` is `idle` or missing: find the transcript as `<Claude folder>\projects\*\<sessionId>.jsonl` (glob, do not rebuild the folder name). Read only new bytes since the last scan; keep parser state between reads, and after a Wakeshot restart read each transcript from its start. Remember the `tool_use` ids of `CronCreate`, `CronDelete`, `ScheduleWakeup` and the background task tools. Take each result by `tool_use_id`; skip `is_error` results. Also match `scheduled_task_fire`, `session_cron_carry`, and `<task-notification>` at the start of a user line. A reminder comes as `CronCreate` with `recurring: false` or as `ScheduleWakeup`: handle both. Keep per job: id, cron, recurring, createdAt, last fire, `nextFireAt` / `scheduledFor` (both floats). Key all job state by pid, not by `sessionId`. When `sessionId` changes, read the new transcript from its start and take `session_cron_carry` (`otherArmed`, `tasks`) as the armed jobs. Drop deleted, stopped, fired one-shots, and recurring jobs older than 7 days. Drop a wakeup at its `scheduled_task_fire` (`taskKind: "loop"`), or at `scheduledFor` plus a margin of a few minutes, which also bounds the invisible Esc cancel. Never hold past that. Loop fallback: no hold (`product.md:35-36`). Resume (`claude --resume` in a new process; no line marks it): lines older than the status file's `procStart` were written by an earlier process. Read the transcript from its start as usual, then for those lines keep `CronCreate` jobs that were not deleted (recurring ones under 7 days old, their next fire counted from `procStart`; one-shots whose time has not passed) and drop every `ScheduleWakeup` wakeup and every open background task (Claude Code does not restore wakeups, and a task does not outlive its process). A reminder may also be a background shell that sleeps (rule 3). A next fire Wakeshot computes, not read from `nextFireAt` or `scheduledFor`, is reported twice: as Claude Code's built-in scheduler values give it and as the latest any value of its remote flag `tengu_kairos_cron_config` allows, so a changed flag never makes the PC sleep through a fire; the fire line then moves the job on. A recurring job fired again after the built-in 7 days comes back, and from then on only its fire lines end it | Pending timer and its next fire time | Medium. Misses: Esc cancel of a dynamic loop (maybe), loop fallback wakeup, tasks restored after resume under a new session id |
 | 6 | If rule 5 finds a recurring job but no exact next time: a cron period of 1 hour or less holds. A longer period uses the next cron time after the last fire. A one-shot uses its exact `nextFireAt` or `scheduledFor` | Next fire estimate | Medium |
 | 7 | Durable jobs (`<cwd>\.claude\scheduled_tasks.json`, the git root's, `~/.claude/scheduled_tasks.json`): dropped for v1; add when a `scheduled_tasks.json` is seen. Fact: durable jobs are off in 2.1.316 (live test 6) | Durable jobs, exact | High, but rare |
 | 8 | `<cwd>\.claude\scheduled_tasks.lock` with a live `pid` that matches a session | That session has used `/loop` or cron at some point. Use only to decide to scan its transcript | Low as a work signal |
@@ -324,12 +325,16 @@ adopted in a stricter form: both readers are dropped for v1 (rules 7 and 10 abov
 - VS Code UI (optional). Test 10 ran the same engine path, but not through the extension, which sets
   `entrypoint: claude-vscode`. Steps:
   1. Open VS Code and start a Claude Code chat in any folder.
-  2. Send: "Use the PowerShell tool with run_in_background set to true to run Start-Sleep 60, then end your turn."
+  2. Send: "Use the Bash tool with run_in_background set to true to run this exact command: ping -n 61 127.0.0.1 >
+     /dev/null && echo done. Then end your turn at once." (The PowerShell tool refuses a standalone `Start-Sleep`.)
   3. Within 60 s, in PowerShell run:
      `Get-ChildItem "$env:USERPROFILE\.claude\sessions\*.json" | ForEach-Object { Get-Content $_ -Raw | ConvertFrom-Json } | Where-Object entrypoint -eq 'claude-vscode' | Select-Object pid, status`
   4. Expected: `idle` while the sleep runs. Report the value you see.
 - Desktop app, only if it gets installed later: open a Code tab session and look for a new `sessions\<pid>.json` with
   `entrypoint: claude-desktop`.
+- A stop of an MCP or WebSocket Monitor from the UI (code: writes only `[Monitor stopped]`, no `<status>`, so it
+  holds until its timeout), and a Monitor whose end falls while the PC sleeps (its timer is wall clock). Not run in
+  "Phase 4 end to end": the first needs an MCP server with a Monitor, the second a PC sleep.
 
 ## Sources
 
@@ -419,9 +424,77 @@ a task" guard is an inference (the SDK resume closed the task anyway).
   closes nothing."
 - Rule 5, reminders: "A reminder may also be a background shell that sleeps (handled by rule 3)."
 
-Parts of this file that the resume test contradicts, left for the parser card or a docs pass: "Short answer" and
-"Claude Code itself uses two outside methods" say Claude Code rebuilds pending jobs on `--resume`: true for
-`CronCreate` jobs, not for `ScheduleWakeup` wakeups. The "Wakeup armed" row says "resume re-arms from
-`scheduledFor`": not seen live for a resume in a new process. All three were corrected in the Phases 2 to 6 docs
-pass (2026-11-04), with rule 3's close on any `<status>`; rule 5's resume and reminder texts above are not yet in
-the rules table.
+The parts of this file that the resume test contradicted ("Short answer", "Claude Code itself uses two outside
+methods" item 1, the "Wakeup armed" row, rule 3's closing statuses) say now what this test saw, and rules 3 and 5
+hold the texts above. The end to end run ("Phase 4 end to end") saw the same: a resumed `*/5` job came back, its
+wakeup did not.
+
+## Phase 4 end to end (2026-11-04)
+
+Card `docs/tasks/p4-live-claude.md`, 01:27 to 01:53 local time (UTC+4). Claude Code 2.1.317, model Haiku, one
+scratch folder per case, driven as in "Phase 4 live shapes" (pseudo console for terminal sessions, stream-json for
+SDK sessions). The real watch thread ran in the harness `crates/wakeshot-windows/examples/agent-watch.rs`: the Claude
+source, the real liveness checks, the PC's zone, the dry-run data folder, a tick every 30 s. It printed each event the
+thread posted as one redacted line, and with `--raw` the kinds of every line each tail fed. "Posted" below means the
+`Sources` or `Holds` event the thread sent. **Verified** means seen live in these sessions.
+
+### What was run
+
+| Case | What the watch thread posted | Verdict |
+|---|---|---|
+| 1 Background shell (terminal) | `working` from the `busy` write, through `shell`, until the `idle` write after the `completed` notice turn | pass |
+| 2 Shell Monitor (terminal) | The same. Result `{persistent: false, taskId, timeoutMs: 120000}`; a terminal session adds no task timer, its `shell` status covers it | pass |
+| 3 `/loop 1m` | Timer = `nextFireAt` (01:29:25.8); fired 0.5 s later. After each fire two due times: the built-in one and the latest the remote flag allows (01:30:25 and 01:30:51) | pass |
+| 4 Dynamic loop and Esc | Haiku armed `ScheduleWakeup` with `delaySeconds` 1800 and `noop: true`: timer 02:00:00. Esc showed "Pending wakeup cancelled" and wrote no line, so the timer stayed (the known miss; the core holds at most until it plus 2 minutes). The session then exited with no "Background work" dialog: nothing was armed | pass, as designed |
+| 5 One-shot reminder | `CronCreate` `recurring: false`: timer 01:31:00, dropped at its `scheduled_task_fire` (01:31:00.9) | pass |
+| 6 Durable job | Input `durable: true`, result `durable: false`, a daily timer at 09:30 (the 30 minute jitter cap), no `scheduled_tasks.json` | durable jobs still off |
+| 7 Waiting | AskUserQuestion (`input needed`) and a permission prompt: `waiting(remote=true)`, `since` = `statusUpdatedAt`. The `/remote-control` dialog (`dialog open`): stayed `idle` | pass |
+| 8 Remote Control off | "Disconnect this session" wrote `bridgeSessionId: null` in a write of its own (status still `waiting` / `dialog open`), then `idle`. The next question: `waiting(remote=false)` | pass; the two writes are new (Phase 0 saw one) |
+| 9 `/clear` during a loop | New `sessionId`; the new transcript's `session_cron_carry` kept the timer; the next fire, in the new transcript, moved it | pass |
+| 10 SDK path | Background shell: `idle tasks=1`. Background subagent: `working` until its notice turn ended. Ends: next table | pass |
+| 11 Crash | `Stop-Process -Force`: `alive=Gone` 36 ms later (exit wait); the status file stayed | pass |
+| 12 `claude agents --json` | Exit 0, every live session listed; no warning, unknown value or extra post in the harness | pass |
+| 14 Loop fallback | A `ScheduleWakeup` fired at 01:31:00.3 and its turn did not reschedule. No timer was posted after it. A hidden fire came at 01:52:00.7 (21 minutes later; Phase 0 saw 20 min 24 s) and posted `working` for its 1 s turn | pass (no hold, `product.md`) |
+| Resume | `/exit` ("Exit and stop tasks") with a `*/5` job and a fired wakeup, then `claude --resume <id>` in the same folder: the new pid posted the job at its `procStart` plus 285 s (01:42:12; fired 01:42:13.7) and the grid time, and no wakeup or fallback | pass; `procStart` is the right divider |
+
+### Ends without a status notice (rule 3), now seen
+
+All on the SDK path, where `open_tasks` counts:
+
+- `TaskStop`: result `{command, message, task_id, task_type}`; Claude Code wrote no notification for that task at
+  all. The task closed at the result: `tasks` 1 to 0. **Verified**.
+- Monitor timeout (`timeout_ms` 60000): result `{persistent: false, taskId, timeoutMs: 60000}`, timer at the result
+  time plus 60 s. At the timeout Claude Code wrote one notice with only `<task-id>`, `<summary>` and
+  `<event>[Monitor expired after 1m with no events delivered. ...]</event>`, no `<status>`, and nothing later. So the
+  timer is the only end. **Verified**. The passed timer stays in the snapshot; the core drops a due time 2 minutes
+  after it.
+- Stop from the UI: the terminal tasks panel (Down, Enter on "1 shell", then `x`) and the SDK control request
+  `{"type":"control_request","request":{"subtype":"stop_task","task_id":..}}` (the SDK client's `stopTask` sends
+  it; the VS Code panel is that client, not verified). Both wrote a `queue-operation` `enqueue` line with
+  `<status>killed</status>` at the stop and no user line (terminal: 6 ms before the `idle` status write; SDK: no
+  status write, the session was already `idle`). On the SDK path the
+  notice came later as `queue-operation` `remove` plus an `attachment` `queued_command` at the next turn. The watch
+  thread closed the task at its next tail read: 6.8 s later (SDK) and 12 s (terminal). **Verified** with the remote
+  flags this laptop has.
+
+### Other facts
+
+- `CLAUDE_CONFIG_DIR` moves the Claude folder. A session started with it set to a scratch folder created
+  `<that folder>\sessions\` (only its `.key` file, listed by name and never opened, since the session stopped at
+  onboarding) and nothing under `%USERPROFILE%\.claude`. Code: `$e = (process.env.CLAUDE_CONFIG_DIR ??
+  join(homedir(), ".claude")).normalize("NFC")` (offset 283,634,862) and the sessions folder `join($e(), "sessions")`
+  (offset 286,672,178). **Verified** (live and code). `projects` too by the code (`join($e(), "projects")`, offset
+  284,711,010); not seen live, since the session stopped at onboarding. So the tray must build the Claude source on that folder:
+  `sources::claude::claude_folder` picks it. A value set only in one shell is not in the tray's environment, so those
+  sessions stay unseen.
+- Timing: a status change was read 7 to 189 ms after its `statusUpdatedAt` (median 29 ms, 170 writes), and posted at
+  once (median 36 ms after the write, 90% within 80 ms). A transcript line that comes with no status write waits for the next change in the sessions folder or the tick: a `turn_duration` line 22 s, the
+  `killed` notices 6.8 and 12 s. At most about 30 s, by design (architecture section 7).
+- About 25 minutes with up to 13 sessions: no parse failure, no retry, no partial line, no unknown value, no log line
+  from the watch thread.
+- A status `idle` write 14 ms before a `busy` write (a notice turn starting) gave two posts 3 ms apart.
+- Task output folders in 2.1.317 are `%LOCALAPPDATA%\Temp\claude\<16 hex characters, one per working folder>\<sessionId>\`
+  (`tasks\` and `scratchpad\` inside), not `...\claude\<project folder name>\...` as the "Background work" table
+  says. Seen for all 12 test sessions (names only); Wakeshot reads none of them.
+- Not run: the VS Code UI (waits for Haik, "Live tests still open"), the Desktop app, an MCP or WebSocket Monitor
+  stopped from the UI, a Monitor end across a PC sleep, `claude --continue`.

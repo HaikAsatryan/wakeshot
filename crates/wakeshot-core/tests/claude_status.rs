@@ -3,12 +3,13 @@
 //! home folder is a made-up path and no real `~/.claude` is ever read.
 
 use std::collections::BTreeSet;
+use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 use wakeshot_core::process::FileTime;
-use wakeshot_core::sources::claude::ClaudeSource;
+use wakeshot_core::sources::claude::{ClaudeSource, claude_folder};
 use wakeshot_core::sources::cron::FixedOffset;
 use wakeshot_core::sources::{
     Activity, AgentSource, Fed, Feed, FileId, FormatHealth, Liveness, SessionFacts, SessionKey,
@@ -269,6 +270,37 @@ fn wanted_is_the_sessions_folder_without_key_files() {
     ] {
         assert!(!accept(name), "{name}");
     }
+}
+
+/// Live (`p4-live-claude`): a session started with `CLAUDE_CONFIG_DIR` set writes its status file under that folder
+/// and nothing under `~\.claude`, so the source must read the folder Claude Code uses.
+#[test]
+fn claude_config_dir_names_the_folder_read() {
+    let home = Path::new(HOME);
+    let moved = PathBuf::from(r"Y:\cfg");
+    assert_eq!(claude_folder(home, None), home.join(".claude"));
+    assert_eq!(
+        claude_folder(home, Some(OsStr::new(""))),
+        home.join(".claude")
+    );
+    assert_eq!(claude_folder(home, Some(moved.as_os_str())), moved);
+
+    let mut source = ClaudeSource::in_folder(moved.clone(), Box::new(FixedOffset(240)));
+    let wanted = source.wanted();
+    let [WantedFile::Folder { dir, .. }] = wanted.as_slice() else {
+        panic!("{wanted:?}");
+    };
+    assert_eq!(dir, &moved.join("sessions"));
+
+    let bytes = read_fixture("idle-remote.json");
+    source.feed(&status_file(CLI.0), Feed::Whole(bytes.clone()));
+    assert!(
+        source.sessions().is_empty(),
+        "the profile's folder is not read"
+    );
+    let file = FileId(moved.join("sessions").join(format!("{}.json", CLI.0)));
+    assert_eq!(source.feed(&file, Feed::Whole(bytes)), Fed::Taken);
+    assert_eq!(source.sessions().len(), 1);
 }
 
 /// A feed the source did not ask for is never parsed, so a `.key` file's bytes could not reach a session even if a

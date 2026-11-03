@@ -3021,3 +3021,37 @@ Card `p2-core-lid`, section "Core round A, lid fixes (2026-11-04)": power safety
   and no request held. The product text infers it runs until the user's own sleep timeout (not tested with the lid
   closed); the lock every 5 minutes rests on that inference. Also not verified: what `SetSuspendState(FALSE)` does on a
   Modern Standby PC with hibernation off, the case a sleep fallback would be for.
+
+## Live Claude end to end checks
+
+Card `p4-live-claude`, 2026-11-04 01:27 to 01:53, Claude Code 2.1.317, Haiku test sessions in scratch folders, the
+real watch thread in the harness `crates/wakeshot-windows/examples/agent-watch.rs` on the dry-run data folder. Full
+table: `docs/research/claude-code-signals.md`, "Phase 4 end to end".
+
+- **Every Claude case of the live tests table matched the rules** (1 to 12, 14, resume, `/clear` during a loop, the
+  SDK path): seen live, from the harness lines and the `--raw` line kinds. Resume: a `*/5` job came back at
+  `procStart` plus 285 s, its fired wakeup did not; `procStart` is the right divider.
+- **`TaskStop`, a Monitor timeout and a stop from the UI end tasks as rule 3 says** (seen live on the SDK path).
+  `TaskStop` writes no notification. A Monitor timeout writes one `<event>` notice with no `<status>`. A stop from
+  the terminal tasks panel, or an SDK `stop_task` control request, writes a `queue-operation` `enqueue` with
+  `<status>killed</status>` at the stop, before any user line.
+- **`CLAUDE_CONFIG_DIR` moves `sessions\`** (live: a session started with it wrote under that folder only; code:
+  `CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude")`). `projects\` moves with it by the code (`join($e(),
+  "projects")`); not seen live, the test session stopped at onboarding. `sources::claude::claude_folder` picks the
+  folder the same way; the tray must use it (integration). A value set only in one shell is not visible to the tray.
+- **Timing**: a status change was read 7 to 189 ms after its `statusUpdatedAt` (median 29 ms, 170 writes) and posted
+  at once. A transcript line with no status write is read at the next sessions folder change or the 30 s tick (seen:
+  6.8 s, 12 s, 22 s).
+- **Hold files**: `wakeshot --dry-run run -- ping` showed `Run alive=Yes` 115 ms after start and went at the child's
+  end; a script hold file with a dead pid showed `Gone` in 24 ms, its reason never printed. With the whole data
+  folder missing when the watch thread started, the first hold showed only at the next tick (19.6 s): the thread
+  retries a missing root only on the tick (a missing `holds\` alone is picked up at once). The tray makes its data
+  folder before the thread starts, so only a harness sees this (not verified in the tray).
+- **`wakeshot run` and the console, in a pseudo console** (ConPTY, the host Windows Terminal uses; not a classic
+  conhost window): Ctrl+C reached the child (`ping` ended with `0xC000013A`), `wakeshot` returned the same code and
+  removed its hold 0.34 s after the key. Ctrl+Break (`GenerateConsoleCtrlEvent`): `ping` printed its statistics and
+  went on, `wakeshot` stayed and kept the hold until the child ended, then exited 0 and removed it. Closing the
+  pseudo console while it waited: `wakeshot` and `ping` ended and the hold file was gone 12 ms later. The CLI log has
+  no exit line for that run, so `wakeshot` likely ended right after it removed the file (inferred, not verified); had
+  it ended first, the hold would show `Gone`. Not run: a key press by a person, a classic conhost window.
+- **Harness Ctrl+C**: stopped the thread cleanly (`stop` returned `true`, exit 0).

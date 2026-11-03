@@ -6,8 +6,9 @@ pub mod status;
 pub mod transcript;
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsStr;
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::process::FileTime;
 use crate::sources::cron::LocalOffset;
@@ -31,6 +32,18 @@ pub const SESSION_ID: &str = "sessionId";
 
 /// FILETIME of the Unix epoch, in 100 ns steps from 1601.
 const UNIX_EPOCH_FT: i128 = 116_444_736_000_000_000;
+
+/// Claude Code's folder: `config_dir` (the value of `CLAUDE_CONFIG_DIR`) when set, else `<home>\.claude`. Claude Code
+/// 2.1.317 puts `sessions` there (live and code) and `projects` (code), so a session started with the variable set
+/// writes no status file under `<home>\.claude` (`docs/research/claude-code-signals.md`, "Phase 4 end to end"). The
+/// caller reads both values, so the core stays free of environment reads. An empty value counts as unset: what Claude
+/// Code does with one is not verified, and no outside reader could follow a relative folder.
+pub fn claude_folder(home: &Path, config_dir: Option<&OsStr>) -> PathBuf {
+    match config_dir {
+        Some(dir) if !dir.is_empty() => PathBuf::from(dir),
+        _ => home.join(".claude"),
+    }
+}
 
 /// Claude Code's sessions, one per `<home>\.claude\sessions\<pid>.json`, keyed by pid (track note 3), each with the
 /// transcript `<home>\.claude\projects\<folder>\<sessionId>.jsonl` its status file names.
@@ -69,7 +82,12 @@ struct Transcript {
 impl ClaudeSource {
     /// `home` is the user's profile folder, the one that holds `.claude`; `zone` gives the PC's local time.
     pub fn new(home: PathBuf, zone: Box<dyn LocalOffset + Send>) -> Self {
-        let claude = home.join(".claude");
+        Self::in_folder(home.join(".claude"), zone)
+    }
+
+    /// `claude` is Claude Code's own folder, the one that holds `sessions` and `projects`: [`claude_folder`] finds
+    /// it the way Claude Code does.
+    pub fn in_folder(claude: PathBuf, zone: Box<dyn LocalOffset + Send>) -> Self {
         Self {
             sessions_dir: claude.join("sessions"),
             projects_dir: claude.join("projects"),
