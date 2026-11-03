@@ -152,7 +152,7 @@ those one at a time across all tracks.
 | `p6-login-and-path` | no | the contracts card; `p3-store` (test key helper) | done (committed 01:42): 21 tests; the real Path and Run unchanged by every run |
 | `p6-update-schedule` | no | the contracts card | done (committed 01:42): 17 tests |
 | `p6-hooks` | no (Question 2: the default, Haik 2026-11-03 18:09) | `p6-login-and-path`; `p3-store`, `p3-log`, `p3-process`, `p3-journal`, `p3-power-plan`; core `p2-ownership-restore` (review M1) | done (committed 02:05): 17 tests; real Run, RunOnce and Path unchanged |
-| `p6-velopack-dependency` | yes, once: the elevated clang install of its step 0 (Question 4: yes); runs alone on the whole laptop: no other card and no cargo command (review M5) | `p6-hooks`, `p6-update-schedule`, `p6-velopack-facts` | in progress (started 03:08, alone; step 0 left for Haik, ARM64 tray: CI only) |
+| `p6-velopack-dependency` | yes, once: the elevated clang install of its step 0 (Question 4: yes); runs alone on the whole laptop: no other card and no cargo command (review M5) | `p6-hooks`, `p6-update-schedule`, `p6-velopack-facts` | done (committed 03:32): velopack 1.2.161; x64 checks and 1,260 tests pass; step 0 (clang) left for Haik, ARM64 tray: CI only |
 | `p6-pack-and-release` | no (Question 5: yes, the first real run is a public pre-release) | `p6-velopack-facts` | done (committed 02:25): x64 and ARM64 packed for real into the scratch folder; nothing installed |
 | `p6-install-e2e` | no; real laptop: installs, the real Run value and Path, a throwaway plan copy | `p6-velopack-dependency`, `p6-pack-and-release`; `p3-power-plan` (its first test shows a write to an inactive copy leaves the real plan alone) | ready |
 | `p6-launch-research` | yes: reads its Result (rival pick, Store recommendation) before the README, winget and Store cards are rewritten; no installs | none | done: its Result waits for Haik's read |
@@ -290,3 +290,14 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
 - 2026-11-04 02:39 (orchestrator, session `wakeshot-46`): CI green on 8ff7fa5 (Linux core, x64, ARM64). Manual
   dry run of `release.yml` (run 41731897399): build, pack, silent install and uninstall pass on both CPUs; only the 3
   hook checks fail, as expected until `p6-velopack-dependency` (details in the `p6-pack-and-release` Log).
+- 2026-11-04 03:32 (orchestrator, session `wakeshot-46`): `p6-velopack-dependency` done and committed, run alone.
+  velopack 1.2.161 (114 packages besides itself on x64, 117 on ARM64; `Cargo.lock` 80 to 181 packages, no locked
+  version changed). `velo.rs`: `startup()` turns auto apply off and runs the four hook callbacks; `feed()` uses
+  `GithubSource` with `prerelease: false`. x64: fmt, clippy both forms, 1,260 workspace tests, release build, CRT check;
+  tray exe 1.64 MB to 2.03 MB; the dry-run smoke test still passes. ARM64: core, windows and cli pass clippy and
+  release (no velopack or `ring` under them); the tray fails locally for want of clang (`ring`), so CI only. Step 0 for
+  Haik (exact steps in the card): one elevated `setup.exe modify ... --add
+  Microsoft.VisualStudio.Component.VC.Llvm.Clang`, then vswhere and `clang --version`. Decided by the worker, for
+  Haik's review: no auto apply at startup; no offline fallback to a downloaded package; the feed keeps the last
+  downloaded update; no pre-release switch in `feed()`; his user Path is not changed by the clang step. Next:
+  `p6-int-update-wiring`, then the release dry run again.

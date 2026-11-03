@@ -1,6 +1,6 @@
 # Add velopack and connect it to the hooks and the update thread
 
-Phase: 6. Status: ready. Needs Haik: yes, once, for an elevated install (step 0). His answer to Question 4 of
+Phase: 6. Status: done (open: Haik's clang install, step 0; ARM64 tray checks CI only until then). Needs Haik: yes, once, for an elevated install (step 0). His answer to Question 4 of
 `p6-plan-ship` (clang on this laptop) is yes: add the Build Tools clang component (`docs/phases/02-06-signoff.md`
 item 8, default, Haik 2026-11-03 18:09). Agent: `wakeshot-worker`. Size: about 110K tokens.
 Real laptop: no. It builds only; it never runs a hook (a hook writes the real Run value and Path).
@@ -77,14 +77,186 @@ the hook callbacks at tray startup step 1, and the update feed.
 
 Each with the worker's default.
 
+### Steps for Haik: add clang to the Build Tools (step 0, needs your elevation)
+
+Not done yet (Haik away; orchestrator's call 03:07: the card goes on without it). Until then ARM64 builds of
+`wakeshot-tray` run in CI only. Do this when no cargo command runs on the laptop (the orchestrator says when).
+Component ids from Microsoft Learn, "Visual Studio Build Tools component directory", Visual Studio 2026 part, workload
+"Desktop development with C++" (`Microsoft.VisualStudio.Workload.VCTools`, installed here); `ring`'s `BUILDING.md`
+asks for the "C++ ARM64 build tools" (`Microsoft.VisualStudio.Component.VC.Tools.ARM64`, already installed) and the
+"clang" component, with the LLVM folder on the PATH.
+
+1. Close the Visual Studio Installer if it is open.
+2. Open Terminal (PowerShell) as administrator: Start, type `Terminal`, right-click it, Run as administrator, Yes.
+3. Paste this one line and press Enter (`--passive` shows a progress window and asks nothing; `--norestart` delays any
+   reboot):
+
+   ```powershell
+   & "C:\Program Files (x86)\Microsoft Visual Studio\Installer\setup.exe" modify --installPath "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools" --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --passive --norestart
+   ```
+
+4. Wait until the installer window closes (download size and time not verified). `$LASTEXITCODE` 0 is done; 3010 is
+   done but wants a reboot (Microsoft's error code table).
+5. Confirm, in the same window:
+
+   ```powershell
+   & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -all -products * -find 'VC\Tools\Llvm\**\clang.exe'
+   ```
+
+   It must print at least one path ending in `clang.exe`. Run the one under an `x64` folder with `--version` (likely
+   `...\BuildTools\VC\Tools\Llvm\x64\bin\clang.exe`; the folder layout is not verified): it prints a clang version
+   (the component list says 20.1.8).
+6. Nothing else to do: you do not need to change your own Path. `Get-Command clang` stays empty on purpose (see
+   decision 5 in Result). Tell the orchestrator it is done; a worker then reruns the two checks, `clang --version` and
+   the ARM64 checks of this card.
+
 ## Found outside scope
 
 Problems seen but not fixed.
 
+1. `docs/architecture.md` section 11, the `velopack` row, still says "not declared yet (113 packages ...)": it is
+   declared now, and pulls 114 packages besides itself for x64, 117 for ARM64 (research "Velopack dependency checks").
+   `docs/phases/06-ship.md` "Where the code goes" also says 113. For a docs pass.
+2. `docs/tasks/p6-int-tray-mode.md` "Notes for the Part B run" finds the icon entry by its `IconGuid`; this run's entry
+   had none (research, "Velopack dependency checks", last point). Compare the ids before and after instead.
+
+## Needs another card
+
+- `p6-int-update-wiring` (takes over `velo.rs`): `velo::feed` is ready for `UpdateThread::start(velo::feed, ...)`;
+  remove its `#[cfg_attr(not(test), expect(dead_code, ...))]` when `main.rs` uses it. For the restarted version: give
+  `startup()` an `on_restarted` callback that keeps the version (for example in a `OnceLock` read by a new
+  `velo::restarted()`); reading `VELOPACK_RESTART` after `startup()` does not work, because `run()` removes that
+  variable (velopack 1.2.161 `app.rs`). Its ARM64 checks of `wakeshot-tray` fail without clang: run them only after
+  Haik's install (with the LLVM folder on that command's PATH), or leave them to CI.
+- Every card that builds or lints `wakeshot-tray` for ARM64 (`-p wakeshot-tray` or `--workspace`): the same; ARM64
+  checks of `wakeshot-core`, `wakeshot-windows` and `wakeshot-cli` alone still work without clang.
+- Orchestrator, after Haik's clang install: a `CLAUDE.md` fact line, such as "ARM64 builds of the tray need clang:
+  put `<BuildTools>\VC\Tools\Llvm\x64\bin` on the PATH of that cargo command (`ring`)", with the path vswhere prints.
+- Orchestrator, at the next push: watch the ARM64 jobs of `ci.yml` and `release.yml` (rerun of the dry run
+  41731897399). If either fails with `failed to find tool "clang"`, the runner's LLVM is not on the PATH: add a step
+  that puts it there (`ci.yml` is this card's under its rule; `release.yml` is `p6-pack-and-release`'s).
+
 ## Log
 
 - 2026-11-03: card written by `p6-plan-ship`.
+- 2026-11-04 03:08: worker started; no cargo or rustc process running.
+- 2026-11-04 03:09: step 0 checks. `Get-Command clang`: not found. `vswhere -all -products * -find
+  'VC\Tools\Llvm\**\clang.exe'`: no hit, exit 0. Only instance: Build Tools 2026 18.11.12324.101 at
+  `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools`; it already has
+  `Microsoft.VisualStudio.Component.VC.Tools.ARM64` (vswhere `-include packages`). Orchestrator's call (Haik away
+  until about 10:00): do not wait; steps for Haik below, then the card's fallback, "ARM64: CI only" for the tray.
+- 2026-11-04 03:12: component ids checked on Microsoft Learn (Build Tools component list, 2026 part; install command
+  line page) and `ring`'s `BUILDING.md` (`main`); `ring` 0.17.14 `build.rs` line 562 to 564 sets the compiler to the bare
+  name `clang` for `aarch64-pc-windows-msvc`, so `clang` must be on the PATH of the cargo process. Steps for Haik written.
+- 2026-11-04 03:15: before the change, in the card's build folder: release builds of the workspace, x64 55 s and ARM64
+  43 s, exit 0. Sizes: x64 tray 1,640,960, CLI 667,648; ARM64 tray 1,318,400, CLI 615,936. `Cargo.lock` copied to the
+  scratchpad (SHA-256 `384FD119...F9248894`).
+- 2026-11-04 03:17: `velopack = "=1.2.161"` in the root and the tray's `Cargo.toml`; `velo.rs` written (four fast
+  callbacks, auto apply off, `feed()`, four unit tests). Next: the one build without `--locked`.
+- 2026-11-04 03:19: `cargo build --release --workspace --target x86_64-pc-windows-msvc` (the one run without
+  `--locked`): exit 0, 67 s. `Cargo.lock` 80 to 181 packages (+101, all targets), none removed, no locked version
+  changed; six existing entries only gained a version suffix or an optional dependency (`rand` gains `chacha20`).
+  `velopack` 1.2.161 pulls 114 packages besides itself for x64, 117 for ARM64 (`windows-sys` 0.52 for `ring`); the
+  tray's x64 build gains 92 new packages (23 are shared with the libs, `windows` 0.62.2 among them).
+- 2026-11-04 03:20: `cargo fmt --all --check` failed on `velo.rs` only (my lines); `rustfmt --edition 2024` on it;
+  again exit 0. Clippy x64 with and without `--all-targets`: exit 0, no warning.
+- 2026-11-04 03:23: `cargo test --workspace --locked`: exit 0; 12 suites, 1,260 passed, 0 failed, 30 ignored (4 new in
+  `velo::tests`). Locked x64 release build: exit 0; tray 2,026,496, CLI 667,648. CRT check (ci.yml's dumpbin step) on
+  both: passed.
+- 2026-11-04 03:24: ARM64 with `velopack`: workspace clippy (both forms) and release build fail in 1 to 3 s: `error:
+  failed to run custom build command for ring v0.17.14` ... `error occurred in cc-rs: failed to find tool "clang":
+  program not found`. ARM64 without it: clippy of `wakeshot-core`, `wakeshot-windows`, `wakeshot-cli` with and without
+  `--all-targets`, and their release build: exit 0, no warning; ARM64 CLI 615,936.
+- 2026-11-04 03:26: clean x64 release build of the tray alone in a fresh folder: 70.4 s, 133 crates compiled; the
+  folder deleted.
+- 2026-11-04 03:26: `cargo tree --locked -p wakeshot-cli -e normal`: 50 lines, no `velopack`. Before the smoke run:
+  16 `NotifyIconSettings` ids saved, one `NotifyIconGeneratedAumid_*` key (not ours), no dry-run entry.
+- 2026-11-04 03:27: smoke test (`--test smoke -- --ignored --test-threads=1 --nocapture`): 1 passed, test 4.5 s, 35 s
+  with the build; tray pid 38716 ran from the card's build folder, held, went idle, quit with code 0, and is gone.
+- 2026-11-04 03:29: one new `NotifyIconSettings` entry, `15983757285637097514`, held only `IconSnapshot` (no
+  `IconGuid` or `ExecutablePath`, unlike `p6-int-tray-mode`'s run; still so at 03:29:01); its PNG is the idle cup, so
+  it is the dry-run icon. Exported to the scratchpad, deleted 03:29:25; no new AUMID key. Data folder, install folder,
+  Run, RunOnce and the user Path hold no Wakeshot trace (03:30).
+- 2026-11-04 03:30: icon entry still gone at 03:30:31 (66 s after the delete), no new AUMID key. Build folder deleted
+  and checked gone. Research section "Velopack dependency checks" added.
+- 2026-11-04 03:31: Result written; status done with the clang install open.
 
 ## Result
 
-What was done, files changed, checks and outcomes, open items.
+Done 2026-11-04 03:31, with one open item: Haik's clang install (step 0). Until then ARM64 builds of `wakeshot-tray`
+are **ARM64: CI only**.
+
+**Built**
+
+- Root `Cargo.toml`: `velopack = "=1.2.161"` in `[workspace.dependencies]`. `crates/wakeshot-tray/Cargo.toml`:
+  `velopack.workspace = true`. The CLI does not get it. `Cargo.lock` regenerated by the one build without `--locked`:
+  80 to 181 packages, none removed, no locked version changed.
+- `crates/wakeshot-tray/src/velo.rs`, whole:
+  - `startup()` (signature kept, `main.rs` untouched): `VelopackApp::build()`, `.set_auto_apply_on_startup(false)`,
+    the four fast callbacks exactly as `p6-hooks` gave them (`hooks::on_install`, `on_obsolete`, `on_updated`,
+    `on_uninstall`, each with `RealHookEnv::installed()` and the version text), `.run()`.
+  - `feed() -> impl UpdateFeed`: `UpdateManager::new(GithubSource::new("https://github.com/HaikAsatryan/wakeshot",
+    None, false), None, None)`, no explicit channel. `check_and_download`: `check_for_updates`; on `UpdateAvailable`,
+    `download_updates` at once, keeps the target asset, answers its version; `NoUpdateAvailable` and `RemoteIsEmpty`
+    are `Ok(None)`. `apply`: `wait_exit_then_apply_updates(asset, true, true, [])`; no asset kept: `Failed`.
+    `Error::NotInstalled(_)` from any call, `UpdateManager::new` too, is `FeedError::NotInstalled`; every other error
+    is `Failed` with the method name as `call`, the OS code (IO error code, or the HRESULT for `Win32`) else 0, and the
+    error text as `detail`.
+  - Four unit tests: a build-folder exe is not installed (both feed calls answer `NotInstalled`, through the real
+    locator); `startup()` returns when not installed (refuses to run with a `--veloapp-` argument); `NotInstalled`
+    mapping; the call, OS code and text of other errors.
+- `.github/workflows/ci.yml`: not changed (no evidence yet that the ARM64 runner needs a clang step).
+- `docs/research.md`: new section "Velopack dependency checks".
+
+**Checks** (all in the card's build folder, alone on the laptop)
+
+- `cargo fmt --all --check`: exit 0 (after `rustfmt` on `velo.rs`, the only file it flagged).
+- `cargo clippy --workspace --all-targets --locked --target x86_64-pc-windows-msvc -- -D warnings` and the same
+  without `--all-targets`: exit 0, no warning.
+- `cargo test --workspace --locked`: exit 0; 12 suites, 1,260 passed, 0 failed, 30 ignored.
+- `cargo build --release --workspace --locked --target x86_64-pc-windows-msvc`: exit 0.
+- ARM64, workspace clippy (both forms) and release build: **fail, no clang**: `error: failed to run custom build
+  command for ring v0.17.14` ... `error occurred in cc-rs: failed to find tool "clang": program not found`. ARM64 that
+  ran and passed: `cargo clippy -p wakeshot-core -p wakeshot-windows -p wakeshot-cli --locked --target
+  aarch64-pc-windows-msvc` with and without `--all-targets` (`-D warnings`), and their `--release` build. `cargo tree
+  -e all --target aarch64-pc-windows-msvc` shows no `velopack` and no `ring` under those three.
+- `cargo tree --locked -p wakeshot-cli -e normal`: no `velopack`.
+- Sizes (bytes): x64 tray 1,640,960 to 2,026,496 (+385,536, +23.5%); x64 CLI 667,648 to 667,648; ARM64 tray
+  1,318,400 before, after not built; ARM64 CLI 615,936 to 615,936. Clean x64 release build of the tray alone: 70.4 s,
+  133 crates (before: the whole workspace in 55 s).
+- CRT check (`ci.yml`'s dumpbin step) on the new x64 exes: passed; no Visual C++ runtime import.
+- Smoke test `cargo test --locked -p wakeshot-tray --target x86_64-pc-windows-msvc --test smoke -- --ignored
+  --test-threads=1`: 1 passed; the dry-run tray started with `velopack` in, held, went idle and quit with code 0. Its
+  icon entry exported and deleted, still gone 66 s later; no tray pid left.
+- No hook and no install ran: no install folder, no data folder, no Wakeshot value in Run or RunOnce, no Wakeshot
+  entry in the user Path (03:30). The build folders are deleted.
+
+**Decided by the worker, for Haik's review** (his rule: with no work going on, the laptop behaves as if Wakeshot were
+not there; nothing here keeps the PC awake)
+
+1. Auto apply at startup off (`p6-velopack-facts`' call): a staged update never applies at tray start, where it would
+   skip the core's apply rules and kill a `wakeshot run` wrapper; the next good check offers it again without a second
+   download (`download_updates` skips a package already on disk). Change it when a staged update should land at
+   sign-in regardless of holds.
+2. No offline fallback: when a check fails, a package staged by an earlier run waits for the next good check. Change
+   it when a log shows a staged update waiting long for want of network.
+3. The feed keeps the last downloaded update even if a later check finds nothing newer (the package on disk is still
+   newer than the running version). Change it when a release is ever pulled for a bug: then drop the kept update on
+   `NoUpdateAvailable`.
+4. No pre-release switch in `feed()`: the update path test uses the debug-only local feed `p6-int-update-wiring`
+   adds, so users' builds have no way to ask for pre-releases. Change it when a beta channel is wanted.
+5. clang reach: no change to Haik's user Path. A cargo command that builds the tray for ARM64 puts the LLVM `x64\bin`
+   folder on its own PATH (`ring` looks for `clang` by name). Reason: the user Path is Haik's real setting, which the
+   hooks edit and other cards hash in their checks. Change it when Haik builds ARM64 by hand in his own terminals.
+6. `feed()` carries `#[cfg_attr(not(test), expect(dead_code, ...))]`: a plain `expect` would be unfulfilled in the test
+   build, which calls it.
+
+**Open items**
+
+- Haik: the clang install, steps under "Questions for Haik". Then a worker (alone, no other cargo command): the two
+  checks and `clang --version` into `docs/research.md`, then ARM64 workspace clippy (both forms) and release build with
+  the LLVM folder on the command's PATH, the ARM64 tray size, and the CRT check on the ARM64 exes.
+- "Needs another card" and "Found outside scope" above.
+
+Files changed: `Cargo.toml`, `Cargo.lock`, `crates/wakeshot-tray/Cargo.toml`, `crates/wakeshot-tray/src/velo.rs`,
+`docs/research.md` (new section), this card.

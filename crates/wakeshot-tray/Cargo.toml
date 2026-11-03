@@ -13,6 +13,9 @@ repository.workspace = true
 [dependencies]
 wakeshot-core.workspace = true
 wakeshot-windows.workspace = true
+# The tray only, and only `velo.rs` names it: it brings 113 packages and needs clang for ARM64 (`ring`), and the CLI
+# needs none of it.
+velopack.workspace = true
 
 [dependencies.windows]
 workspace = true

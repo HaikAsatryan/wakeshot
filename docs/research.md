@@ -3351,3 +3351,82 @@ dry-run tray's own log printed by the test.
 - **The quit is quick and the 1400 line comes once.** From the quit's restore to "Wakeshot ends with code 0" took
   3 ms; the IO thread's one `PostMessageW` 1400 line ("as after a quit ... dropped") is Info, once, as the
   orchestrator asked.
+
+## Velopack dependency checks
+
+Checked 2026-11-04 between 03:08 and 03:31 for card `docs/tasks/p6-velopack-dependency.md`, on this laptop, in the
+card's own build folder, with no other cargo command running. Rust 1.99.1, the repo's static CRT config.
+
+- **clang is still missing here.** `Get-Command clang`: not found. `vswhere -all -products * -find
+  'VC\Tools\Llvm\**\clang.exe'`: no hit (03:09). The one Visual Studio instance is Build Tools 2026 18.11.12324.101 in
+  `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools`; it already has
+  `Microsoft.VisualStudio.Component.VC.Tools.ARM64` (`vswhere -include packages`). Not installed: it needs Haik's
+  elevation (steps in the card).
+- **Component ids and the command.** Microsoft Learn, "Visual Studio Build Tools component directory", the Visual
+  Studio 2026 part, workload "Desktop development with C++" (`Microsoft.VisualStudio.Workload.VCTools`), all optional:
+  `Microsoft.VisualStudio.Component.VC.Llvm.Clang` ("C++ Clang Compiler for Windows (20.1.8)"),
+  `Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset` ("MSBuild support for LLVM (clang-cl) toolset"),
+  `Microsoft.VisualStudio.ComponentGroup.NativeDesktop.Llvm.Clang` ("C++ Clang tools for Windows (20.1.8 - x64/x86)").
+  "Use command-line parameters to install Visual Studio": `setup.exe modify --installPath <dir> --add <id>`,
+  `--passive` (a progress window, no questions), `--norestart`; the installer must be started from another folder than
+  its own; every command needs elevation; exit 0 is done, 3010 done with a reboot wanted. `ring`'s `BUILDING.md`
+  (`main`): for `aarch64-pc-windows-msvc`, the Build Tools "C++ ARM64 build tools" and "clang" components, and the
+  Visual Studio LLVM folder on the PATH. Read 03:10 to 03:12.
+- **`ring` calls clang by its bare name.** `ring` 0.17.14 (the version `velopack` locks) `build.rs` lines 562 to 564:
+  on Windows AArch64, when the compiler cc-rs found is not clang-like, it sets the compiler to `clang`. So the PATH of
+  the cargo process decides; no user Path change is needed if the cargo command's own PATH has the LLVM folder. Read in
+  the cargo registry copy. That `CC_aarch64_pc_windows_msvc` set to a full clang path works too: inferred from the same
+  lines (a clang there is clang-like), not tried.
+- **The ARM64 error without clang.** Workspace clippy (with and without `--all-targets`) and the release build for
+  `aarch64-pc-windows-msvc` stop in 1 to 3 s: `error: failed to run custom build command for ring v0.17.14` ...
+  `error occurred in cc-rs: failed to find tool "clang": program not found`. Build scripts run for clippy too, so every
+  ARM64 command that compiles `wakeshot-tray` fails the same way until clang is reachable.
+- **The CLI and the libs stay free of it.** `cargo tree --locked -p wakeshot-cli -e normal`: 50 lines, no `velopack`.
+  `cargo tree -e all --target aarch64-pc-windows-msvc` for `wakeshot-cli`, and for `wakeshot-core` with
+  `wakeshot-windows`: no `velopack` and no `ring`. So for ARM64, `cargo clippy -p wakeshot-core -p wakeshot-windows -p
+  wakeshot-cli` with and without `--all-targets` (`-D warnings`) and their release build pass without clang (03:24).
+- **Lock and package counts.** The one build without `--locked` took `Cargo.lock` from 80 to 181 packages (+101, all
+  targets); none removed, no locked version changed, six existing entries only gained a version suffix (now two
+  `windows-sys` and two `getrandom`) or an optional dependency (`rand` gains `chacha20`). Compared with a Python
+  `tomllib` diff of the two files. `cargo tree -p velopack -e normal --prefix none`, unique lines: 115 for x64 (114
+  packages besides `velopack`), 118 for ARM64 (plus `windows-sys` 0.52, `windows-targets` and `windows_aarch64_msvc`
+  0.52.6 for `ring`). Research "Contracts build" counted 113 in a scratch project on 2026-11-03; the newer resolve
+  (`ureq` 3.5.1 now) likely explains the difference (not verified). The x64 tray build gains 92 packages; 23 of
+  velopack's are already in the libs' tree (`windows` 0.62.2 and its crates, `serde`, `serde_json`, `syn`).
+- **Sizes and build time.** Release exes in bytes, before and after `velopack`:
+
+  | Exe | x64 before | x64 after | ARM64 before | ARM64 after |
+  |---|---|---|---|---|
+  | `wakeshot-tray.exe` | 1,640,960 | 2,026,496 (+385,536) | 1,318,400 | not built (no clang) |
+  | `wakeshot.exe` | 667,648 | 667,648 | 615,936 | 615,936 |
+
+  Clean release build in a fresh folder: before, the whole workspace for x64 took 55 s (ARM64 43 s); after, the tray
+  alone for x64 took 70.4 s with 133 crates compiled.
+- **Static CRT holds with `ring`'s C code.** `ci.yml`'s dumpbin step, run on the new x64 release exes: no `VCRUNTIME`,
+  `MSVCP`, `ucrtbase` or `api-ms-win-crt-*`. The tray imports `kernel32`, `ntdll`, `oleaut32`, `bcryptprimitives`,
+  `advapi32`, `api-ms-win-core-synch-l1-2-0`, `shell32`, `ole32`, `user32`, `combase`, `gdi32`, `dwmapi`, `powrprof`,
+  `propsys`, `wtsapi32`, `userenv` and `api-ms-win-shcore-scaling-l1-1-1`. Which of these are new: not compared (the
+  before exe was overwritten).
+- **velopack 1.2.161 behavior `velo.rs` relies on** (source in the cargo registry: `app.rs`, `manager.rs`,
+  `locator.rs`, `sources/github.rs`).
+  - `VelopackApp::run()`: when the first argument is `--veloapp-install`, `-updated`, `-obsolete` or `-uninstall`, it
+    calls that callback only if the second argument parses as a semver version, then `exit(0)` unless
+    `VELOPACK_DEBUG` is set. Otherwise it locates the install; not installed, it logs and returns.
+  - `set_auto_apply_on_startup(false)` skips the apply of a staged package in `run()`; `run()` still deletes local
+    full packages other than the running version and the newest staged one.
+  - `download_updates` returns at once when the target package is already in `packages\` ("Package already exists on
+    disk, skipping download"), so a package staged by an earlier run is offered again after the next good check,
+    with no second download.
+  - `wait_exit_then_apply_updates` uses only the target asset (`AsRef<VelopackAsset>`); a package missing on disk is
+    `Error::FileNotFound`.
+  - `GithubSource::new` panics only on a URL that does not parse (`expect`); `UpdateManager::new` auto-locates from
+    the exe: `Update.exe` beside it, or `<root>\current\` with `Update.exe` in `<root>`. A test exe in `target\` gets
+    `NotInstalled` (unit test `velo::tests::a_build_folder_exe_is_not_installed`).
+- **The dry-run tray still starts with `velopack` in.** The smoke test (`--test smoke -- --ignored
+  --test-threads=1`) passed after the change: 1 passed, test 4.5 s, 35 s with its debug build. `VelopackApp::run()`
+  in the not-installed build returned and the tray ran on, held, went idle and quit with code 0.
+- **The shell's entry for that run had no GUID.** One new `HKCU\Control Panel\NotifyIconSettings\<id>` key came with
+  the run (ids listed before and after), holding only `IconSnapshot`, a 24 px PNG of the idle cup; no `IconGuid` and
+  no `ExecutablePath`, still so 1.5 minutes after the run (session locked). The tray mode card's run had both. So a
+  clean-up that looks only for the dry-run GUID can miss the entry; comparing the ids before and after finds it. Why
+  the values were missing: not verified.
