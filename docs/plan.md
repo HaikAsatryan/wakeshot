@@ -25,7 +25,10 @@ Start here in every new context: read this file, then the current phase file in 
    a failure in another card's file is reported, never fixed or formatted. At most four cards build at the same time
    (the laptop has 24 threads and every cargo build takes them all); each card deletes its build folder when done. The whole-workspace check runs when the
    orchestrator closes a wave. A card that signs out, restarts Explorer or reboots runs only when no other agent
-   runs.
+   runs. Work non-stop (Haik, 2026-11-03 19:55: "minimum stop, maximum parallelism at safe count"): fill a free
+   slot the moment a card ends, from every ready card of every track, instead of waiting for a wave to drain; drain
+   only for a card that must run alone. Cards that do not build (planning, docs, research, agent sessions) run beside
+   the four building cards. Questions for Haik go to him in chat while the work that does not depend on them goes on.
 3. Review: at least two reviewers per phase, one general code review and one domain review with a narrow brief (for
    example "find any path where user power settings are not restored"). Findings go to `docs/reviews/`.
 4. Fix: a worker fixes the findings; a reviewer verifies.
