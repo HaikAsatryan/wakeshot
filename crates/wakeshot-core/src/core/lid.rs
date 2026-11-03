@@ -8,6 +8,10 @@
 //! force now ([`Core::in_force`]), not the last plan read, which an apply leaves up to 10 s behind. The countdown is
 //! derived in each settle pass from two wants, "work ended with the lid closed" and "a step back with the lid closed",
 //! so every rule that starts, stops or restarts it is one line in one place.
+//!
+//! A closed-lid lock is watched until the session reports it ([`LockWatch`]): one that fails, or that no
+//! `Session(Locked)` follows within [`LOCK_CHECK_MS`], is sent once more, and when that one goes the same way the core
+//! steps back as at the battery floor (section 8, "Lock fails"; power safety review finding 1).
 
 use super::settings::{KEYS, TARGET};
 use super::{Core, label, ms_ahead, nearest};
@@ -24,7 +28,42 @@ use crate::view::{Cue, Notice};
 /// Both power sources, for a rule asked before the first `Power` event: then it must hold for either.
 const EITHER: [bool; 2] = [true, false];
 
+/// How long the session may take to report `Locked` after a closed-lid `Lock`. `LockWorkStation` only starts the lock
+/// (research, "`LockWorkStation`"); in the lid spike the session read locked 1 s after it (research, "Lock").
+const LOCK_CHECK_MS: u64 = 5_000;
+
+/// The lid action Sleep: the stand-in for a lid key no plan read has shown and no journal entry names, so never ours.
+const SLEEP: u32 = 1;
+
+/// A closed-lid lock until the session reports it, and the step back when it never does. It sits beside the state
+/// rather than in it because `state.rs` was not the fix round's file; move it into `State` with the next card that
+/// owns that file.
+#[derive(Debug, Default)]
+pub(super) struct LockWatch {
+    /// A closed-lid `Lock` the session has not confirmed with `Session(Locked)` yet.
+    pending: Option<PendingLock>,
+    /// Both tries failed with the lid closed on our Do nothing: no hold holds until the session locks or the lid opens.
+    stepped_back: bool,
+    /// That step back's restore and countdown went out.
+    step_back_sent: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PendingLock {
+    /// This lock is the one retry.
+    retry: bool,
+    /// `LockFailed` went out for this lock or the one it retries.
+    shown: bool,
+    /// When a tick decides: [`LOCK_CHECK_MS`] after the lock, or at once after it failed.
+    check_mono: u64,
+}
+
 impl Core {
+    /// No hold holds now: the battery floor, or a closed laptop that could not be locked (`policy::requests`).
+    pub(super) fn holds_back(&self) -> bool {
+        self.state.stepped_back || self.lock.stepped_back
+    }
+
     /// The power sources the PC may be on: the known one, or both before the first `Power` event.
     fn sources(&self) -> &'static [bool] {
         match self.state.ac {
@@ -68,13 +107,55 @@ impl Core {
         Some((plan, journal))
     }
 
+    /// What the lock rules see: what is in force, or before the first plan read a guess from the journal `Started`
+    /// carried (`p2-core-props` finding 2). A crashed tray's values may be in force then, and a lid close is an edge, so
+    /// a lock missed then never comes. The guess takes each lid key a journal entry names, on whichever plan, as ours
+    /// in force on one stand-in plan, and any other lid key as Sleep. Only the lid keys are guessed, so only the
+    /// lid-close and source lock rules read it; like the in-force view it errs toward a lock.
+    fn lock_view(&self) -> Option<(PlanValues, Vec<JournalEntry>)> {
+        if self.state.plan.is_some() {
+            return self.in_force();
+        }
+        let active = self.state.journal.first()?.plan;
+        let mut plan = PlanValues {
+            active,
+            lid_ac: SLEEP,
+            lid_dc: SLEEP,
+            sleep_ac: 0,
+            sleep_dc: 0,
+            saver_threshold_dc: 0,
+        };
+        let mut journal = Vec::new();
+        for key in [SettingKey::LidAc, SettingKey::LidDc] {
+            if let Some(&entry) = self.state.journal.iter().find(|e| e.key == key) {
+                set(&mut plan, key, entry.written);
+                journal.push(JournalEntry {
+                    plan: active,
+                    ..entry
+                });
+            }
+        }
+        Some((plan, journal))
+    }
+
     /// Our Do nothing keeps a closed laptop running on the current source (either one before the first `Power`).
     fn lid_ours(&self) -> bool {
-        self.in_force().is_some_and(|(plan, journal)| {
+        self.lock_view().is_some_and(|(plan, journal)| {
             self.sources()
                 .iter()
                 .any(|&ac| lid::ours(&plan, ac, &journal))
         })
+    }
+
+    /// A step back with the lid closed wants the `Floor` countdown only when the user's own battery lid action is not
+    /// Do nothing, the same rule as at work end (Haik, 2026-11-03; power safety review finding 7): with their own Do
+    /// nothing the closed laptop would run without Wakeshot too. No plan read: nothing was applied, so Wakeshot changed
+    /// nothing.
+    fn floor_countdown_starts(&self) -> bool {
+        self.state.lid_closed == Some(true)
+            && self.in_force().is_some_and(|(plan, journal)| {
+                ending::starts_at_work_end(true, lid::user_action(&plan, false, &journal))
+            })
     }
 
     /// The battery floor from the last plan read (`policy::floor::floor_pct`).
@@ -101,7 +182,7 @@ impl Core {
                     // after work that ended with the lid closed.
                     if self.state.episode.is_none() {
                         self.work_ended();
-                    } else if self.state.stepped_back {
+                    } else if self.state.stepped_back && self.floor_countdown_starts() {
                         self.state.floor_countdown = true;
                     }
                 }
@@ -113,10 +194,18 @@ impl Core {
 
     /// The laptop now runs with the lid closed on our Do nothing: `Lock` first, then the chime, side by side; the lock
     /// never waits for the sound (the chime was heard in a session already locked, research "Lid-close results").
-    /// While holding, the closed-lid stretch begins for the report.
+    /// While holding, the closed-lid stretch begins for the report. A session the core knows as locked will not report
+    /// `Locked` again, so only a lock into an unlocked one is watched.
     fn lock_and_chime(&mut self, now: Now, out: &mut Vec<Command>) {
         out.push(Command::Lock);
         out.push(Command::Play(Cue::LidClosedHolding));
+        if !self.state.session_locked {
+            self.lock.pending = Some(PendingLock {
+                retry: false,
+                shown: false,
+                check_mono: now.mono_ms.saturating_add(LOCK_CHECK_MS),
+            });
+        }
         let state = &mut self.state;
         if let Some(episode) = state.episode.as_ref() {
             let run = state.closed_lid.get_or_insert_with(ClosedLid::default);
@@ -127,6 +216,8 @@ impl Core {
 
     fn lid_opens(&mut self, now: Now, out: &mut Vec<Command>) {
         self.cancel_countdowns(Cancel::LidOpened, "the lid opened", out);
+        self.lock.pending = None;
+        self.end_lock_step_back("the lid opened", out);
         if let Some(run) = self.state.closed_lid.as_mut()
             && let Some(since) = run.since_mono.take()
         {
@@ -157,7 +248,7 @@ impl Core {
         self.state.source_since_mono = Some(now.mono_ms);
         let closed = self.state.lid_closed == Some(true);
         // In place of any earlier one, so a change back inside the settle drops it.
-        self.state.source_lock = self.in_force().and_then(|(plan, journal)| {
+        self.state.source_lock = self.lock_view().and_then(|(plan, journal)| {
             lid::source_change(&plan, &journal, closed, from, ac, now.mono_ms)
         });
         if self.state.source_lock.is_some() {
@@ -186,8 +277,11 @@ impl Core {
         self.state.last_resume_mono = Some(now.mono_ms);
     }
 
-    pub(super) fn take_locked(&mut self) {
+    /// `Locked`: a watched lock is confirmed, and a closed laptop that is locked after all may hold again.
+    pub(super) fn take_locked(&mut self, out: &mut Vec<Command>) {
         self.state.session_locked = true;
+        self.lock.pending = None;
+        self.end_lock_step_back("the session is locked now", out);
     }
 
     /// `Unlocked`: the notices that waited, in order, then the closed-lid report once the lid is open. A sign-in on an
@@ -263,12 +357,19 @@ impl Core {
             let floor_pct = self.floor_pct();
             self.notify(Notice::StepBack { floor_pct }, out);
             out.push(Command::Play(Cue::BatteryFloor));
-            if self.state.lid_closed == Some(true) {
+            if self.floor_countdown_starts() {
                 self.state.floor_countdown = true;
             }
         }
+        // Our Do nothing kept the closed laptop running and it could not be locked: give the settings back and let it
+        // hibernate as after work that ended, read before the restore lands. The requests went off in this pass.
+        if self.lock.stepped_back && !self.lock.step_back_sent {
+            self.lock.step_back_sent = true;
+            self.restore_all(RestoreWhy::Floor, out);
+            self.work_ended();
+        }
         // A hold that appears while stepped back does not hold, so it ends no countdown (`Cancel::HoldingStarts`).
-        if self.state.episode.is_some() && !self.state.stepped_back {
+        if self.state.episode.is_some() && !self.holds_back() {
             self.cancel_countdowns(Cancel::HoldingStarts, "holding starts again", out);
         }
         let state = &mut self.state;
@@ -291,13 +392,64 @@ impl Core {
             self.state.idle_lock_check = None;
         }
         let idle_due = self.state.idle_lock_check;
-        nearest(nearest(source_due, countdown_due, now), idle_due, now)
+        let lock_due = self.lock.pending.map(|p| Deadline::Mono(p.check_mono));
+        let due = nearest(nearest(source_due, countdown_due, now), idle_due, now);
+        nearest(due, lock_due, now)
+    }
+
+    /// At a tick, before the settle pass: a watched lock that failed, or that the session did not confirm in time,
+    /// gets the one retry; when the retry goes the same way, the step back, whose requests go off in this pass. Both
+    /// only while the lid is closed on our Do nothing; else the lock no longer guards anything Wakeshot keeps running.
+    pub(super) fn check_lock(&mut self, now: Now, out: &mut Vec<Command>) {
+        let Some(pending) = self.lock.pending.filter(|p| now.mono_ms >= p.check_mono) else {
+            return;
+        };
+        self.lock.pending = None;
+        if self.state.lid_closed != Some(true) || !self.lid_ours() {
+            out.push(Command::Log(
+                "The lock is not confirmed, but Wakeshot no longer keeps a closed laptop running: nothing to do"
+                    .to_owned(),
+            ));
+            return;
+        }
+        if !pending.shown {
+            self.notify(Notice::LockFailed, out);
+        }
+        if pending.retry {
+            out.push(Command::Log(
+                "The lock failed twice with the lid closed: step back as at the battery floor until the session \
+                 locks or the lid opens"
+                    .to_owned(),
+            ));
+            self.lock.stepped_back = true;
+            return;
+        }
+        out.push(Command::Log(
+            "The lock failed or the session did not report it locked: lock once more".to_owned(),
+        ));
+        out.push(Command::Lock);
+        self.lock.pending = Some(PendingLock {
+            retry: true,
+            shown: true,
+            check_mono: now.mono_ms.saturating_add(LOCK_CHECK_MS),
+        });
+    }
+
+    /// The closed laptop is locked or in front of the user again: holds hold as at a hold start.
+    fn end_lock_step_back(&mut self, why: &str, out: &mut Vec<Command>) {
+        if std::mem::take(&mut self.lock.stepped_back) {
+            self.lock.step_back_sent = false;
+            out.push(Command::Log(format!(
+                "The step back after the failed lock ends: {why}"
+            )));
+            self.want_apply();
+        }
     }
 
     fn settle_source_lock(&mut self, now: Now, out: &mut Vec<Command>) -> Option<Deadline> {
         let pending = self.state.source_lock?;
         let closed = self.state.lid_closed == Some(true);
-        let answer = match (self.in_force(), self.state.ac) {
+        let answer = match (self.lock_view(), self.state.ac) {
             (Some((plan, journal)), Some(ac)) => {
                 lid::settle(pending, &plan, &journal, closed, ac, now.mono_ms)
             }
@@ -523,15 +675,30 @@ impl Core {
         }
     }
 
-    /// A failed lock gets a notice (section 8). The core sends `Lock` also into a session already locked, since a lost
-    /// `Unlocked` must never skip a lock; whether `LockWorkStation` fails then is not verified, so a failure while the
-    /// session is locked, which changes nothing, is logged only.
-    pub(super) fn done_locked(&mut self, result: Result<(), Failure>, out: &mut Vec<Command>) {
-        if let Err(Failure { call, code }) = result {
-            out.push(Command::Log(format!("Lock failed ({call}, code {code})")));
-            if !self.state.session_locked {
-                self.notify(Notice::LockFailed, out);
+    /// A failed lock gets a notice (section 8), one per watched lock and its retry; the next tick decides on a watched
+    /// one ([`Core::check_lock`]). `Ok` only means the lock started, so `Session(Locked)` or the check decides. The core
+    /// sends `Lock` also into a session already locked, since a lost `Unlocked` must never skip a lock; whether
+    /// `LockWorkStation` fails then is not verified, so a failure while the session is locked, which changes nothing,
+    /// is logged only.
+    pub(super) fn done_locked(
+        &mut self,
+        result: Result<(), Failure>,
+        now: Now,
+        out: &mut Vec<Command>,
+    ) {
+        let Err(Failure { call, code }) = result else {
+            return;
+        };
+        out.push(Command::Log(format!("Lock failed ({call}, code {code})")));
+        let first = match self.lock.pending.as_mut() {
+            Some(pending) => {
+                pending.check_mono = now.mono_ms;
+                !std::mem::replace(&mut pending.shown, true)
             }
+            None => !self.state.session_locked,
+        };
+        if first {
+            self.notify(Notice::LockFailed, out);
         }
     }
 

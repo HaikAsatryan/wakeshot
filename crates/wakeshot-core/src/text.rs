@@ -195,9 +195,12 @@ pub fn notice(notice: &Notice) -> NoticeText {
             "Wakeshot tried to hibernate the PC with the lid closed, but it did not work. Your power settings are \
              back, so Windows should sleep it at your usual sleep time.",
         ),
+        // Raised at the first failure of a closed-lid lock, before its retry and the step back (architecture section
+        // 8, "Lock fails"), and for a failed Keep screen on lock with the lid open, so it fits both.
         Notice::LockFailed => warning(
             "Wakeshot could not lock the PC",
-            "Windows did not lock the PC when Wakeshot asked. Press Windows key + L to lock it yourself.",
+            "Windows did not lock the PC. Lock it with Windows key + L. With the lid closed, Wakeshot tries once \
+             more; if that fails, it stops keeping the PC awake and hibernates it after 5 minutes with no input.",
         ),
         Notice::ClosedLidReport { ran_ms, held_by } => {
             let lead = format!(
@@ -1086,7 +1089,9 @@ mod tests {
             (lock_failed.title, "Wakeshot could not lock the PC"),
             (
                 lock_failed.body,
-                "Windows did not lock the PC when Wakeshot asked. Press Windows key + L to lock it yourself.",
+                "Windows did not lock the PC. Lock it with Windows key + L. With the lid closed, Wakeshot tries \
+                 once more; if that fails, it stops keeping the PC awake and hibernates it after 5 minutes with no \
+                 input.",
             ),
             (report.title, "The PC ran with the lid closed"),
             (

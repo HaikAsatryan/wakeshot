@@ -36,8 +36,9 @@ const ACCESS_DENIED: [u32; 2] = [5, 1260];
 
 impl Core {
     /// The core writes settings now: a hold counts, this tray owns the settings mutex, its session is on the PC's
-    /// own screen, it has not stepped back, the session is not ending, no apply failed in this episode or run, and
-    /// some key is not released (architecture section 3, "Holding starts" and "A failed `Restore`").
+    /// own screen, it has not stepped back (battery floor or a failed lock), the session is not ending, no apply
+    /// failed in this episode or run, and some key is not released (architecture section 3, "Holding starts" and "A
+    /// failed `Restore`").
     pub(super) fn applies(&self) -> bool {
         let state = &self.state;
         state
@@ -46,7 +47,7 @@ impl Core {
             .is_some_and(|e| !e.requests_only && e.released.len() < KEYS.len())
             && state.owner
             && state.on_console
-            && !state.stepped_back
+            && !self.holds_back()
             && !state.session_ending
             && !state.requests_only_run
     }
@@ -218,6 +219,35 @@ impl Core {
         };
         out.push(Command::Log(line));
         self.notify(Notice::UserChanged(changed.key), out);
+        if newly == Some(true) {
+            self.take_back(changed.key, out);
+        }
+    }
+
+    /// A key just released may still be ours somewhere: an apply on its way writes it (a plan switch's read posts
+    /// `Plan` before its check's `UserChanged`), or another plan's entry holds it (`p2-core-props` finding 1). The next
+    /// apply leaves the key out and restores this plan's entry for it (track note 3); with every key released no apply
+    /// comes, so a restore takes them back.
+    fn take_back(&mut self, key: SettingKey, out: &mut Vec<Command>) {
+        let ours =
+            !self.state.applying.is_empty() || self.state.journal.iter().any(|e| e.key == key);
+        if !ours {
+            return;
+        }
+        if self.applies() {
+            self.want_apply();
+        } else if self
+            .state
+            .episode
+            .as_ref()
+            .is_some_and(|e| e.released.len() == KEYS.len())
+        {
+            out.push(Command::Log(
+                "Every key is the user's for this episode: restore what Wakeshot may still hold"
+                    .to_owned(),
+            ));
+            self.restore_all(RestoreWhy::WorkEnded, out);
+        }
     }
 
     /// A corrupt journal was set aside: a new corrupt file may get its own restore.
@@ -263,7 +293,7 @@ impl Core {
 
     pub(super) fn take_session(&mut self, change: SessionChange, now: Now, out: &mut Vec<Command>) {
         match change {
-            SessionChange::Locked => self.take_locked(),
+            SessionChange::Locked => self.take_locked(out),
             SessionChange::Unlocked => self.take_unlocked(now, out),
             // The last chance before Windows ends the process, so it goes out whatever the copy says.
             SessionChange::Ending => {
@@ -332,15 +362,17 @@ impl Core {
                     self.read_plan(now, out);
                 }
             }
-            Err(ApplyError::SafetyNet(failure) | ApplyError::Write(failure)) => {
-                self.apply_failed(failure, out);
-            }
+            Err(ApplyError::SafetyNet(failure)) => self.apply_failed(failure, false, out),
+            Err(ApplyError::Write(failure)) => self.apply_failed(failure, true, out),
         }
     }
 
     /// Requests only (decision 29): for the run on access denied, else for the episode, with one notice per
-    /// failure streak. What this episode owns goes back at once, since no apply will take it over.
-    fn apply_failed(&mut self, failure: Failure, out: &mut Vec<Command>) {
+    /// failure streak. What this episode owns goes back at once, since no apply will take it over. A failed write
+    /// restores whatever the copy holds: the apply saved and maybe wrote entries, and its own restore may have failed
+    /// to load the journal, which reports none (power safety review finding 2); a restore of a missing journal costs
+    /// nothing. A safety net failure writes nothing.
+    fn apply_failed(&mut self, failure: Failure, wrote: bool, out: &mut Vec<Command>) {
         let Failure { call, code } = failure;
         let holding = self.state.episode.is_some();
         let line = if ACCESS_DENIED.contains(&code) {
@@ -365,7 +397,7 @@ impl Core {
         let corrupt = failure == JOURNAL_CORRUPT;
         let first_corrupt =
             corrupt && !std::mem::replace(&mut self.state.corrupt_restore_sent, true);
-        if first_corrupt || (!corrupt && !self.state.journal.is_empty()) {
+        if first_corrupt || (!corrupt && (wrote || !self.state.journal.is_empty())) {
             out.push(Command::Restore {
                 plan: None,
                 why: RestoreWhy::WorkEnded,

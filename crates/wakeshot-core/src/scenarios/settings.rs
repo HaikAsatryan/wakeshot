@@ -427,6 +427,77 @@ fn a_released_key_stays_released_after_a_plan_switch() {
     );
 }
 
+#[test]
+fn a_release_while_the_switchs_apply_is_on_its_way_applies_again_without_the_key() {
+    // `p2-core-props` finding 1: the switch's read posts `Plan` before its check's `UserChanged`, so the switch's
+    // apply goes out with all three keys and would write the key the user just took back.
+    let mut sim = holding();
+    let out = sim.send(read(OTHER_PLAN));
+    assert_eq!(
+        settings(&out),
+        [
+            &restore(Some(BALANCED), RestoreWhy::PlanSwitch),
+            &apply(OTHER_PLAN, &KEYS)
+        ],
+        "{}",
+        sim.trace()
+    );
+    let out = sim.send(Event::UserChanged(OwnedKey {
+        plan: BALANCED,
+        key: SettingKey::SleepDc,
+    }));
+    let trace = sim.trace();
+    let kept = [SettingKey::LidAc, SettingKey::LidDc];
+    assert_eq!(settings(&out), [&apply(OTHER_PLAN, &kept)], "{trace}");
+    assert_eq!(
+        notified(&out, &Notice::UserChanged(SettingKey::SleepDc)),
+        1,
+        "{trace}"
+    );
+
+    // Both answered in order: nothing more.
+    let mut out = sim.send(applied(OTHER_PLAN, Ok(()), entries(OTHER_PLAN, &KEYS)));
+    out.extend(sim.send(applied(OTHER_PLAN, Ok(()), entries(OTHER_PLAN, &kept))));
+    assert!(settings(&out).is_empty(), "{}", sim.trace());
+}
+
+#[test]
+fn a_release_named_on_another_plan_takes_the_active_plans_override_back() {
+    // A failed restore left LidDc on the other plan; the user sets it there with `powercfg`. The key is released on
+    // every plan, so Balanced's override of it must go too.
+    let mut sim = known_plan();
+    sim.send(working(1));
+    let mut journal = entries(BALANCED, &KEYS);
+    journal.extend(entries(OTHER_PLAN, &[SettingKey::LidDc]));
+    sim.send(applied(BALANCED, Ok(()), journal));
+    let out = sim.send(Event::UserChanged(OwnedKey {
+        plan: OTHER_PLAN,
+        key: SettingKey::LidDc,
+    }));
+    let kept = [SettingKey::LidAc, SettingKey::SleepDc];
+    assert_eq!(settings(&out), [&apply(BALANCED, &kept)], "{}", sim.trace());
+}
+
+#[test]
+fn every_key_released_while_an_apply_is_on_its_way_restores() {
+    // With every key released no apply comes, so a restore takes back what the one on its way writes.
+    let mut sim = known_plan();
+    sim.send(working(1));
+    let mut out = Vec::new();
+    for key in KEYS {
+        out = sim.send(Event::UserChanged(OwnedKey {
+            plan: BALANCED,
+            key,
+        }));
+    }
+    assert_eq!(
+        settings(&out),
+        [&restore(None, RestoreWhy::WorkEnded)],
+        "{}",
+        sim.trace()
+    );
+}
+
 // Items 6 and 15.
 
 #[test]
@@ -503,6 +574,37 @@ fn a_failed_write_restores_what_the_apply_left_at_once() {
         [&restore(None, RestoreWhy::WorkEnded)],
         "{trace}"
     );
+}
+
+#[test]
+fn a_failed_write_whose_own_restore_cannot_load_the_journal_still_restores() {
+    // Power safety review finding 2: the apply saved its entries and wrote one, then the restore inside it could not
+    // load the journal, so the outcome names no entry. The copy was empty: the first hold of the run.
+    let mut sim = known_plan();
+    sim.send(working(1));
+    let out = sim.send(Event::Done(crate::command::Outcome::Applied {
+        plan: BALANCED,
+        written: vec![SettingKey::LidAc],
+        result: Err(ApplyError::Write(WRITE_FAILED)),
+        journal: vec![],
+    }));
+    let trace = sim.trace();
+    assert_eq!(notified(&out, &Notice::RequestsOnly), 1, "{trace}");
+    assert_eq!(
+        settings(&out),
+        [&restore(None, RestoreWhy::WorkEnded)],
+        "{trace}"
+    );
+
+    // A safety net failure writes nothing, so it still restores nothing.
+    let mut sim = known_plan();
+    sim.send(working(1));
+    let out = sim.send(applied(
+        BALANCED,
+        Err(ApplyError::SafetyNet(GUARD_FAILED)),
+        vec![],
+    ));
+    assert!(settings(&out).is_empty(), "{}", sim.trace());
 }
 
 #[test]

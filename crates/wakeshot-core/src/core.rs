@@ -43,12 +43,14 @@ const MINUTE_MS: i64 = 60_000;
 #[derive(Debug)]
 pub struct Core {
     state: State,
+    lock: lid::LockWatch,
 }
 
 impl Core {
     pub fn new(config: Config) -> Self {
         Self {
             state: State::new(&config),
+            lock: lid::LockWatch::default(),
         }
     }
 
@@ -113,7 +115,10 @@ impl Core {
             }
             Event::Holds(files) => holds::take_files(&mut self.state, now, files, out),
             Event::Done(outcome) => self.done(now, outcome, out),
-            Event::Tick => self.tick(now, out),
+            Event::Tick => {
+                self.tick(now, out);
+                self.check_lock(now, out);
+            }
             // The idle clamp counts from here; the settle pass takes the requests again.
             Event::Resumed => self.take_resumed(now),
             // Only the resume matters to the idle clamp; run time stops by itself during the sleep.
@@ -260,7 +265,7 @@ impl Core {
                 result,
                 journal,
             } => self.done_restored(plan, why, result, journal, out),
-            Outcome::Locked(result) => self.done_locked(result, out),
+            Outcome::Locked(result) => self.done_locked(result, now, out),
             Outcome::Hibernate(end) => self.done_hibernate(end, now, out),
             Outcome::Update(result) => self.done_update(result, out),
             // Their runners log them.
@@ -282,7 +287,7 @@ impl Core {
         let wanted = requests::wanted(RequestFacts {
             holding: !found.holders.is_empty(),
             keep_screen_on: found.screen,
-            stepped_back: self.state.stepped_back,
+            stepped_back: self.holds_back(),
             on_console: self.state.on_console,
         });
         if wanted != self.state.requests {

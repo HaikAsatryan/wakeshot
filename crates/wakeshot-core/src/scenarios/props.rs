@@ -13,8 +13,8 @@
 //!
 //! Each property draws from the general mix of steps, and the lid and restore properties also from a focused mix of
 //! the same steps (`lid_case`, `late_case`), since the general mix seldom builds their longer chains
-//! (`coverage_tally` counts them). Each strict form a property gave up for a finding stays here as an ignored test,
-//! named in `p2-core-props`'s "Found outside scope".
+//! (`coverage_tally` counts them). The two strict forms `p2-core-props` gave up for its findings 1 and 2 are tests
+//! again since the power review fixes (`p2-core-lid`, "Power review fixes").
 
 use std::collections::BTreeSet;
 use std::fmt;
@@ -103,7 +103,26 @@ struct Model {
     stepped_back: bool,
     step_back_shown: bool,
     episode: Option<Episode>,
+    lid_closed: bool,
+    /// A lid lock (with the chime) into an unlocked session that no `Session(Locked)` confirmed yet (section 8, "Lock
+    /// fails").
+    lock_watch: Option<LockWatch>,
+    /// The lid lock and its retry both failed: no hold holds until the session locks or the lid opens. Set whenever
+    /// the core may have stepped back (it also needs its own view that our Do nothing is in force), so the model may
+    /// say "does not apply" when the core does; never the other way.
+    lock_stepped_back: bool,
 }
+
+#[derive(Clone, Copy, Debug)]
+struct LockWatch {
+    /// The one retry went out.
+    retry: bool,
+    /// When a tick decides: 5 s after the lock, or the moment it failed.
+    check_mono: u64,
+}
+
+/// How long the session may take to report `Locked` after a lid lock (section 8, "Lock fails").
+const LOCK_CHECK_MS: u64 = 5 * SECOND;
 
 /// From the first hold that counts to the last.
 #[derive(Clone, Debug, Default)]
@@ -145,8 +164,59 @@ impl Model {
             && self.owner
             && self.on_console
             && !self.stepped_back
+            && !self.lock_stepped_back
             && !self.session_ending
             && !self.requests_only_run
+    }
+
+    /// This step's `Lock` without the chime is the one retry of a lid lock: at a tick, once the lock failed or went
+    /// [`LOCK_CHECK_MS`] without `Session(Locked)`.
+    fn lock_retry_due(&self, step: &sim::Step) -> bool {
+        step.event == Event::Tick
+            && self
+                .lock_watch
+                .is_some_and(|w| !w.retry && step.at.mono_ms >= w.check_mono)
+    }
+
+    /// The lid lock watch through one step, from the section 8 row: the lock with the chime starts it, `Locked` or the
+    /// lid opening ends it (and the step back), a failure makes the next tick decide, and a due tick gives the retry
+    /// (its `Lock` in the step) or, after the retry, the step back.
+    fn take_lock(&mut self, step: &sim::Step) {
+        match step.event {
+            Event::Session(SessionChange::Locked) | Event::Lid { closed: false } => {
+                self.lock_watch = None;
+                self.lock_stepped_back = false;
+            }
+            Event::Done(Outcome::Locked(Err(_))) => {
+                if let Some(watch) = self.lock_watch.as_mut() {
+                    watch.check_mono = step.at.mono_ms;
+                }
+            }
+            Event::Tick => {
+                if let Some(watch) = self.lock_watch.filter(|w| step.at.mono_ms >= w.check_mono) {
+                    self.lock_watch = None;
+                    if !watch.retry && step.commands.contains(&Command::Lock) {
+                        self.lock_watch = Some(LockWatch {
+                            retry: true,
+                            check_mono: step.at.mono_ms + LOCK_CHECK_MS,
+                        });
+                    } else if watch.retry && self.lid_closed {
+                        self.lock_stepped_back = true;
+                    }
+                }
+            }
+            _ => {}
+        }
+        let lid_lock = step.commands.contains(&Command::Lock)
+            && step
+                .commands
+                .contains(&Command::Play(Cue::LidClosedHolding));
+        if lid_lock && !self.locked {
+            self.lock_watch = Some(LockWatch {
+                retry: false,
+                check_mono: step.at.mono_ms + LOCK_CHECK_MS,
+            });
+        }
     }
 
     /// The user cannot see a notice now, so it waits for them (track note 18).
@@ -235,8 +305,10 @@ impl Model {
                 self.ac = Some(*ac);
                 self.battery_pct = *battery_pct;
             }
+            Event::Lid { closed } => self.lid_closed = *closed,
             _ => {}
         }
+        self.take_lock(step);
         let was = self.stepped_back;
         if let Some(ac) = self.ac {
             self.stepped_back = floor::stepped_back(was, ac, self.battery_pct, self.floor_pct());
@@ -581,7 +653,7 @@ fn no_lock_on_the_users_own_do_nothing(world: &World) -> Result<(), String> {
 /// The other side of the lid rule (section 3, "Lid closes while the lid action in force is our Do nothing"): a lid
 /// close with our Do nothing in force for the current power source gives `Lock` and the chime in the same step, with
 /// or without a hold (`p2-core-lid` design choice 4). Judged only where [`core_can_know`], which also leaves out a
-/// close before the first plan read (finding 2).
+/// close before the first plan read, which the strict form of [`closed_laptop_is_locked_in_time`] judges.
 fn a_lid_close_on_ours_locks(world: &World) -> Result<(), String> {
     let mut before: Option<&Truth> = None;
     let seen = replay(world);
@@ -608,8 +680,9 @@ fn a_lid_close_on_ours_locks(world: &World) -> Result<(), String> {
 }
 
 /// Decision 0: every `Lock`, step back and user change comes with a notice or a sound in the same step (a notice
-/// raised while the user is away comes at their return, track note 18); every `Hibernate` is its own explanation, so
-/// the core never plays the going to sleep sound; each run of failed restores gets one `RestoreFailed`.
+/// raised while the user is away comes at their return, track note 18), but for the one retry of a lid lock, whose
+/// chime went with the lock it retries; every `Hibernate` is its own explanation, so the core never plays the going
+/// to sleep sound; each run of failed restores gets one `RestoreFailed`.
 fn every_action_is_explained(world: &World) -> Result<(), String> {
     // Notices raised while the user was away, owed at their return.
     let mut owed: Vec<Notice> = Vec::new();
@@ -653,6 +726,7 @@ fn every_action_is_explained(world: &World) -> Result<(), String> {
                     Command::Play(Cue::LidClosedHolding) | Command::Notify(Notice::IdleLocked)
                 )
             })
+            && !seen.before.lock_retry_due(step)
         {
             return Err(format!(
                 "a Lock with no chime and no notice, {}",
@@ -746,8 +820,8 @@ fn runs_closed_unlocked_on_ours(truth: &Truth) -> bool {
 
 /// A closed laptop never runs on battery on our Do nothing unlocked for more than 30 s (power verify minor 11; the
 /// settle, Haik 2026-11-03), from a lid close or an AC to battery change that leaves it so. Judged from a change the
-/// core heard where [`core_can_know`], and excused when the lock itself failed (section 8: a notice is all left).
-/// `strict` also judges a change before the core's first plan read (finding 2: a crashed tray's values in the first
+/// core heard where [`core_can_know`], and excused when the lock itself failed (section 8: then the retry and the step
+/// back). `strict` also judges a change before the core's first plan read (finding 2: a crashed tray's values in the first
 /// moments after the start).
 fn closed_laptop_is_locked_in_time(world: &World, strict: bool) -> Result<(), String> {
     let seen = replay(world);
@@ -1281,7 +1355,6 @@ proptest! {
 
     /// The strict form: a lid close before the core's first plan read, with a crashed tray's Do nothing in force.
     #[test]
-    #[ignore = "finding 2, see p2-core-props Found outside scope"]
     fn a_closed_laptop_is_locked_also_before_the_first_plan_read(
         case in prop_oneof![case(), lid_case()]
     ) {
@@ -1305,7 +1378,6 @@ proptest! {
 
     /// The strict, Windows-side form of the release rule.
     #[test]
-    #[ignore = "finding 1, see p2-core-props Found outside scope"]
     fn a_released_key_is_never_ours_in_force_again_in_its_episode(case in case()) {
         let world = play(&case);
         verdict(&world, released_keys_are_not_ours_in_force(&world))?;

@@ -384,3 +384,184 @@ plan, so the plan copy is right at once.
 - Found outside scope 1 to 5.
 - This card's code is in the power safety review scope (`docs/phases/02-06-lighter.md`, "Reviews"): the in-force view,
   design choices 4, 5, 9, 10, 11, 16, and the `Done(Hibernate)` rules.
+
+## Power review fixes (2026-11-03)
+
+Status: done. Agent: `wakeshot-worker` (work name `p2-power-fixes`). Brief from the orchestrator: power safety
+review (`docs/reviews/p2-6-power-safety.md`) findings 1, 2, 4 and 7, and `p2-core-props` findings 1 and 2. Owns
+`core.rs`, `core/`, `scenarios/lid.rs`, `scenarios/settings.rs`, `scenarios/props.rs`, `sim.rs`, the section 8 "Lock
+fails" row. Not `state.rs`.
+
+### Log
+
+- 2026-11-03 23:41: started. Read the review, this card's Log and Result, `p2-core-props` Result and Found outside
+  scope, section 8, and the core code. `state.rs` is not mine this round, so the new lock state lives in a private
+  field of `Core`.
+- 2026-11-03 23:45 (orchestrator message): finding 7 added, Haik's answer: no floor countdown when the user's own
+  battery lid action is Do nothing, on both paths. Haik's principle: with no work going on, the laptop behaves as if
+  Wakeshot were not there.
+- 2026-11-03 23:50: design. Finding 1: a closed-lid `Lock` (lid close or source lock) into an unlocked session starts
+  a watch; `Session(Locked)` ends it; `Done(Locked(Err))` or 5 s with no `Locked` makes the next tick send `Lock`
+  once more, and the same again steps back (requests off, `Restore { plan: None, why: Floor }`, the work-end
+  countdown) until the session locks or the lid opens. Finding 2: a failed write always sends one restore. Finding 7:
+  the floor countdown needs the user's own battery lid action not Do nothing, one rule for both paths. Props 1: a new
+  release while an apply is on its way or an entry holds the key asks for a new apply (or a restore when every key is
+  released). Props 2: before the first plan read the lock rules read a guess from the `Started` journal. Finding 4:
+  not built, see Decisions: in that case the user's own AC Do nothing kept the laptop running at the close, so
+  Haik's 23:45 principle and the product text ("Wakeshot changed nothing, so it only releases its hold") say no
+  countdown; a test pins it.
+- 2026-11-03 23:58: 15 new scenarios written first (11 in `scenarios/lid.rs`, 4 in `scenarios/settings.rs`).
+  Against the unchanged core 12 fail and 3 pass, as expected: `a_failed_lock_needs_no_retry_once_the_lid_opens_or_the_session_locks`
+  (nothing to retry), the finding 4 pin, and finding 7's second path (a lid close after the step back already needs
+  our Do nothing in force on battery, which means the user's own battery action is not Do nothing).
+- 2026-11-04 00:01: code done (`core/lid.rs`, `core/settings.rs`, `core.rs`). Four older lid scenarios closed the lid
+  and never sent the `Session(Locked)` Windows posts after a lock, so the new watch retried: each now sends it. The two
+  "every lock is explained" properties (lid proptest and props property 10) allow only the one retry; the props model
+  learned the lock watch and its step back from the section 8 row. Both ignored strict props tests un-ignored.
+  `cargo test -p wakeshot-core --lib`: 552 passed, 2 ignored (`coverage_tally`, `p2-ownership-props`' finding).
+  `PROPTEST_CASES=10000` release run of `scenarios::props`, the lid proptest and `scenarios::settings`: 54 passed.
+  `cargo mutants` is not installed and the card used hand-made mutants, so the mutants run by hand next.
+- 2026-11-04 00:04: `lock_view` simplified: every journal entry has `written` 0 and a non-zero `original` (the apply
+  never journals a key already at its target), so it takes the first entry per lid key. One more case in
+  `a_failed_lock_needs_no_retry_once_the_lid_opens_or_the_session_locks`: the user takes the lid key back after the
+  failure, so no retry and the hold goes on (it pins the "our Do nothing in force" guard). 552 lib tests pass.
+- 2026-11-04 00:04 (orchestrator message, 00:02 or so): `text.rs` is mine for the `LockFailed` words. They now say what
+  follows a failed closed-lid lock: "Windows did not lock the PC. Lock it with Windows key + L. With the lid closed,
+  Wakeshot tries once more; if that fails, it stops keeping the PC awake and hibernates it after 5 minutes with no
+  input." (199 characters, under the 200 the balloon guideline asks for; it also fits the Keep screen on lock with the
+  lid open). Left out "unless your own lid action is Do nothing": when this notice comes for a closed lid, the user's
+  own action for that power source is never Do nothing (else no lock goes out), so it matters only after a later
+  dock, and the words would pass 200. No other notice is raised in a new case: `HibernateFailed` after a lock step
+  back still holds ("Your power settings are back"). `wording_snapshot` updated.
+- 2026-11-04 00:11: orchestrator message: section 3's "Lid closes" bullet now also says lock and chime with nothing
+  holding (verified in `take_lid`: the lock goes out on our Do nothing before the episode is looked at; test
+  `lid_closed_after_a_failed_restore_still_locks_and_chimes`). Section 8's "Lock fails" row gets the 5 s check and when
+  the step back ends; re-read right before each edit. Mutants by hand in a scratch copy (runner `mutants.py`, own build
+  folder): the card's four and 17 for this round, 20 killed at once; "applies during the lock step back" survived (no
+  test had an edge that wants an apply then), so `nothing_is_applied_while_stepped_back_after_a_failed_lock` was
+  added: then killed, 21 of 21.
+- 2026-11-04 00:14: final checks green (Result). `docs/research.md` "Power review fix checks" added. Build folder,
+  mutant copy and scratch scripts deleted. Status: done.
+
+### Result
+
+Status: done 2026-11-04. Findings 1, 2 and 7 of the power safety review and findings 1 and 2 of `p2-core-props` are
+fixed, each with scenarios written first; finding 4 is kept as it is, by Haik's 23:45 principle (Decisions). 16 new
+scenarios, both strict props tests un-ignored, the `LockFailed` words updated.
+
+#### What changed
+
+- **Finding 1 (major), a failed or unconfirmed closed-lid lock.** A lid-close or source lock into an unlocked session
+  is watched. `Session(Locked)` ends the watch. `Done(Locked(Err))` brings the check to the next tick (at once), and
+  no `Locked` within 5 s counts the same, since `LockWorkStation` only starts the lock. At the check, with the lid
+  still closed on our Do nothing: `LockFailed` (once for the lock and its retry), then `Lock` once more; when that one
+  goes the same way, the step back: requests off and no apply (as at the floor), `Restore { plan: None, why: Floor }`,
+  and the work-end countdown (hibernate after 5 minutes with no input; it pauses on a source whose own lid action is
+  Do nothing). The step back ends when the session locks (a late `Locked`, or Windows' own lock at screen off) or the
+  lid opens: then the hold applies again as at a hold start. If the lid opened or our Do nothing is gone at the check
+  (a release, or the hold ended and the restore landed), it only logs.
+- **Finding 2 (minor), a failed write whose own restore could not load the journal.** A `Write` failure always sends
+  one `Restore { plan: None, why: WorkEnded }`, whatever the copy holds; a restore of a missing journal costs nothing.
+  A `SafetyNet` failure writes nothing, so it still restores only a copy that holds entries. Why this over setting
+  `retry`: the restore goes at once instead of up to 10 s later, and if it fails it sets `retry` by the usual rule.
+- **Finding 7 (minor, Haik 23:45), the floor countdown and the user's own battery Do nothing.** One rule for both
+  paths (`floor_countdown_starts`): the lid closed and the user's own battery lid action (the journal's `original`
+  while we own it) not Do nothing; no plan read means nothing was applied, so no countdown. The step back with the lid
+  already closed was the path that broke it; a lid close after the step back already needed our Do nothing in force
+  on battery, which implies the same, so its test passed before too and now guards it.
+- **Props finding 1, a release while an apply is on its way.** A key newly released in an episode, while an apply is
+  not answered or another plan's entry holds the key, sets the apply to `Wanted`: the next apply leaves the key out and
+  restores this plan's entry for it (track note 3). With every key released no apply comes, so a restore goes out.
+  This covers the plan switch case (`Plan` before the check's `UserChanged`), a release named on an inactive plan, and
+  an apply queued behind the read that dropped the entry.
+- **Props finding 2, a lid close before the first plan read.** The lid-close and source lock rules read `lock_view`:
+  what is in force, or before the first read a guess from the `Started` journal (each lid key a journal entry names is
+  ours in force on one stand-in plan, any other lid key Sleep). The work-end countdown and the idle lock still need a
+  real read.
+- **Docs.** Section 3 "Lid closes": also with nothing holding. Section 8 "Lock fails": the 5 s check, the work-end
+  countdown, when the step back ends. `text.rs`: the `LockFailed` words (Log 00:04).
+
+#### Decisions (mine), each with when to change it
+
+1. Finding 4 not built: docked with their own AC Do nothing, work ends on AC, then unplugged: no countdown. Their own
+   Do nothing kept the laptop running at the close, so Wakeshot changed nothing (product, work end: "it only releases
+   its hold"), and with no work going on the laptop behaves as if Wakeshot were not there (Haik 23:45). The cost: that
+   laptop runs on battery with the lid closed until the user's own battery sleep timeout, unlocked, as it would
+   without Wakeshot. Pinned by `work_ended_on_the_users_own_ac_do_nothing_then_unplugged_gives_no_countdown`. Change
+   it when Haik wants the countdown there: keep `WorkEnd` paused at the work end (the review's fix, a few lines in
+   `work_ended`).
+2. The lock watch lives in a private field of `Core` (`lid::LockWatch`), not in `State`: `state.rs` was not this
+   round's file. Change it when a card owns `state.rs`: move the three fields there.
+3. The retry goes at the next tick, at once after an `Err` (the review's wording), 5 s after an `Ok` with no
+   `Locked`. Change it when a real check shows `LockWorkStation` failures that clear within seconds: then wait that
+   long.
+4. One `LockFailed` per lock and its retry, at the first failure; the step back adds a log line, no second notice.
+   Change it when Haik wants a notice of its own for the step back (a new `Notice` variant, a contract change).
+5. The lock step back's restore uses `RestoreWhy::Floor`, the closest reason; the core logs why. Change it when the
+   contract gets a reason for it (Contract proposals).
+6. The props model learns the lock watch from the section 8 row and the step's `Lock` commands, and says "stepped
+   back" whenever the core may have (it cannot see the core's in-force view), so it is never stricter than the core.
+   Change it when a property needs the exact step back.
+
+#### Tests
+
+- New in `scenarios/lid.rs` (12): `a_lid_close_before_the_first_plan_read_locks_on_a_crashed_trays_do_nothing`,
+  `unplugged_before_the_first_plan_read_locks_on_a_crashed_trays_do_nothing_once_battery_lasted`,
+  `battery_floor_with_the_lid_closed_and_the_users_own_battery_do_nothing_gives_no_countdown`,
+  `a_lid_close_after_the_step_back_with_the_users_own_battery_do_nothing_gives_no_countdown`,
+  `work_ended_on_the_users_own_ac_do_nothing_then_unplugged_gives_no_countdown`,
+  `a_failed_lid_close_lock_is_sent_once_more_at_the_next_tick`,
+  `a_lid_close_lock_that_fails_twice_steps_back_and_hibernates_after_5_minutes_idle`,
+  `a_lock_the_session_does_not_confirm_within_5_s_is_sent_once_more_then_steps_back`,
+  `nothing_is_applied_while_stepped_back_after_a_failed_lock`,
+  `the_session_locking_or_the_lid_opening_ends_the_step_back`,
+  `a_failed_lock_needs_no_retry_once_the_lid_opens_or_the_session_locks`, `a_failed_source_lock_is_sent_once_more_too`.
+- New in `scenarios/settings.rs` (4): `a_failed_write_whose_own_restore_cannot_load_the_journal_still_restores`,
+  `a_release_while_the_switchs_apply_is_on_its_way_applies_again_without_the_key`,
+  `a_release_named_on_another_plan_takes_the_active_plans_override_back`,
+  `every_key_released_while_an_apply_is_on_its_way_restores`.
+- Before the fix: of the first 15, 12 failed and 3 passed by design (Log 23:58); the 16th came from a surviving
+  mutant and kills it.
+- Un-ignored in `scenarios/props.rs`: `a_released_key_is_never_ours_in_force_again_in_its_episode` (props finding 1)
+  and `a_closed_laptop_is_locked_also_before_the_first_plan_read` (props finding 2). Both pass.
+- Changed: four lid scenarios now send the `Session(Locked)` Windows posts after a lock
+  (`lid_closed_on_ac_while_holding_locks_and_chimes`, `lid_closed_during_a_step_back_with_our_do_nothing_left_counts_down`,
+  `the_first_power_reading_is_no_source_change`, `work_ended_after_a_long_idle_hibernates_at_once`); the lid proptest
+  and props property 10 allow only the one retry of a lid lock; `text::tests::wording_snapshot` has the new words.
+
+#### Checks (final runs 2026-11-04 00:11 to 00:14, own build folder, every cargo command `--locked`)
+
+- `rustfmt --edition 2024 --check` on `core.rs` (with `core/`), `scenarios/lid.rs`, `scenarios/settings.rs`,
+  `scenarios/props.rs`, `sim.rs`, `text.rs`: exit 0.
+- `cargo clippy -p wakeshot-core --all-targets --target x86_64-pc-windows-msvc -- -D warnings` and the same without
+  `--all-targets`: both exit 0.
+- `cargo test -p wakeshot-core`: 553 passed, 2 ignored (`coverage_tally`, `p2-ownership-props`' open finding), plus
+  10 and 19 in `tests/`.
+- `PROPTEST_CASES=10000 cargo test -p wakeshot-core --lib --release -- scenarios::props
+  scenarios::lid::lid_events_in_any_order scenarios::settings`: 54 passed in each of three runs, the last two on the
+  final code.
+- Mutants by hand, 21 of 21 killed (Log 00:11). The card's four: a lock on any Do nothing in force
+  (`docked_user_with_their_own_do_nothing_gets_no_lock_and_no_sound` and 5 more); no lock at AC to battery
+  (`a_failed_source_lock_is_sent_once_more_too` and 9 `policy::lid` tests); the hibernate without the resume clamp
+  (`a_resume_during_the_countdown_restarts_the_idle_count` and 2 more); the going to sleep sound with `Hibernate`
+  (`work_ends_with_the_lid_closed_hibernates_after_5_minutes_idle` and 4 more). 17 for this round, each killed by at
+  least one of the new tests.
+- No clock read, no I/O, no new dependency. Only the owned files changed (from my own edit record; git not run), plus
+  this card, `docs/architecture.md` (two lines), `docs/research.md` (an addition) and `text.rs` (granted 00:02).
+
+#### Contract proposals
+
+- `RestoreWhy::LockFailed` (or `StepBack`), so the lock step back's restore is not logged as `Floor` on the IO side.
+
+#### Found outside scope
+
+1. `docs/tasks/p5-text.md` lines 101 and 222 still quote the old `LockFailed` words; line 222 is the wording table
+   Haik reads. That is `p5-text`'s file.
+2. While the lock step back lasts, the tray shows "Cannot hold awake: ..." (holds count, no request), which reads like
+   a failed request. A status of its own needs a `Status` field (`text.rs`, `present.rs`): a contract change, low
+   priority, since the `LockFailed` notice says why.
+
+#### Open items
+
+- Decision 1 (finding 4) is my reading of Haik's 23:45 principle; the orchestrator may want Haik's word on it.
+- Not in this round: review findings 3, 5, 6, 8, 9, 10.

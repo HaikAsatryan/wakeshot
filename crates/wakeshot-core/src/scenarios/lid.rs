@@ -35,6 +35,9 @@ const HOUR: u64 = 60 * MINUTE;
 /// Not a multiple of the 30 s safety tick, so a time checked to the millisecond is the core's own deadline at work.
 const OFF_THE_TICK: u64 = 7 * SECOND;
 
+/// How long the session may take to report `Locked` after a closed-lid `Lock` (section 8, "Lock fails").
+const LOCK_CHECK: u64 = 5 * SECOND;
+
 const LOCK: Command = Command::Lock;
 const CHIME: Command = Command::Play(Cue::LidClosedHolding);
 const FLOOR_CHIME: Command = Command::Play(Cue::BatteryFloor);
@@ -248,7 +251,8 @@ fn lid_closed_on_ac_while_holding_locks_and_chimes() {
     );
     assert!(logs(&out) >= 1, "the lock is logged\n{trace}");
 
-    // Closed it stays: no second lock.
+    // Windows reports the lock; closed it stays: no second lock.
+    sim.send(session(SessionChange::Locked));
     let out = sim.run(10 * MINUTE);
     assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
 }
@@ -357,6 +361,7 @@ fn lid_closed_during_a_step_back_with_our_do_nothing_left_counts_down() {
     let at = sim.now();
     let out = sim.send(lid(true));
     assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+    sim.send(session(SessionChange::Locked));
     sim.run(IDLE_MS + MINUTE);
     let trace = sim.trace();
     assert_eq!(hibernate_times(&sim, at), [i128::from(IDLE_MS)], "{trace}");
@@ -396,6 +401,64 @@ fn the_first_lid_reading_is_no_close() {
     sim.send(lid(false));
     let out = sim.send(lid(true));
     assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+}
+
+/// `Started` with a crashed tray's journal whose start-up restore failed: its values for `keys` on Balanced.
+fn crashed_tray(keys: &[SettingKey]) -> Event {
+    Start {
+        journal: Some(Journal {
+            owner: JournalOwner {
+                pid: 4100,
+                proc_start: FileTime(7),
+                session: 1,
+            },
+            entries: entries(BALANCED, keys),
+        }),
+        ..Start::default()
+    }
+    .event()
+}
+
+#[test]
+fn a_lid_close_before_the_first_plan_read_locks_on_a_crashed_trays_do_nothing() {
+    // `p2-core-props` finding 2: no plan read yet, but the journal says our Do nothing may be in force.
+    let mut sim = Sim::new();
+    sim.send(crashed_tray(&KEYS));
+    sim.send(power(false, 80));
+    sim.send(lid(false));
+    let out = sim.send(lid(true));
+    let trace = sim.trace();
+    assert_eq!(count(&out, &LOCK), 1, "{trace}");
+    assert_eq!(count(&out, &CHIME), 1, "{trace}");
+    assert!(position(&out, &LOCK) < position(&out, &CHIME), "{trace}");
+
+    // Only the battery sleep key left: no Do nothing of ours, so nothing.
+    let mut sim = Sim::new();
+    sim.send(crashed_tray(&[SettingKey::SleepDc]));
+    sim.send(power(false, 80));
+    sim.send(lid(false));
+    let out = sim.send(lid(true));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    assert_eq!(plays(&out), 0, "{}", sim.trace());
+}
+
+#[test]
+fn unplugged_before_the_first_plan_read_locks_on_a_crashed_trays_do_nothing_once_battery_lasted() {
+    let mut sim = Sim::new();
+    sim.send(crashed_tray(&KEYS));
+    sim.send(power(true, 80));
+    sim.send(lid(true));
+    let unplugged = sim.now();
+    let mut out = sim.send(power(false, 80));
+    out.extend(sim.run(SOURCE_SETTLE_MS + SECOND));
+    let trace = sim.trace();
+    assert_eq!(count(&out, &LOCK), 1, "{trace}");
+    assert_eq!(count(&out, &CHIME), 1, "{trace}");
+    assert_eq!(
+        lock_times(&sim, unplugged),
+        [i128::from(SOURCE_SETTLE_MS)],
+        "{trace}"
+    );
 }
 
 // Item 2: the power source changes with the lid closed.
@@ -482,6 +545,7 @@ fn the_first_power_reading_is_no_source_change() {
     // The source is not known yet: ours on either source locks.
     let out = sim.send(lid(true));
     assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+    sim.send(session(SessionChange::Locked));
 
     let mut out = sim.send(power(false, 80));
     out.extend(sim.run(SOURCE_SETTLE_MS + SECOND));
@@ -649,6 +713,55 @@ fn the_floor_follows_the_energy_saver_threshold() {
     assert_eq!(count(&out, &SYSTEM), 1, "{}", sim.trace());
 }
 
+/// The user's own lid action on battery is Do nothing, on AC Sleep.
+fn own_battery_do_nothing() -> PlanValues {
+    PlanValues {
+        lid_dc: 0,
+        ..plan(BALANCED)
+    }
+}
+
+/// What an apply leaves on that plan: the battery lid key is the user's own Do nothing, so the IO side skips it.
+const OWN_DC_KEYS: [SettingKey; 2] = [SettingKey::LidAc, SettingKey::SleepDc];
+
+#[test]
+fn battery_floor_with_the_lid_closed_and_the_users_own_battery_do_nothing_gives_no_countdown() {
+    // Power safety review finding 7, Haik 2026-11-03 23:45: the same rule as at work end. Their own Do nothing keeps
+    // the closed laptop running without Wakeshot too.
+    let mut sim = started_with(own_battery_do_nothing(), false, 80);
+    sim.send(working(1));
+    sim.send(applied(BALANCED, Ok(()), entries(BALANCED, &OWN_DC_KEYS)));
+    let out = sim.send(lid(true));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    let out = sim.send(power(false, 19));
+    let trace = sim.trace();
+    assert_eq!(count(&out, &OFF), 1, "the step back itself\n{trace}");
+    assert_eq!(count(&out, &FLOOR_CHIME), 1, "{trace}");
+    sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
+    let out = sim.run(20 * MINUTE);
+    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+}
+
+#[test]
+fn a_lid_close_after_the_step_back_with_the_users_own_battery_do_nothing_gives_no_countdown() {
+    // Finding 7's second path, with our battery sleep Never left by a failed restore.
+    let mut sim = started_with(own_battery_do_nothing(), false, 80);
+    sim.send(working(1));
+    sim.send(applied(BALANCED, Ok(()), entries(BALANCED, &OWN_DC_KEYS)));
+    sim.send(power(false, 19));
+    sim.send(restored(
+        None,
+        RestoreWhy::Floor,
+        Err(RESTORE_FAILED),
+        entries(BALANCED, &OWN_DC_KEYS),
+    ));
+    let mut out = sim.send(lid(true));
+    out.extend(sim.run(20 * MINUTE));
+    let trace = sim.trace();
+    assert_eq!(count(&out, &LOCK), 0, "{trace}");
+    assert!(hibernates(&out).is_empty(), "{trace}");
+}
+
 // Item 4: the countdown.
 
 #[test]
@@ -715,6 +828,7 @@ fn work_ended_with_the_lid_closed_does_not_hibernate_while_typing() {
 fn work_ended_after_a_long_idle_hibernates_at_once() {
     let mut sim = holding(false);
     sim.send(lid(true));
+    sim.send(session(SessionChange::Locked));
     sim.run(20 * MINUTE);
     let ended = sim.now();
     sim.send(idle(1));
@@ -849,6 +963,28 @@ fn a_power_source_change_onto_the_users_own_sleep_keeps_the_countdown() {
         [i128::from(IDLE_MS)],
         "{}",
         sim.trace()
+    );
+}
+
+#[test]
+fn work_ended_on_the_users_own_ac_do_nothing_then_unplugged_gives_no_countdown() {
+    // Power safety review finding 4, kept as it is: their own AC Do nothing kept the laptop running at the close, so
+    // Wakeshot changed nothing and only releases (product, work end). After an unplug Windows' own rules apply, as if
+    // Wakeshot were not there (Haik, 2026-11-03 23:45).
+    let mut sim = holding_docked(true);
+    sim.input();
+    sim.send(lid(true));
+    sim.send(idle(1));
+    sim.send(restored(None, RestoreWhy::WorkEnded, Ok(()), vec![]));
+    sim.run(10 * MINUTE);
+    let mut out = sim.send(power(false, 80));
+    out.extend(sim.run(20 * MINUTE));
+    let trace = sim.trace();
+    assert!(hibernates(&out).is_empty(), "{trace}");
+    assert_eq!(
+        count(&out, &LOCK),
+        0,
+        "nothing of ours keeps it running\n{trace}"
     );
 }
 
@@ -1055,6 +1191,246 @@ fn a_failed_lock_shows_a_notice() {
     assert!(logs(&out) >= 1, "{}", sim.trace());
     out.extend(sim.send(session(SessionChange::Unlocked)));
     assert!(notices(&out).is_empty(), "{}", sim.trace());
+}
+
+// Power safety review finding 1: a closed laptop never runs unlocked in a bag (section 8, "Lock fails").
+
+fn lock_answer(result: Result<(), Failure>) -> Event {
+    Event::Done(Outcome::Locked(result))
+}
+
+/// Holding with Haik's values, the lid closed: lock and chime, and the session has not reported `Locked` yet.
+fn closed_unconfirmed(ac: bool) -> Sim {
+    let mut sim = holding(ac);
+    sim.input();
+    let out = sim.send(lid(true));
+    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+    sim
+}
+
+/// `Lock` failed twice: the second answer, then the tick that steps back. Gives both steps' commands.
+fn failed_twice(sim: &mut Sim) -> Vec<Command> {
+    sim.send(lock_answer(Err(LOCK_FAILED)));
+    let out = sim.run(SECOND);
+    assert_eq!(count(&out, &LOCK), 1, "the retry\n{}", sim.trace());
+    let mut out = sim.send(lock_answer(Err(LOCK_FAILED)));
+    out.extend(sim.run(SECOND));
+    out
+}
+
+#[test]
+fn a_failed_lid_close_lock_is_sent_once_more_at_the_next_tick() {
+    let mut sim = closed_unconfirmed(false);
+    let out = sim.send(lock_answer(Err(LOCK_FAILED)));
+    let trace = sim.trace();
+    assert_eq!(notices(&out), [&Notice::LockFailed], "{trace}");
+    assert_eq!(count(&out, &LOCK), 0, "{trace}");
+    let failed = sim.now();
+    let out = sim.run(SECOND);
+    let trace = sim.trace();
+    assert_eq!(count(&out, &LOCK), 1, "{trace}");
+    assert_eq!(
+        plays(&out),
+        0,
+        "the chime went with the first lock\n{trace}"
+    );
+    assert_eq!(lock_times(&sim, failed).last(), Some(&0), "{trace}");
+    assert!(logs(&out) >= 1, "the retry is logged\n{trace}");
+
+    // It worked: the hold goes on, with no second notice.
+    let mut out = sim.send(lock_answer(Ok(())));
+    out.extend(sim.send(session(SessionChange::Locked)));
+    out.extend(sim.run(10 * MINUTE));
+    let trace = sim.trace();
+    assert_eq!(count(&out, &LOCK), 0, "{trace}");
+    assert_eq!(count(&out, &OFF), 0, "{trace}");
+    assert!(sim.requests().system, "{trace}");
+    assert_eq!(
+        sim.notices()
+            .into_iter()
+            .filter(|n| **n == Notice::LockFailed)
+            .count(),
+        1,
+        "{trace}"
+    );
+}
+
+#[test]
+fn a_lid_close_lock_that_fails_twice_steps_back_and_hibernates_after_5_minutes_idle() {
+    let mut sim = closed_unconfirmed(false);
+    let input = sim.now();
+    let out = failed_twice(&mut sim);
+    let trace = sim.trace();
+    let restore = Command::Restore {
+        plan: None,
+        why: RestoreWhy::Floor,
+    };
+    assert_eq!(count(&out, &OFF), 1, "{trace}");
+    assert_eq!(count(&out, &restore), 1, "{trace}");
+    assert!(position(&out, &OFF) < position(&out, &restore), "{trace}");
+    assert!(
+        notices(&out).is_empty(),
+        "one LockFailed is enough\n{trace}"
+    );
+    assert_eq!(count(&out, &LOCK), 0, "no third lock\n{trace}");
+    assert!(logs(&out) >= 1, "the step back is logged\n{trace}");
+    sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
+
+    // No hold holds while stepped back, and a new one does not end the countdown.
+    let both = sim::sources(vec![
+        (claude(1, Activity::Working), Alive::Yes),
+        (claude(2, Activity::Working), Alive::Yes),
+    ]);
+    let mut out = sim.send(both);
+    out.extend(sim.run(IDLE_MS + MINUTE));
+    let trace = sim.trace();
+    assert_eq!(count(&out, &SYSTEM), 0, "{trace}");
+    assert!(
+        !out.iter().any(|c| matches!(c, Command::Apply { .. })),
+        "{trace}"
+    );
+    assert_eq!(
+        hibernates(&out),
+        [&hibernate(CountdownReason::WorkEnded, None)],
+        "{trace}"
+    );
+    assert_eq!(
+        hibernate_times(&sim, input),
+        [i128::from(IDLE_MS)],
+        "{trace}"
+    );
+    never_going_to_sleep(&sim);
+}
+
+#[test]
+fn a_lock_the_session_does_not_confirm_within_5_s_is_sent_once_more_then_steps_back() {
+    // `LockWorkStation` only starts the lock: `Ok` with no `Session(Locked)` counts as a failure.
+    let mut sim = closed_unconfirmed(true);
+    let locked = sim.now();
+    sim.send(lock_answer(Ok(())));
+    let out = sim.run(LOCK_CHECK - 1);
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    let out = sim.run(SECOND);
+    let trace = sim.trace();
+    assert_eq!(count(&out, &LOCK), 1, "{trace}");
+    assert_eq!(notices(&out), [&Notice::LockFailed], "{trace}");
+    assert_eq!(
+        lock_times(&sim, locked).last(),
+        Some(&i128::from(LOCK_CHECK)),
+        "{trace}"
+    );
+
+    sim.send(lock_answer(Ok(())));
+    let out = sim.run(LOCK_CHECK - SECOND);
+    assert_eq!(count(&out, &OFF), 0, "{}", sim.trace());
+    let out = sim.run(SECOND);
+    let trace = sim.trace();
+    assert_eq!(count(&out, &OFF), 1, "{trace}");
+    assert_eq!(
+        count(
+            &out,
+            &Command::Restore {
+                plan: None,
+                why: RestoreWhy::Floor
+            }
+        ),
+        1,
+        "{trace}"
+    );
+    assert!(notices(&out).is_empty(), "{trace}");
+}
+
+#[test]
+fn nothing_is_applied_while_stepped_back_after_a_failed_lock() {
+    // An apply would put our Do nothing back on a closed laptop nobody could lock.
+    let mut sim = closed_unconfirmed(false);
+    failed_twice(&mut sim);
+    sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
+    let mut out = sim.send(idle(1));
+    out.extend(sim.send(working(1)));
+    out.extend(sim.send(read(plan(sim::OTHER_PLAN))));
+    out.extend(sim.run(MINUTE));
+    let trace = sim.trace();
+    assert!(
+        !out.iter().any(|c| matches!(c, Command::Apply { .. })),
+        "{trace}"
+    );
+    assert_eq!(count(&out, &SYSTEM), 0, "{trace}");
+}
+
+#[test]
+fn the_session_locking_or_the_lid_opening_ends_the_step_back() {
+    let apply = Command::Apply {
+        plan: BALANCED,
+        writes: KEYS.iter().map(|&k| (k, 0)).collect(),
+    };
+    // Windows locked it after all (a late `Locked`, or its own lock at screen off): hold again as at a hold start.
+    let mut sim = closed_unconfirmed(false);
+    failed_twice(&mut sim);
+    sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
+    let mut out = sim.send(session(SessionChange::Locked));
+    let trace = sim.trace();
+    assert_eq!(count(&out, &SYSTEM), 1, "{trace}");
+    assert_eq!(count(&out, &apply), 1, "{trace}");
+    assert!(position(&out, &SYSTEM) < position(&out, &apply), "{trace}");
+    out.extend(sim.run(20 * MINUTE));
+    assert!(
+        hibernates(&out).is_empty(),
+        "holding again ends the countdown\n{}",
+        sim.trace()
+    );
+
+    // The lid opens: the user is at the laptop.
+    let mut sim = closed_unconfirmed(false);
+    failed_twice(&mut sim);
+    sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
+    let out = sim.send(lid(false));
+    let trace = sim.trace();
+    assert_eq!(count(&out, &SYSTEM), 1, "{trace}");
+    assert_eq!(count(&out, &apply), 1, "{trace}");
+}
+
+#[test]
+fn a_failed_lock_needs_no_retry_once_the_lid_opens_or_the_session_locks() {
+    let mut sim = closed_unconfirmed(false);
+    sim.send(lock_answer(Err(LOCK_FAILED)));
+    let mut out = sim.send(lid(false));
+    out.extend(sim.run(MINUTE));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    assert!(sim.requests().system, "{}", sim.trace());
+
+    let mut sim = closed_unconfirmed(false);
+    sim.send(lock_answer(Err(LOCK_FAILED)));
+    let mut out = sim.send(session(SessionChange::Locked));
+    out.extend(sim.run(MINUTE));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    assert!(sim.requests().system, "{}", sim.trace());
+
+    // The user took the battery lid action back (their own value is in force now): no retry, and the hold goes on.
+    let mut sim = closed_unconfirmed(false);
+    sim.send(lock_answer(Err(LOCK_FAILED)));
+    let mut out = sim.send(Event::UserChanged(OwnedKey {
+        plan: BALANCED,
+        key: SettingKey::LidDc,
+    }));
+    out.extend(sim.run(MINUTE));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    assert_eq!(count(&out, &OFF), 0, "{}", sim.trace());
+}
+
+#[test]
+fn a_failed_source_lock_is_sent_once_more_too() {
+    let mut sim = holding(true);
+    sim.send(lid(true));
+    sim.send(session(SessionChange::Locked));
+    sim.send(session(SessionChange::Unlocked));
+    sim.send(power(false, 80));
+    let out = sim.run(SOURCE_SETTLE_MS);
+    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+    let out = sim.send(lock_answer(Err(LOCK_FAILED)));
+    assert_eq!(notices(&out), [&Notice::LockFailed], "{}", sim.trace());
+    let out = sim.run(SECOND);
+    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
 }
 
 // Item 7: the closed-lid report.
@@ -1542,8 +1918,9 @@ proptest! {
     #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
 
     /// `handle` never panics on any order of these events and `Sim` finds no deadline behind a `Tick`; every `Lock`
-    /// comes with a sound or a notice in its step; no `Hibernate` within 5 minutes of input or a resume; the core
-    /// never plays the going to sleep sound; nothing follows `Quit`.
+    /// comes with a sound or a notice in its step, but for the one retry of a lid lock, which follows a failure or
+    /// [`LOCK_CHECK`] with no `Session(Locked)`; no `Hibernate` within 5 minutes of input or a resume; the core never
+    /// plays the going to sleep sound; nothing follows `Quit`.
     #[test]
     fn lid_events_in_any_order(ops in vec(op(), 0..40)) {
         let mut sim = Sim::new();
@@ -1583,12 +1960,27 @@ proptest! {
             }
         }
         let mut quit = false;
+        // The last lid lock not retried yet, its time, and whether a failure answered it since.
+        let mut retry_for: Option<(u64, bool)> = None;
         for step in sim.steps() {
             prop_assert!(!quit || step.commands.is_empty(), "{}", sim.trace());
-            let explained = step.commands.iter().any(|c| {
-                matches!(c, Command::Play(Cue::LidClosedHolding) | Command::Notify(Notice::IdleLocked))
-            });
-            prop_assert!(!step.commands.contains(&LOCK) || explained, "{}", sim.trace());
+            let chime = step.commands.contains(&CHIME);
+            let explained = chime || step.commands.contains(&Command::Notify(Notice::IdleLocked));
+            if step.commands.contains(&LOCK) && !explained {
+                let due = retry_for.is_some_and(|(at, failed)| {
+                    failed || step.at.mono_ms >= at.saturating_add(LOCK_CHECK)
+                });
+                prop_assert!(due && step.event == Event::Tick, "{}", sim.trace());
+                retry_for = None;
+            }
+            if matches!(step.event, Event::Done(Outcome::Locked(Err(_))))
+                && let Some((_, failed)) = retry_for.as_mut()
+            {
+                *failed = true;
+            }
+            if chime && step.commands.contains(&LOCK) {
+                retry_for = Some((step.at.mono_ms, false));
+            }
             prop_assert!(!step.commands.contains(&Command::Play(Cue::GoingToSleep)), "{}", sim.trace());
             quit |= step.commands.contains(&Command::Quit);
         }
