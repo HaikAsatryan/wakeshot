@@ -171,6 +171,9 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   cases, Haik's values same), `p4-claude-status`, `p4-cron`, `p6-velopack-facts`. Running: `p2-ownership-props`,
   `p6-int-dispatch`, `p4-claude-transcript`, `p3-harness` (laptop lane). Two questions with Haik (asked 21:52): the
   battery floor exception for a user whose own battery lid action is Do nothing, and when the closed-lid report shows.
+- 2026-11-03 23:36: Haik answered both 21:52 questions with the defaults and approved the power safety review's lock
+  fix (failed lid-close lock: one retry, then step back and countdown). Recorded in `product.md`, `architecture.md`
+  and the `02-core.md` work log; the code goes to the power review fix round.
 - Next (orchestrator): the continuation prompt of session `wakeshot-91` (its scratchpad, `continuation.md`) lists the
   running cards and their files, the ready cards, both reviews and the open items. Ready now: `p2-core-props`,
   `p4-watch-agents`, `p4-watch-folders`, `p6-int-window`, `p6-int-startup`, the CLI bundles, the tray cards,

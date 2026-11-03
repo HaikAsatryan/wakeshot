@@ -367,7 +367,9 @@ While holding:
   only. A restore that fails here warns in this session, not the user at the screen; it is retried on each tick.
   Session notices: not tested (checklist 11). Phase 1 Question 10: the default, Haik 2026-11-03 18:09.
 - On battery under the floor (energy saver threshold DC; 20 when it is 0 "Never" or 100 "On battery"): step back:
-  `Requests` off, `Restore`, notice and `Play(BatteryFloor)`; if the lid is closed, start the countdown (reason Floor).
+  `Requests` off, `Restore`, notice and `Play(BatteryFloor)`; if the lid is closed and the user's own battery lid
+  action is not Do nothing, start the countdown (reason Floor). A lid close after the step back follows the same
+  rule (Haik, 2026-11-03; power safety review finding 7).
   No hold starts while stepped back. AC back: hold again.
 - Keep screen on: `Lock` and `Notify(IdleLocked)` when input idle passes the user's own sleep timeout for the current
   power source (from the journal's `original` while we own it; none when it is Never), once per idle period. Windows locks by itself at
@@ -391,8 +393,10 @@ Countdown: due when input idle (clamped at resume as above) reaches 5 minutes (H
 hold, lid open, or AC back (Floor reason). When due: `Hibernate` (section 5); the hibernate thread plays the "going
 to sleep" sound after its last check, and the core sends no `Play` for it.
 
-Closed-lid report: at the first unlock after a hold that ran with the lid closed, a notice says how long the PC kept
-running with the lid closed (`mono_ms`) and what held it.
+Closed-lid report: after a hold that ran with the lid closed, a notice says how long the PC kept running with the lid
+closed (`mono_ms`) and what held it. It goes out at the first unlock with the lid open, or when the lid opens while
+unlocked; a docked user who signs in on the external screen with the lid closed gets it when the lid opens (Haik,
+2026-11-03).
 
 User actions: "Restore my power settings" (menu, or `wakeshot restore` through its request file, section 4) restores,
 marks all three keys released for the episode (so no plan gets a write until the work ends, also after a plan
@@ -917,7 +921,7 @@ fallback. No `unwrap` on OS results outside tests.
 | Liveness Unknown | last state kept, retried on the next tick; no file deleted, no restore started |
 | Settings mutex held by another session | requests only; retried on each tick |
 | Hibernate not allowed, fails, or lid state unknown | notice; settings were already restored |
-| Lock fails | log, notice |
+| Lock fails | log, notice; with the lid closed on our Do nothing: `Lock` once more at the next tick; if that fails too, step back as at the floor (`Requests` off, `restore_all`) and start the countdown (Haik, 2026-11-03; power safety review finding 1) |
 | Sound fails | log only |
 | Agent file format unknown | "update Wakeshot" notice |
 | Tray icon add fails at sign-in | retry with backoff; re-add on `TaskbarCreated` |

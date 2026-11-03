@@ -13,6 +13,9 @@ The user must always understand what happens to their laptop. The tray icon show
 sound explains every action Wakeshot takes on its own. The routine start and end of a hold, with the power settings
 Wakeshot writes and puts back each time, show in the icon and tooltip only (Haik, 2026-11-03).
 
+When no work is going on, the laptop behaves as if Wakeshot were not there: the user's own settings decide (Haik,
+2026-11-03). Open calls follow this rule.
+
 ## Decided
 
 ### Platform and stack
@@ -79,7 +82,10 @@ Wakeshot writes and puts back each time, show in the icon and tooltip only (Haik
   account for it, so v1 always locks at lid close while holding (Haik, 2026-11-03). No lock on lid close in docked
   use (the user's own lid action is Do nothing). Unplugging a closed laptop that then keeps running only because of
   Wakeshot locks it too, once it has been on battery for 30 seconds (Haik, 2026-11-03: the test laptop's dock dropped
-  AC for 5.3 s and 6.3 s, so 5 s locked him while he worked on the external screen).
+  AC for 5.3 s and 6.3 s, so 5 s locked him while he worked on the external screen). If that lock fails, Wakeshot
+  tries once more; if it fails again, it steps back as at the battery floor (releases every request, restores
+  settings) and hibernates the laptop after 5 minutes with no input, so a closed laptop never runs unlocked in a bag
+  (Haik, 2026-11-03; power safety review finding 1).
 - Sounds wherever they give a useful hint (Haik, 2026-11-03):
   - Lid closed while Wakeshot holds: a short chime says the laptop keeps running.
   - Work ended with the lid closed: a short "going to sleep" sound right before Wakeshot hibernates the laptop.
@@ -91,14 +97,17 @@ Wakeshot writes and puts back each time, show in the icon and tooltip only (Haik
   - Every sound plays on the default audio device, unless that device is a screen's audio (HDMI or DisplayPort, often
     with no speakers); then on the laptop speakers. Headphones stay as they are. Card `p1-lid-sound` picked this and
     Haik heard the chime at two lid closes with the lock on (`research.md`, "Lid-close sound").
-- When the user signs in after a closed-lid hold, a notification says how long the PC kept running with the lid closed
-  and what held it (Haik, 2026-11-03).
+- After a closed-lid hold, once the lid is open and the user is signed in (at the first unlock, or when the lid opens
+  while signed in), a notification says how long the PC kept running with the lid closed and what held it. A docked
+  user who signs in on the external screen with the lid still closed gets it when the lid opens (Haik, 2026-11-03).
 - **Battery floor**: the Windows energy saver threshold; 20% when it is Never or Always. No Wakeshot setting. On
   battery below the floor, Wakeshot steps back at once: it releases every request, restores settings and notifies,
   so Windows rules apply. If the lid is closed, it then hibernates the laptop, but only after the same 5 minutes
   with no input as at work end (below), so someone typing on an external screen with the lid closed is not put to
-  sleep. Right before it hibernates, it checks again that the lid is closed and the PC is on battery under the floor:
-  a USB-C dock can drop AC for a few seconds (seen on the test laptop). When AC comes back, the hold resumes.
+  sleep. If the user's own battery lid action is Do nothing, it does not hibernate, the same rule as at work end
+  (Haik, 2026-11-03). Right before it hibernates, it checks again that the lid is closed and the PC is on battery
+  under the floor: a USB-C dock can drop AC for a few seconds (seen on the test laptop). When AC comes back, the hold
+  resumes.
 - With the lid closed, Wakeshot holds for as long as the work runs: no time limit and no heat guard. Someone who sets
   the lid to Do nothing by hand and puts the laptop in a bag gets no heat check either, and the hardware's own
   protection applies the same in both cases: the CPU slows itself at its limit (not tested here), and Windows shuts

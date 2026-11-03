@@ -230,3 +230,4 @@ limit; Copilot waiting does not hold. The cards build these.
   the session already holds, else `Ok` (so an idle session never shows "update Wakeshot"; a notice-only variant is
   proposed in its card). For the Claude parsing review: an SDK session's task stopped by a Monitor timeout or the UI
   writes no transcript line, so it holds until the session ends; transcript times use `holds::file::parse_expires`.
+- 2026-11-03 23:36: Claude parsing review running (`wakeshot-reviewer`, report `docs/reviews/p4-claude-parsing.md`), scope `p4-claude-status`, `p4-cron`, `p4-claude-transcript`, `p4-hold-files`, `p4-watch-reads`, `p4-watch-agents`.

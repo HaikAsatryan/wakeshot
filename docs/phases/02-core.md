@@ -220,3 +220,12 @@ Where each item this track owns is built. "Integration" is planned after the tra
   fix round, each kept as an ignored failing test: a plan switch inside the 10 s read window lets the switch's apply
   write a key the user just took back (`core/settings.rs`; proposed: after a release, ask for a new apply); a lid
   close before the first plan read, with a crashed tray's values in force, gives no lock (`core/lid.rs`).
+- 2026-11-03 23:36: Haik answered the two 21:52 questions and approved the power safety review's lock fix, all as
+  proposed (recorded in `product.md` and `architecture.md` sections 3 and 8 by session `wakeshot-9d`). (1) Floor
+  countdown: no hibernate when the user's own battery lid action is Do nothing, on both paths (at the step back and at
+  a lid close after it); review finding 7. (2) Closed-lid report: stays as built, it waits for the lid to open
+  (`p2-core-lid` design choice 13). (3) Lock fails with the lid closed on our Do nothing: `Lock` once more at the next
+  tick; if that fails too, step back as at the floor and start the countdown; review finding 1. Code for (1) and (3)
+  goes to the power review fix round in `core/lid.rs`.
+- 2026-11-03 23:36: power review fix round running (new worker, session `wakeshot-7c`): finding 1 (major, lid lock retry then step back), findings 2 and 4, and `p2-core-props`' two ignored tests. Owns `core.rs`, `core/`, `scenarios/lid.rs`, `settings.rs`, `props.rs`, `sim.rs`, one line of `architecture.md` section 8. Its Log goes in `p2-core-lid`. Routed: finding 3 to `p6-int-startup`; findings 5, 8, 9, 10 (core) to a second fix round after this one; finding 6 (hibernate thread) to a Windows worker later; finding 7 waits for Haik's answer on the battery floor.
+- 2026-11-03 23:42: Haik confirmed in the orchestrator's chat (about 23:41): the 23:36 answers stand, and his rule for open calls is that with no work going on the laptop behaves as if Wakeshot were not there (now in `product.md`). Finding 7 (no floor hibernate on the user's own battery Do nothing, both paths) sent to the running fix round. The orchestrator keeps the 5 s no-`Session(Locked)` check in the finding 1 fix.
