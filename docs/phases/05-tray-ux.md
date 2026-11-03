@@ -180,10 +180,10 @@ own Windows settings switched and put back.
 
 | Card | Needs Haik | Laptop | Runs after | Status |
 |---|---|---|---|---|
-| `p5-theme` | no | no | contracts change card | in progress |
+| `p5-theme` | no | no | contracts change card | done (00:24): 7 tests; `Theme { light, contrast }`, `ThemeWatch` with `current()` |
 | `p5-icon-art` | one look at the icon sheet, not blocking | no | contracts change card | ready |
 | `p5-text` | one read of the text list, not blocking | no | contracts change card | done (00:02): every word in `text.rs`, 552 core tests; the text list for Haik is in its Result |
-| `p5-menu-paint` | no (menu look answered 17:32: an icon per item) | no | `p5-theme` | in progress |
+| `p5-menu-paint` | no (menu look answered 17:32: an icon per item) | no | `p5-theme` | done (00:50): 15 tests; colours and row sizes match the Phase 1 renders by pixel; nine renders in `docs/research/img/ux/` |
 | `p5-tray-icon` | no | screen, settings (light and dark mode) | `p5-theme`, `p5-icon-art` | ready |
 | `p5-menu-view` | no (menu look answered 17:32) | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | ready |
 | `p5-notices` | no | screen, settings (Do not disturb) | Part A: contracts change card; Part B: `p5-tray-icon`, `p5-text`, `p5-icon-art` | ready |
@@ -236,3 +236,10 @@ Bundle (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p5-th
 - 2026-11-03 23:36: `p5-text` running (core only, beside the app.rs contract change).
 - 2026-11-04 00:02: `p5-text` done and committed. Its Result holds the text list for Haik (`p5-haik-check`). The fix round now words the LockFailed notice for the new step back (`text.rs` handed to it). Next tray cards: `p5-theme` + `p5-menu-paint`, `p5-icon-art`, `p5-sounds` (sound is fine at night, Haik 23:45).
 - 2026-11-04 00:17: the `p5-theme` + `p5-menu-paint` bundle running. `p5-text`'s card table now quotes the new LockFailed words.
+- 2026-11-04 00:51: the `p5-theme` + `p5-menu-paint` bundle done and committed (orchestrator session after the
+  handover). Decided by the worker, for Haik's review: a missing `SystemUsesLightTheme` reads as light; icons on the
+  five main rows only (eye, cup, restore arrow, page, cross), none on the Keep awake lengths, Keep screen on or the
+  status line; the status line uses the secondary text colour; text capped at 480 epx (a long status ends in "...");
+  marks and chevron use WinUI's secondary colour. For `p5-menu-view` Part B: check on screen that each row is as wide
+  as measure plus `windows_adds()` (14, 16, 20 px at 96, 120, 144 dpi; only 120 was confirmed on screen). Stale line:
+  `p5-menu-paint`'s "Out of scope" still lists icons in items, which Haik's 17:32 answer overrides (next docs pass).
