@@ -205,7 +205,7 @@ Answered 2026-11-03 18:09 (Haik: all defaults), each as its default below.
 | `p1-close-contracts` | no | fixes verify | done (18:50): `Event::Updated`, `Notice::Updated`, owner lines, `architecture.md`, answers in 16 cards, all 8 verify findings fixed; `Cargo.lock` one line (`proptest` in the CLI) |
 | close verify (reviewer, no card) | no | `p1-close-contracts` | done (19:05): 0/1/5 (`docs/reviews/p1-close-verify.md`); major and minors routed or fixed (19:08) |
 | `p6-plan-integration` | yes: signs off the plan, two questions | first push | done (18:39): 11 cards, about 1.19M tokens (`docs/phases/06-integration.md`) |
-| `p6-int-skeleton` | no | `p1-close-contracts`; Haik's sign-off (18:58) | ready; runs alone after wave 1 ends (with the plan's five `architecture.md` proposals) |
+| `p6-int-skeleton` | no | `p1-close-contracts`; Haik's sign-off (18:58) | done (card Result) |
 | `p1-ci` | no | `p1-cargo-workspace` | done (16:25); CI green after the first push (18:15) |
 | Phase 1 general review (reviewer, no card) | no | `p1-repo-files`, `p1-ci` | of the repo files, workspace and CI, before the first push |
 | fixes for that review (card written from its findings) | no | Phase 1 general review | not written yet |
