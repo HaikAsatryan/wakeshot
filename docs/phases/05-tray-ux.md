@@ -181,10 +181,10 @@ own Windows settings switched and put back.
 | Card | Needs Haik | Laptop | Runs after | Status |
 |---|---|---|---|---|
 | `p5-theme` | no | no | contracts change card | done (00:24): 7 tests; `Theme { light, contrast }`, `ThemeWatch` with `current()` |
-| `p5-icon-art` | one look at the icon sheet, not blocking | no | contracts change card | ready |
+| `p5-icon-art` | one look at the icon sheet, not blocking | no | contracts change card | done (committed 01:29): three glyph sets (Cup, Eye, Sky) with holding, idle and off; app icon; ICO 16 to 64; 12 tests |
 | `p5-text` | one read of the text list, not blocking | no | contracts change card | done (00:02): every word in `text.rs`, 552 core tests; the text list for Haik is in its Result |
 | `p5-menu-paint` | no (menu look answered 17:32: an icon per item) | no | `p5-theme` | done (00:50): 15 tests; colours and row sizes match the Phase 1 renders by pixel; nine renders in `docs/research/img/ux/` |
-| `p5-tray-icon` | no | screen, settings (light and dark mode) | `p5-theme`, `p5-icon-art` | ready |
+| `p5-tray-icon` | no | screen, settings (light and dark mode) | `p5-theme`, `p5-icon-art` | in progress |
 | `p5-menu-view` | no (menu look answered 17:32) | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | ready |
 | `p5-notices` | no | screen, settings (Do not disturb) | Part A: contracts change card; Part B: `p5-tray-icon`, `p5-text`, `p5-icon-art` | ready |
 | `p5-sounds` | no (the "No sounds" question: honor it, Haik 2026-11-03 18:09) | sound | contracts change card | ready |
@@ -243,3 +243,12 @@ Bundle (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p5-th
   marks and chevron use WinUI's secondary colour. For `p5-menu-view` Part B: check on screen that each row is as wide
   as measure plus `windows_adds()` (14, 16, 20 px at 96, 120, 144 dpi; only 120 was confirmed on screen). Stale line:
   `p5-menu-paint`'s "Out of scope" still lists icons in items, which Haik's 17:32 answer overrides (next docs pass).
+- 2026-11-04 01:30: `p5-icon-art` done and committed. Sheets: `docs/research/img/ux/icon-sheet-dark.png`,
+  `-light.png`, `-contrast.png`, `icon-app.png` (Haik's look, not blocking). Decided by the worker, for Haik's review:
+  the pick is the Cup (steam while holding, empty when idle, struck through when off; Eye and Sky stay in `art.rs` as
+  the other choices); the app icon is a white cup on an orange disc; whole-pixel strokes (2 px at 24 px, a little
+  heavier than Windows' 1.5 px); padding size/16; the glyph on a light taskbar is 1a1a1a like Windows' own; `png`
+  compresses (a stored sheet would be about 28 MB); no polygon primitive. Outside scope: track note 3.2 says a 256 px
+  frame needs a crate, which no longer holds (`png` is a stdlib deflate now); size not measured (next docs pass or
+  Haik's call). `p5-tray-icon` running; its Part B (screen, the light/dark switch) runs only after 15 minutes with no
+  user input, else it stops after Part A.
