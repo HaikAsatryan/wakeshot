@@ -1,6 +1,6 @@
 # Live test: Copilot CLI (with Haik)
 
-Phase: 4. Status: ready. Needs Haik: yes, about 20 minutes at the laptop: install or sign in to Copilot CLI with his
+Phase: 4. Status: later (after v1, Haik 2026-11-03; `docs/phases/02-06-lighter.md`). Needs Haik: yes, about 20 minutes at the laptop: install or sign in to Copilot CLI with his
 own account, then type the numbered steps the worker gives. Agent: `wakeshot-worker`. Size: about 100K tokens.
 Runs after: `p4-live-codex` (both may fix `lockowner.rs` and `watch/agents.rs`). Parallel with: code cards of any
 track that own none of the files below. Never at the same time as another live card or any card that needs Haik's

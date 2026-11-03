@@ -17,15 +17,19 @@ the plan and fix this file.
    Read a card's Result section only when the card is done or blocked.
 3. Pick the next cards: Status `ready` and every "Runs after" card `done`. Cards that touch the same files or the same
    real power settings run one at a time. Run cards in parallel only where their "Parallel with" lines allow it.
-4. Spawn one `wakeshot-worker` agent per card, in the background. The prompt names the card path and adds any answer
-   or context from Haik that the card needs, and the files it owns this round. No worktrees in this repo: parallel
+4. Spawn one `wakeshot-worker` agent per card, or per bundle (the "Bundles" line in the phase file: one worker, both
+   cards in order, once both cards' Runs after are met), in the background. Never start a card with Status `later`.
+   The prompt names the card path (or both, in order) and adds any answer or context from Haik that the card needs,
+   and the files it owns this round. No worktrees in this repo: parallel
    cards own different files (`docs/plan.md`, "Git"). Never ask agents to inspect the tree with git.
 5. When an agent ends, read its short final reply and the card's Result. Update the card table in the phase file.
 6. Blocked cards: relay the card's "Questions for Haik" and its manual steps (lid, battery, theme switch) to Haik in
    chat. Copy the steps exactly. When he answers, resume the card: SendMessage to the same agent if it is still
    available, otherwise a new worker that reads the card's Log.
-7. At phase end, spawn `wakeshot-reviewer` agents: at least two, one general review and one domain review with a
-   narrow brief. Findings go to `docs/reviews/`. Then a worker fixes the findings and a reviewer verifies.
+7. Reviews: only the two in `docs/phases/02-06-lighter.md` ("Reviews"), each one `wakeshot-reviewer` with its narrow
+   brief, at the point named there. Findings go to `docs/reviews/`. The worker that built the card fixes them
+   (SendMessage, or a new worker that reads the card's Log); the same reviewer checks the fixes of blockers and majors
+   only. No phase-end review loop, and no plan, close or fix cards.
 8. Before you stop: add dated lines to the phase file work log and update the Status section of `docs/plan.md`.
 
 ## Git

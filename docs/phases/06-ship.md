@@ -144,11 +144,17 @@ those one at a time across all tracks.
 | `p6-pack-and-release` | no (Question 5: yes, the first real run is a public pre-release) | `p6-velopack-facts` | ready |
 | `p6-install-e2e` | no; real laptop: installs, the real Run value and Path, a throwaway plan copy | `p6-velopack-dependency`, `p6-pack-and-release`; `p3-power-plan` (its first test shows a write to an inactive copy leaves the real plan alone) | ready |
 | `p6-winget-manifest` | no | `p6-pack-and-release` | ready |
-| `p6-readme` | yes: a read at the Phase 6 sign-off; the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3, sign-off item 12) are in, all defaults | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-codex`, `p4-live-copilot`; the tray track's `p5-haik-check` (review m2) | ready |
+| `p6-readme` | yes: a read at the Phase 6 sign-off; the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3, sign-off item 12) are in, all defaults | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-claude`; the tray track's `p5-haik-check` (review m2) | ready |
 | `p6-pages` | yes: one look before it goes live at v1 | `p6-readme`; the tray track's `p5-icon-art` and `p5-haik-check` (Haik's icon pick rewrites `assets/wakeshot.ico`; review m3) | ready |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
 dependency 110K, pack and release 110K, install e2e 130K, winget 60K, README 70K, Pages 60K. About 880K in all.
+Wave 1 of the other tracks peaked at 2 to 3 times such estimates (`docs/phases/02-06-lighter.md`).
+
+Bundles (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p6-login-and-path` +
+`p6-update-schedule`; `p6-pack-and-release` + `p6-winget-manifest`; `p6-readme` + `p6-pages`. No separate review for
+this track: `p6-hooks` calls the reviewed `restore_locked`, and `p6-install-e2e` and the integration e2e cards run the
+rest for real.
 
 ### Files each card owns
 

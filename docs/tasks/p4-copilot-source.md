@@ -1,6 +1,6 @@
 # Copilot CLI source
 
-Phase: 4. Status: ready. Needs Haik: no (his live test is `p4-live-copilot`). Agent: `wakeshot-worker`. Size: about
+Phase: 4. Status: later (after v1, Haik 2026-11-03; `docs/phases/02-06-lighter.md`). Needs Haik: no (his live test is `p4-live-copilot`). Agent: `wakeshot-worker`. Size: about
 90K tokens.
 Runs after: `p4-cron` (for cron schedules). Parallel with: every other card of this track and every card of tracks
 2, 3, 5, 6.

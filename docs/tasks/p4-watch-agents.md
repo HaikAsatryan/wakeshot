@@ -1,6 +1,7 @@
 # Watch thread: drive the agent sources and check their liveness
 
-Phase: 4. Status: ready. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 100K tokens.
+Phase: 4. Status: ready. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 80K tokens (was 100K; the
+`AnyProcess` part moved to `p4-codex-source`, after v1, Haik 2026-11-03).
 Runs after: `p4-watch-reads`. Parallel with: every other card of this track and every card of tracks 2, 3, 5, 6. Uses
 `FakeSource`, so it does not wait for the parser cards.
 Build folder: `CARGO_TARGET_DIR=<scratchpad>\p4-watch-agents\target`. Uses the real laptop: no (temp folders, fakes).
@@ -12,11 +13,11 @@ per source with each session's liveness, as section 7 says ("checks liveness: th
 
 ## Read first
 
-- `docs/phases/04-sources.md`: track notes 6, 7, 14, 16.
+- `docs/phases/04-sources.md`: track notes 6, 14, 16.
 - `docs/architecture.md` section 5 "Liveness", section 7, section 8 (format problems logged at most once a minute per
   source; Liveness Unknown).
 - `crates/wakeshot-core/src/sources.rs`, `testing.rs` (`FakeSource`), `event.rs`.
-- `crates/wakeshot-windows/src/watch/read.rs`, `lockowner.rs` (from `p4-watch-reads`).
+- `crates/wakeshot-windows/src/watch/read.rs` (from `p4-watch-reads`).
 - From the contracts card: `process::Liveness` and `FakeLiveness`, the log seam and its fake.
 
 ## Deliverables
@@ -29,11 +30,10 @@ per source with each session's liveness, as section 7 says ("checks liveness: th
    answer schedules one re-read 200 ms later: return it to the caller); `Names` as `Present` or `Gone`; every `Tail`
    and `FindTail` of the same source on a change in any of its folders and on each tick (section 7: transcripts are
    read on status changes and on the tick, not watched). `wanted()` is asked again after each feed.
-3. Liveness for each session: `Process { pid, start }` through `process::Liveness`; `AnyProcess { image, lock_file }`
-   through `lockowner::holders(lock_file)`: a holder whose image is `image` (from the process list) gives that holder's
-   liveness and is cached until the lock file changes or the holder is gone; no holder gives `Gone`; a Restart Manager
-   error falls back to "any live process with that image" (track note 7) while the lock file is `Present`, and a failed
-   process list gives `Unknown`. Return the live `ProcessRef`s so the thread can wait on their exit.
+3. Liveness for each session: `Process { pid, start }` through `process::Liveness`. Return the live `ProcessRef`s so
+   the thread can wait on their exit. `AnyProcess { image, lock_file }` serves only Codex and Copilot, so it moved to
+   `p4-codex-source` (after v1, Haik 2026-11-03): here it gives `Unknown`, with one log line per source per minute
+   like a format problem, and a short "why" comment that names that card.
 4. `snapshots() -> Vec<Event>`: one `Event::Sources` per source whose snapshot changed since the last one returned
    (always all of them on the first call), sessions paired with their `Alive`.
 5. Format problems: a session with `Unreadable` or `UnknownValue` gives at most one log line per source per minute
@@ -41,8 +41,7 @@ per source with each session's liveness, as section 7 says ("checks liveness: th
 
 Tests first, with `FakeSource`, `FakeLiveness` and temp folders: a feed per want kind; a retry answered once; a
 `Names` file appearing and going; a tail fed only new lines; `Process` liveness `Yes`, `Gone`, `Unknown`;
-`AnyProcess` with a holder (a child process the test starts holding a file), with no holder, with a Restart Manager
-error (inject it), with a failed process list; no event when nothing changed; the log limit with a fake clock.
+`AnyProcess` gives `Unknown`; no event when nothing changed; the log limit with a fake clock.
 
 ## Acceptance checks
 

@@ -8,7 +8,7 @@ never changes the PC's zone or clock).
 
 ## Goal
 
-Give the Claude and Copilot parsers the next run time of a cron job, in the PC's local time with daylight saving,
+Give the Claude parser (and Copilot's, after v1) the next run time of a cron job, in the PC's local time with daylight saving,
 with Claude's jitter, without a date crate and without OS calls in the core.
 
 ## Read first

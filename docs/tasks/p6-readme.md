@@ -6,8 +6,9 @@ sign-off item 12: all answered with the defaults (`docs/phases/02-06-signoff.md`
 `wakeshot-worker`. Size: about 70K tokens.
 Real laptop: no.
 Runs after: `p6-pack-and-release` (install steps) and `p6-install-e2e` (what an uninstall really
-leaves); the sources track's `p4-hold-files` (`docs/hold-files.md`), `p4-cli-args` (the command help), `p4-live-codex`
-and `p4-live-copilot` (which agents are tested live); the tray track's `p5-haik-check` (final menu words and icon)
+leaves); the sources track's `p4-hold-files` (`docs/hold-files.md`), `p4-cli-args` (the command help), `p4-live-claude`
+(what is tested live; v1 supports Claude Code only, Codex and Copilot come after v1, Haik 2026-11-03); the tray
+track's `p5-haik-check` (final menu words and icon)
 (review m2). Parallel with: any card that does not own `README.md`.
 The README also says that Windows keeps its own record of the tray icons it has seen (`NotifyIconSettings`), which an
 uninstall leaves (`p6-hooks`, review m17).

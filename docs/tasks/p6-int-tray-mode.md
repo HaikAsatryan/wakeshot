@@ -5,9 +5,10 @@ Real laptop: Part A no. Part B: **screen**, about 10 minutes, one dry-run tray i
 card at a time, across all tracks); no power setting, no sound on purpose, no Haik.
 Build folder: `CARGO_TARGET_DIR=<scratchpad>\p6-int-tray-mode\target`.
 Runs after: `p6-int-io-thread`, `p6-int-window`, `p6-int-dispatch`, `p6-int-startup`, `p3-requests`,
-`p3-system-events`, `p3-hibernate`, `p3-recovery`, `p4-watch-thread`, `p4-claude-transcript`, `p4-codex-source`,
-`p4-copilot-source`, `p4-cron`, `p5-tray-icon`, `p5-menu-view`, `p5-notices`, `p5-sounds`. Parallel with: any card
-that owns none of the files below.
+`p3-system-events`, `p3-hibernate`, `p3-recovery`, `p4-watch-thread`, `p4-claude-transcript`, `p4-cron`,
+`p5-tray-icon`, `p5-menu-view`, `p5-notices`, `p5-sounds`. Parallel with: any card that owns none of the files
+below. The watch thread starts with the Claude source only: Codex and Copilot moved to after v1 (Haik, 2026-11-03;
+`docs/phases/06-integration.md` note 6).
 
 ## Goal
 

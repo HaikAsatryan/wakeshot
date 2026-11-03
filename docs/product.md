@@ -35,7 +35,8 @@ Wakeshot writes and puts back each time, show in the icon and tooltip only (Haik
   - `shell` (background command while idle), and a background task found in the transcript of a non-terminal session
     (VS Code, SDK, Desktop): holds while the session process lives and the task is open. No time cap. A dev server
     that never ends holds until it or the session ends; the tooltip says what holds.
-- **Other agents** in v1: Codex CLI and Copilot CLI (`research/other-agent-signals.md`). OpenCode next (reliable
+- **Other agents** after v1 (Haik, 2026-11-03: v1 ships Claude Code only, to keep v1 small; the cards are ready and
+  marked `later`): Codex CLI and Copilot CLI first (`research/other-agent-signals.md`). OpenCode next (reliable
   signal, free to test). No reliable signal yet: Gemini CLI, Cursor CLI, Aider, Amp, Kiro. Logic may be ported from
   the MIT rivals with credit. Haik has personal Codex and Copilot access for one live test each. Agents not tested
   live are marked so in the docs.
@@ -186,6 +187,8 @@ lid action stays Do nothing and battery sleep Never. The README says so.
   "SignPath Foundation" as publisher.
 
 ### Answers to the track plan questions (Haik, 2026-11-03 18:09: all defaults)
+
+The two Codex and Copilot answers apply when they are built, after v1.
 
 - Codex waiting for approval looks like working (it writes no approval prompt to disk), so it holds with no limit
   while `codex.exe` lives and its turn is open. The battery floor still protects.

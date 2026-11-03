@@ -30,6 +30,8 @@ Answered 2026-11-03 18:09: Haik, "Answer to all questions are default!". Every q
 1. Codex waiting for your approval looks like working, so it holds with no limit while Codex runs. Default: hold, no
    limit. Other: end a silent Codex turn after 1 hour (also ends long silent builds).
 2. Copilot waiting for your approval. Default: no hold, like Claude without Remote Control. Other: hold up to 1 hour.
+   Later note: Codex and Copilot moved to after v1 (Haik, 2026-11-03; `02-06-lighter.md`). Answers 1 and 2 apply
+   when they are built.
 3. Chimes when your sound scheme is "No sounds". Default: honor it, no chime, a log line. Other: always play.
 4. Notices raised while you are locked or another user is on the screen wait until you are back. Default: yes.
 5. Wakeshot is off after `winget upgrade` until the next sign-in. Default: accept; the README says so.

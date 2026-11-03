@@ -413,7 +413,7 @@ Every decision in `product.md`, by section. Phase numbers are from `plan.md`.
 | 6 | Idle with a timer due within 1 hour holds; none for the hidden loop fallback | section 7 | 4 |
 | 7 | `waiting` holds only with Remote Control, at most 1 hour | section 7 | 4 |
 | 8 | `shell` and open background tasks of non-terminal sessions hold while the process lives | section 7 | 4 |
-| 9 | Codex CLI and Copilot CLI in v1; others later; logic may be ported from the MIT rivals with credit | section 7; a credit line in the README for each port | 4, 6 |
+| 9 | Codex CLI and Copilot CLI after v1 (Haik, 2026-11-03; v1 is Claude Code only); others later; logic may be ported from the MIT rivals with credit | section 7; a credit line in the README for each port | 4, 6 |
 | 10 | `wakeshot run -- <command>` with a documented hold file | sections 4 and 6 | 4 |
 | 11 | Keep awake on demand | `holds\keep-awake.json` (section 6), episode flow | 2, 4, 5 |
 | 12 | Every signal checked against a fact; only the waiting hour and the battery floor limit time | `Liveness` on every hold and session (sections 5, 6, 7); the Codex rule is not yet tied to its session (section 7) | 2, 4 |
@@ -880,7 +880,7 @@ rulings:
   unknown-format rule above.
 - Rule 5 does not cover `claude --resume` in a new process. Phase 4 runs one live test and fixes the rule.
 
-Codex CLI and Copilot CLI (Phase 4): the same trait. Liveness comes from `research/other-agent-signals.md` (Codex
+Codex CLI and Copilot CLI (after v1, Haik 2026-11-03; their cards are `later` in Phase 4): the same trait. Liveness comes from `research/other-agent-signals.md` (Codex
 files hold no pid: "a `codex.exe` is alive and the thread lock file exists"). That Codex rule can outlive its session:
 a crash leaves the lock file until the next Codex start, and a shared `codex app-server` can live for days. Phase 4
 maps the lock file to the process that holds it open (for example Restart Manager `RmGetList`; not verified for this

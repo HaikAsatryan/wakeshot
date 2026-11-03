@@ -5,7 +5,9 @@ model: opus
 effort: xhigh
 ---
 
-You do exactly one task card in the Wakeshot repo (`C:\Users\haika\code\wakeshot`).
+You do exactly one task card in the Wakeshot repo (`C:\Users\haika\code\wakeshot`), or a bundle of two when the
+orchestrator names two: then do them in the given order, each card with its own Status, Log, acceptance checks and
+Result, and finish the first card before you start the second.
 
 ## Start
 
@@ -38,4 +40,4 @@ You do exactly one task card in the Wakeshot repo (`C:\Users\haika\code\wakeshot
 - Run every acceptance check in the card and record each outcome.
 - Fill "Result": what was done, files changed, checks run and their outcome, open items. Set Status to `done` or
   `blocked`.
-- Final reply: under 150 words, the same content as Result. The orchestrator reads only this and the card.
+- Final reply: under 150 words per card, the same content as Result. The orchestrator reads only this and the card.

@@ -125,9 +125,9 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | Card | Needs Haik | Runs after | Status |
 |---|---|---|---|
 | `p2-ownership-restore` | no | contracts card | done (19:13): 45 tests, 4 mutants caught |
-| `p2-policy-holds` | no | contracts card | ready (started 19:29, stopped by Haik about 19:45, no code) |
-| `p2-policy-power` | no | contracts card | ready (started 19:29, stopped by Haik about 19:45, no code) |
-| `p2-present` | no | contracts card | ready (started 19:29, stopped by Haik about 19:45, no code) |
+| `p2-policy-holds` | no | contracts card | running (19:55) |
+| `p2-policy-power` | no | contracts card | running (19:55) |
+| `p2-present` | no | contracts card | running (19:55) |
 | `p2-ownership-apply` | no | `p2-ownership-restore` | ready |
 | `p2-core-holds` | no | `p2-policy-holds`, `p2-policy-power`, `p2-present`, `p4-hold-files` | ready |
 | `p2-ownership-props` | no | `p2-ownership-apply` | ready |
@@ -190,3 +190,5 @@ Where each item this track owns is built. "Integration" is planned after the tra
   Aligned with the power track's decisions (correction 12, the released-key entry, `JournalCorrupt`,
   `FinishRestoreRequest`), the sources track's `holds::file`, and the tray track's `text.rs`. The open question of who
   owns the apply, restore and check routines was decided at 17:05: the core.
+- 2026-11-03 19:55: wave 2 restarted after the lighter plan (`02-06-lighter.md`): `p2-policy-holds`,
+  `p2-policy-power`, `p2-present` running, with `p4-hold-files`. Next free slot: `p2-ownership-apply`.

@@ -1,6 +1,6 @@
 # Codex CLI source
 
-Phase: 4. Status: ready. Needs Haik: no (his live test is `p4-live-codex`). Agent: `wakeshot-worker`. Size: about 70K
+Phase: 4. Status: later (after v1, Haik 2026-11-03; `docs/phases/02-06-lighter.md`). Needs Haik: no (his live test is `p4-live-codex`). Agent: `wakeshot-worker`. Size: about 70K
 tokens.
 Runs after: the contracts card (it creates `sources/codex.rs` and adds `WantedFile::Names`, `FindTail`,
 `Feed::Present`). Parallel with: every other card of this track and every card of tracks 2, 3, 5, 6.
@@ -43,6 +43,14 @@ sessions from thread lock files, activity from the last turn event of the rollou
    pieces) and checks the facts.
 5. The module doc says "not tested live" until `p4-live-codex` changes it. `docs/research/other-agent-signals.md`
    belongs to the live cards; do not edit it here.
+6. Moved here from `p4-watch-reads` when Codex and Copilot went after v1 (Haik, 2026-11-03): deliverable 2 of that
+   card, `crates/wakeshot-windows/src/lockowner.rs` (Restart Manager `holders(path)`), with its tests and the
+   research line on the Restart Manager answers. Size about 25K more.
+7. Moved here from `p4-watch-agents` (done by then): the `AnyProcess { image, lock_file }` liveness in
+   `crates/wakeshot-windows/src/watch/agents.rs` through `lockowner::holders`, as that card's deliverable 3 first
+   said (cache until the lock file changes or the holder is gone; no holder gives `Gone`; a Restart Manager error
+   falls back to "any live process with that image" while the lock file is `Present`; a failed process list gives
+   `Unknown`), and its tests. Size about 20K more.
 
 ## Acceptance checks
 

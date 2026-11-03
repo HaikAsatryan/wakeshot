@@ -4,8 +4,9 @@ Phase: 4. Status: ready. Needs Haik: optional, about 3 minutes (the VS Code chec
 `wakeshot-worker`. Size: about 120K tokens. Split trigger (review m13): if the run shows bugs whose fixes would take
 this card past about 150K, stop after the harness and the run, list each bug under "Found outside scope" with its
 log lines, and the orchestrator makes a fix card.
-Runs after: `p4-watch-thread`, `p4-claude-transcript`, `p4-codex-source`, `p4-copilot-source`, `p4-cli-run`, and
-`p3-process` (the real `process::Liveness`). Parallel with: code cards of any track that own none of the
+Runs after: `p4-watch-thread`, `p4-claude-transcript`, `p4-cli-run`, `p3-process` (the real `process::Liveness`),
+and the Claude parsing review with its blocker and major fixes (`docs/phases/02-06-lighter.md`). Codex and Copilot
+moved to after v1 (Haik, 2026-11-03), so this card runs the Claude source only. Parallel with: code cards of any track that own none of the
 files below. Never at the same time as `p4-claude-live-shapes`, `p4-live-codex`, `p4-live-copilot`.
 Build folder: `CARGO_TARGET_DIR=<scratchpad>\p4-live-claude\target`.
 Uses the real laptop: yes, Claude Code test sessions (Haiku) in throwaway folders. No power settings, screen or sound.
@@ -16,7 +17,7 @@ sound, installs) (review m19). Its `--dry-run` harness uses the dry-run data fol
 ## Goal
 
 Run the real watch thread with the real sources on this laptop, check every Claude Code case of the live tests table
-against what it posts, and leave a harness the Codex and Copilot live tests reuse.
+against what it posts, and leave a harness the later Codex and Copilot live tests can reuse.
 
 ## Read first
 
@@ -24,12 +25,12 @@ against what it posts, and leave a harness the Codex and Copilot live tests reus
 - `docs/phases/04-sources.md` (all track notes).
 - `docs/research/claude-code-signals.md`: "Live test results", "Live tests still open", the "Phase 4 live shapes"
   section; `docs/tasks/p4-claude-live-shapes.md` Result (how the sessions were driven).
-- `crates/wakeshot-windows/src/watch/` and the three sources in `crates/wakeshot-core/src/sources/`.
+- `crates/wakeshot-windows/src/watch/` and the Claude source in `crates/wakeshot-core/src/sources/claude/`.
 
 ## Deliverables
 
-1. `crates/wakeshot-windows/examples/agent-watch.rs`: starts `WatchThread` with `ClaudeSource`, `CodexSource`,
-   `CopilotSource` (homes from the usual variables), the real `process::Liveness`, `SystemZone`, a data folder given on the
+1. `crates/wakeshot-windows/examples/agent-watch.rs`: starts `WatchThread` with `ClaudeSource` (home from the usual
+   variables; a source list, so a later source is one more line), the real `process::Liveness`, `SystemZone`, a data folder given on the
    command line (default: the dry-run folder, never the real one), and an `EventSink` that prints each event in one
    redacted line (source, session key, activity, timers as local times, open tasks, liveness, format health; hold ids,
    kinds, liveness). Plus `--raw <file>`: also log the kinds (never the text) of the lines each tail fed. Ctrl+C stops

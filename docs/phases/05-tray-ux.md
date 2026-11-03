@@ -192,6 +192,11 @@ own Windows settings switched and put back.
 
 Sizes, one worker's context: `p5-theme` about 40K tokens, `p5-icon-art` 120K, `p5-text` 80K, `p5-menu-paint` 110K,
 `p5-tray-icon` 140K, `p5-menu-view` 130K, `p5-notices` 110K, `p5-sounds` 120K, `p5-haik-check` 80K. Total about 930K.
+Wave 1 of the other tracks peaked at 2 to 3 times such estimates (`docs/phases/02-06-lighter.md`).
+
+Bundle (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p5-theme` + `p5-menu-paint`. So
+`p5-tray-icon` starts when the bundle is done. No separate review for this track: the acceptance checks,
+`p6-int-dry-run-e2e` and Haik's checks cover it.
 
 ## Order inside the track
 

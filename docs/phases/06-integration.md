@@ -142,7 +142,7 @@ and the balloon click hook (`take_click`, then `shell::open_with_default_app`); 
 `Session(Locked)` if the session was locked at start (`startup::locked_at_start`; `docs/reviews/p1-close-verify.md`
 Major 1), then `JournalCorrupt` if a corrupt journal was left by another process, then `Updated` if Velopack
 restarted the tray;
-`WatchThread::start` with the Claude source (home, `SystemZone`), Codex, Copilot and `SystemLiveness`; the update
+`WatchThread::start` with the Claude source (home, `SystemZone`) and `SystemLiveness` (Codex and Copilot after v1); the update
 thread (tray mode only, installed only); then the pump. Events posted before the pump runs wait in the window's queue,
 so the core always sees `Started` first.
 9. After the pump: `IoThread::finish(10 s)`, update thread stop, `WatchHandle::stop`, subscriptions, session
@@ -198,7 +198,7 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | `p6-int-window` | no | no (hidden windows only) | `p6-int-skeleton`, `p3-session` | ready |
 | `p6-int-dispatch` | no | no | `p6-int-skeleton`, `p2-core-lid`, `p3-power-io` | ready |
 | `p6-int-startup` | no | no | `p6-int-skeleton`, `p3-store`, `p3-log`, `p3-process`, `p3-session`, `p3-journal`, `p3-power-io` | ready |
-| `p6-int-tray-mode` | no | Part B: screen, about 10 min (a dry-run icon) | `p6-int-io-thread`, `p6-int-window`, `p6-int-dispatch`, `p6-int-startup`, `p3-requests`, `p3-system-events`, `p3-hibernate`, `p3-recovery`, `p4-watch-thread`, `p4-claude-transcript`, `p4-codex-source`, `p4-copilot-source`, `p4-cron`, `p5-tray-icon`, `p5-menu-view`, `p5-notices`, `p5-sounds` | ready |
+| `p6-int-tray-mode` | no | Part B: screen, about 10 min (a dry-run icon) | `p6-int-io-thread`, `p6-int-window`, `p6-int-dispatch`, `p6-int-startup`, `p3-requests`, `p3-system-events`, `p3-hibernate`, `p3-recovery`, `p4-watch-thread`, `p4-claude-transcript`, `p4-cron`, `p5-tray-icon`, `p5-menu-view`, `p5-notices`, `p5-sounds` | ready |
 | `p6-int-update-wiring` | no | no | `p6-int-tray-mode`, `p6-velopack-dependency`, `p6-update-schedule` | ready |
 | `p6-int-dry-run-e2e` | no | screen (dry-run icon, balloons, pictures); agent-session lane (one Claude Code test session) | `p6-int-update-wiring`, `p4-cli-args`, `p4-cli-run`, `p4-cli-commands`, `p4-cli-restore`, `p4-live-claude` | ready |
 | `p6-int-real-e2e` | no | global: power settings on active plan copies, RunOnce, a guard | `p6-int-dry-run-e2e`, `p3-real-checks` | ready |
@@ -207,6 +207,8 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 
 Sizes, one worker's context: skeleton 50K, io-thread 120K, window 100K, dispatch 140K, startup 100K, tray-mode 140K,
 update-wiring 90K, dry-run-e2e 130K, real-e2e 130K, update-e2e 120K, haik-checks 70K. About 1.19M tokens in all.
+Wave 1 peaked at 2 to 3 times such estimates (`docs/phases/02-06-lighter.md`). No bundles here: every card is 90K to
+140K by its estimate. No separate review: the e2e cards and Haik's checks cover the wiring.
 
 Hand-overs (a card edits a file another card owned, only after that card is done): `crates/wakeshot-tray/src/main.rs`
 (contracts card, then `p6-int-skeleton`, then `p6-int-update-wiring`); `crates/wakeshot-tray/src/velo.rs`

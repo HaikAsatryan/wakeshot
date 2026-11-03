@@ -29,9 +29,12 @@ Start here in every new context: read this file, then the current phase file in 
    slot the moment a card ends, from every ready card of every track, instead of waiting for a wave to drain; drain
    only for a card that must run alone. Cards that do not build (planning, docs, research, agent sessions) run beside
    the four building cards. Questions for Haik go to him in chat while the work that does not depend on them goes on.
-3. Review: at least two reviewers per phase, one general code review and one domain review with a narrow brief (for
-   example "find any path where user power settings are not restored"). Findings go to `docs/reviews/`.
-4. Fix: a worker fixes the findings; a reviewer verifies.
+3. Review: only the risky code gets a separate review (Haik, 2026-11-03): in Phases 2 to 6, two domain reviews with
+   a narrow brief, power safety and Claude parsing (`docs/phases/02-06-lighter.md`, "Reviews"). Other cards are
+   covered by their acceptance checks, the end-to-end cards and Haik's checks. Findings go to `docs/reviews/`.
+4. Fix: the worker that built the card fixes its findings (SendMessage while it is available, otherwise a new worker
+   that reads the card's Log). The same reviewer checks the fixes of blockers and majors only. No separate plan,
+   close or fix cards.
 5. Test: automated tests pass; manual checks that need Haik are listed in the phase file with exact steps.
 6. Record: phase file, the status below, and every doc the phase changed.
 
@@ -39,7 +42,9 @@ Start here in every new context: read this file, then the current phase file in 
 
 - One file per task, from `docs/tasks/_template.md`. Name: phase plus what it does, for example
   `p1-cargo-workspace.md`.
-- Size: one worker finishes it within about 150K tokens of context. Split bigger work; merge tiny pieces.
+- Size: card estimates run 2 to 3 times low; wave 1 workers peaked at 190K to 270K tokens and did well. A bundle is
+  two cards one worker does in order, each with its own Status, Log and Result; its estimates add up to at most about
+  170K. The phase files list the bundles.
 - A card holds everything a worker needs: goal, what to read, deliverables, acceptance checks, what is out of scope.
   The worker appends its log and result to the card.
 
@@ -81,7 +86,7 @@ Facts with how they were checked: `docs/research.md`. Longer research: `docs/res
 | 1 | Detailed design and skeleton | Detailed `architecture.md`, public GitHub repo, Cargo workspace, the contracts between the parts (`p1-contracts`), CI (fmt, clippy, tests, x64 and ARM64 builds), tray menu look that matches Windows 11 (`p1-tray-menu-look`), audible lid-close sound (`p1-lid-sound`) | Done (signed off 2026-11-03 19:13; `docs/phases/01-design-skeleton.md`) |
 | 2 | Core (track) | State machine, policies, settings ownership rules, file formats, full tests | Building (`docs/phases/02-core.md`) |
 | 3 | Windows power layer (track) | Power requests and settings, journal and restore, guard process, OS events | Building (`docs/phases/03-windows-power.md`) |
-| 4 | Sources (track) | Claude Code (with timers), Codex and Copilot CLI, `wakeshot run` and hold files, Keep awake | Building (`docs/phases/04-sources.md`) |
+| 4 | Sources (track) | Claude Code (with timers), `wakeshot run` and hold files, Keep awake; Codex and Copilot CLI after v1 (Haik, 2026-11-03) | Building (`docs/phases/04-sources.md`) |
 | 5 | Tray UX (track) | Icons (design, light and dark, high contrast, every scale), menu, notifications, sounds, first run, log | Planned (`docs/phases/05-tray-ux.md`) |
 | 6 | Ship (track, then integration) | Velopack installer and updates, start at login, uninstall restore, signing, winget manifest, README, GitHub Pages; then wiring all tracks into the two exes, end-to-end tests, Haik's manual checklist | Planned (`docs/phases/06-ship.md`, `docs/phases/06-integration.md`; `p6-int-skeleton` running) |
 | 7 | Field test | A week of real use on the test laptop, fixes, v1.0 | |
@@ -151,6 +156,10 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   session (`wakeshot-9d`) is making Phases 2 to 6 lighter for Haik (merge small cards, fewer reviews, Codex and
   Copilot after v1, lid-closed mode stays); it sends its merge plan before it edits cards or phase files. The
   orchestrator starts no card until that plan is applied and Haik confirms the three decisions in its own chat.
+- 2026-11-03 20:00: the lighter plan is applied (`docs/phases/02-06-lighter.md`, by session `wakeshot-9d`): nine
+  bundles, two separate reviews instead of one loop per phase, Codex and Copilot after v1, lid-closed mode stays.
+  Next (orchestrator): start cards at once from the phase tables, bundles as one worker, the old wave 2 cards first
+  (`p2-policy-holds`, `p2-policy-power`, `p2-present`, `p4-hold-files`). The line below is older.
 - Next (orchestrator), before the re-plan: the card tables in the phase files 02 to 06 and `06-integration.md` hold
   the build state from now on. (1) `p6-int-skeleton` ends: commit; (2) wave 2, the core chain first (the integration critical path):
   `p2-policy-holds`, `p2-policy-power`, `p2-present`, `p4-hold-files`; then fill free slots from `p2-core-holds`,

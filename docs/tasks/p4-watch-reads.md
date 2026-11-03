@@ -1,6 +1,8 @@
-# Watch thread: file reads, tails, finds and lock holders
+# Watch thread: file reads, tails and finds
 
-Phase: 4. Status: ready. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 100K tokens.
+Phase: 4. Status: ready. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 75K tokens (was 100K; the lock-holder
+part moved to `p4-codex-source`, after v1, Haik 2026-11-03). Bundle: first card of `p4-watch-reads` +
+`p4-watch-data` (`docs/phases/02-06-lighter.md`).
 Runs after: the contracts card (it creates `watch/read.rs`, `lockowner.rs` and adds the Restart Manager feature).
 Parallel with: every other card of this track and every card of tracks 2, 3, 5, 6.
 Build folder: `CARGO_TARGET_DIR=<scratchpad>\p4-watch-reads\target`. Uses the real laptop: no (temp folders and
@@ -9,16 +11,16 @@ processes the tests start).
 ## Goal
 
 The I/O behind each `WantedFile` kind, so the watch thread can feed any source: whole reads that never block the
-agent, tails that hand over complete lines only, a finder for files whose folder is not known, name-only listings,
-and Restart Manager's answer to "which process holds this file open".
+agent, tails that hand over complete lines only, a finder for files whose folder is not known, and name-only
+listings. Restart Manager's answer to "which process holds this file open" serves only Codex and Copilot, so it
+moved to `p4-codex-source` (after v1); leave the `lockowner.rs` stub as it is.
 
 ## Read first
 
-- `docs/phases/04-sources.md`: track notes 7, 10.
+- `docs/phases/04-sources.md`: track note 10.
 - `crates/wakeshot-core/src/sources.rs` (`WantedFile`, `Feed`, `FileId`, after the contracts card).
 - `spikes/claude-watch/src/names.rs` (`StatusFile::read`: share flags, the name check at the open), `tail.rs`,
   `watch.rs` (`find_transcript`).
-- `docs/research.md`: "Sources track plan checks" (Restart Manager functions and `RM_UNIQUE_PROCESS`).
 
 ## Deliverables
 
@@ -33,16 +35,14 @@ and Restart Manager's answer to "which process holds this file open".
      names compared case-insensitively; a cache so the tick does not walk Codex's date folders every 30 s (walk again
      only when a wanted name is not found or a cached path is gone).
    - `names(dir, depth, accept) -> Vec<PathBuf>`: lists names, never opens a file.
-2. `crates/wakeshot-windows/src/lockowner.rs`: `holders(path) -> Result<Vec<ProcessRef>, WinError>` through
-   `RmStartSession`, `RmRegisterResources`, `RmGetList` (retry on `ERROR_MORE_DATA`), `RmEndSession` always. A
-   `ProcessRef` from `RM_UNIQUE_PROCESS` (pid plus start time). Never opens the file itself.
+2. Moved to `p4-codex-source` (after v1): `crates/wakeshot-windows/src/lockowner.rs`, `holders(path) ->
+   Result<Vec<ProcessRef>, WinError>` through `RmStartSession`, `RmRegisterResources`, `RmGetList` (retry on
+   `ERROR_MORE_DATA`), `RmEndSession` always; a `ProcessRef` from `RM_UNIQUE_PROCESS`. Not built here.
 
 Tests first: whole reads while another handle writes and deletes the file; the name guard refuses `x.key` even with a
 crafted path; tails across partial lines, CRLF and LF, truncation, replacement, a 10 MB file; `find` at depth 1 and 3
 with decoys; `names` on a folder with a file the test holds with an exclusive lock (`LockFileEx`), which must not be
-disturbed; `holders` on a file the test process holds open (gives the test's own pid and start time), on a file held
-by a child process the test starts (gives the child), on a file nobody holds (empty), and on a missing file (empty or
-an error, as Windows answers; record which).
+disturbed. (The `holders` tests moved to `p4-codex-source` with deliverable 2.)
 
 ## Acceptance checks
 
@@ -51,7 +51,6 @@ an error, as Windows answers; record which).
   wakeshot-windows`: clean as the check rule below says, new tests named in the Result.
 - Every `unsafe` block has a comment that says why it is sound. Every child process a test starts is ended by its
   handle.
-- The Restart Manager answers seen (missing file, unheld file) are written to `docs/research.md` (additions only).
 - Check rule: `docs/plan.md` "How we work" step 2 and "Checks while other cards run" in this track's phase file. A
   failure in a file another card owns goes in the Log: wait and run again; if it is still there when this card's own
   work is done, list it under "Found outside scope". Never edit, format or `--fix` that file. Every cargo command takes

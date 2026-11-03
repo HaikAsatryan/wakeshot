@@ -139,7 +139,12 @@ laptop" cards run one at a time across all tracks.
 
 Size estimates (one worker's context): store 90K, log 80K, process 110K, power-plan 110K, requests 60K,
 system-events 100K, session 80K, journal 90K, hibernate 90K, power-io 110K, recovery 140K, stop-points 110K, harness
-120K, real-checks 70K, haik-checks 60K. Total about 1.43M tokens.
+120K, real-checks 70K, haik-checks 60K. Total about 1.43M tokens. Wave 1 peaked at 2 to 3 times these estimates
+(`docs/phases/02-06-lighter.md`).
+
+Bundles (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p3-requests` + `p3-session`;
+`p3-real-checks` + `p3-haik-checks`. The `p3-real-checks` bundle also waits for the power safety review
+(`docs/phases/02-06-lighter.md`, "Reviews"), so its fixes land before the real checks and Haik's checks.
 
 ## Order inside the track
 
