@@ -31,8 +31,9 @@ quit, so the tray's behavior is the core's, tested here without Windows.
    last_resume_mono_ms)`, `apply_update()`, `input_idle_ms() -> u64`, `try_settings_owner() -> bool`, `watch_tick()`.
    Names may change; the set may not shrink. Results that come later (sound, hibernate, update) arrive as events.
 2. `Dispatcher::new(core: Core, clock: Box<dyn Clock>, io: Arc<IoQueue>, runners: R, ack: Ack, first: Vec<Event>)`:
-   feeds `first` in order (`Started`, then `JournalCorrupt` or `Updated` when `p6-int-tray-mode` passes them) before
-   any other event. `impl LoopHandler for Dispatcher<R>`.
+   feeds `first` in order (`Started`, then `Session(Locked)` when the session was locked at start, then
+   `JournalCorrupt` or `Updated` when `p6-int-tray-mode` passes them) before any other event
+   (`docs/reviews/p1-close-verify.md` Major 1). `impl LoopHandler for Dispatcher<R>`.
 3. Routing: every `Command` variant to the runner of the phase file's table, by an exhaustive `match` (no wildcard
    arm, so a new variant fails to compile here). Loop runners' answers go back into the core at once, in order.
    `Hibernate` while one runs: one log line (through `Command::Log` on the IO queue), no second thread.
@@ -65,7 +66,8 @@ quit, so the tray's behavior is the core's, tested here without Windows.
   - end of session: `session_ending` happens before the core sees the change; a test thread that sets the `Ack` after
     200 ms ends the wait at 200 ms; no `Ack` returns at about 4 s; no `Apply` after it until `EndCancelled`;
   - `Menu(Quit)` gives `requests(false, false)`, the restore and `DeleteHold` on the queue, then `Flow::Quit`;
-  - `Started` is always the core's first event, also when `first` holds `JournalCorrupt` and `Updated`.
+  - `Started` is always the core's first event, also when `first` holds `Session(Locked)`, `JournalCorrupt` and
+    `Updated`; with the real core, `Started`, `Session(Locked)`, `Updated` gives no `Notify` until `Unlocked`.
 - `rustfmt --edition 2024 --check crates/wakeshot-windows/src/app/dispatch.rs`.
 - `cargo clippy --locked -p wakeshot-windows --all-targets --target x86_64-pc-windows-msvc -- -D warnings` and the same
   without `--all-targets`; both with `--target aarch64-pc-windows-msvc`: nothing in the owned file.

@@ -35,7 +35,7 @@ core once at start after an update. Add the debug-only local feed the update pat
    `tray_mode::run` in tray mode only (never in dry run, guard or restore mode).
 3. `crates/wakeshot-windows/src/app/tray_mode.rs` (taken over from `p6-int-tray-mode`): `run` takes the update parts;
    starts the update thread only when a feed is given; `apply_update` hands the request to it; the thread is stopped
-   in shutdown step 9; `Updated { version }` is passed in `first` after `Started` (and after `JournalCorrupt`).
+   in shutdown step 9; `Updated { version }` is passed in `first` after `Started` (and after `Session(Locked)` and `JournalCorrupt`).
 4. `docs/research.md`: the velopack facts checked, with how.
 
 ## Acceptance checks

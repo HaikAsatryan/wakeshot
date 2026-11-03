@@ -138,8 +138,11 @@ tests, Haik's checklist) starts when the tracks it needs are done.
 - 2026-11-03 18:39: fixes verify done (0/2/6, `docs/reviews/p1-fixes-verify.md`); `p1-close-contracts` running
   alone (with `p4-claude-live-shapes`, no build). Integration planned (`docs/phases/06-integration.md`, 11 cards,
   about 1.19M tokens); waits for Haik's sign-off and two answers.
-- Next (orchestrator), see the Phase 1 file (card table, work log): (1) `p1-close-contracts` ends: commit; (2)
-  `p6-int-skeleton` alone once Haik signs off the integration plan; (3) a reviewer checks both cards; (4) track
-  builds in waves (laptop cards one at a time, at most four building cards at once); (5) push after Phase 1 passes
-  review and Haik signs it off. A SYSTEM power request from the old orchestrator session (pwsh,
+- 2026-11-03 19:08: `p1-close-contracts` done and verified (0/1/5, major routed into not-started cards). Haik
+  signed off the integration plan (18:58); his dock is always plugged in. Wave 1 of the track builds runs since
+  18:52: `p3-store`, `p3-log`, `p3-process`, `p2-ownership-restore`.
+- Next (orchestrator), see the Phase 1 file (card table, work log): (1) push the Phase 1 commits; (2) Haik signs off
+  Phase 1; (3) when wave 1 ends, `p6-int-skeleton` alone; (4) then the track builds in waves (laptop cards one at a
+  time, at most four building cards at once), starting with `p4-hold-files`, `p4-watch-reads`, `p3-journal`,
+  `p2-ownership-apply`. A SYSTEM power request from the old orchestrator session (pwsh,
   `away-system-holder.ps1`) runs until about 20:20; Haik's power values are back (checked 16:21).

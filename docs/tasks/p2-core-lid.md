@@ -48,7 +48,10 @@ Nothing else.
 8. `Suspending` and `Resumed`: the last resume time for the idle clamp.
 8a. Build it: Haik said yes to the tray track's proposal (`docs/phases/02-06-signoff.md` item 4, default, Haik
     2026-11-03 18:09; `docs/phases/02-core.md` note 18). Notices raised while the session is locked or another
-    session is on the console wait and go out at `Unlocked` or `ConsoleBack`, in order; sounds never wait.
+    session is on the console wait and go out at `Unlocked` or `ConsoleBack`, in order; sounds never wait. A tray
+    that starts while locked gets `Session(Locked)` right after `Started` (integration,
+    `docs/reviews/p1-close-verify.md` Major 1): test that `Started`, `Session(Locked)`, `Updated` gives no `Notify`
+    until `Unlocked`, and the same for a start-time `RestoreFailed`.
 9. `Log` lines for each lock, step back, countdown start, cancel and due.
 9a. Updates: the contracts cards took all four ship track contract changes (`p1-contracts-split` Result, 17:56:
     changes 1 to 3; `p1-close-contracts`: change 4, `Event::Updated` and `Notice::Updated`, after Haik's yes to ship

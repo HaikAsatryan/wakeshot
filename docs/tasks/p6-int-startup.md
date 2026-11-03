@@ -45,6 +45,9 @@ journal left by another process, and the `Started` event with every field right.
    executor's startup already reports it (read `p3-power-io`'s Result), this function only says so and does nothing.
 9. `started(config, first_run, startup, owner, ..) -> Event`: `Started { config, journal, owner, on_console, tray,
    first_run }`, `tray` from `process::current()`, `on_console` from `session::on_console()`.
+10. Added by the orchestrator (`docs/reviews/p1-close-verify.md` Major 1): `locked_at_start() -> bool` from
+    `session::locked_now()` (`Some(true)` only; `None` counts as unlocked, with one log line), so `p6-int-tray-mode`
+    passes `Session(SessionChange::Locked)` right after `Started`, before `JournalCorrupt` and `Updated`.
 
 ## Acceptance checks
 

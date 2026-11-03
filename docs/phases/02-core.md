@@ -124,7 +124,7 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 
 | Card | Needs Haik | Runs after | Status |
 |---|---|---|---|
-| `p2-ownership-restore` | no | contracts card | ready |
+| `p2-ownership-restore` | no | contracts card | in progress (18:52) |
 | `p2-policy-holds` | no | contracts card | ready |
 | `p2-policy-power` | no | contracts card | ready |
 | `p2-present` | no | contracts card | ready |

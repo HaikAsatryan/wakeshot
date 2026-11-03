@@ -1,7 +1,8 @@
 # Build the tray menu: owner-drawn Win32 menu with round corners
 
-Phase: 5. Status: ready. Needs Haik: his one look at the menu pictures (`p1-tray-menu-look`); if his answer changes
-the pick (for example a XAML flyout), stop and ask the orchestrator for a new plan of this card. Agent:
+Phase: 5. Status: ready. Needs Haik: no. His menu look answer (2026-11-03 17:32): "I like your new ui, you might
+need some icons for each row as examples are using. Everything else is good." The pick stands; every item gets the
+icon that `p5-menu-paint` draws. Agent:
 `wakeshot-worker`. Size: about 130K tokens.
 Real laptop: **screen** in Part B (one screen or sound card at a time, across all tracks), and **settings**: the
 Windows mode is switched to light and back through Settings. Build folder:

@@ -29,6 +29,11 @@ console check, and `Command::Lock` with a dry-run form and a fake.
   `WM_QUERYENDSESSION` (Ending); `WM_ENDSESSION` TRUE (Ended), FALSE (EndCancelled). Others: `None`. The window's
   owner (integration or the tray track) calls it; this card writes no window procedure.
 - `on_console()`: `WTSGetActiveConsoleSessionId()` equals this process's session.
+- `locked_now() -> Option<bool>` (added by the orchestrator, `docs/reviews/p1-close-verify.md` Major 1): this
+  session's lock state at start, a port of the spike's `session_locked` (`WTSQuerySessionInformationW` with
+  `WTSSessionInfoEx`, `SessionFlags`; feature `Win32_System_RemoteDesktop`, declared). `None` when the query fails.
+  Integration feeds `Session(Locked)` right after `Started` when it gives `Some(true)`, so notices wait (Haik's
+  answer 4) also for a tray that starts while the session is locked.
 - Trait `Locker { lock() -> Result<(), WinError> }` with `Win32Locker` (`LockWorkStation`), `DryRunLocker` (logs) and
   `FakeLocker` (behind `test-support`).
 
@@ -41,6 +46,8 @@ Tests in `session::tests`:
   console session is not verified); this card runs it once with `cargo test --locked -p wakeshot-windows -- --ignored
   session::real_on_console_here`, and `p3-real-checks` step 2 runs it again.
 - `register_on_hidden_window` (real: a hidden top-level window made by the test; register and drop return no error).
+- `real_locked_now_here` (real: `Some(false)` when run from an unlocked desktop; record it). `#[ignore]` like
+  `real_on_console_here`; this card runs it once with `--ignored`.
 - `fake_and_dry_run_lock_never_lock`.
 - `real_lock_locks`: `#[ignore]`; never run by this card (it locks Haik's screen). `p3-haik-checks` runs it.
 

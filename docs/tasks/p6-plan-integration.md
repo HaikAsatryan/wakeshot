@@ -78,6 +78,9 @@ they need are done.
 
 Each with the worker's default. Neither blocks a card.
 
+Answered 2026-11-03 18:58. Haik signs off the integration plan. 1: his dock with an external screen is always plugged
+in, so block 6 is in, not optional. 2: "not sure needs to be tested": the default stands (not tested before v1).
+
 1. **A USB-C dock for your checklist session.** Checklist 8 (dock AC drop, unplug with the lid closed) and the "not
    while typing on an external screen" part of 7 need a dock with an external screen and keyboard. Default: block 6
    of `p6-int-haik-checks` is optional (about 15 minutes); without a dock at hand those checks move to the Phase 7

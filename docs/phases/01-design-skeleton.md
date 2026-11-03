@@ -23,7 +23,7 @@ off. Reply "signed off", plus an answer to any question you want to change.
   parallel" is tested with the Windows sound, not yet with our chime (a Phase 3 check).
 - **Going public.** Your 15:45 sign-off covers only the local build cards. `git init` and the first public push wait
   for this sign-off, then for one more yes from you right before them (Gate B below). A public push cannot be undone.
-- **Open questions**, each with the default I take (details under "New questions"):
+- **Questions 10 to 12** (answered 2026-11-03 18:09: the defaults below; details under "New questions"):
   - 10. Two users: while another user is on the PC's own screen, Wakeshot puts your settings back and keeps only the
     system power request; the same over Remote Desktop into your own session (likely; not tested). Beyond that, v1
     assumes one signed-in user at a time; the README says so. Risk accepted: an override left behind after a crash
@@ -141,7 +141,7 @@ commits (`gh` search, 15:29), so no noreply address.
 
 ### New questions for Haik (from the review fixes)
 
-Each with the default the design takes until you answer. None blocks Phase 1.
+Answered 2026-11-03 18:09 (Haik: all defaults), each as its default below.
 
 9. **Worktrees in this repo.** Your global rule gives fan-out agents worktree isolation because many repos deploy on
    push. Here a push only runs CI, only the orchestrator runs git, and parallel cards write different files (their
@@ -203,9 +203,9 @@ Each with the default the design takes until you answer. None blocks Phase 1.
 | `p1-track-plan-fixes` | no | cross-track review; `p1-contracts-split`'s card edits | done (18:07); `docs/phases/02-06-signoff.md` has 12 questions with defaults |
 | fixes verify (reviewer, no card) | no | `p1-contracts-split`, `p1-track-plan-fixes`, first push | done (18:30): 0/2/6 (`docs/reviews/p1-fixes-verify.md`) |
 | `p1-close-contracts` | no | fixes verify | done (18:50): `Event::Updated`, `Notice::Updated`, owner lines, `architecture.md`, answers in 16 cards, all 8 verify findings fixed; `Cargo.lock` one line (`proptest` in the CLI) |
-| close verify (reviewer, no card) | no | `p1-close-contracts` | next |
+| close verify (reviewer, no card) | no | `p1-close-contracts` | done (19:05): 0/1/5 (`docs/reviews/p1-close-verify.md`); major and minors routed or fixed (19:08) |
 | `p6-plan-integration` | yes: signs off the plan, two questions | first push | done (18:39): 11 cards, about 1.19M tokens (`docs/phases/06-integration.md`) |
-| `p6-int-skeleton` | no | `p1-close-contracts` | ready; runs alone before the track builds (with the plan's five `architecture.md` proposals) |
+| `p6-int-skeleton` | no | `p1-close-contracts`; Haik's sign-off (18:58) | ready; runs alone after wave 1 ends (with the plan's five `architecture.md` proposals) |
 | `p1-ci` | no | `p1-cargo-workspace` | done (16:25); CI green after the first push (18:15) |
 | Phase 1 general review (reviewer, no card) | no | `p1-repo-files`, `p1-ci` | of the repo files, workspace and CI, before the first push |
 | fixes for that review (card written from its findings) | no | Phase 1 general review | not written yet |
@@ -338,7 +338,8 @@ scratchpad):
 
 - [x] Haik signs off the design (2026-11-03 16:44, "signed off" on the sign-off list; Questions 10 to 12 at the
   defaults, as the list asks).
-- [ ] All cards done; reviews (general and domain) done and fixed.
+- [x] All cards done; reviews (general and domain) done and fixed (2026-11-03 19:08; `p6-int-skeleton` is an
+  integration card and runs after wave 1).
 - [x] Repo public, CI green on x64 and ARM64 (2026-11-03 18:15, run 41651223828).
 - [ ] Haik signs off Phase 1.
 
@@ -664,4 +665,21 @@ scratchpad):
   tests, both release builds green with `--locked`. The worker ran `git diff --no-index` once by mistake (usage
   error, no change). `CLAUDE.md` owner line fixed by the orchestrator (an `Owner:` line in the module doc).
   Commits: live shapes, the integration plan, then this card with the verify review.
+- 2026-11-03 18:52: Track builds, wave 1 started (four building cards): `p3-store`, `p3-log`, `p3-process`,
+  `p2-ownership-restore`. Beside them a reviewer checks `p1-close-contracts` (no build; `docs/reviews/p1-close-verify.md`).
+  `p6-int-skeleton` waits for Haik's sign-off of the integration plan (asked 18:40, no answer yet).
+- 2026-11-03 18:58: Haik: "Signing off + dock station is always plugged in. As now. RemoteDesktop not sure needs to
+  be tested". Integration plan signed off; the dock block of `p6-int-haik-checks` is in; Remote Desktop not tested
+  before v1 (default). Recorded in `p6-plan-integration`, `06-integration.md`, `p6-int-haik-checks` and `CLAUDE.md`
+  (test laptop). Order: no new build card starts as wave 1 cards end; when all four are done, `p6-int-skeleton`
+  runs alone (about 50K), then wave 2.
+- 2026-11-03 19:08: Close verify done (`docs/reviews/p1-close-verify.md`): 0 blocker, 1 major, 5 minor; all
+  deliverables and the 8 earlier findings confirmed. Major 1 (a tray that starts while locked shows notices at once,
+  against answer 4) routed with no contract shape change: `p3-session` adds `locked_now()`, `p6-int-startup` adds
+  `locked_at_start()`, `p6-int-dispatch`, `p6-int-update-wiring` and `06-integration.md` note 6 feed
+  `Session(Locked)` right after `Started`, `p2-core-lid` 8a adds the test, `p6-int-skeleton` deliverable 9 adds the
+  rely-on line in the `Event` doc. Minors 1 and 2 (owner lines) added to `p6-int-skeleton`; minors 3 to 5 fixed by
+  the orchestrator (`product.md` answers block and the Claude-only approval limit; Questions 10 to 12 marked
+  answered here; menu look answer in `p5-menu-paint`, `p5-menu-view` and `05-tray-ux.md`; `04-sources.md` status).
+  Phase 1 review passes with these routed; push next.
 

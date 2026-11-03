@@ -1,7 +1,7 @@
 # Integration: Haik's checklist session on the installed Wakeshot
 
-Phase: 6. Status: ready. Needs Haik: **yes**, about 27 minutes (about 18 of hands), plus about 15 optional with a
-USB-C dock and an external screen. Agent: `wakeshot-worker`. Size: about 70K tokens.
+Phase: 6. Status: ready. Needs Haik: **yes**, about 42 minutes: 27 (about 18 of hands) plus 15 with his USB-C
+dock and external screen (always plugged in, Haik 2026-11-03). Agent: `wakeshot-worker`. Size: about 70K tokens.
 Real laptop: **whole laptop**: an install, lid closes, locks, one hibernate, Switch user, battery; no other agent and
 no cargo command runs from Part A step 2 to the end of Part C. Haik's own plan is never written: the session runs on
 an active plan copy.
@@ -76,8 +76,8 @@ you saw and heard, or "as expected".
 3. Plug the charger in. See within about 10 seconds: the icon shows holding again.
 4. Run `<scratchpad>\floor-off.cmd`. Menu: Keep awake > Off.
 
-**Block 6, optional. With a USB-C dock, an external screen and a keyboard on it (rest of checklists 8 and 7; about
-15 minutes).** Skip it if no dock is at hand; it then moves to the Phase 7 field test.
+**Block 6. With a USB-C dock, an external screen and a keyboard on it (rest of checklists 8 and 7; about 15
+minutes).** Haik's dock is always plugged in (2026-11-03), so this block runs.
 1. Short AC drop: docked, lid open, run `floor-on.cmd`, Keep awake > 30 minutes. Pull the dock's cable and plug it
    back within 2 seconds. Say what you saw and heard. Run `floor-off.cmd`.
 2. Your own AC lid action Do nothing: Keep awake > Off; run `dock-on.cmd`; Keep awake > 30 minutes; close the lid and

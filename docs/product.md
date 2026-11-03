@@ -47,8 +47,9 @@ Wakeshot writes and puts back each time, show in the icon and tooltip only (Haik
   time plus a short margin; this also ends a wakeup cancelled with Esc, which writes nothing to disk. `busy` and
   `shell` have no cap while the process lives. A hold file counts while its process lives, so `wakeshot run` ends
   with its command. Keep awake ends at its time or at sign-out. No extra safeguard for another program's bug (Haik,
-  2026-11-03). Two limits stay because they are product rules, not bug guards: waiting for approval holds at most
-  1 hour (the `waiting` rule above), and the battery floor.
+  2026-11-03). Two limits stay because they are product rules, not bug guards: Claude waiting for approval
+  holds at most 1 hour (the `waiting` rule above), and the battery floor. Codex and Copilot: see "Answers to the
+  track plan questions".
 - Later, not v1: rules for any app ("while ffmpeg runs"). Claude Code inside WSL: its session files carry Linux pids,
   which Windows cannot check, so stale files would hold forever. Revisit with a helper inside WSL.
 - No plugins and no scripting. A new built-in source is new code.
@@ -183,3 +184,20 @@ lid action stays Do nothing and battery sleep Never. The README says so.
   so a hold active during uninstall would leave the lid set to Do nothing).
 - Signing: v1 ships unsigned. Apply to SignPath Foundation once the project has users; signed builds then show
   "SignPath Foundation" as publisher.
+
+### Answers to the track plan questions (Haik, 2026-11-03 18:09: all defaults)
+
+- Codex waiting for approval looks like working (it writes no approval prompt to disk), so it holds with no limit
+  while `codex.exe` lives and its turn is open. The battery floor still protects.
+- Copilot waiting for approval (`permission.requested`) does not hold, like Claude waiting without Remote Control.
+- Chimes honor the Windows sound scheme: with "No sounds", no chime, one log line.
+- Notices raised while the session is locked or another user is on the screen wait until the user is back.
+  Sounds never wait.
+- After `winget upgrade`, Wakeshot is off until the next sign-in or a manual start; the README says so.
+- Uninstall: after a good restore the data folder is deleted; after a failed one only the journal and logs stay.
+- After Wakeshot updates itself, one notice says so ("Wakeshot updated to <version>"), no sound.
+- Uninstall leaves Windows' own record of Wakeshot's tray icons (`NotifyIconSettings`); the README says so.
+- A public pre-release tests the release workflow; Phase 8 deletes it.
+- Two users on one PC: Wakeshot overrides only while its user's session is on the screen (Phase 1 Question 10).
+- A failed restore by the guard or the sign-in restore starts the tray, so the warning shows (Phase 1 Question 12).
+- Remote Desktop into the session is not tested before v1 (Haik, 2026-11-03 18:58).

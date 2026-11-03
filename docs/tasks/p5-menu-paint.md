@@ -1,7 +1,7 @@
 # Paint the menu items the Windows 11 way
 
-Phase: 5. Status: ready. Needs Haik: his one look at the menu pictures (`p1-tray-menu-look`) decides the details;
-start on the current pick if no answer has come, and apply his answer when it comes. Agent: `wakeshot-worker`. Size:
+Phase: 5. Status: ready. Needs Haik: no (his menu look answer came 2026-11-03 17:32: the pick stands, plus an icon
+per menu item; see Read first). Agent: `wakeshot-worker`. Size:
 about 110K tokens.
 Real laptop: no (draws into memory bitmaps, no window, no screen). Build folder:
 `CARGO_TARGET_DIR=<scratchpad>\p5-menu-paint\target`.

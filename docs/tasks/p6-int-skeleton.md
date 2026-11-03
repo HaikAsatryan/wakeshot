@@ -47,6 +47,14 @@ Create every integration file with its owner line, the seams the integration car
    `docs/phases/02-core.md` (the IO queue is `p3-power-io`'s; integration only uses it), `docs/phases/05-tray-ux.md`
    (checklist 16 maps to integration), and `docs/tasks/p0-architecture-review.md` Status (done: Phase 0 is signed off).
    Change only those lines.
+9. Added by the orchestrator, from `docs/reviews/p1-close-verify.md`: (a) Major 1: one rely-on line in the `Event`
+   doc (`crates/wakeshot-core/src/event.rs`, `Started`): a tray that starts while the session is locked gets
+   `Session(Locked)` right after `Started`, before `JournalCorrupt` and `Updated`; no shape change. (b) Minor 1: owner
+   lines name the integration hand-overs: "then `p6-int-update-wiring`; fixes by the e2e cards" in
+   `crates/wakeshot-tray/src/velo.rs`, "fixes by `p6-int-dry-run-e2e`" in the seven CLI command files (`args.rs`,
+   `run.rs`, `keep_awake.rs`, `automatic.rs`, `status.rs`, `restore.rs`, `open_log.rs`), "fixes by the e2e cards" in
+   the `app/*` owner lines you write. (c) Minor 2: `crates/wakeshot-cli/src/main.rs` gets "Owner: contracts card."
+   in its module doc; the tray `main.rs` gets its `Owner:` line through deliverable 4. Doc lines only.
 
 ## Acceptance checks
 
@@ -66,7 +74,7 @@ Run alone, so whole-workspace checks are right here:
 ## Out of scope
 
 - Any body beyond `Ack` and the `tray_mode::run` stub. Any track file, except the two phase file lines in
-  deliverable 8. `crates/wakeshot-cli/`.
+  deliverable 8 and the doc lines in deliverable 9. In `crates/wakeshot-cli/`, only the doc lines of deliverable 9.
 
 ## Questions for Haik
 

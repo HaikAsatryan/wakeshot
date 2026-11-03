@@ -1,7 +1,7 @@
 # Phase 4: Sources (track)
 
 Status: planned 2026-11-03 by card `p4-plan-sources`; Haik signed off all five track plans 2026-11-03 18:09, every
-question with its default. No card started.
+question with its default. Cards: see the table.
 
 ## Goal
 

@@ -139,7 +139,9 @@ is 10 s, `03-windows-power.md` note 9), then exits anyway: the guard covers what
 and the balloon click hook (`take_click`, then `shell::open_with_default_app`); the sound player; requests and locker
 (real or dry run); `IoQueue`; the executor (real or dry run, `TrayGuard` or `NoGuard`); `IoThread::start`;
 `session::register(hwnd)`; `Subscriptions::start(sink)`; `Dispatcher::new`, which feeds `Started` first, then
-`JournalCorrupt` if a corrupt journal was left by another process, then `Updated` if Velopack restarted the tray;
+`Session(Locked)` if the session was locked at start (`startup::locked_at_start`; `docs/reviews/p1-close-verify.md`
+Major 1), then `JournalCorrupt` if a corrupt journal was left by another process, then `Updated` if Velopack
+restarted the tray;
 `WatchThread::start` with the Claude source (home, `SystemZone`), Codex, Copilot and `SystemLiveness`; the update
 thread (tray mode only, installed only); then the pump. Events posted before the pump runs wait in the window's queue,
 so the core always sees `Started` first.
@@ -201,7 +203,7 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | `p6-int-dry-run-e2e` | no | screen (dry-run icon, balloons, pictures); agent-session lane (one Claude Code test session) | `p6-int-update-wiring`, `p4-cli-args`, `p4-cli-run`, `p4-cli-commands`, `p4-cli-restore`, `p4-live-claude` | ready |
 | `p6-int-real-e2e` | no | global: power settings on active plan copies, RunOnce, a guard | `p6-int-dry-run-e2e`, `p3-real-checks` | ready |
 | `p6-int-update-e2e` | no | global: installs, Run, RunOnce, Path, a user environment value, an active plan copy | `p6-int-real-e2e`, `p6-install-e2e`, `p6-pack-and-release`, `p6-hooks` | ready |
-| `p6-int-haik-checks` | yes: about 27 min (18 of hands), plus 15 optional (dock) | whole laptop: lid, lock, hibernate, switch user, battery; no other agent or cargo command | `p6-int-update-e2e`, `p3-haik-checks`, `p5-haik-check` | ready |
+| `p6-int-haik-checks` | yes: about 42 min (27, 18 of hands, plus 15 with the dock) | whole laptop: lid, lock, hibernate, switch user, battery; no other agent or cargo command | `p6-int-update-e2e`, `p3-haik-checks`, `p5-haik-check` | ready |
 
 Sizes, one worker's context: skeleton 50K, io-thread 120K, window 100K, dispatch 140K, startup 100K, tray-mode 140K,
 update-wiring 90K, dry-run-e2e 130K, real-e2e 130K, update-e2e 120K, haik-checks 70K. About 1.19M tokens in all.
@@ -242,11 +244,11 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
 | 4 | End task on the tray, then its group: the guard restores | `p3-haik-checks` (Task Manager); also `p6-int-real-e2e` (the real tray killed by pid during a hold) |
 | 5 | Tray and guard killed, sign out and in: RunOnce restores | `p3-haik-checks` |
 | 6 | Sign out during a hold: restored before the session ends | `p3-haik-checks`; also `p6-int-real-e2e` (end-of-session messages sent to the real tray) |
-| 7 | Work ends with the lid closed: hibernate after 5 min; not while typing on an external screen | `p6-int-haik-checks` block 4; the external screen part in block 6 (optional, dock) |
-| 8 | Battery floor with a dock AC drop; dock lid cases, unplugged | `p6-int-haik-checks` block 5 (floor, no dock) and block 6 (dock, optional; without a dock it moves to Phase 7) |
+| 7 | Work ends with the lid closed: hibernate after 5 min; not while typing on an external screen | `p6-int-haik-checks` block 4; the external screen part in block 6 (dock) |
+| 8 | Battery floor with a dock AC drop; dock lid cases, unplugged | `p6-int-haik-checks` block 5 (floor, no dock) and block 6 (dock; Haik's is always plugged in) |
 | 9 | Plan switch during a hold | `p6-int-real-e2e` (two active plan copies; no hands needed) |
 | 10 | Unlock after a closed-lid hold: the report notice | `p6-int-haik-checks` block 2 |
-| 11 | `Global\` mutex; fast user switching; Remote Desktop | mutex: `p3-real-checks`; lock and unlock notices: `p3-haik-checks`; console left and back: `p6-int-haik-checks` block 3 (Switch user, one account); Remote Desktop: later (needs a second PC; Phase 7 if one is at hand) |
+| 11 | `Global\` mutex; fast user switching; Remote Desktop | mutex: `p3-real-checks`; lock and unlock notices: `p3-haik-checks`; console left and back: `p6-int-haik-checks` block 3 (Switch user, one account); Remote Desktop: not tested before v1 (Haik 2026-11-03; needs a second PC; Phase 7 if one is at hand) |
 | 12 | Sign-in delay and the stored Never | later (no test account) |
 | 13 | Theme, high contrast, scales, sounds by ear, toast colours | `p5-haik-check`; in the real exe: `p6-int-dry-run-e2e` (pictures: balloon header, exe icon) and `p6-int-haik-checks` block 1; toast colours: none in v1 (balloons only) |
 | 14 | `winget upgrade` and uninstall during a hold | `p6-int-update-e2e` (Setup.exe over the install during a real hold, which is what `winget upgrade` runs; uninstall during a real hold); `winget upgrade` itself after the Phase 8 submission |
@@ -257,3 +259,6 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
 
 - 2026-11-03: planned by `p6-plan-integration`: 11 cards, about 1.19M tokens, one contract change (the `app` module,
   run alone as `p6-int-skeleton`). Haik: about 27 minutes plus 15 optional, in one session at the end.
+- 2026-11-03 18:58: Haik signed off the plan. His dock with an external screen is always plugged in, so block 6 of
+  `p6-int-haik-checks` is in (about 42 minutes in all). Remote Desktop: not tested before v1 (default kept).
+  `p6-int-skeleton` runs alone once wave 1 of the track builds ends.

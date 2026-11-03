@@ -123,7 +123,8 @@ Design calls the design leaves to Phase 5 (worker as principal designer). Each h
 
 ### 6. Waiting on Haik
 
-- His one look at the menu pictures (`p1-tray-menu-look`): `p5-menu-paint` and `p5-menu-view` follow his answer.
+- His one look at the menu pictures (`p1-tray-menu-look`): answered 2026-11-03 17:32, the pick stands and every
+  menu item gets an icon (`p5-menu-paint` draws it, `p5-menu-view` shows it).
 - Question in `p5-plan-tray-ux`: do the chimes honor the Windows "No sounds" scheme. Answered: yes, the default
   (`docs/phases/02-06-signoff.md` item 3, Haik 2026-11-03 18:09).
 - Non-blocking looks, batched for the sign-off or `p5-haik-check`: the icon sheet (`p5-icon-art`), the text list
@@ -182,9 +183,9 @@ own Windows settings switched and put back.
 | `p5-theme` | no | no | contracts change card | ready |
 | `p5-icon-art` | one look at the icon sheet, not blocking | no | contracts change card | ready |
 | `p5-text` | one read of the text list, not blocking | no | contracts change card | ready |
-| `p5-menu-paint` | his menu look answer (`p1-tray-menu-look`) | no | `p5-theme` | ready |
+| `p5-menu-paint` | no (menu look answered 17:32: an icon per item) | no | `p5-theme` | ready |
 | `p5-tray-icon` | no | screen, settings (light and dark mode) | `p5-theme`, `p5-icon-art` | ready |
-| `p5-menu-view` | his menu look answer | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | ready |
+| `p5-menu-view` | no (menu look answered 17:32) | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | ready |
 | `p5-notices` | no | screen, settings (Do not disturb) | Part A: contracts change card; Part B: `p5-tray-icon`, `p5-text`, `p5-icon-art` | ready |
 | `p5-sounds` | no (the "No sounds" question: honor it, Haik 2026-11-03 18:09) | sound | contracts change card | ready |
 | `p5-haik-check` | yes, about 25 minutes: eyes, ears, hands | screen, sound, settings | every card above, `p4-cli-commands` | ready |

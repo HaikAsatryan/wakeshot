@@ -119,9 +119,9 @@ laptop" cards run one at a time across all tracks.
 
 | Card | Needs Haik | Real laptop | Runs after | Status |
 |---|---|---|---|---|
-| `p3-store` | no | no (temp folders, a test registry key) | contracts card | ready |
-| `p3-log` | no | no | contracts card | ready |
-| `p3-process` | no | no (child processes it starts and ends by its own handles) | contracts card | ready |
+| `p3-store` | no | no (temp folders, a test registry key) | contracts card | in progress (18:52) |
+| `p3-log` | no | no | contracts card | in progress (18:52) |
+| `p3-process` | no | no (child processes it starts and ends by its own handles) | contracts card | in progress (18:52) |
 | `p3-power-plan` | no | yes: a plan copy, never active; reads Haik's plan | contracts card | ready |
 | `p3-requests` | no | no (a power request held under 1 s) | contracts card | ready |
 | `p3-system-events` | no | no (notifications only) | contracts card | ready |
