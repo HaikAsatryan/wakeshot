@@ -156,3 +156,67 @@ Checks:
 
 Open items: the built-exe check once `p4-cli-args` lands; the end-to-end check against a running tray after
 `p4-watch-thread` and `p6-int-io-thread`. The bundle's build folder is deleted.
+
+## CI fix (2026-11-04)
+
+Status: done. Scope: the test module of `crates/wakeshot-cli/src/restore.rs` and this card only; product code
+stays as it is. Build folder: `<scratchpad>\cli-ci-fix\target`.
+
+Problem: on the ARM64 CI runner `restore::tests::a_tray_that_could_not_restore_says_what_is_still_changed` failed once
+at `assert!(tray.join().unwrap())`. The fake tray slept a fixed 300 ms and gave up when the request file was not there
+yet.
+
+### Log
+
+- 2026-11-04 02:21: started by `wakeshot-worker`.
+- 2026-11-04 02:23: `fake_tray` now waits for the request file (10 ms looks, 4 s limit) before its delay; the
+  still-changed test uses no delay, the asked test keeps 1 s. Searched the crate for the same pattern: only these two
+  tests. rustfmt clean, LF. Next: the 20-run test loop.
+- 2026-11-04 02:26: `cargo test --locked -p wakeshot-cli restore` 20 times: 20 passed, 0 failed (each run 10 passed,
+  1 ignored). The workspace compiled with core round B's edits in place; nothing to wait for.
+- 2026-11-04 02:27: clippy clean on both targets; rustfmt clean again; build folder deleted. Done.
+
+### Result
+
+Done 2026-11-04 02:27.
+
+What changed (test module of `crates/wakeshot-cli/src/restore.rs` only; product code untouched):
+
+- `fake_tray(data, delay, overridden)` looks for `restore-request.json` every 10 ms (`REQUEST_POLL`) for up to 4 s
+  (`REQUEST_LIMIT`), then waits `delay`, then writes `state.json` and deletes the request as before. It returns
+  `false` only when no request came within the limit.
+- `a_live_owner_is_asked_and_its_answer_read`: keeps a 1 s delay, now counted from when the request appears, so
+  `took >= 1 s` always holds. The upper bound stays 3 s: the poll adds at most about 10 ms, and the new timing passes
+  every write time the old one did. A comment says why the bounds are what they are.
+- `a_tray_that_could_not_restore_says_what_is_still_changed`: delay 0 (the 300 ms only gave `restore` time to write).
+- Both `tray.join()` asserts now say "no request within 4s" when they fail.
+
+Places with the pattern (a fixed sleep, then a check of a file another thread writes): only the two tests above, both
+through `fake_tray`. Checked and not the pattern: `a_tray_that_does_not_answer_leaves_the_request` (no thread);
+`run.rs` `held_while_running` and `tests/run.rs` (already poll with a deadline); `open_log.rs` `real_open_log` (an
+ignored by-hand test whose 3 s sleep lets an app read the file before the folder goes).
+
+Checks:
+
+1. `cargo test --locked -p wakeshot-cli restore`, 20 runs in a row: 20 passed, 0 failed.
+2. `cargo clippy --locked -p wakeshot-cli --all-targets --target x86_64-pc-windows-msvc -- -D warnings`: clean. The
+   same for `aarch64-pc-windows-msvc`: clean.
+3. `rustfmt --edition 2024 --check crates/wakeshot-cli/src/restore.rs`: clean. LF line ends (no CR byte).
+
+Not tested: the ARM64 runner itself; the loop ran on this x86_64 laptop, where the old test also passed.
+
+Decided by the worker, for Haik's review:
+
+1. **4 s limit, under the CLI's 5 s `ANSWER_WAIT`.** Why: generous for a slow runner, and a run that never writes the
+   request then fails no slower than an unanswered one. Change it when `ANSWER_WAIT` changes.
+2. **No delay in the still-changed test.** Why: the delay was not part of what it checks. Change it when that test
+   must prove the CLI waits for a slow tray.
+
+Found outside scope:
+
+1. `run.rs` `held_while_running` (not this card's file) asserts the child is still alive after the hold file is found;
+   the child is `ping -n 2` (about 1 s) in `the_reason_never_holds_the_arguments` and `ping -n 3` (about 2 s) in
+   `the_hold_file_exists_while_the_command_runs_and_is_gone_after`. On a very slow runner the time from child start to
+   that check could pass 1 s. Not seen failing; not verified. Not the fixed-sleep pattern, so left alone.
+
+Open items: none.

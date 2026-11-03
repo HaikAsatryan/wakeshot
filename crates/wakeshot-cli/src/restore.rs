@@ -395,20 +395,30 @@ mod tests {
         assert_eq!(data.read(DataFile::RestoreRequest), None);
     }
 
-    /// A fake tray: after `after`, it writes `state.json` (this process as the tray), then deletes the request, in
-    /// that order, as `FinishRestoreRequest` does.
+    /// How long the fake tray looks for the request, and how often. Generous, as a slow runner wrote it later than
+    /// 300 ms (CI, ARM64); under `ANSWER_WAIT`, so a run that never writes it fails no slower than an unanswered one.
+    const REQUEST_LIMIT: Duration = Duration::from_secs(4);
+    const REQUEST_POLL: Duration = Duration::from_millis(10);
+
+    /// A fake tray: once the request is there and `delay` has passed, it writes `state.json` (this process as the
+    /// tray), then deletes the request, in that order, as `FinishRestoreRequest` does. `false`: no request came.
     fn fake_tray(
         data: &TempData,
-        after: Duration,
+        delay: Duration,
         overridden: &'static [(&'static str, &'static str)],
     ) -> thread::JoinHandle<bool> {
         let dir = data.dir.clone();
         thread::spawn(move || {
-            thread::sleep(after);
             let request = dir.file(DataFile::RestoreRequest);
-            if !request.exists() {
-                return false;
+            // A fixed sleep before the first look guesses how fast `restore` writes; waiting for the file does not.
+            let start = Instant::now();
+            while !request.exists() {
+                if start.elapsed() >= REQUEST_LIMIT {
+                    return false;
+                }
+                thread::sleep(REQUEST_POLL);
             }
+            thread::sleep(delay);
             let state = state_json(me(), true, &[], overridden, false);
             std::fs::write(dir.file(DataFile::State), state).unwrap();
             std::fs::remove_file(request).unwrap();
@@ -425,8 +435,10 @@ mod tests {
         let started = Instant::now();
         let run = restore(&data, plans(), &SystemLiveness);
         let took = started.elapsed();
-        assert!(tray.join().unwrap(), "the request file was not there");
+        assert!(tray.join().unwrap(), "no request within {REQUEST_LIMIT:?}");
         assert_eq!(run.answer, Answer::ok(RESTORED));
+        // At least 1 s: the tray's delay starts only once the request is there. Under 3 s: the answer was read, not
+        // the 5 s timeout, with room for a slow write before the delay.
         assert!(
             took >= Duration::from_secs(1) && took < Duration::from_secs(3),
             "{took:?}"
@@ -449,11 +461,11 @@ mod tests {
         data.write(DataFile::Journal, &journal(me()));
         let tray = fake_tray(
             &data,
-            Duration::from_millis(300),
+            Duration::ZERO,
             &[("381b4222-f694-41f0-9685-ff5bb260df2e", "lidDc")],
         );
         let run = restore(&data, plans(), &SystemLiveness);
-        assert!(tray.join().unwrap());
+        assert!(tray.join().unwrap(), "no request within {REQUEST_LIMIT:?}");
         assert_eq!(
             run.answer,
             Answer::failed(format!(

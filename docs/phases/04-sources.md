@@ -295,3 +295,8 @@ limit; Copilot waiting does not hold. The cards build these.
   `restore::tests::a_tray_that_could_not_restore_says_what_is_still_changed` (`wakeshot-cli/src/restore.rs:456`). The
   fake tray sleeps a fixed 300 ms, then expects the request file; on a slow runner `restore` writes it later. Test-only
   fix (the fake tray waits for the file, with a timeout), routed to the next free build slot.
+- 2026-11-04 02:28 (orchestrator, session `wakeshot-46`): the CLI restore test fix done and committed (Log in
+  `p4-cli-restore`, "CI fix"): `fake_tray` waits for the request file (every 10 ms, up to 4 s, under the 5 s answer
+  wait), then its delay; 20 of 20 runs passed; not yet run on the ARM64 runner. Seen by the worker, not changed:
+  `run.rs` test `held_while_running` expects a `ping -n 2` child (about 1 s) still alive after the hold file shows; a
+  very slow runner could miss that window (never seen failing).
