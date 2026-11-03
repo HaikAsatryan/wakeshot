@@ -2245,3 +2245,48 @@ Windows, not Windows itself).
   E1's write) survived a full run; with points biased to the first 18 calls it was caught in 2 of 3 runs, and a
   property whose every case starts that way caught it in 3 of 3. **Verified** (runs).
 - **Not verified: Windows refuses to delete the active plan.** The test world deletes only an inactive plan.
+
+## Claude transcript checks
+
+Card `docs/tasks/p4-claude-transcript.md`, 2026-11-03. Claude Code 2.1.317's own code was read in
+`C:\Users\haika\.local\bin\claude.exe` (read only, a byte search for the strings named; the short names are this
+build's minified ones). The live checks use `crates/wakeshot-core/tests/fixtures/claude/live/`.
+
+- **The carry line can hold more than the live one showed.** The builder `OZn` (with `Tdn`) writes
+  `{type: "session_cron_carry", tasks, otherArmed?, wakeup?, ended?}`. `tasks` and `otherArmed` together are the
+  process's armed session jobs, each `{id, cron, prompt, createdAt, recurring, plugin?}` (schema `$cr`); `tasks` holds
+  the ones made or carried in the conversation's kept lines. `wakeup` is the pending dynamic-loop wakeup
+  `{prompt, scheduledFor, reason?, keepalive?}` (schema `Hcr`); `ended` lists ids of jobs that ended. Jobs owned by
+  a subagent (`agentId`) are left out. The live `/clear` (fixture 06) showed only `tasks: []` and `otherArmed`.
+- **A resume restores jobs from the transcript (`zi`).** For each `CronCreate` call whose result is not an error, not
+  durable and not deleted: a recurring job is restored with `lastFiredAt` set to the restore time (`Date.now()`),
+  unless it is `recurringMaxAgeMs` (7 days) old; a one-shot only if its time (`W7o` from `createdAt`) has not passed.
+  That is why the live `*/5` jobs fired at resume plus 285 s. Wakeups are re-armed (`Vi`) only for a session with a
+  job folder (`SN()`: `jobDir` or `CLAUDE_JOB_DIR`, so `bg` sessions); for terminal and SDK sessions they are not,
+  as seen live. The `bg` case: not verified live.
+- **The restore comes about 1 s after the process start.** In fixtures 09 and 10 the first fire after the resume
+  came 1104 and 1151 ms after `procStart` plus 285 s; every other live fire came 54 to 951 ms after the due time the
+  source gave (printed once from test `every_live_fire_was_due_and_every_live_line_reads`). A due time counted from
+  `procStart` is so about 1 s early, well inside the core's 2 minute margin.
+- **The scheduler tick (`de`).** A job's next fire is cached at first sight with `wRt` (`lastFiredAt ?? createdAt`)
+  and, after a recurring fire, recomputed with `Zkn(cron, now)`. A recurring job past `recurringMaxAgeMs` that is not
+  `permanent` (`Ze`) is deleted after that fire.
+- **`ScheduleWakeup`.** `stop: true` cancels every pending loop wakeup (`Uzs`) and returns `scheduledFor: 0,
+  stopped: true, cancelledWakeups: N`. A call that arms nothing (a loop 7 days old) returns `scheduledFor: 0` without
+  `stopped`. Each wakeup is a store job with `kind: "loop"`, a random id and a `cron` of the minute and hour of
+  `scheduledFor` (`M`), fired by the one-shot rule, so it fires up to 90 s early on :00 and :30 and not after
+  `scheduledFor` (plus the 1 s tick, or the end of a busy turn). No code was seen that drops an earlier pending
+  wakeup when a new one is armed.
+- **Task notifications (`Ai`).** Header fields come in the order `task-id`, `tool-use-id`, `task-type`,
+  `output-file`, `status`, `summary`, one per line, then the body. Tasks a dead process left get one notification
+  each, or past a count one batch notification with several `<task-id>` lines and one `<status>` (`stopped` or
+  `failed`). Status values written in the code: `completed`, `failed`, `killed`, `stopped`. Claude Code's own text
+  about such a task: "It may have been stopped (via the UI, Monitor timeout, or agent teardown: these leave no
+  transcript marker)". That a Monitor timeout writes no notification: not verified live.
+- **The live transcripts read cleanly.** All 14 give no format problem (test `no_live_transcript_line_is_a_problem`).
+  The 6 `CronList` answers in them name next fires within 2 ms of the source's due times (test
+  `every_live_cron_list_agrees`).
+- **A carried job's next fire follows from its creation alone.** A recurring fire comes `min(frac * 0.5 * gap,
+  30 min)` after its cron run, so the first fire after a time t is on the chain of fires that starts 30 minutes
+  before t. Fixture 06 `.2` read alone gives 14:22:28.955 UTC; the job fired 282 ms later. A `*/5` job's chain hangs
+  on its real fire times, so for it the guess is off by up to one 285 s step (not tested live).
