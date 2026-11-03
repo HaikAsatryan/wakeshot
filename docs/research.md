@@ -2215,3 +2215,33 @@ Checked by `p6-int-dispatch`, 2026-11-03.
 - **Mutants**: 22 hand-planted mutants of `app/dispatch.rs`, run in a scratch copy of the workspace, all killed after
   one test gained an assertion (the safety tick must win over a farther deadline; the 30 s clamp alone had hidden a
   timer set from the deadline only). **Verified** (test).
+
+## Journal property test checks
+
+Checked 2026-11-03 by `p2-ownership-props`, with `ownership::props` against `ownership::fake::FakePlans` (a model of
+Windows, not Windows itself).
+
+- **A failed apply whose restore routine fails too leaves a false user change.** A failure in Apply step 5 or 6 runs
+  the restore routine on the plan. When that routine fails as well (its journal load, a plan read, its mark save or
+  its drop save), an entry the apply saved in step 3 but never wrote stays in the file, unmarked, with live equal to
+  `original`. The next ownership check sees "differs from `written`" and reports it as the user's change. A read-back
+  that differs (the user changing the value in that moment, or anything else that resets it) counts as the first
+  failure. No held value is lost. Shown by the ignored test
+  `ownership::props::a_failed_apply_whose_restore_fails_reports_no_false_user_change` (the user changes `lidAc` just
+  before its read-back, then the routine's journal delete fails: the check reports `lidAc` and `lidDc`, and `lidDc`
+  was never written), and by the user-change property in a run with a fault and a user action in every routine,
+  once its excuse for this case was taken out (shrunk to 4 operations). **Verified** (test, on the fake).
+- **The restore routine overwrites a user change between its steps 3 and 4.** A change after step 3 reads an entry as
+  `written` and before step 4 writes `original` (the mark save sits between) is replaced by `original`. With the
+  test harness, a change at the restore's call 4 or 5 ended at `original`; at call 3 (before the read) or call 6
+  (after the write) the user's value stayed. Section 5 names only the apply's window (steps 2 to 5). **Verified**
+  (test, on the fake).
+- **`Applied.journal` is empty when the apply's own restore routine cannot load the journal.** After a failed write
+  the apply reports what that routine reports, which is empty when its load fails, while the file still holds the
+  entries the apply saved in step 3 (a run's trace: `Write(..), wrote [lidAc], 0 entries`, two entries in the file).
+  The same case as `p2-ownership-apply` Found outside scope 3. **Verified** (test, on the fake).
+- **At 256 cases, a fault on one exact call is often missed.** With fault points spread evenly over 32 calls, the
+  mutant "a takeover clears the mark" (it needs E1 alone, then a stop or a failure between Apply step 3's save and
+  E1's write) survived a full run; with points biased to the first 18 calls it was caught in 2 of 3 runs, and a
+  property whose every case starts that way caught it in 3 of 3. **Verified** (runs).
+- **Not verified: Windows refuses to delete the active plan.** The test world deletes only an inactive plan.
