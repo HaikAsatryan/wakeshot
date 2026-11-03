@@ -87,10 +87,12 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   account for it, so v1 always locks at lid close while holding (Haik, 2026-11-03). No lock on lid close in docked
   use (the user's own lid action is Do nothing). Unplugging a closed laptop that then keeps running only because of
   Wakeshot locks it too, once it has been on battery for 30 seconds (Haik, 2026-11-03: the test laptop's dock dropped
-  AC for 5.3 s and 6.3 s, so 5 s locked him while he worked on the external screen). If that lock fails, Wakeshot
-  tries once more; if it fails again, it steps back as at the battery floor (releases every request, restores
-  settings) and hibernates the laptop after 5 minutes with no input, so a closed laptop never runs unlocked in a bag
-  (Haik, 2026-11-03; power safety review finding 1).
+  AC for 5.3 s and 6.3 s, so 5 s locked him while he worked on the external screen). If that lock fails, or Windows
+  does not report the session locked within 5 seconds, Wakeshot tries once more; if that fails too, it steps back as
+  at the battery floor (releases every request, restores settings) and hibernates the laptop after 5 minutes with no
+  input, so a closed laptop never runs unlocked in a bag (Haik, 2026-11-03; power safety review finding 1). The step
+  back lasts until the session locks or the lid opens; then the hold runs again. The notice about the failed lock is
+  shown again when the user is back at the open laptop, since with the lid closed nobody may have seen it.
 - Sounds wherever they give a useful hint (Haik, 2026-11-03):
   - Lid closed while Wakeshot holds: a short chime says the laptop keeps running.
   - Work ended with the lid closed: a short "going to sleep" sound right before Wakeshot hibernates the laptop.
@@ -124,8 +126,12 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   Method: `SetSuspendState(TRUE)` after `IsPwrHibernateAllowed` and enabling SeShutdownPrivilege; on this Modern
   Standby laptop `SetSuspendState(FALSE)` hibernates too (tested). Check the lid right before the call. If hibernate
   is not allowed or the call fails: release every request, restore settings and notify; Windows then most likely
-  stops the laptop at the user's sleep timeout. If the user's own lid action is Do nothing, Wakeshot changed nothing,
-  so it only releases its hold.
+  stops the laptop at the user's sleep timeout. Until the lid opens, Wakeshot then locks the laptop, with the lid-close
+  chime, whenever it has had no input for 5 minutes and is unlocked, at most every 5 minutes, so it does not run
+  unlocked for hours (worker's call 2026-11-04, for Haik's review; power safety verify minor 1). A notice shown while
+  the lid was closed and the session unlocked, which nobody may have seen, is shown again when the user is back at
+  the open laptop. If the user's own lid action is Do nothing, Wakeshot changed nothing, so it only releases its hold,
+  and it does not lock either.
 
 ### User settings safety
 

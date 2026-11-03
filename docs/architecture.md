@@ -317,12 +317,20 @@ State is one struct owned by the loop thread: `automatic`; holds by source; live
 `floor_pct`, `lid`; `episode: Option<Episode>` (from the first hold to the last: `released: Set<SettingKey>`, on every
 plan, `lid_closed_since`, labels of what held); a mirror of the journal, a copy of the entries that `Done(Applied)` and
 `Done(Restored)` carry, less the keys `UserChanged` names; `requests`; `stepped_back` (battery floor); `on_console`;
-`session_ending`; `ending: Option<Countdown>`; `last_resume_mono`; notices already shown.
+`session_ending`; `ending: Option<Countdown>`; `last_resume_mono`; notices already shown. Beside it, for now, the lid
+side's own memory (`core::lid::LockWatch`): the lock watch (a closed-lid `Lock` until `Session(Locked)` confirms it),
+the lock step back, the lock after a hibernate that did not happen, notices kept for the user's return, countdown rules
+waiting for the first plan read, and the journal mirror as the last settle pass saw it.
 
 The lid, lock and countdown rules read the plan as in force now (`Core::in_force`), not the last plan read, which an
 apply leaves up to 10 s behind: each mirror entry on the active plan sets its key to `written`, and an `Apply` with no
 answer yet on the active plan counts as written for each key not already at its target. Both err toward a lock: an
-entry the user changed in the last 10 s, or an apply in flight that fails, still counts as ours.
+entry the user changed in the last 10 s, or an apply in flight that fails, still counts as ours. A restore leaves the
+plan copy behind the other way, showing what Wakeshot wrote until the next read (up to 30 s once nothing is owned): an
+entry that left the mirror, whose key the copy still shows at `written`, puts its `original` back in the copy, and a
+later read replaces it (power safety review finding 5). Before the first plan read, a countdown rule that meets the lid
+closed while the `Started` journal holds entries (a crashed tray's values) waits for that read and decides on it
+(power safety verify minor 3).
 
 ### Clocks
 
@@ -358,7 +366,11 @@ While holding:
   `Apply` to the new plan.
 - Lid closes while the lid action in force is our Do nothing: `Lock` and `Play(LidClosedHolding)` at once, side by
   side; note `lid_closed_since`. Also with nothing holding, when a restore that failed or has not landed left our Do
-  nothing in force (the countdown below starts too). The lock does not wait for the sound. Tested: the Windows alias sound played in full
+  nothing in force (the countdown below starts too). The lock is watched: a lock that fails, or that no
+  `Session(Locked)` follows within 5 s (`LockWorkStation` only starts it), is sent once more at the next tick; if that
+  one goes the same way, step back as at the floor (requests off, restore, the work-end countdown) until the session
+  locks or the lid opens, then hold again as at a hold start (section 8, "Lock fails"). The same for the source lock
+  below. The lock does not wait for the sound. Tested: the Windows alias sound played in full
   with the lock 0.2 ms after its call, and our chime was heard both in a session already locked and with its stream
   running before the lock (research, "Lid-close sound", "Lid-close results"). Not tested: our chime with the lock
   landing during its stream start, which is the v1 order (checklist 16). Change it when a test shows the lock cuts a
@@ -410,18 +422,26 @@ wait for an apply that never comes. So a retry never undoes a running hold, and 
 fails rests on entries the journal still holds.
 
 Countdown: due when input idle (clamped at resume as above) reaches 5 minutes (Haik, 2026-11-03). Cancelled by a new
-hold, lid open, or AC back (Floor reason). It pauses while another session has the PC's screen: input idle is this
-session's, so the other user's typing would not count. A work-end countdown also pauses while the user's own lid
-action for the current power source is Do nothing; after that pause it starts again only once a source whose own
-action is not Do nothing has lasted 30 s (`policy::lid::SOURCE_SETTLE_MS`), so a dock's short AC drop never
-hibernates a docked laptop left idle. A lid close on our Do nothing while nothing holds (a restore that failed or has
-not landed) starts the countdown as a work end does. When due: `Hibernate` (section 5); the hibernate thread plays
-the "going to sleep" sound after its last check, and the core sends no `Play` for it.
+hold (not while stepped back, at the floor or after a failed lock, since no hold holds then), lid open, or AC back
+(Floor reason; a step back after a failed lock is no floor one). It pauses while another session has the PC's
+screen: input idle is this session's, so the other user's typing would not count. A work-end countdown also pauses
+while the user's own lid action for the current power source is Do nothing; after that pause it starts again only
+once a source whose own action is not Do nothing has lasted 30 s (`policy::lid::SOURCE_SETTLE_MS`), so a dock's short
+AC drop never hibernates a docked laptop left idle. A lid close on our Do nothing while nothing holds (a restore that
+failed or has not landed) starts the countdown as a work end does. When due: `Hibernate` (section 5); the hibernate
+thread plays the "going to sleep" sound after its last check, and the core sends no `Play` for it. Not allowed,
+failed or the lid unknown: `HibernateFailed`, the countdown ends; putting the lid action back does not sleep a laptop
+whose lid is already closed, so while the lid stays closed the core locks it, `Lock` with `Play(LidClosedHolding)`,
+at an input reading 5 minutes idle with the session unlocked and on the PC's screen, at most every 5 minutes, until
+the lid opens; not on a power source whose own lid action is Do nothing (as without Wakeshot), and only once that
+source lasted 30 s (power safety verify minor 1; worker's call for Haik's review).
 
 Closed-lid report: after a hold that ran with the lid closed, a notice says how long the PC kept running with the lid
 closed (`mono_ms`) and what held it. It goes out at the first unlock with the lid open, or when the lid opens while
 unlocked; a docked user who signs in on the external screen with the lid closed gets it when the lid opens (Haik,
-2026-11-03).
+2026-11-03). Notices a closed laptop showed with the session unlocked, which nobody may have seen (`LockFailed` at a
+lock step back, `HibernateFailed`), go out again right before it, also when no report is due (power safety verify
+minor 2).
 
 User actions: "Restore my power settings" (menu, or `wakeshot restore` through its request file, section 4) restores,
 marks all three keys released for the episode (so no plan gets a write until the work ends, also after a plan

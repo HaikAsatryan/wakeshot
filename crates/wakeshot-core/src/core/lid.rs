@@ -11,7 +11,9 @@
 //!
 //! A closed-lid lock is watched until the session reports it ([`LockWatch`]): one that fails, or that no
 //! `Session(Locked)` follows within [`LOCK_CHECK_MS`], is sent once more, and when that one goes the same way the core
-//! steps back as at the battery floor (section 8, "Lock fails"; power safety review finding 1).
+//! steps back as at the battery floor (section 8, "Lock fails"; power safety review finding 1). A hibernate that did
+//! not happen leaves a closed laptop running: from then on it is locked, with the chime, whenever input has been idle
+//! 5 minutes, until the lid opens (power safety verify minor 1).
 
 use super::settings::{KEYS, TARGET};
 use super::{Core, label, ms_ahead, nearest};
@@ -35,8 +37,14 @@ const LOCK_CHECK_MS: u64 = 5_000;
 /// The lid action Sleep: the stand-in for a lid key no plan read has shown and no journal entry names, so never ours.
 const SLEEP: u32 = 1;
 
-/// A closed-lid lock until the session reports it, and the step back when it never does. It sits beside the state
-/// rather than in it because `state.rs` was not the fix round's file; move it into `State` with the next card that
+/// How often a closed laptop that a hibernate did not stop is locked again while it stays idle and unlocked: the
+/// countdown's own 5 minutes, so each lock comes with its chime at most that often.
+const RELOCK_MS: u64 = ending::IDLE_MS;
+
+/// The lid side's memory beside the state: a closed-lid lock until the session reports it, the step back when it
+/// never does, the lock after a hibernate that did not happen, the notices kept for the user's return, the countdown
+/// rules that wait for the first plan read, and the journal copy the last settle pass saw. It sits beside the state
+/// rather than in it because `state.rs` was not the fix rounds' file; move it into `State` with the next card that
 /// owns that file.
 #[derive(Debug, Default)]
 pub(super) struct LockWatch {
@@ -46,6 +54,17 @@ pub(super) struct LockWatch {
     stepped_back: bool,
     /// That step back's restore and countdown went out.
     step_back_sent: bool,
+    /// A hibernate did not happen with the lid closed: from this run time on, lock again at an idle reading
+    /// ([`Core::relock`]). Ends when the lid opens.
+    relock: Option<u64>,
+    /// Notices a closed laptop showed on a screen nobody may look at: they go out again with the closed-lid report.
+    kept: Vec<Notice>,
+    /// Work ended with the lid closed before the first plan read, on these power sources: the read decides.
+    work_end_waits: Option<&'static [bool]>,
+    /// A step back met the lid closed before the first plan read: the read decides the `Floor` countdown.
+    floor_waits: bool,
+    /// The journal copy as the last settle pass ended, so the next one sees which entries a restore took away.
+    journal_seen: Vec<JournalEntry>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -78,9 +97,9 @@ impl Core {
     /// Do nothing at a lid close in the first seconds of a hold. So each journal entry on the active plan sets its key
     /// to `written` (the IO thread's check drops an entry once a read shows the value changed), and an apply not
     /// answered yet on the active plan counts as written, since it may have landed. Both err toward a lock. `None`
-    /// before the first plan read: nothing was applied.
+    /// before the first plan read. The plan copy is taken as the last restores left it ([`Core::plan_copy`]).
     pub(super) fn in_force(&self) -> Option<(PlanValues, Vec<JournalEntry>)> {
-        let mut plan = self.state.plan?;
+        let mut plan = self.plan_copy()?;
         let mut journal = self.state.journal.clone();
         if self.state.applying.contains(&plan.active) {
             for key in KEYS {
@@ -105,6 +124,37 @@ impl Core {
             set(&mut plan, entry.key, entry.written);
         }
         Some((plan, journal))
+    }
+
+    /// The plan copy with what restores put back since the last settle pass. After a restore the copy still shows
+    /// what Wakeshot wrote until the next read, up to 30 s once nothing is owned, so a work end then would read the
+    /// user's own lid action as Do nothing and start no countdown (power safety review finding 5). An entry that left
+    /// the journal copy, on the copy's active plan, whose key the copy still shows at `written`, was restored (or the
+    /// user changed it, and the read that shows it comes next): its `original` stands for the value in force. A key
+    /// the copy shows at another value was read since, and the read wins.
+    fn plan_copy(&self) -> Option<PlanValues> {
+        let mut plan = self.state.plan?;
+        let active = plan.active;
+        let journal = &self.state.journal;
+        let gone = self.lock.journal_seen.iter().filter(|seen| {
+            seen.plan == active
+                && !journal
+                    .iter()
+                    .any(|e| (e.plan, e.key) == (seen.plan, seen.key))
+        });
+        for entry in gone {
+            if value(&plan, entry.key) == entry.written {
+                set(&mut plan, entry.key, entry.original);
+            }
+        }
+        Some(plan)
+    }
+
+    /// The end of each settle pass: the plan copy keeps what this pass's restores put back, until a read replaces it,
+    /// and the next pass compares with this journal copy.
+    fn keep_plan_copy(&mut self) {
+        self.state.plan = self.plan_copy();
+        self.lock.journal_seen.clone_from(&self.state.journal);
     }
 
     /// What the lock rules see: what is in force, or before the first plan read a guess from the journal `Started`
@@ -149,13 +199,24 @@ impl Core {
 
     /// A step back with the lid closed wants the `Floor` countdown only when the user's own battery lid action is not
     /// Do nothing, the same rule as at work end (Haik, 2026-11-03; power safety review finding 7): with their own Do
-    /// nothing the closed laptop would run without Wakeshot too. No plan read: nothing was applied, so Wakeshot changed
-    /// nothing.
+    /// nothing the closed laptop would run without Wakeshot too. No plan read: not known yet.
     fn floor_countdown_starts(&self) -> bool {
         self.state.lid_closed == Some(true)
             && self.in_force().is_some_and(|(plan, journal)| {
                 ending::starts_at_work_end(true, lid::user_action(&plan, false, &journal))
             })
+    }
+
+    /// The `Floor` countdown at a step back with the lid closed. Before the first plan read the user's own battery lid
+    /// action is not known, yet a crashed tray's values from the `Started` journal may keep the laptop running: then the
+    /// read decides (power safety verify minor 3).
+    fn floor_countdown_wanted(&mut self) {
+        if self.floor_countdown_starts() {
+            self.state.floor_countdown = true;
+        } else if self.state.plan.is_none() && self.state.lid_closed == Some(true) && self.may_own()
+        {
+            self.lock.floor_waits = true;
+        }
     }
 
     /// The battery floor from the last plan read (`policy::floor::floor_pct`).
@@ -182,8 +243,8 @@ impl Core {
                     // after work that ended with the lid closed.
                     if self.state.episode.is_none() {
                         self.work_ended();
-                    } else if self.state.stepped_back && self.floor_countdown_starts() {
-                        self.state.floor_countdown = true;
+                    } else if self.state.stepped_back {
+                        self.floor_countdown_wanted();
                     }
                 }
             }
@@ -217,6 +278,7 @@ impl Core {
     fn lid_opens(&mut self, now: Now, out: &mut Vec<Command>) {
         self.cancel_countdowns(Cancel::LidOpened, "the lid opened", out);
         self.lock.pending = None;
+        self.lock.relock = None;
         self.end_lock_step_back("the lid opened", out);
         if let Some(run) = self.state.closed_lid.as_mut()
             && let Some(since) = run.since_mono.take()
@@ -225,7 +287,7 @@ impl Core {
         }
         // Signed in already (an external screen): the user is back now.
         if !self.state.session_locked {
-            self.report(now, out);
+            self.back_at_the_laptop(now, out);
         }
     }
 
@@ -262,7 +324,8 @@ impl Core {
         }
     }
 
-    /// `InputIdle`: the countdown and the Keep screen on idle lock decide only on a reading.
+    /// `InputIdle`: the countdown, the Keep screen on idle lock and the lock after a hibernate that did not happen
+    /// decide only on a reading.
     pub(super) fn take_input_idle(&mut self, ms: u64, now: Now, out: &mut Vec<Command>) {
         self.state.idle = Some(IdleReading {
             ms,
@@ -270,6 +333,7 @@ impl Core {
         });
         self.check_countdown(now, out);
         self.idle_lock(ms, now, out);
+        self.relock(ms, now, out);
     }
 
     /// `Resumed`, and a `Hibernate` that resumed: a resume counts as input for the idle clamp.
@@ -290,7 +354,27 @@ impl Core {
         self.state.session_locked = false;
         self.send_held(out);
         if self.state.lid_closed != Some(true) {
-            self.report(now, out);
+            self.back_at_the_laptop(now, out);
+        }
+    }
+
+    /// The user is at the open laptop and signed in: the notices a closed laptop showed to nobody, then the closed-lid
+    /// report (power safety verify minor 2).
+    fn back_at_the_laptop(&mut self, now: Now, out: &mut Vec<Command>) {
+        for notice in std::mem::take(&mut self.lock.kept) {
+            self.notify(notice, out);
+        }
+        self.report(now, out);
+    }
+
+    /// A notice raised with the lid closed and the session unlocked goes to a screen nobody may look at (the lid
+    /// closed, no external screen): it goes out again when the user is back.
+    fn keep_for_return(&mut self, notice: Notice) {
+        if self.state.lid_closed == Some(true)
+            && !self.state.session_locked
+            && !self.lock.kept.contains(&notice)
+        {
+            self.lock.kept.push(notice);
         }
     }
 
@@ -350,6 +434,16 @@ impl Core {
         tick: bool,
         out: &mut Vec<Command>,
     ) -> Option<Deadline> {
+        // The first plan read tells the user's own lid actions: the countdown rules that met the lid closed before it
+        // decide now, before the cancels below.
+        if self.state.plan.is_some() {
+            if let Some(sources) = self.lock.work_end_waits.take() {
+                self.work_ended_on(sources);
+            }
+            if std::mem::take(&mut self.lock.floor_waits) && self.state.stepped_back {
+                self.floor_countdown_wanted();
+            }
+        }
         // Once per step back, at the first moment a hold counts in it: a step back with nothing held changes nothing.
         if self.state.stepped_back && self.state.episode.is_some() && !self.state.step_back_shown {
             self.state.step_back_shown = true;
@@ -357,9 +451,7 @@ impl Core {
             let floor_pct = self.floor_pct();
             self.notify(Notice::StepBack { floor_pct }, out);
             out.push(Command::Play(Cue::BatteryFloor));
-            if self.floor_countdown_starts() {
-                self.state.floor_countdown = true;
-            }
+            self.floor_countdown_wanted();
         }
         // Our Do nothing kept the closed laptop running and it could not be locked: give the settings back and let it
         // hibernate as after work that ended, read before the restore lands. The requests went off in this pass.
@@ -393,6 +485,7 @@ impl Core {
         }
         let idle_due = self.state.idle_lock_check;
         let lock_due = self.lock.pending.map(|p| Deadline::Mono(p.check_mono));
+        self.keep_plan_copy();
         let due = nearest(nearest(source_due, countdown_due, now), idle_due, now);
         nearest(due, lock_due, now)
     }
@@ -422,6 +515,8 @@ impl Core {
                     .to_owned(),
             ));
             self.lock.stepped_back = true;
+            // The only notice that says why the hold stopped went to a closed laptop's screen.
+            self.keep_for_return(Notice::LockFailed);
             return;
         }
         out.push(Command::Log(
@@ -433,6 +528,47 @@ impl Core {
             shown: true,
             check_mono: now.mono_ms.saturating_add(LOCK_CHECK_MS),
         });
+    }
+
+    /// A hibernate that did not happen (not allowed, failed, or the lid unknown) leaves the closed laptop running until
+    /// the user's own sleep timeout, since putting the lid action back does not sleep a laptop whose lid is already
+    /// closed; unlocked, if the lid-close lock failed or the user signed in on an external screen (power safety verify
+    /// minor 1). So at an input reading 5 minutes idle (clamped at resume, as the countdown), `Lock` with the chime,
+    /// then at most every [`RELOCK_MS`], while the lid stays closed, the session is unlocked and on the PC's screen,
+    /// and the user's own lid action for the power source, once it lasted the settle, is not Do nothing: with their
+    /// own Do nothing the laptop would run unlocked without Wakeshot too. A lock that works shows as `Session(Locked)`
+    /// and the next one waits for an unlock. Not watched: a failure changes nothing, and the next one comes anyway.
+    /// The chime goes with each, as every `Lock` comes with a sound or a notice (decision 0).
+    fn relock(&mut self, reported_ms: u64, now: Now, out: &mut Vec<Command>) {
+        if self.lock.relock.is_none_or(|at| now.mono_ms < at) {
+            return;
+        }
+        let idle = ending::clamped_idle_ms(reported_ms, now.mono_ms, self.state.last_resume_mono);
+        let state = &self.state;
+        let settled = state
+            .source_since_mono
+            .is_none_or(|at| now.mono_ms >= at.saturating_add(SOURCE_SETTLE_MS));
+        let wanted = ending::check(idle, now.mono_ms) == Check::Due
+            && settled
+            && state.lid_closed == Some(true)
+            && !state.session_locked
+            && state.on_console
+            && self.lock.pending.is_none()
+            && self.in_force().is_some_and(|(plan, journal)| {
+                self.sources()
+                    .iter()
+                    .all(|&ac| lid::user_action(&plan, ac, &journal) != DO_NOTHING)
+            });
+        if !wanted {
+            return;
+        }
+        out.push(Command::Log(
+            "The closed laptop still runs unlocked after the hibernate did not happen, 5 minutes without input: lock"
+                .to_owned(),
+        ));
+        out.push(Command::Lock);
+        out.push(Command::Play(Cue::LidClosedHolding));
+        self.lock.relock = Some(now.mono_ms.saturating_add(RELOCK_MS));
     }
 
     /// The closed laptop is locked or in front of the user again: holds hold as at a hold start.
@@ -477,11 +613,23 @@ impl Core {
     /// lid action is not Do nothing (`policy::ending::starts_at_work_end`). Their own actions for both sources are
     /// kept, read now while the journal's `original` still answers, for a later power source change.
     pub(super) fn work_ended(&mut self) {
+        let sources = self.sources();
+        self.work_ended_on(sources);
+    }
+
+    /// [`Core::work_ended`] on the power sources the PC was on when work ended. Before the first plan read the user's
+    /// own lid actions are not known: with nothing owned, nothing was applied and Wakeshot changed nothing; else a
+    /// crashed tray's values from the `Started` journal may keep the closed laptop running, and the read decides
+    /// (power safety verify minor 3). A guess from the journal would take a key it does not name, often the user's own
+    /// Do nothing, for Sleep.
+    fn work_ended_on(&mut self, sources: &'static [bool]) {
         if self.state.lid_closed != Some(true) {
             return;
         }
-        // No plan read: nothing was applied, so Wakeshot changed nothing that keeps the laptop running.
         let Some((plan, journal)) = self.in_force() else {
+            if self.may_own() {
+                self.lock.work_end_waits = Some(sources);
+            }
             return;
         };
         let work_end = WorkEnd {
@@ -489,8 +637,7 @@ impl Core {
             own_lid_dc: lid::user_action(&plan, false, &journal),
             paused: false,
         };
-        let starts = self
-            .sources()
+        let starts = sources
             .iter()
             .any(|&ac| ending::starts_at_work_end(true, work_end.own_action(ac)));
         if starts {
@@ -500,6 +647,13 @@ impl Core {
 
     /// Ends the wants that `cancel` ends (`policy::ending::cancels`), with a log line when a countdown ran.
     fn cancel_countdowns(&mut self, cancel: Cancel, why: &str, out: &mut Vec<Command>) {
+        // A want still waiting for the first plan read ends the same way.
+        if ending::cancels(CountdownReason::WorkEnded, cancel) {
+            self.lock.work_end_waits = None;
+        }
+        if ending::cancels(CountdownReason::Floor, cancel) {
+            self.lock.floor_waits = false;
+        }
         let work =
             self.state.work_end.is_some() && ending::cancels(CountdownReason::WorkEnded, cancel);
         let floor = self.state.floor_countdown && ending::cancels(CountdownReason::Floor, cancel);
@@ -695,7 +849,8 @@ impl Core {
                 pending.check_mono = now.mono_ms;
                 !std::mem::replace(&mut pending.shown, true)
             }
-            None => !self.state.session_locked,
+            // A lock after a hibernate that did not happen: `HibernateFailed` said so, and each comes with its chime.
+            None => !self.state.session_locked && self.lock.relock.is_none(),
         };
         if first {
             self.notify(Notice::LockFailed, out);
@@ -703,10 +858,11 @@ impl Core {
     }
 
     /// How the hibernate thread ended. Not allowed, failed or an unknown lid: a notice, and the countdown ends; settings
-    /// came back at the work end or the step back, so Windows' own timers most likely apply (section 8). A skip for
-    /// the lid open ends it too; one for input goes on to the next reading, one for the floor to the next battery
-    /// reading; one for AC ends only a `Floor` countdown (`policy::ending::cancels`). `Resumed` counts as a resume,
-    /// and the countdown is done.
+    /// came back at the work end or the step back, so Windows' own timers most likely apply (section 8), and with the
+    /// lid still closed the laptop is locked whenever it is left idle ([`Core::relock`]). A skip for the lid open ends
+    /// it too; one for input goes on to the next reading, one for the floor to the next battery reading; one for AC
+    /// ends only a `Floor` countdown (`policy::ending::cancels`). `Resumed` counts as a resume, and the countdown is
+    /// done.
     pub(super) fn done_hibernate(&mut self, end: HibernateEnd, now: Now, out: &mut Vec<Command>) {
         self.state.hibernating = false;
         match end {
@@ -732,6 +888,15 @@ impl Core {
                 )));
                 self.end_countdowns();
                 self.notify(Notice::HibernateFailed, out);
+                self.keep_for_return(Notice::HibernateFailed);
+                if self.state.lid_closed == Some(true) {
+                    out.push(Command::Log(
+                        "The closed laptop keeps running: lock it whenever it is left 5 minutes without input, until \
+                         the lid opens"
+                            .to_owned(),
+                    ));
+                    self.lock.relock = Some(now.mono_ms);
+                }
             }
             HibernateEnd::Skipped(HibernateSkip::LidOpen) => {
                 out.push(Command::Log(

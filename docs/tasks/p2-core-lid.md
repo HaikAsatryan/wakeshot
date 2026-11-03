@@ -565,3 +565,197 @@ scenarios, both strict props tests un-ignored, the `LockFailed` words updated.
 
 - Decision 1 (finding 4) is my reading of Haik's 23:45 principle; the orchestrator may want Haik's word on it.
 - Not in this round: review findings 3, 5, 6, 8, 9, 10.
+
+## Core round A, lid fixes (2026-11-04)
+
+Status: done. Agent: `wakeshot-worker`. Brief from the orchestrator: power safety review
+(`docs/reviews/p2-6-power-safety.md`) finding 5, and minors 1 to 5 of `docs/reviews/p2-6-power-safety-verify.md`.
+Owns `core/lid.rs`, `policy/lid.rs`, `scenarios/lid.rs`, `text.rs` (only for new notice words), section 3 lid lines of
+`docs/architecture.md`, `docs/product.md` lid lines only if a rule changes, this card, and a new section in
+`docs/research.md`. Not `core.rs`, `core/settings.rs`, `ownership/`, `scenarios/settings.rs`, `scenarios/props.rs`
+(core round B), nor `crates/wakeshot-windows/`.
+
+### Log
+
+- 2026-11-04 01:08: started. Read the card, both reviews, the brief.
+- 2026-11-04 01:23: read `core/lid.rs`, `core.rs`, `core/settings.rs`, `state.rs`, `policy/lid.rs`, the lid scenarios
+  and the props model (read only). Design:
+  - Finding 5: `done_restored` is not mine, so the lid side does it by diff: each settle pass ends by keeping the
+    journal copy it saw; an entry that left it since, on the copy's active plan, whose key the copy still shows at
+    `written`, puts its `original` back in the plan copy (`in_force` sees it at once, the fold makes it last). A real
+    read overwrites it, so a value the user set since wins.
+  - Minor 3: a countdown rule that meets the lid closed before the first plan read waits for that read when anything
+    may be owned (the `Started` journal), then decides on the read: exact, where the `lock_view` guess could take a
+    docked user's own AC Do nothing for Sleep. The floor rule had the same hole; fixed the same way.
+  - Minor 1: decision 0 (every `Lock` with a notice or a sound) rules out silent lock retries. Picked: after a
+    hibernate that is not allowed, failed or found the lid unknown, with the lid still closed, `Lock` with the chime
+    once input has been idle 5 minutes (a fresh reading), and again every 5 minutes, while the session is unlocked,
+    on the console and the user's own lid action for the source is not Do nothing; it ends when the lid opens. Not
+    the sleep fallback: it needs the hibernate thread and maybe a contract change, and on Modern Standby
+    `SetSuspendState(FALSE)` hibernates too (research), so it adds nothing where hibernation is off there.
+  - Minor 2: `LockFailed` at the lock step back with the lid closed, and `HibernateFailed` raised with the lid closed
+    and the session unlocked, are kept and shown again at the user's return, with the closed-lid report.
+  - Minor 4: the two scenarios in `scenarios/lid.rs`; the props part is `scenarios/props.rs` (round B).
+- 2026-11-04, between 01:23 and 01:44 (clock not read; corrected at 01:44): 12 new scenarios written first in `scenarios/lid.rs`. Against the unchanged core 8 fail (finding
+  5's work end after a restore; minor 3's lock step back, no-hold lid close and floor step back before the first
+  read; minor 1's three relock tests; minor 2's kept notices) and 4 pass by design (minor 4's two, which pin code
+  that is right today, and finding 5's two guards: a later read wins, and a value a read already shows stays).
+  `scenarios::lid`: 73 passed, 8 failed. Next: the code.
+- 2026-11-04 01:44 (clock read): code done in `core/lid.rs`; three more cases added from the mutant plan (a lid open
+  drops a want waiting for the read; no relock off the console; a `HibernateFailed` held while locked is not shown
+  twice). `scenarios::lid` 81 passed; `cargo test -p wakeshot-core` 577 passed, 2 ignored, plus 10 and 25 in
+  `tests/`. Long runs (`PROPTEST_CASES=10000`, release, `scenarios::props`, the lid proptest, `scenarios::settings`):
+  `scenarios::props::a_released_key_is_never_ours_in_force_again_in_its_episode` failed in three of seven runs,
+  each with plan switches and failed restores and no lid command in the trace; outside this round (Found outside
+  scope). rustfmt on the owned files, clippy four ways: exit 0. `docs/architecture.md` section 3 and the two
+  `docs/product.md` lid lines updated. Next: mutants in a scratch copy.
+- 2026-11-04 01:51 (clock read): mutants in a scratch copy: 27 of 27 killed (the first run stopped at the baseline:
+  `holds/file.rs` tests read `docs/hold-files.md`, so the copy needs `docs/`). Final `cargo test -p wakeshot-core`:
+  577 passed, 2 ignored. `docs/research.md` "Core lid round A checks" added. Result written. Status: done.
+
+### Result
+
+Status: done 2026-11-04. Finding 5 of the power safety review and minors 1 to 5 of its verify are fixed, each code
+fix with scenarios written first (12, of which 8 failed before the fix), three more from the mutant plan; minor 5 and
+the new rules are in the docs.
+
+#### What changed
+
+- **Finding 5, a stale plan copy after a restore.** `done_restored` is not this round's file, so the lid side does
+  what the review asks by diff: each settle pass ends by keeping the journal copy it saw (`journal_seen`); an entry
+  that left it since, on the copy's active plan, whose key the copy still shows at `written`, puts its `original` back
+  in the plan copy (`Core::plan_copy`, read by `in_force` at once, written to `state.plan` at the end of the pass by
+  `keep_plan_copy`). A key the copy shows at another value was read since, and the read wins; a later read replaces
+  the copy. Only the lid side reads plan values (the settings side reads `.active` only; checked), so nothing else
+  changes. Haik's case now counts down: "Restore my power settings" while closed and signed in on the external
+  screen, then the work ends before the next read.
+- **Minor 1, a hibernate that did not happen.** Picked: after `Hibernate` not allowed, failed or with the lid unknown,
+  while the lid stays closed, `Lock` with `Play(LidClosedHolding)` at an input reading 5 minutes idle (clamped at
+  resume), at most every 5 minutes, until the lid opens; only while the session is unlocked and on the PC's screen, no
+  watched lock waits, the user's own lid action for the power source is not Do nothing, and the source lasted 30 s.
+  A lock that works shows as `Session(Locked)` (it also ends a lock step back, so the hold applies again on a locked
+  laptop). Not watched: a failure logs, no notice, the next one comes anyway. It covers the review's case (two failed
+  locks, the step back, then no hibernate) and the plain work end where the user signed in on an external screen.
+  Not the sleep fallback: see Decisions.
+- **Minor 2, the step back's notice on a dark screen.** `LockFailed` at the lock step back, and `HibernateFailed`
+  raised with the lid closed and the session unlocked, are kept (`LockWatch::kept`) and go out again when the user is
+  back at the open laptop (lid opens while unlocked, or the first unlock with the lid open), right before the
+  closed-lid report, also when no report is due. A notice raised while locked waits through the held list as before,
+  never twice.
+- **Minor 3, a countdown rule before the first plan read.** `work_ended` with no plan read and something possibly
+  owned (`may_own`: a crashed tray's `Started` journal) keeps the power sources it ended on and decides at the first
+  `Plan(Ok)`, on the read's values; the floor rule the same (`floor_countdown_wanted`, not named by the review, same
+  hole). A lid open or a new hold ends a waiting want as it ends a countdown. Both callers the review names (the lock
+  step back and the no-hold lid close) and the hold end go through it.
+- **Minor 4, tests across a power source change.** Two scenarios (below). The props half is round B's file (Needs
+  another card 1).
+- **Minor 5, docs.** `docs/architecture.md` section 3: the state paragraph names the lid side's memory beside the
+  state (the lock watch and the rest); the in-force paragraph gets the plan copy after a restore and the wait for the
+  first read; the lid-close bullet gets the lock watch, the 5 s check, the retry and when the step back ends; the
+  countdown line says a new hold does not cancel it while stepped back after a failed lock, and AC back does not end
+  that one; the failed hibernate's lock; the closed-lid report gets the kept notices. `docs/product.md`, the two lid
+  lines: the 5 s check and "until the session locks or the lid opens", the notice shown again, and the lock after a
+  hibernate that did not happen (marked as the worker's call for Haik's review).
+- `text.rs` not changed: `LockFailed` still says what happens ("tries once more; if that fails, it stops keeping the
+  PC awake and hibernates it after 5 minutes with no input") and `HibernateFailed` that settings are back; both fit
+  when shown again at the return.
+
+#### Decisions (worker's, for Haik's review), each with when to change it
+
+1. Minor 1: the lock with the chime after a hibernate that did not happen, every 5 minutes while idle. Over the sleep
+   fallback, which needs the hibernate thread and a product change (sleep instead of hibernate), and helps little on
+   Modern Standby, where `SetSuspendState(FALSE)` hibernates too (research, tested here); what it does there with
+   hibernation off: not verified. Silent retries are ruled out by decision 0 (every `Lock` with a notice or a sound),
+   hence the chime, and the 5 minutes keep it from being noise. Known limit: a user who sets Do nothing by hand right
+   after the restore may get one lock before the next read (up to 30 s). Change it when Haik wants the sleep fallback
+   (Needs another card 4) or finds the chime every 5 minutes too much.
+2. Minor 2: `HibernateFailed` is kept too, not only the review's `LockFailed`: the same dark screen. A user at an
+   external screen with the lid closed sees each twice. Change it when that repeat is seen to annoy.
+3. Minor 3: wait for the first read rather than read the `Started` journal's guess: the guess takes a lid key the
+   journal does not name for Sleep, and an apply skips exactly the keys already at Do nothing (the user's own), so a
+   docked user would be counted down. The decision uses the sources at the work end, so the pause on the user's own
+   Do nothing works as at any work end. Known limit: if every plan read fails, no countdown starts. Change it when the
+   journal carries the user's values for every key.
+4. Finding 5 built by diff on the lid side, not at `Done(Restored)`: `core/settings.rs` is round B's. Change it when
+   round B patches the copy at `Done(Restored)` and `Done(Applied)` (then `plan_copy` and `journal_seen` go).
+
+#### Tests
+
+- New in `scenarios/lid.rs` (12): `a_source_lock_that_fails_twice_steps_back_and_a_redock_onto_the_users_own_do_nothing_pauses_it`,
+  `ac_back_after_a_lock_step_back_keeps_the_work_end_countdown` (minor 4);
+  `a_work_end_right_after_restore_my_power_settings_reads_the_users_own_lid_action` (and the docked case),
+  `a_plan_read_after_the_restore_wins_over_the_values_put_back`, `a_value_a_read_already_shows_stays_when_its_entry_leaves`
+  (finding 5); `a_lock_step_back_before_the_first_plan_read_counts_down_once_the_plan_is_read`,
+  `a_lid_close_with_nothing_holding_before_the_first_plan_read_counts_down_once_the_plan_is_read` (and the docked
+  case, and a lid open that drops the want), `a_floor_step_back_before_the_first_plan_read_counts_down_once_the_plan_is_read`
+  (minor 3); `a_hibernate_not_allowed_after_a_lock_step_back_locks_again_with_the_chime_every_5_minutes`,
+  `a_failed_hibernate_waits_for_5_minutes_without_input_before_it_locks`,
+  `a_failed_hibernate_gives_no_lock_on_the_users_own_do_nothing_or_off_the_console` (minor 1);
+  `a_lock_step_back_keeps_its_notices_for_the_users_return` (minor 2, three cases).
+- Before the fix: 8 failed, 4 passed by design (Log 01:23 to 01:44). The three cases added from the mutant plan
+  (the lid open in minor 3's no-hold test, off the console in minor 1's, a held `HibernateFailed` in minor 2's) each
+  kill a mutant that survived on paper.
+- No existing test changed.
+
+#### Checks (final runs 2026-11-04 01:44 to 01:51, own build folder, every cargo command `--locked`)
+
+- `cargo test -p wakeshot-core --locked` (01:51): 577 passed, 2 ignored (`coverage_tally`, `p2-ownership-props`'
+  open finding), plus 11 and 25 in `tests/`. `scenarios::lid`: 81 passed (69 before this round, 12 new).
+- `rustfmt --edition 2024 --check` on `core/lid.rs`, `scenarios/lid.rs`, `policy/lid.rs`, `text.rs`: exit 0.
+  `cargo fmt --all --check`: diffs only in other cards' files (Found outside scope 1).
+- `cargo clippy -p wakeshot-core --locked --target <t> -- -D warnings`, with and without `--all-targets`, for
+  `x86_64-pc-windows-msvc` and `aarch64-pc-windows-msvc`: all four exit 0.
+- `PROPTEST_CASES=10000`, release, `scenarios::props`, `scenarios::lid::lid_events_in_any_order`,
+  `scenarios::settings`: every lid property passed in each run; `a_released_key_is_never_ours_in_force_again_in_its_episode`
+  failed in three of seven runs (Needs another card 2; older than this round).
+- Mutants by hand in a scratch copy (own build folder, each reverted): 27 of 27 killed. The card's four: a lock on any
+  Do nothing in force (12 tests, among them the new docked source lock test); no lock at AC to battery (12); the
+  hibernate without the resume clamp (3); the going to sleep sound with `Hibernate` (5). This round's 23: no value
+  put back, put back over a read value, the seen journal only growing, the put back value not lasting (finding 5);
+  no work-end wait, no floor wait, the read deciding on the sources now, the journal guess instead of the read, a
+  cancel keeping the wait (minor 3); no relock, no idle gate, relock on the user's own Do nothing, before the source
+  lasted, at every reading, without the chime, kept past a lid open, into a locked session, off the console, a notice
+  per failed relock (minor 1); `LockFailed` not kept, `HibernateFailed` not kept, kept notices never sent, kept while
+  locked (minor 2). Each killed by at least one new test.
+- No clock read, no I/O, no new dependency in the core. Only the owned files changed (from my own edit record; git
+  not run): `core/lid.rs`, `scenarios/lid.rs`, `docs/architecture.md` section 3, `docs/product.md` two lid lines,
+  this card, a new `docs/research.md` section. `policy/lid.rs` and `text.rs` unchanged. Build folder, mutant copy and
+  scratch scripts deleted.
+
+#### Needs another card
+
+1. `scenarios/props.rs` (round B), verify minor 4's props half: `no_request_without_a_hold` should also check the
+   model's `lock_stepped_back`, and `closed_laptop_is_locked_in_time` should replace its blanket `lock_failed` excuse
+   with "requests off and a `Restore` within one tick of the retry's failure". Relocks need no model change: each is a
+   `Lock` with the chime, which the model already reads as a lid lock.
+2. `scenarios/props.rs` (round B): `released_keys_are_not_ours_in_force` clears `restore_failed` at any
+   `Done(Restored { result: Ok(()) })`, also of another plan while the core still retries (`state.retry` stays set
+   until a `plan: None` restore works or a scoped one leaves nothing), so it fails now and then at 10,000 cases. Change:
+   clear it only at `Done(Restored { plan: None, result: Ok(()), .. })`. Minimal cases: (a) start Balanced on battery
+   25 %, io keeps up: user switches to other plan; AC in; next Restore fails at call 0; run-4000.json Alive; user
+   switches to docked plan; next Restore fails at call 0; menu Restore; user switches to other plan; end LastHold.
+   (b) start Balanced on battery 25 %, Automatic off, io lags: menu Keep awake 30 min; agent 1 Working; IO flush;
+   user switches to other plan; next Restore fails at call 0; run 10 s; IO runs one; menu Restore; next Apply fails
+   at call 2; user switches to Balanced; IO flush; end LastHold.
+3. `state.rs`: move `lid::LockWatch` (now nine fields) into `State`, and the `State::plan` doc: "The last plan read
+   that worked, with the values restores put back since (`core::lid`, power safety review finding 5)."
+4. Optional, Haik's call first: a sleep fallback when hibernate is not allowed, in the hibernate thread
+   (`crates/wakeshot-windows`, `p3-hibernate`) and `docs/product.md`.
+5. `docs/architecture.md` section 8 and section 5 (not this round's lines): the "Hibernate not allowed, fails, or lid
+   state unknown" row: "notice; settings were already restored; while the lid stays closed, `Lock` with the chime at
+   each input reading 5 minutes idle with the session unlocked, at most every 5 minutes, until the lid opens (power
+   safety verify minor 1)". The "Lock fails" row, at its end: "`LockFailed` is shown again with the closed-lid report
+   (verify minor 2)". Section 5 "Lock and hibernate", the last sentence: add "; with the lid still closed the core
+   then locks it whenever it is left idle (section 3, Countdown)".
+
+#### Found outside scope
+
+1. `cargo fmt --all --check` shows diffs in other cards' files, not touched: `crates/wakeshot-windows/examples/agent-watch.rs`,
+   `crates/wakeshot-windows/examples/ux_icon.rs`, `crates/wakeshot-windows/src/tray/icon.rs`.
+2. The props failure in Needs another card 2 is older than this round: neither trace has a lid command, and only the
+   lid side reads the plan values this round changes.
+
+#### Open items
+
+- Decisions 1 to 3 are product-near; the orchestrator may want Haik's word on decision 1 (it adds to his rule).
+- Needs another card 1 to 5.

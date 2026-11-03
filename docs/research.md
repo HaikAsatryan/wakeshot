@@ -2995,3 +2995,29 @@ test calls `Shell_NotifyIconW`; the tests use a fake shell). The screen results 
   echo of `uID` and a 0 both pass); whether a `NIM_ADD` of a GUID left by a run that ended without `NIM_DELETE` fails
   (the code deletes the GUID and adds once more when an add fails); whether `Shell_TrayWnd`'s DPI is the tray slot's
   size and the shell shows the drawn icon 1:1.
+
+## Core lid round A checks
+
+Card `p2-core-lid`, section "Core round A, lid fixes (2026-11-04)": power safety review finding 5 and verify minors 1 to
+5. Pure core code; nothing here touched the laptop or its power settings.
+
+- **Tests written first fail first.** 12 new scenarios against the unchanged core: 8 failed, 4 passed by design (two
+  pin code that was right already, two guard the new plan copy rule). Three more came from the mutant plan.
+- **Only the lid side reads plan values.** A grep of `crates/wakeshot-core/src` for `state.plan` (2026-11-04): the
+  settings side (`core/settings.rs`) reads only `.active`; `core/update.rs`, `core/view.rs`, `core/holds.rs` and
+  `present.rs` do not read the plan copy. So putting a restored `original` back in the copy changes only the lid,
+  lock and countdown rules.
+- **Decision 0 rules out a silent lock.** Every `Lock` must come with a notice or a sound in its step
+  (`docs/architecture.md`, decisions table, row 0); the property `every_lock_step_back_and_user_change_is_explained`
+  and the lid proptest check it. So the lock after a hibernate that did not happen carries the lid-close chime.
+- **Long property runs** (`PROPTEST_CASES=10000`, release, `scenarios::props`, the lid proptest,
+  `scenarios::settings`) on the final core code: `a_released_key_is_never_ours_in_force_again_in_its_episode` failed
+  in three of seven runs, each a plan switch with failed restores and no lid command in the trace (the property
+  clears its "restore failed" flag at a restore of another plan that worked, while the core still retries); every
+  other property passed in each of the four runs of the whole set.
+- **Mutants by hand, 27 of 27 killed** (scratch copy of the workspace with `docs/`, since `holds/file.rs` tests read
+  `docs/hold-files.md`; own build folder; each reverted): the card's four, and 23 on the lines of this round.
+- **Not verified:** what a closed laptop does after a hibernate that is not allowed, with the user's own settings back
+  and no request held. The product text infers it runs until the user's own sleep timeout (not tested with the lid
+  closed); the lock every 5 minutes rests on that inference. Also not verified: what `SetSuspendState(FALSE)` does on a
+  Modern Standby PC with hibernation off, the case a sleep fallback would be for.
