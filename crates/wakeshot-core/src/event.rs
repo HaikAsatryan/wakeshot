@@ -33,9 +33,11 @@ pub enum SessionChange {
 /// tray track (Phase 5) `Menu`; ship track (Phase 6) `UpdateReady`, `Updated`; the loop `Tick`. The core may rely on:
 ///
 /// - `Started` comes first and once. Its `config` wins over the one `Core::new` got. `journal`: the entries this
-///   version knows, `None` when there are none. `owner`: this tray holds the settings mutex. `on_console`: this
-///   session is on the PC's own screen. `tray`: this tray's own process, for `state.json` and the Keep awake hold.
-///   `first_run`: `config.json` was missing at start, so the core shows `Notice::FirstRun` and writes the config.
+///   version knows, `None` when there are none. `journal_unread`: `journal.json` did not read at start (then
+///   `journal` is `None`), so what it holds is not known and the core retries it as `Restore { why: Leftover }` on
+///   each tick. `owner`: this tray holds the settings mutex. `on_console`: this session is on the PC's own screen.
+///   `tray`: this tray's own process, for `state.json` and the Keep awake hold. `first_run`: `config.json` was
+///   missing at start, so the core shows `Notice::FirstRun` and writes the config.
 /// - A tray that starts while the session is locked gets `Session(Locked)` right after `Started`, before
 ///   `JournalCorrupt` and `Updated`: the only way the core learns of a lock that began before the tray.
 /// - `Sources` pairs each session with the adapter's liveness answer; the parser never checks liveness.
@@ -53,6 +55,7 @@ pub enum Event {
     Started {
         config: Config,
         journal: Option<Journal>,
+        journal_unread: bool,
         owner: bool,
         on_console: bool,
         tray: ProcessRef,

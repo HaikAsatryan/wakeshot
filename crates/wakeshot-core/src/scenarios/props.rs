@@ -1105,6 +1105,9 @@ fn world_start() -> impl Strategy<Value = WorldStart> {
                 battery_pct,
                 leftover,
                 startup_fails,
+                // Not drawn: the core cannot know a crashed tray's values while the file does not read, so the
+                // lock rules here would need that excuse (`p2-6-unread-journal`); the named cases below cover it.
+                startup_unread: false,
                 keep_up,
             },
         )
@@ -1445,6 +1448,56 @@ fn a_lock_step_back_takes_the_requests_off() {
 #[test]
 fn a_lock_step_back_restores_within_one_tick() {
     lock_step_back_case(|world| closed_laptop_is_locked_in_time(world, false));
+}
+
+/// Power safety review finding 3: a crashed tray left its values and journal, and the start-up read of that journal
+/// failed, so the core knows of nothing and only its `Leftover` retry, through the real restore routine, brings the
+/// user's values back.
+fn unread_leftover() -> WorldStart {
+    WorldStart {
+        leftover: true,
+        startup_unread: true,
+        ..WorldStart::default()
+    }
+}
+
+#[test]
+fn an_unread_journal_at_start_is_restored_at_the_first_tick() {
+    let mut world = World::new(&unread_leftover());
+    assert!(
+        !world.plans().state().held().is_empty(),
+        "the crashed tray's values are in force at start"
+    );
+    world.play(&WorldStep::Run(30 * SECOND));
+    if let Err(why) = restored_at_the_end(&world) {
+        panic!("{why}\n\ntrace:\n{}", world.trace());
+    }
+}
+
+#[test]
+fn an_unread_journal_whose_retry_fails_is_restored_at_a_later_tick() {
+    check_case(
+        unread_leftover(),
+        vec![restore_fails(), WorldStep::Run(30 * SECOND)],
+        End::LastHold,
+        |world| restored_at_the_end(world).and_then(|()| every_action_is_explained(world)),
+    );
+}
+
+#[test]
+fn an_unread_journal_and_a_hold_before_the_first_tick() {
+    check_case(
+        unread_leftover(),
+        vec![
+            WorldStep::Agent {
+                pid: 1,
+                now: AgentNow::Working,
+            },
+            WorldStep::Run(45 * SECOND),
+        ],
+        End::LastHold,
+        |world| restored_at_the_end(world).and_then(|()| retries_spare_the_running_hold(world)),
+    );
 }
 
 proptest! {

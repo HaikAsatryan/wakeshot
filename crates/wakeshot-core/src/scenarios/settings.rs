@@ -884,6 +884,117 @@ fn leftover_journal_is_restored_on_each_tick_until_it_succeeds() {
     assert!(settings(&out).is_empty(), "{}", sim.trace());
 }
 
+// Power safety review finding 3: a journal that did not read at start.
+
+/// Started with a `journal.json` that did not read: what it holds is not known, so nothing is in the copy.
+fn unread_at_start() -> Sim {
+    let mut sim = Sim::new();
+    let out = sim.send(
+        Start {
+            journal_unread: true,
+            ..Start::default()
+        }
+        .event(),
+    );
+    assert!(
+        settings(&out).is_empty(),
+        "start-up already tried\n{}",
+        sim.trace()
+    );
+    sim
+}
+
+/// The `Restore` commands of each `Tick` step since step `from`, one list per tick.
+fn restores_per_tick(sim: &Sim, from: usize) -> Vec<Vec<Command>> {
+    sim.steps()[from..]
+        .iter()
+        .filter(|s| s.event == Event::Tick)
+        .map(|s| {
+            s.commands
+                .iter()
+                .filter(|c| matches!(c, Command::Restore { .. }))
+                .cloned()
+                .collect()
+        })
+        .collect()
+}
+
+#[test]
+fn unread_journal_is_retried_on_the_next_tick() {
+    let mut sim = unread_at_start();
+    let from = sim.steps().len();
+    sim.run(SAFETY_TICK_MS);
+    let leftover = restore(None, RestoreWhy::Leftover);
+    assert_eq!(
+        restores_per_tick(&sim, from),
+        [vec![leftover]],
+        "{}",
+        sim.trace()
+    );
+    assert!(
+        overridden(&mut sim).is_empty(),
+        "nothing is known to be ours"
+    );
+}
+
+#[test]
+fn unread_journal_retry_ends_at_a_good_read() {
+    // The read works now: the routine found the crashed tray's entries and put every value back.
+    let mut sim = unread_at_start();
+    sim.run(SAFETY_TICK_MS);
+    let out = sim.send(restored(None, RestoreWhy::Leftover, Ok(()), vec![]));
+    assert_eq!(notified(&out, &Notice::RestoreFailed), 0, "{}", sim.trace());
+    let out = sim.run(3 * SAFETY_TICK_MS);
+    assert!(settings(&out).is_empty(), "{}", sim.trace());
+
+    // The read works, but its owner is alive: the entries it names are now known and the retry goes on.
+    let mut sim = unread_at_start();
+    sim.run(SAFETY_TICK_MS);
+    // The executor's `OWNER_ALIVE`, with the known entries of the file it read.
+    let alive = Failure {
+        call: "journal owner (alive)",
+        code: 170,
+    };
+    sim.send(restored(
+        None,
+        RestoreWhy::Leftover,
+        Err(alive),
+        entries(BALANCED, &[SettingKey::LidDc]),
+    ));
+    assert_eq!(overridden(&mut sim), owned(BALANCED, &[SettingKey::LidDc]));
+    let out = sim.run(SAFETY_TICK_MS);
+    assert!(
+        count(&out, &restore(None, RestoreWhy::Leftover)) >= 1,
+        "{}",
+        sim.trace()
+    );
+}
+
+#[test]
+fn unread_journal_that_keeps_failing_keeps_the_retry() {
+    let mut sim = unread_at_start();
+    let from = sim.steps().len();
+    let leftover = restore(None, RestoreWhy::Leftover);
+    let mut warned = 0;
+    for _ in 0..6 {
+        sim.run(SAFETY_TICK_MS);
+        // The executor's answer to a read that fails: nothing known, so no entries.
+        let out = sim.send(restored(
+            None,
+            RestoreWhy::Leftover,
+            Err(LOAD_FAILED),
+            vec![],
+        ));
+        warned += notified(&out, &Notice::RestoreFailed);
+    }
+    // `Sim::send` panics on a deadline that is not after a `Tick`, so no tick loops; each one sends one retry.
+    let ticks = restores_per_tick(&sim, from);
+    assert_eq!(ticks.len(), 6, "{}", sim.trace());
+    assert!(ticks.iter().all(|t| *t == [leftover.clone()]), "{ticks:?}");
+    assert_eq!(warned, 1, "one notice per run of failed restores");
+    assert!(overridden(&mut sim).is_empty());
+}
+
 // Item 9, and the orchestrator's decision on `JOURNAL_CORRUPT`.
 
 #[test]

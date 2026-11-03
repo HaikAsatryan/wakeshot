@@ -72,7 +72,9 @@ pub enum FileKind {
 /// - `Restore`: `plan: None` takes every entry, `Some` only that plan's.
 /// - `Hibernate`: the hibernate thread checks again right before the call (section 5), so it gets what that check
 ///   needs: the reason, the battery floor, and the last resume (idle counts from it). The hibernate thread plays
-///   `Cue::GoingToSleep` after its last check; the core never sends `Play(GoingToSleep)`.
+///   `Cue::GoingToSleep` after its last check, then reads the lid once more; the core never sends
+///   `Play(GoingToSleep)`.
+/// - `WriteConfig`: the runner never writes over a newer `config.json` (section 6).
 /// - `WriteHold`: Keep awake from the menu; the hold file carries the tray's own pid and start.
 /// - `FinishRestoreRequest`: after `Done(Restored { why: UserAsked })`, write this `state.json` at once, then delete
 ///   `restore-request.json`, so `wakeshot restore` never prints the state from before the restore. Answers as

@@ -12,6 +12,7 @@ use std::thread::JoinHandle;
 
 use wakeshot_core::command::{Command, Failure, FileKind, Outcome, RestoreWhy};
 use wakeshot_core::event::Event;
+use wakeshot_core::files::{self, Config, Read};
 use wakeshot_core::holds::HoldId;
 use wakeshot_core::ownership::io::{PlanIo, SafetyNet};
 use wakeshot_core::view::Notice;
@@ -35,6 +36,13 @@ const AREA: &str = "io";
 
 /// `log::LOG_FILE`, private there: the one file every process appends to.
 const LOG_FILE: &str = "wakeshot.log";
+
+/// The answer to a `WriteConfig` that found a newer `config.json` and kept it. 13 (`ERROR_INVALID_DATA`), as
+/// `READ_BACK_DIFFERS` uses where Windows gives no code; the core ignores a `Config` answer.
+const NEWER_CONFIG_KEPT: Failure = Failure {
+    call: "config.json (newer version kept)",
+    code: ERROR_INVALID_DATA.0,
+};
 
 /// What the tray gives `finish` (phase file note 5): the journal mutex wait is 10 s, so a restore that waits for the
 /// mutex still fits. Dropping an `IoThread` waits as long.
@@ -222,11 +230,7 @@ impl Runner {
                 let result = write_json(&path, serde_json::to_vec_pretty(state));
                 self.file_done(FileKind::State, result, "state.json not written", command);
             }
-            Command::WriteConfig(config) => {
-                let path = self.dir.file(DataFile::Config);
-                let result = write_json(&path, serde_json::to_vec_pretty(config));
-                self.file_done(FileKind::Config, result, "config.json not written", command);
-            }
+            Command::WriteConfig(config) => self.write_config(config, command),
             Command::WriteHold { id, hold } => {
                 let result = hold_path(&self.dir, id)
                     .and_then(|path| write_json(&path, serde_json::to_vec_pretty(hold)));
@@ -312,6 +316,36 @@ impl Runner {
             "restore request answered: state.json written, restore-request.json removed",
         );
         Ok(())
+    }
+
+    /// Never over a newer `config.json` (architecture section 6): it may hold fields this version does not know, and
+    /// a write would drop them. The menu's Automatic then holds for this run only. A file that does not parse is
+    /// replaced, and one that does not read is kept, as `wakeshot automatic` does.
+    fn write_config(&mut self, config: &Config, command: &Command) {
+        let path = self.dir.file(DataFile::Config);
+        let result = match store::read_whole(&path) {
+            Ok(Some(bytes)) => match files::read::<Config>(&bytes) {
+                Read::Newer(version) => {
+                    let word = if config.automatic { "on" } else { "off" };
+                    let text = format!(
+                        "config.json not written: version {version} is newer than {}; Automatic {word} for this run \
+                         only",
+                        Config::VERSION
+                    );
+                    self.note(Level::Warn, &text);
+                    let answer = Outcome::Written {
+                        file: FileKind::Config,
+                        result: Err(NEWER_CONFIG_KEPT),
+                    };
+                    self.post(Event::Done(answer), command);
+                    return;
+                }
+                Read::Value(_) | Read::Bad => write_json(&path, serde_json::to_vec_pretty(config)),
+            },
+            Ok(None) => write_json(&path, serde_json::to_vec_pretty(config)),
+            Err(e) => Err(Failure::from(e)),
+        };
+        self.file_done(FileKind::Config, result, "config.json not written", command);
     }
 
     /// Answers a file command; `failed` names the file, never its content (architecture section 8).
@@ -828,6 +862,62 @@ mod tests {
         assert_eq!(warned.len(), 1, "{warned:?}");
         assert!(
             warned[0].contains("restore-request.json kept"),
+            "{warned:?}"
+        );
+    }
+
+    /// Core round B, Needs another card 1: a newer version's fields survive the menu's Automatic toggle.
+    #[test]
+    fn write_config_never_writes_over_a_newer_file() {
+        let rig = Rig::new("config-newer");
+        let newer = br#"{ "version": 2, "automatic": true, "theme": "dark" }"#;
+        store::write_atomic(&rig.data().file(DataFile::Config), newer).unwrap();
+
+        let events = rig.run(vec![Command::WriteConfig(Config::new(false))]);
+
+        assert_eq!(events, [written(FileKind::Config, Err(NEWER_CONFIG_KEPT))]);
+        assert_eq!(rig.read(DataFile::Config).unwrap(), newer);
+        assert_eq!(
+            rig.io_lines(Level::Warn),
+            ["config.json not written: version 2 is newer than 1; Automatic off for this run only"]
+        );
+    }
+
+    #[test]
+    fn write_config_replaces_a_bad_or_older_file_and_keeps_one_that_does_not_read() {
+        for old in [
+            &b"{ not json"[..],
+            br#"{ "version": 0, "automatic": true }"#,
+        ] {
+            let rig = Rig::new("config-bad");
+            store::write_atomic(&rig.data().file(DataFile::Config), old).unwrap();
+            let events = rig.run(vec![Command::WriteConfig(Config::new(false))]);
+            assert_eq!(events, [written(FileKind::Config, Ok(()))]);
+            let config: Config =
+                serde_json::from_slice(&rig.read(DataFile::Config).unwrap()).unwrap();
+            assert_eq!(config, Config::new(false));
+        }
+
+        // A folder in the file's place makes the read fail: whether it is newer cannot be known, so it stays.
+        let rig = Rig::new("config-unread");
+        let path = rig.data().file(DataFile::Config);
+        fs::create_dir(&path).unwrap();
+        let events = rig.run(vec![Command::WriteConfig(Config::new(true))]);
+        assert!(
+            matches!(
+                events.as_slice(),
+                [Event::Done(Outcome::Written {
+                    file: FileKind::Config,
+                    result: Err(_),
+                })]
+            ),
+            "{events:?}"
+        );
+        assert!(path.is_dir());
+        let warned = rig.io_lines(Level::Warn);
+        assert_eq!(warned.len(), 1, "{warned:?}");
+        assert!(
+            warned[0].starts_with("config.json not written: "),
             "{warned:?}"
         );
     }

@@ -149,12 +149,13 @@ pub struct Step {
     pub commands: Vec<Command>,
 }
 
-/// `Event::Started` with the values a test usually wants: Automatic on, no journal, settings owner, on the console,
-/// this [`TRAY`], not the first run. Change a field with struct update syntax.
+/// `Event::Started` with the values a test usually wants: Automatic on, no journal and it read, settings owner, on the
+/// console, this [`TRAY`], not the first run. Change a field with struct update syntax.
 #[derive(Clone, Debug)]
 pub struct Start {
     pub config: Config,
     pub journal: Option<Journal>,
+    pub journal_unread: bool,
     pub owner: bool,
     pub on_console: bool,
     pub tray: ProcessRef,
@@ -166,6 +167,7 @@ impl Default for Start {
         Self {
             config: Config::default(),
             journal: None,
+            journal_unread: false,
             owner: true,
             on_console: true,
             tray: TRAY,
@@ -179,6 +181,7 @@ impl Start {
         Event::Started {
             config: self.config,
             journal: self.journal,
+            journal_unread: self.journal_unread,
             owner: self.owner,
             on_console: self.on_console,
             tray: self.tray,
@@ -937,6 +940,9 @@ pub struct WorldStart {
     pub leftover: bool,
     /// The start-up restore of that journal fails, so `Started` carries it and the core retries.
     pub startup_fails: bool,
+    /// The start-up read of `journal.json` fails, so nothing is restored at start and `Started` says it did not read
+    /// (power safety review finding 3); with `leftover`, the crashed tray's values stay until the core's retry.
+    pub startup_unread: bool,
     /// The IO thread and the loop keep up: after every step each command runs and each answer is handled.
     pub keep_up: bool,
 }
@@ -954,6 +960,7 @@ impl Default for WorldStart {
             battery_pct: 80,
             leftover: false,
             startup_fails: false,
+            startup_unread: false,
             keep_up: true,
         }
     }
@@ -970,7 +977,7 @@ impl std::fmt::Debug for WorldStart {
         };
         write!(
             f,
-            "start on {}, lid {}, on {} at {} %{}{}{}{}{}{}{}{}",
+            "start on {}, lid {}, on {} at {} %{}{}{}{}{}{}{}{}{}",
             plan_name(PLANS[self.active % PLANS.len()]),
             if self.lid_closed { "closed" } else { "open" },
             if self.ac { "AC" } else { "battery" },
@@ -981,6 +988,7 @@ impl std::fmt::Debug for WorldStart {
             flag(self.locked, "locked"),
             flag(self.leftover, "leftover"),
             flag(self.startup_fails, "startup-restore-fails"),
+            flag(self.startup_unread, "startup-read-fails"),
             flag(self.keep_up, "io-keeps-up"),
             flag(!self.keep_up, "io-lags"),
         )
@@ -1136,8 +1144,16 @@ impl World {
             armed: Vec::new(),
         };
         world.sim.remark(format!("world: {start:?}"));
-        let journal = if start.leftover {
-            world.leftover(active, start.startup_fails)
+        if start.leftover {
+            world.crashed_tray(active);
+        }
+        let journal = if start.startup_unread {
+            world
+                .sim
+                .remark("IO: the start-up read of journal.json fails: nothing restored".to_owned());
+            None
+        } else if start.leftover {
+            world.leftover(start.startup_fails)
         } else {
             None
         };
@@ -1145,6 +1161,7 @@ impl World {
             Start {
                 config: Config::new(start.automatic),
                 journal,
+                journal_unread: start.startup_unread,
                 owner: start.owner,
                 on_console: start.on_console,
                 ..Start::default()
@@ -1166,9 +1183,8 @@ impl World {
         world
     }
 
-    /// A crashed tray's values on `plan_id`, its journal and RunOnce value; the start-up restore runs on them at once,
-    /// its owner being Gone (`p3-power-io`, `startup`), and may fail. Gives the journal `Started` carries.
-    fn leftover(&mut self, plan_id: Guid, fails: bool) -> Option<Journal> {
+    /// A crashed tray's values on `plan_id`, its journal and RunOnce value.
+    fn crashed_tray(&mut self, plan_id: Guid) {
         let values = world_plan(plan_id);
         let entries: Vec<JournalFileEntry> = KEYS
             .into_iter()
@@ -1196,11 +1212,17 @@ impl World {
                 entries,
             });
             state.run_once = true;
-            if fails {
-                // The restore's second call reads the active plan; failing it fails the run before anything changes.
-                let at = state.calls.len() + 1;
-                state.script.insert(at, Action::Fail(2));
-            }
+        }
+    }
+
+    /// The start-up restore runs on the crashed tray's journal at once, its owner being Gone (`p3-power-io`,
+    /// `startup`), and may fail. Gives the journal `Started` carries.
+    fn leftover(&mut self, fails: bool) -> Option<Journal> {
+        if fails {
+            let mut state = self.plans.state();
+            // The restore's second call reads the active plan; failing it fails the run before anything changes.
+            let at = state.calls.len() + 1;
+            state.script.insert(at, Action::Fail(2));
         }
         let (mut io, mut net) = (self.plans.clone(), self.plans.clone());
         let restored = restore(&mut io, &mut net, None, Some(DEAD_TRAY));

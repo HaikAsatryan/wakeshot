@@ -174,11 +174,11 @@ pub fn install_panic_hook(log: Arc<dyn Log>) {
     }));
 }
 
-/// Step 6, before any other thread starts: the executor's startup restore, with one retry when `journal.json` did not
-/// read (orchestrator, card Log 21:06). `Startup` cannot say the read failed, and `Started` then tells the core that
-/// nothing is owned, so a leftover override would stay until an apply, Quit or the end of the session. If the second
-/// read fails too, that is logged and the tray goes on. It takes the `FileNet` forms only: the check reads the net's
-/// own `journal.json`.
+/// Step 6, before any other thread starts: the executor's startup restore, with one quick retry when `journal.json`
+/// did not read (orchestrator, card Log 21:06). `Startup::unread` already makes the core retry it on each tick; this
+/// retry catches a failure of a moment before the tray is up, so a leftover override goes back at once and not at the
+/// first safety tick, while a lid close in between would find it still in force (`p2-6-unread-journal`). If the
+/// second read fails too, that is logged and the tray goes on.
 pub fn startup_restore<P: PlanIo, G: GuardControl>(
     executor: &mut PowerExecutor<P, FileNet<G>>,
     log: &dyn Log,
@@ -195,36 +195,27 @@ fn restore_with_retry<P: PlanIo, G: GuardControl>(
     pause: impl FnOnce(),
 ) -> Startup {
     let first = executor.startup();
-    // Entries came back, so the file read. A file that reads now was missing, restored, or holds only a newer
-    // version's entries: nothing to try again. A read that fails and works again before this check is missed; a
-    // failure that short is not likely (not verified).
-    if first.journal.is_some() || unreadable_journal(executor).is_none() {
+    // Only a read that failed is worth a second try: a missing, corrupt or read file has given its answer.
+    if !first.unread {
         return first;
     }
     let text = format!("journal.json did not read at start; one more try in {JOURNAL_RETRY_MS} ms");
     log.line(Level::Info, AREA, &text);
     pause();
     let second = executor.startup();
-    if second.journal.is_none()
-        && let Some(e) = unreadable_journal(executor)
-    {
-        let text = format!(
-            "journal.json still does not read after one retry: {} failed with {}; the tray starts with nothing owned",
-            e.call, e.code
+    if second.unread {
+        // The executor's own line before this one names the failed call.
+        log.line(
+            Level::Warn,
+            AREA,
+            "journal.json still does not read after one retry; the core retries it on each tick",
         );
-        log.line(Level::Warn, AREA, &text);
     }
     Startup {
         journal: second.journal,
         corrupt: first.corrupt || second.corrupt,
+        unread: second.unread,
     }
-}
-
-/// The same read `FileNet::load_journal` makes: `Some` exactly when that read gives `JournalRead::Failed`.
-fn unreadable_journal<P: PlanIo, G: GuardControl>(
-    executor: &PowerExecutor<P, FileNet<G>>,
-) -> Option<WinError> {
-    store::read_whole(&executor.net().dir().file(DataFile::Journal)).err()
 }
 
 /// `config.json` at start, and whether this is the first run. `first_run` only for a missing file: the core then shows
@@ -349,6 +340,7 @@ pub fn started(
     Event::Started {
         config,
         journal: startup.journal.clone(),
+        journal_unread: startup.unread,
         owner,
         on_console,
         tray: boot.tray,
@@ -727,7 +719,8 @@ mod tests {
             startup,
             Startup {
                 journal: None,
-                corrupt: false
+                corrupt: false,
+                unread: false,
             }
         );
         assert_eq!(rig.stored(), restored_values());
@@ -772,7 +765,8 @@ mod tests {
             startup,
             Startup {
                 journal: None,
-                corrupt: false
+                corrupt: false,
+                unread: false,
             }
         );
         assert!(!paused);
@@ -798,6 +792,7 @@ mod tests {
 
         assert_eq!(pauses, 1);
         assert_eq!(startup.journal, None);
+        assert!(!startup.unread, "the second read worked");
         assert_eq!(rig.stored(), restored_values());
         assert!(!journal.exists());
         assert_eq!(rig.warned("still does not read"), 0);
@@ -819,7 +814,8 @@ mod tests {
             startup,
             Startup {
                 journal: None,
-                corrupt: false
+                corrupt: false,
+                unread: true,
             }
         );
         assert_eq!(rig.warned("still does not read after one retry"), 1);
@@ -835,17 +831,20 @@ mod tests {
             owner: DEAD,
             entries: vec![entry(SettingKey::LidDc)],
         };
-        let startup = Startup {
-            journal: Some(journal.clone()),
-            corrupt: true,
-        };
         let me = process::current().unwrap();
 
-        for (owner, first_run) in [(true, false), (false, true)] {
+        // `unread` never comes with a journal from the executor; the copy is checked field by field all the same.
+        for (owner, first_run, unread) in [(true, false, false), (false, true, true)] {
+            let startup = Startup {
+                journal: Some(journal.clone()),
+                corrupt: true,
+                unread,
+            };
             let event = started(&boot, Config::new(false), first_run, &startup, owner, &log);
             let Event::Started {
                 config,
                 journal: got,
+                journal_unread,
                 owner: got_owner,
                 on_console,
                 tray,
@@ -857,6 +856,7 @@ mod tests {
             assert_eq!(tray, me);
             assert_eq!(config, Config::new(false));
             assert_eq!(got, Some(journal.clone()));
+            assert_eq!(journal_unread, unread);
             assert_eq!((got_owner, got_first_run), (owner, first_run));
             assert_eq!(on_console, session::on_console().unwrap_or(false));
         }

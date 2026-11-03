@@ -82,7 +82,7 @@ lists end up the same. macOS and Linux later add an adapter crate next to `wakes
 | `power::plan` | `Win32Power` and `DryRunPower`, the Windows forms of the core's `PlanIo`; `PlanSetting { LidAc, LidDc, SleepAc, SleepDc, SaverThresholdDc }` (reads need AC sleep and the saver threshold for `PlanValues`; writes stay limited to `SettingKey`) |
 | `power::journal` | `FileNet`, the Windows `SafetyNet` (journal file, RunOnce, guard); `restore_locked`, `apply_locked`, `check_locked`: the core's routines under `Local\Wakeshot.Journal`, the only way any process calls them |
 | `power::executor` | runs `ReadPlan` (`check_locked`, then `PlanIo::values`), `Apply` and `Restore` on the IO thread; the startup restore |
-| `power::hibernate` | the hibernate thread: the last check, the going to sleep sound, `SetSuspendState` |
+| `power::hibernate` | the hibernate thread: the last check, the going to sleep sound, the lid once more, `SetSuspendState` |
 | `power::system` | lid, AC, battery, active plan, suspend and resume notifications |
 | `io_queue` | `IoQueue`: the IO thread's commands in order; `push_front` and the end-of-session rule (section 4) |
 | `session` | session notifications, `lock()`; real and dry run |
@@ -194,10 +194,12 @@ uses them).
 
 ```rust
 pub enum Event {
-    Started { config: Config, journal: Option<Journal>, owner: bool, on_console: bool, tray: ProcessRef,
-              first_run: bool },
+    Started { config: Config, journal: Option<Journal>, journal_unread: bool, owner: bool, on_console: bool,
+              tray: ProcessRef, first_run: bool },
                                                 // config wins over Core::new's; journal: known entries only, None
-                                                // when there are none; owner: holds the settings mutex; on_console:
+                                                // when there are none; journal_unread: journal.json did not read at
+                                                // start, so the core retries it as Restore { why: Leftover } on
+                                                // each tick; owner: holds the settings mutex; on_console:
                                                 // this session is the one on the PC's own screen
                                                 // (WTSGetActiveConsoleSessionId); tray: this tray's own process,
                                                 // for state.json and the Keep awake hold; first_run: config.json
@@ -798,9 +800,11 @@ aside with a warning; the log holds the old values.
   still at least 5 minutes with no resume since the countdown started, and for the Floor reason still on battery and
   under the floor. Then SeShutdownPrivilege (works from a process started by Explorer, tested) and
   `IsPwrHibernateAllowed`, then the "going to sleep" sound (Phase 5 sets how long the thread waits for it; a failed
-  sound is logged and the run goes on), then `SetSuspendState(TRUE, FALSE, FALSE)` (hibernates here, returns only
-  after resume, tested). The two checks come before the sound, so a PC with hibernate off never plays "going to
-  sleep" and then stays awake (card `p3-hibernate`). Not allowed or failed: a notice; settings are already
+  sound is logged and the run goes on), then the lid once more (open or no answer: no hibernate, so a user who hears
+  the sound can open the lid to stop it; an agent turn that starts during the sound is not seen, since nothing
+  cancels the thread), then `SetSuspendState(TRUE, FALSE, FALSE)` (hibernates here, returns only after resume,
+  tested). The two checks come before the sound, so a PC with hibernate off never plays "going to sleep" and then
+  stays awake (card `p3-hibernate`). Not allowed or failed: a notice; settings are already
   restored, so Windows' own timers most likely apply (inferred; with the lid closed not tested, checklist 2); with
   the lid still closed the core then locks it whenever it is left idle (section 3, "Countdown").
 
@@ -851,7 +855,8 @@ Velopack accepts the dot: pack, install, updates, Setup.exe over an install and 
 research "Velopack checks for Wakeshot", point 1).
 
 Every file is UTF-8 JSON with `"version": 1`. A reader takes its own version and older ones. A file with a newer
-version is ignored and logged; the journal is the one exception (below). The reader reads `VersionProbe` first, so a
+version is ignored and logged, and never written over (the tray's menu then changes Automatic for this run only, and
+`wakeshot automatic` refuses with a message); the journal is the one exception (below). The reader reads `VersionProbe` first, so a
 newer file whose fields changed shape is still recognized as newer. Writes go to a temp file, flush, then
 `MoveFileExW(REPLACE_EXISTING | WRITE_THROUGH)` (Nightcrew's way). That gives 5 while a reader has the target open, so
 `store::write_atomic` then renames by handle with POSIX semantics (`SetFileInformationByHandle(FileRenameInfoEx)`), as

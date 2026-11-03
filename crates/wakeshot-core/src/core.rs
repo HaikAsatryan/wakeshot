@@ -81,6 +81,7 @@ impl Core {
             Event::Started {
                 config,
                 journal,
+                journal_unread,
                 owner,
                 on_console,
                 tray,
@@ -97,8 +98,10 @@ impl Core {
                 state.on_console = on_console;
                 state.tray = tray;
                 state.journal = journal.map(|j| j.entries).unwrap_or_default();
-                // Start-up already tried this restore once; the tick retries it until it works (track note 9).
-                if !state.journal.is_empty() {
+                // Start-up already tried this restore once; the tick retries it until it works (track note 9). A
+                // journal that did not read may hold a crashed tray's values, so the copy stays empty and the retry
+                // reads it again (power safety review finding 3).
+                if !state.journal.is_empty() || journal_unread {
                     state.retry = Some(RestoreWhy::Leftover);
                 }
                 if first_run {

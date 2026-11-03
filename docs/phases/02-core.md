@@ -135,7 +135,7 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | `p2-core-settings` | no (Phase 1 Question 10: default, console part built; Haik 2026-11-03 18:09) | `p2-core-holds` | done (21:06): 34 tests, 12 of 12 mutants caught |
 | `p2-core-lid` | no | `p2-core-settings` | done (21:46): 57 scenarios, 19 of 19 mutants caught; fixed a lid lock gap in the first seconds of a hold |
 | `p2-core-props` | no | `p2-core-lid`, `p2-ownership-apply` | done (23:29): 13 properties at 10,000 cases; two findings kept as ignored tests |
-| `p2-6-unread-journal` | no | core round B (Log in `p2-core-settings`); runs alone among cards that build | in progress (started 02:30; power findings 3 and 6, and the newer `config.json` write check) |
+| `p2-6-unread-journal` | no | core round B (Log in `p2-core-settings`); runs alone among cards that build | done (committed 02:51): findings 3 and 6, the newer `config.json` write check; 1256 workspace tests |
 
 No card touches the real laptop (no power settings, screen, sound or installs) or needs Haik's hands. "Contracts
 card": the one card the orchestrator runs alone before the track builds.
@@ -267,3 +267,12 @@ Where each item this track owns is built. "Integration" is planned after the tra
   B's `WriteConfig` check). Orchestrator decision, for Haik's review: it runs beside `p6-int-tray-mode` Part A and
   `p5-sounds` Part B, not alone: neither of them builds `Event::Started` or `Startup`, and the worker makes the
   contract change in one quick pass before its first cargo run. Pushed 8ff7fa5 at 02:30 (both known flaky tests fixed).
+- 2026-11-04 02:51 (orchestrator, session `wakeshot-46`): `p2-6-unread-journal` done and committed. `Startup.unread`
+  and `Event::Started.journal_unread`: a startup journal read that fails now retries as `Leftover` on each tick (power
+  finding 3); the hibernate thread checks the lid once more after the going to sleep sound (finding 6; an agent turn
+  that starts during the sound is not covered); the `WriteConfig` runner never writes over a newer `config.json`
+  (round B's `core.rs:159` item). 6 new core tests (4 of them catch the mutant that ignores the flag), 2 config tests;
+  workspace 1256 passed, 30 ignored. Decided by the worker, for Haik's review: the 500 ms startup retry stays, now
+  keyed on `unread`; no notice at start for an unread journal; the random World start does not draw the unread case.
+  Seen: two `app::window` timer tests failed under load in 2 of 5 runs (not its file; may flake CI; routed to a small
+  test fix).

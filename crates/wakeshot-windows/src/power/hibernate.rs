@@ -1,4 +1,4 @@
-//! The hibernate thread: the last check, the going to sleep sound, `SetSuspendState`.
+//! The hibernate thread: the last check, the going to sleep sound, the lid once more, `SetSuspendState`.
 //!
 //! Owner: `p3-hibernate`.
 //!
@@ -71,9 +71,11 @@ pub trait HibernateDeps: Send + Sync {
 /// 4. SeShutdownPrivilege: a failure is `Failed`;
 /// 5. `IsPwrHibernateAllowed`: false is `NotAllowed`;
 /// 6. the going to sleep sound, waited for; a failed sound is logged and the run goes on;
-/// 7. `SetSuspendState(TRUE, FALSE, FALSE)`: an error is `Failed`, a return after resume is `Resumed`.
+/// 7. the lid once more, as in step 1, so a lid opened while the sound played skips the hibernate;
+/// 8. `SetSuspendState(TRUE, FALSE, FALSE)`: an error is `Failed`, a return after resume is `Resumed`.
 ///
-/// Every failure is the safe side: no hibernate. The settings are already restored when the core sends `Hibernate`,
+/// An agent turn that starts during the sound is not seen: only the core knows of it, and nothing stops this thread
+/// (power safety review finding 6). Every failure is the safe side: no hibernate. The settings are already restored when the core sends `Hibernate`,
 /// so the core's answer to a skip or a failure is a notice or another countdown, never a running laptop it holds.
 pub fn run_hibernate(
     reason: CountdownReason,
@@ -90,7 +92,7 @@ pub fn run_hibernate(
         "last check before hibernate, {}",
         reason_text(reason)
     ));
-    let checks = check_lid(deps, log)
+    let checks = check_lid(deps, log, false)
         .and_then(|()| check_idle(last_resume_mono_ms, deps, log))
         .and_then(|()| match reason {
             CountdownReason::Floor => check_floor(floor_pct, deps, log),
@@ -124,6 +126,12 @@ pub fn run_hibernate(
         )),
     }
 
+    // The sound plays for seconds (`p3-hibernate` Found outside scope 3): a user who hears it may open the lid to stop
+    // the sleep.
+    if let Err(skip) = check_lid(deps, log, true) {
+        return HibernateEnd::Skipped(skip);
+    }
+
     // Logged before the call: if the PC never comes back, the log still shows how far the run got.
     info("calling SetSuspendState(TRUE, FALSE, FALSE)");
     match deps.hibernate() {
@@ -138,21 +146,27 @@ pub fn run_hibernate(
     }
 }
 
-fn check_lid(deps: &dyn HibernateDeps, log: &dyn Log) -> Result<(), HibernateSkip> {
+/// `after_sound`: the second check, right before the call; its lines say so.
+fn check_lid(
+    deps: &dyn HibernateDeps,
+    log: &dyn Log,
+    after_sound: bool,
+) -> Result<(), HibernateSkip> {
+    let when = if after_sound { " after the sound" } else { "" };
     match deps.lid_closed() {
         Some(true) => {
-            log.line(Level::Info, AREA, "lid closed");
+            log.line(Level::Info, AREA, &format!("lid closed{when}"));
             Ok(())
         }
         Some(false) => {
-            log.line(Level::Info, AREA, "lid open: no hibernate");
+            log.line(Level::Info, AREA, &format!("lid open{when}: no hibernate"));
             Err(HibernateSkip::LidOpen)
         }
         None => {
             log.line(
                 Level::Warn,
                 AREA,
-                &format!("no lid state within {LID_WAIT_MS} ms: no hibernate"),
+                &format!("no lid state within {LID_WAIT_MS} ms{when}: no hibernate"),
             );
             Err(HibernateSkip::LidUnknown)
         }
@@ -544,6 +558,8 @@ impl HibernateDeps for FakeHibernate {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
     use wakeshot_core::command::Failure;
     use windows::Win32::Security::{
         GetTokenInformation, TOKEN_ACCESS_MASK, TOKEN_PRIVILEGES_ATTRIBUTES, TOKEN_QUERY,
@@ -562,14 +578,15 @@ mod tests {
     /// `FakeHibernate`'s mono now.
     const T0: u64 = 7_200_000;
 
-    /// Every call of a run whose checks all pass, for the `Floor` reason.
-    const ALL_FLOOR: [HibernateCall; 7] = [
+    /// Every call of a run whose checks all pass, for the `Floor` reason. The second `Lid` comes after the sound.
+    const ALL_FLOOR: [HibernateCall; 8] = [
         Lid,
         InputIdle,
         MonoNow,
         PowerStatus,
         Privilege,
         Allowed,
+        Lid,
         Hibernate,
     ];
 
@@ -804,7 +821,7 @@ mod tests {
                     call: "SetSuspendState",
                     code: 5,
                 }),
-                7,
+                8,
             ),
         ]
     }
@@ -866,6 +883,101 @@ mod tests {
                 &[]
             };
             assert_eq!(r.played, expected, "{name}");
+        }
+    }
+
+    /// The fake's answers, but the lid reads `after` once the sound has played: the user opened it while the sound
+    /// played, or its state got lost.
+    struct LidDuringSound {
+        fake: FakeHibernate,
+        after: Option<bool>,
+        played: AtomicBool,
+    }
+
+    impl HibernateDeps for LidDuringSound {
+        fn lid_closed(&self) -> Option<bool> {
+            let before = self.fake.lid_closed();
+            if self.played.load(Ordering::SeqCst) {
+                self.after
+            } else {
+                before
+            }
+        }
+
+        fn input_idle_ms(&self) -> Result<u64, WinError> {
+            self.fake.input_idle_ms()
+        }
+
+        fn mono_now_ms(&self) -> u64 {
+            self.fake.mono_now_ms()
+        }
+
+        fn power_status(&self) -> Result<(bool, Option<u8>), WinError> {
+            self.fake.power_status()
+        }
+
+        fn enable_shutdown_privilege(&self) -> Result<(), WinError> {
+            self.fake.enable_shutdown_privilege()
+        }
+
+        fn hibernate_allowed(&self) -> bool {
+            self.fake.hibernate_allowed()
+        }
+
+        fn hibernate(&self) -> Result<(), WinError> {
+            self.fake.hibernate()
+        }
+    }
+
+    impl SoundPlayer for LidDuringSound {
+        fn play(&self, cue: Cue) {
+            panic!("the hibernate thread only plays and waits, got play({cue:?})");
+        }
+
+        fn play_and_wait(&self, cue: Cue) -> Result<SoundEnd, WinError> {
+            assert_eq!(cue, Cue::GoingToSleep);
+            self.played.store(true, Ordering::SeqCst);
+            Ok(SoundEnd::Played)
+        }
+    }
+
+    /// Power safety review finding 6: the lid is read once more after the sound, right before the call.
+    #[test]
+    fn lid_opened_during_the_sound_skips() {
+        for (after, skip, level, line) in [
+            (
+                Some(false),
+                HibernateSkip::LidOpen,
+                Level::Info,
+                "lid open after the sound: no hibernate",
+            ),
+            (
+                None,
+                HibernateSkip::LidUnknown,
+                Level::Warn,
+                "no lid state within 2000 ms after the sound: no hibernate",
+            ),
+        ] {
+            let deps = LidDuringSound {
+                fake: FakeHibernate::default(),
+                after,
+                played: AtomicBool::new(false),
+            };
+            let log = MemoryLog::default();
+            let end = run_hibernate(Floor, FLOOR, None, &deps, &deps, &log);
+            assert_eq!(end, HibernateEnd::Skipped(skip), "{after:?}");
+            assert!(deps.played.load(Ordering::SeqCst), "{after:?}");
+            assert_eq!(
+                deps.fake.calls(),
+                ALL_FLOOR[..7],
+                "{after:?}: no hibernate call"
+            );
+            let lines = log.lines.lock().unwrap();
+            assert_eq!(
+                lines.last().map(|(l, _, text)| (*l, text.as_str())),
+                Some((level, line)),
+                "{after:?}"
+            );
         }
     }
 
@@ -958,7 +1070,7 @@ mod tests {
         assert_eq!(r.played, [Cue::GoingToSleep]);
         assert_eq!(
             fake.calls(),
-            [Lid, InputIdle, MonoNow, Privilege, Allowed, Hibernate]
+            [Lid, InputIdle, MonoNow, Privilege, Allowed, Lid, Hibernate]
         );
     }
 
@@ -978,6 +1090,7 @@ mod tests {
                 "SeShutdownPrivilege enabled",
                 "hibernate allowed",
                 "going to sleep sound played",
+                "lid closed after the sound",
                 "calling SetSuspendState(TRUE, FALSE, FALSE)",
                 "SetSuspendState returned TRUE: the PC resumed",
             ]
@@ -1004,7 +1117,7 @@ mod tests {
         assert_eq!(end, HibernateEnd::Resumed, "every check passed");
         assert_eq!(
             dry.reads.calls(),
-            [Lid, InputIdle, MonoNow, PowerStatus, Allowed],
+            [Lid, InputIdle, MonoNow, PowerStatus, Allowed, Lid],
             "only the reads reach the inner deps"
         );
         let lines = log.lines.lock().unwrap();

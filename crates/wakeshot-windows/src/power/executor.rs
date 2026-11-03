@@ -48,6 +48,10 @@ pub struct Startup {
     /// `None` when there are none. The core retries what is left as `Restore { why: Leftover }`. `None` also when
     /// `journal.json` did not read at all (logged): nothing can be known then.
     pub journal: Option<Journal>,
+    /// `Event::Started`'s `journal_unread`: `journal.json` did not read (`JournalRead::Failed`), so nothing was
+    /// restored and what it holds is not known. The core then retries it as `Restore { why: Leftover }` on each tick,
+    /// whose run reads the file again, checks its owner and restores. `false` for a missing, corrupt or read file.
+    pub unread: bool,
     /// A corrupt journal was found: set aside by this restore, or left as `journal.json.corrupt` by restore mode, the
     /// guard or a hook. It is renamed `journal.json.corrupt.seen` already, so post `Event::JournalCorrupt` once, after
     /// `Started` (and after `Session(Locked)` when that comes).
@@ -143,15 +147,19 @@ impl<P: PlanIo, N: SafetyNet> PowerExecutor<P, N> {
     }
 
     /// Tray startup step 6, on the tray's main thread before any other thread starts. A journal whose owner is Gone is
-    /// restored at once; one whose owner is alive or Unknown is left for the core's `Leftover` retry on the tick. A
-    /// corrupt `journal.json` is set aside, as any restore would: no owner can be read from it, and setting it aside
-    /// writes no setting. A `journal.json.corrupt` left by restore mode, the guard or a hook is reported once.
+    /// restored at once; one whose owner is alive or Unknown, or one that does not read (`Startup::unread`), is left
+    /// for the core's `Leftover` retry on the tick. A corrupt `journal.json` is set aside, as any restore would: no
+    /// owner can be read from it, and setting it aside writes no setting. A `journal.json.corrupt` left by restore
+    /// mode, the guard or a hook is reported once.
     pub fn startup(&mut self) -> Startup {
-        let (journal, set_aside) = match self.net.load_journal() {
+        let read = self.net.load_journal();
+        let unread = matches!(read, JournalRead::Failed(_));
+        let (journal, set_aside) = match read {
             JournalRead::Missing => (None, false),
             JournalRead::Failed(f) => {
                 let text = format!(
-                    "startup: journal.json does not read: {}; nothing restored at start",
+                    "startup: journal.json does not read: {}; nothing restored at start, the core retries it on \
+                     each tick",
                     error_text(f)
                 );
                 self.note(Level::Warn, &text);
@@ -167,6 +175,7 @@ impl<P: PlanIo, N: SafetyNet> PowerExecutor<P, N> {
         Startup {
             journal: journal.filter(|j| !j.entries.is_empty()),
             corrupt: set_aside || left_by_others,
+            unread,
         }
     }
 
@@ -1067,7 +1076,8 @@ mod tests {
             startup,
             Startup {
                 journal: None,
-                corrupt: false
+                corrupt: false,
+                unread: false,
             }
         );
         let s = rig.fake.state();
@@ -1098,6 +1108,7 @@ mod tests {
                     entries
                 }),
                 corrupt: false,
+                unread: false,
             }
         );
         let s = rig.fake.state();
@@ -1116,6 +1127,57 @@ mod tests {
         assert_left_alone(Alive::Yes);
     }
 
+    /// Power safety review finding 3: a journal that does not read is left as it is and said so, for the core's
+    /// `Leftover` retry; every other answer of the read is not `unread`.
+    #[test]
+    fn startup_says_when_the_journal_does_not_read() {
+        let rig = Rig::new("start-not-read");
+        overridden(&rig.fake, DEAD, &ALL, vec![]);
+        rig.script_next(0, Action::Fail(32));
+
+        let startup = rig.executor().startup();
+
+        assert_eq!(
+            startup,
+            Startup {
+                journal: None,
+                corrupt: false,
+                unread: true,
+            }
+        );
+        let s = rig.fake.state();
+        assert_eq!(s.calls, [Call::LoadJournal]);
+        assert_eq!(s.held().len(), 3);
+        assert!(s.run_once);
+        drop(s);
+        assert!(rig.warned("startup: journal.json does not read: "));
+
+        // The first `Leftover` retry reads it again and restores, its owner being Gone.
+        let mut executor = rig.executor();
+        let events = executor.run(&Command::Restore {
+            plan: None,
+            why: RestoreWhy::Leftover,
+        });
+        assert!(
+            matches!(
+                events.as_slice(),
+                [Event::Done(Outcome::Restored { result: Ok(()), journal, .. })] if journal.is_empty()
+            ),
+            "{events:?}"
+        );
+        assert!(rig.fake.state().held().is_empty());
+
+        for journal in [
+            FakeJournal::Missing,
+            FakeJournal::Corrupt,
+            FakeJournal::File(journal_file(DEAD, vec![])),
+        ] {
+            let rig = Rig::new("start-read");
+            rig.fake.state().journal = journal.clone();
+            assert!(!rig.executor().startup().unread, "{journal:?}");
+        }
+    }
+
     #[test]
     fn startup_reports_corrupt_left_by_restore_mode() {
         let rig = Rig::new("start-corrupt-left");
@@ -1124,10 +1186,12 @@ mod tests {
         let none_found = Startup {
             journal: None,
             corrupt: false,
+            unread: false,
         };
         let found = Startup {
             journal: None,
             corrupt: true,
+            unread: false,
         };
 
         assert_eq!(rig.executor().startup(), found);
@@ -1319,7 +1383,8 @@ mod tests {
             *startup,
             Startup {
                 journal: None,
-                corrupt: false
+                corrupt: false,
+                unread: false,
             },
             "{case}"
         );
