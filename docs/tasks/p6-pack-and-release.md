@@ -158,7 +158,7 @@ Done 2026-11-04 02:19.
 
 **Outside scope**
 - None new. Known: `06-ship.md` "Hooks" still says 12 s for the updated hook (code uses 10 s).
-- 2026-11-04 02:40, orchestrator (session `wakeshot-46`): manual dry run of `release.yml` on 8ff7fa5, run 41731897399.
+- 2026-11-04 02:39, orchestrator (session `wakeshot-46`): manual dry run of `release.yml` on 8ff7fa5, run 41731897399.
   Version job passed; on both CPUs build, pack and the silent install and uninstall passed, with 22 smoke checks each.
   3 checks failed on each, as expected until `p6-velopack-dependency` wires `VelopackApp`: the Run value, the user Path
   entry, the install hook's log line (Velopack logs "Hook exited with non-zero exit code: 2": the tray exe does not
