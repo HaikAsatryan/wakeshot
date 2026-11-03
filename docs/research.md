@@ -2650,6 +2650,69 @@ High). Times are from one run with the crate's other tests running beside them.
   the file was touched (seen 2026-11-04: the restored tests failed exactly as under the mutation). Touch the file, or
   restore it with a write, after such a check.
 
+## Power track real checks
+
+Checked 2026-11-04 00:32 to 00:52 for card `docs/tasks/p3-real-checks.md` on this laptop (Windows 11 Pro
+10.0.26300), with the x64 debug build of `power_check` and `wakeshot-tray` (tree of 00:36), from an elevated (High)
+agent shell. The laptop was on battery (93%) and undocked, lid open; the screen was off from 00:42:37 (idle timer)
+until a touchpad touch at 00:48:56. The orchestrator's own SYSTEM request (a pwsh helper) was held all through. Haik's
+values before (00:32:57) and after (00:52:26), by `powercfg /qh` and our read: Balanced active and the only plan, lid
+AC 1 and DC 1, sleep AC 18000 and DC 18000, energy saver DC 30; no journal, no `WakeshotRestore` value. Logs and
+scripts: the card's Log.
+
+- **The track's real tests pass on the finished power code.** `cargo test --locked -p wakeshot-windows -- --ignored
+  --test-threads=1 --skip real_lock_locks power:: process:: session:: recovery::`: 16 passed (plan 4, stop points 4,
+  system 2, process 2 plus a helper role, recovery helper role, session 2), and `-p wakeshot-tray --test recovery --
+  --ignored`: 2 passed. `real_lock_locks` was not run (it locks the screen; `p3-haik-checks`).
+- **A Medium process started through Explorer creates a `Global\` mutex** (checklist 11, first part).
+  `explorer.exe <file>.cmd` from the elevated shell ran the file at Medium (cmd <- `explorer.exe
+  /factory,{75dff2b7-...} -Embedding` <- svchost); `power_check medium-probe` read "integrity Medium (0x2000),
+  elevation type Limited" and created and took `Global\Wakeshot.Probe.<pid>`. A denied open across users
+  (architecture section 4): not tested (no second account). The factory Explorer instance ended by itself within
+  minutes.
+- **The journal lock works across integrity levels, both ways.** A pwsh script made the same call as
+  `NamedMutex::open` (`CreateMutexExW`, default security, flags 0, `SYNCHRONIZE | MUTEX_MODIFY_STATE`; take by
+  `WaitForSingleObject`) on probe names in `Local\`. High holder, Medium opener: the open gave a handle with error 183,
+  `take(0)` gave 258 while held and 0 after the holder's release. Medium holder, High opener: the same. A High creator
+  gives the object owner BA and full access (0x1f0001) to SYSTEM, BA and the logon session SID (`S-1-5-5-0-...`); a
+  Medium creator gives owner the user and full access to SYSTEM, the user and the same logon SID. Both tokens carry
+  that logon SID, so each side opens the other's mutex. So an elevated `wakeshot restore` holding the lock makes the
+  Medium tray wait, not fail with 5 (the case in `docs/reviews/p2-6-power-safety.md` finding 8). Not run with the Rust
+  exes and not under the real name `Local\Wakeshot.Journal`; the object type, namespace, call and access are the same.
+- **The real guard restores after a crash of a Medium tray.** `power_check fake-tray` at Medium in
+  `%LocalAppData%\Wakeshot`: copy written (lid AC 0, lid DC 0, sleep DC 0), journal with three entries, RunOnce value,
+  guard `wakeshot-tray.exe --guard ...` with the shell Explorer as parent. `taskkill /PID <tray> /F`: the guard logged
+  "tray pid ... is gone" 270 ms after the kill, wrote the three originals back, deleted the journal and removed the
+  RunOnce value within 10 ms more, and exited; journal and guard process gone within 300 ms of the kill (polled every
+  100 ms). The copy read its original values by `powercfg /qh`. `power_check cleanup` then deleted the copy.
+- **Activating a plan applies its stored values; a write to an inactive plan does not change the values in force.**
+  Read with `CallNtPowerInformation` `SystemPowerPolicyAc` (0) and `SystemPowerPolicyDc` (1) (`SYSTEM_POWER_POLICY`,
+  232 bytes; `LidClose.Action` at offset 28, `IdleTimeout` at 60). Balanced: lid action 2 (Sleep) on AC and DC, DC idle
+  Sleep after 18000 s. A copy given lid AC 0, lid DC 0 and sleep DC 0 by `powercfg /set*valueindex` while inactive: the
+  same 0.5 s later. `powercfg /setactive <copy>`: lid 0 on AC and DC, DC idle after 2147483647 s (Never). Balanced
+  again: back to 2 and 18000 s. This covers both points architecture section 5 "Plan switch" lists as not tested.
+  `SystemPowerPolicyCurrent` (8) read lid 3 and idle 0 for Balanced on battery, unlike the DC policy; why: not
+  verified, so it is not used as a measure.
+- **50 apply and restore cycles on an active copy** (checklist 15). `power_check cycles 50`, 1000 ms pauses, 108 s:
+  100 `PowerSetActiveScheme` calls, min 33.2, median 51.5, max 121.8 ms; 11 cycles had one call over 100 ms. Each
+  apply took effect: the DC policy in force flipped between lid 2 with 18000 s and lid 0 with Never, 103 times.
+  Display brightness (`WmiMonitorBrightness`, sampled about every 220 ms, 519 samples): 100 in every sample, before,
+  during and after each cycle. System and Application logs for the run: no error or warning. A flicker someone could
+  see: not verified (nobody watched; the screen was off for cycles 1 to 24, on at the lock screen from cycle 25). Other
+  apps' setting callbacks: no app logged an error; nothing more checked. On AC: not run.
+- **Each `PowerSetActiveScheme` call writes one System log event.** `Microsoft-Windows-UserModePowerService` event 12
+  (Information), "Process <exe> (process ID:<pid>) reset policy scheme from {<old>} to {<new>}": 102 in the cycles
+  run, one per call. So the tray adds about two per hold (one at its apply, one at its restore; inferred from
+  architecture section 5, not counted on a tray).
+- **A change in Settings can be dated.** Settings writes show as the same event 12 with
+  `C:\Windows\ImmersiveControlPanel\SystemSettings.exe` as the process, and the setting's key under
+  `HKLM\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\<plan>\<subgroup>\<setting>` gets a new last write
+  time (`RegQueryInfoKeyW`). Here: both sleep values went from 10800 and 14400 to 18000 at 00:31:08, before the card
+  started.
+- **Wake reason in the System log.** Kernel-Power 507 "exiting Modern Standby" carries the reason ("Input
+  Touchpad"), and 566 the session reason ("InputPoUserPresent"); 506 "entering Modern Standby" said "Idle Timeout"
+  for the screen-off timer. Useful for the battery runs of `p3-haik-checks`.
+
 ## Claude UI stop notice checks
 
 Card `docs/tasks/p4-claude-transcript.md`, section "Claude parsing review fixes, round 2 (2026-11-04)"; verify
