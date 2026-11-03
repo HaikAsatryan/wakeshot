@@ -1744,3 +1744,84 @@ Checked 2026-11-03 by `p3-session`. Reads only: no lock, sign-out, sleep or sett
   final code only `Some(true)` was seen; `p3-real-checks` step 2 runs `real_locked_now_here` again.
 - **Registration on a hidden window.** `session::tests::register_on_hidden_window`: a never-shown top-level window of
   the system `STATIC` class; register, drop, register again and `unregister()` all returned without error.
+
+## Power IO checks
+
+Checked 2026-11-03 for card `docs/tasks/p3-power-io.md`, by the tests in `power::executor::tests` and
+`io_queue::tests` (Windows 11 Pro 10.0.26300, test build, which unwinds on panic; temp folders and `Names::test`
+mutexes; test runner elevated, High).
+
+- **A stop inside `restore_locked` releases the journal mutex.** In `startup_stop_points`, `FakePlans` panicked at
+  every call of the startup restore of three starting states, also while `restore_locked` held its test journal
+  mutex. After each stop another thread took that mutex with a 0 ms wait. The other thread matters: a Windows mutex
+  counts per owning thread, so the same thread would take it again even if it were never released. A release build
+  aborts on panic instead, and the next taker then gets `WAIT_ABANDONED` ("Journal seam checks").
+- **A set-aside over an older `.seen` keeps the newer bytes.** `corrupt_journal_gives_event_once` set two corrupt
+  journals aside through `FileNet::dry_run` and marked each seen; `journal.json.corrupt.seen` then held the second
+  file's bytes, as "Journal seam checks" found for `std::fs::rename` over an existing target.
+- **Not tested: the executor on real plans.** Every test here ran on `FakePlans`; `p3-harness` and `p3-real-checks`
+  drive it over a plan copy.
+
+## Watch reads checks
+
+Checked 2026-11-03 for card `docs/tasks/p4-watch-reads.md`, by the tests in `watch::read::tests` (Windows 11 Pro
+10.0.26300, NTFS, files in `%TEMP%`; test runner elevated, High) unless a line names another source. No check here
+depends on elevation: share modes and byte range locks apply to every token.
+
+- **A reader with full sharing blocks no writer.** While a handle with read, write and delete sharing was open, a
+  second handle wrote the file in place, `std::fs::rename` replaced it, and `std::fs::remove_file` deleted it; each
+  returned `Ok` (`whole_read_shares_with_a_writer_that_writes_renames_and_deletes`). A writer that shared no read
+  made the read fail at once with 32 (`ERROR_SHARING_VIOLATION`), not wait
+  (`whole_read_fails_at_once_while_a_writer_shares_no_read`).
+- **std's defaults on Windows.** Read in the toolchain's std source (Rust 1.99.1, `library/std/src/sys/fs/windows.rs`):
+  `OpenOptions::new()` sets `share_mode` to `FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE`;
+  `DirEntry::file_type` and `DirEntry::metadata` come from the `WIN32_FIND_DATAW` of the listing (no open);
+  `fs::metadata` opens the path with access 0 and `FILE_FLAG_BACKUP_SEMANTICS`, falling back to `FindFirstFileExW` on
+  32 or 5. `FileType::is_dir` and `is_file` are false for a reparse point whose tag has the name surrogate bit
+  (`0x20000000`: symlinks and junctions), so a walk that follows only `is_dir` never enters a folder link.
+- **Win32 name trimming.** With a file `x.key` in a scratch folder, `cmd /d /c type` of `x.key.`, `x.key ` (trailing
+  space), `x.key. . ` and `x.key\..\x.key` each printed its content, and .NET `File.ReadAllText` of `x.key::$DATA`
+  did too (cmd refused that name). So a name filter that sees `x.key.` or `x.key::$DATA` but not `x.key` can still
+  open `x.key`; `read_whole` refuses names that end in a dot or a space or hold a `:`
+  (`name_guard_refuses_a_key_file_even_with_a_crafted_path`, with the key file held open with no sharing, so any open
+  of it would fail with 32 instead of the guard's `InvalidInput`).
+- **A rename over a file changes its file id.** `GetFileInformationByHandleEx(FileIdInfo)` gave a new id for the file
+  `std::fs::rename` put under the old name, and the same id after an in-place truncate
+  (`tail_restarts_when_the_file_is_replaced`, `tail_restarts_when_the_file_gets_shorter`). The tail compares ids, not
+  creation times, because NTFS tunneling can give a new file under a recently freed name the old creation time (from
+  memory of Microsoft's docs: not verified). FAT, which has no stable ids: not tested.
+- **A listing does not disturb a lock.** With one file opened with no sharing and another locked whole by
+  `LockFileEx(LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY)`, `names` listed both; afterwards a second handle's
+  `LockFileEx` failed with 33 (`ERROR_LOCK_VIOLATION`), an open of the no-sharing file failed with 32, and the holder's
+  `UnlockFileEx` returned `Ok` (`names_lists_locked_files_without_disturbing_the_lock`).
+- **Folder times for "newest first".** `File::set_modified` on a folder opened with `FILE_WRITE_ATTRIBUTES` and
+  `FILE_FLAG_BACKUP_SEMANTICS` set the time the listing then reported (`find_takes_exactly_one_level_with_decoys`,
+  `find_takes_exactly_three_levels_with_decoys`). When Codex's date folders and Claude's project folders get a new
+  write time in practice (an entry added or removed, not a file in it growing): not verified.
+
+## Core settings checks
+
+Checked 2026-11-03 for card `docs/tasks/p2-core-settings.md`.
+
+- **PowerShell drops a bare `--` passed to a `.ps1` script.** `& cargo.ps1 clippy ... -- -D warnings` reached cargo
+  without the `--` (cargo: `unexpected argument '-D' found`); the same call with `'--'` quoted ran clippy. A helper
+  script that forwards `@args` to cargo needs the quoted form.
+- **The settings scenarios catch the card's mutants.** Twelve mutants planted by hand in a scratch copy, each run
+  against `cargo test --locked -p wakeshot-core scenarios::` and reverted: all twelve failed at least one test (list in
+  the card's Result). A mutant that clears the released keys at a plan switch (the effect of keying them by plan)
+  failed two tests; one that lets the retry take the active plan's entries failed one; one that applies after
+  `Session(Ending)` failed three, the property among them.
+- **`settings_events_in_any_order` runs 10,000 cases in about 10 s.** `PROPTEST_CASES=10000`, debug build, this laptop:
+  9.9 s, no failure.
+
+## Watch data checks
+
+Checked 2026-11-03 for card `docs/tasks/p4-watch-data.md`, by the tests in `watch::data::tests` (Windows 11 Pro
+10.0.26300, NTFS, data folders on `%TEMP%` through `DataDir::at`; test runner elevated, High).
+
+- **A write time set to the 100 ns comes back exact.** `File::set_modified` with a `SystemTime` built from a FILETIME
+  (2026-11-03 12:00:00 UTC, and that minus or plus 100 ns as process starts) gave the same FILETIME from
+  `MetadataExt::last_write_time` on a later handle, so the "started at or before the write time" rule was tested at
+  its edge (`missing_proc_start_counts_a_process_started_by_the_write_time`).
+- **A hold file held with no sharing reads as error 32**, not as missing, so it is retried and then logged, never
+  read as a deleted hold (`an_unreadable_file_is_retried_then_logged`).
