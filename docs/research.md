@@ -1606,3 +1606,34 @@ dock, from an elevated (High) agent shell, with `cargo test --locked -p wakeshot
   `wakeshot-core` (lib) due to 25 previous errors". So `-D warnings` reaches every workspace crate the build lints,
   not only the `-p` package (cargo's clippy wrapper is a workspace wrapper; that reason is from memory, not
   verified in the cargo docs). A card's own clippy check can therefore fail on a half-done file in another crate.
+
+## Apply and ownership check checks
+
+Checked 2026-11-03 by `p2-ownership-apply`, with the core's tests against `ownership::fake::FakePlans` (a model of
+Windows, not Windows itself).
+
+- **Two Win32 codes.** `ERROR_FILE_CORRUPT` is 1392 and `ERROR_INVALID_DATA` is 13: read in the `windows` 0.62.2
+  source in the local cargo registry (`src/Windows/Win32/Foundation/mod.rs`; `windows-sys` 0.61.2 says the same).
+  The apply and the check use them for two failures Windows gives no code for: a journal that does not parse, and a
+  read-back that returns another value.
+- **Apply step 3's takeover text, read literally, puts back an old value.** "A key that already has an entry for
+  this plan keeps its `original` and its `restored` mark". For an entry the user changed while a restore waited (the
+  check skips marked entries, so no `UserChanged` came), keeping that `original` makes the next restore write the
+  value from before the user's change. The apply takes an entry over only while it is ours (live equals `written`, or
+  marked with live equal to `original`, restore step 3's two "ours" cases); any other entry becomes a new one with the
+  live value as `original`. Shown by `apply::tests::an_entry_no_longer_ours_gets_the_live_value_as_original`.
+- **A stop walk over all three taken-over entries hides a dropped E1.** With a mutant that clears the mark on
+  takeover, a stop between step 3's save and the write leaves E1 unmarked with `original` stored and ours in force;
+  the next restore drops it. Beside E2 or E3 on the same plan the restore still calls `set_active` for them, which
+  brings E1's stored `original` into force, so the walk passed. Walking each entry alone caught it
+  (`apply::tests::takeover_then_a_stop_at_any_call_drops_no_held_value`). Stop-point tests of other tracks
+  (`p3-stop-points`) should keep one starting state with E1 as the only entry on its plan.
+- **The stop walk holds on the fake for the apply.** A stop at each call of an apply from six starting states
+  (fresh; E1, E2 and E3 together with an unknown-key entry; each of the three alone; a released key's entry with an
+  unknown-key entry), then a fault-free restore: at the stop every held value has a known entry with RunOnce set and the guard running, and the restore
+  puts every value back.
+- **The mutant "call `set_active` with the step 1 id" cannot fail a test.** The call runs only when the second read
+  equals the command's plan, which step 1 also checked, so both ids are equal there (an equivalent mutant). The
+  variant that makes the call with the step 1 id whatever the second read returns failed two tests.
+- **The scratch copy for mutants needs `docs\` now.** `holds/file.rs` tests read `docs/hold-files.md` through
+  `include_str!`, so a copy without `docs\` (`docs/phases/02-core.md` note 20's list) does not compile.
