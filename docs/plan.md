@@ -179,8 +179,14 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   each one as "orchestrator decision, for Haik's review" in the phase work log, and lists them for him. Cards that
   need his hands still wait. His rule for open calls: with no work going on, the laptop behaves as if Wakeshot were
   not there (`product.md`). Handover when the context is big: a continuation prompt to the idle Claude Code session.
-- Next (orchestrator): the continuation prompt of session `wakeshot-91` (its scratchpad, `continuation.md`) lists the
-  running cards and their files, the ready cards, both reviews and the open items. Ready now: `p2-core-props`,
-  `p4-watch-agents`, `p4-watch-folders`, `p6-int-window`, `p6-int-startup`, the CLI bundles, the tray cards,
-  `p6-login-and-path` + `p6-update-schedule`. The power safety review starts when `p2-ownership-props` is done. Power:
-  the SYSTEM request (pwsh PID 12276) runs until about 00:15; start a new one before then if work goes on.
+- 2026-11-04 00:46: since 23:32 (session `wakeshot-91` after a /clear): done and committed: the power review fix
+  round and its verify (finding 1 Fixed; the power safety review has passed), the LoopHandler `&self` contract
+  change, `p5-text`, `p6-int-window`, `p6-int-startup`, a docs pass, the Claude parsing review (1 blocker, 1 major,
+  8 minors) and its fixes, `p4-watch-folders`, the `p4-cli-commands` + `p4-cli-restore` bundle; session
+  `wakeshot-12`'s launch planning (Haik's launch request: `p6-launch-research`, `p6-media`, `p8-store`). Pushed at
+  00:37. Running: `p4-watch-thread`, `p5-theme` + `p5-menu-paint`, `p3-real-checks` (Part 1; `p3-haik-checks` waits
+  for Haik), `p4-cli-args` + `p4-cli-run`, the Claude fixes verify, `p6-launch-research`.
+- Next (orchestrator): the continuation prompt of session `wakeshot-91` (its scratchpad, `continuation.md`; sent to
+  session `wakeshot-9d` at the handover) lists the running cards and their files, the ready queue in order, the
+  routing of the open review findings, the decisions for Haik's review and the open doc items. Power: the SYSTEM
+  request (pwsh PID 35152) runs until about 06:36; start a new one before then if work goes on.

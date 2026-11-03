@@ -224,3 +224,4 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   part should say Velopack kills a tray that has not quit 60 s after `wait_exit_then_apply_updates`. Optional cleanup
   for Haik: Velopack logs in `%LocalAppData%\velopack`, an empty `%TEMP%\velopack` and two crash reports from the
   panic tests (delete commands in the card).
+- 2026-11-04 00:40: `p6-launch-research` running (no build: the exe sizes are left for `p6-media`). Session `wakeshot-12`'s launch planning is committed.
