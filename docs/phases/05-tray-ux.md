@@ -187,7 +187,7 @@ own Windows settings switched and put back.
 | `p5-tray-icon` | no | screen, settings (light and dark mode) | `p5-theme`, `p5-icon-art` | in progress |
 | `p5-menu-view` | no (menu look answered 17:32) | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | ready |
 | `p5-notices` | no | screen, settings (Do not disturb) | Part A: contracts change card; Part B: `p5-tray-icon`, `p5-text`, `p5-icon-art` | ready |
-| `p5-sounds` | no (the "No sounds" question: honor it, Haik 2026-11-03 18:09) | sound | contracts change card | ready |
+| `p5-sounds` | no (the "No sounds" question: honor it, Haik 2026-11-03 18:09) | sound | contracts change card | in progress (Part A; Part B waits for the sound slot) |
 | `p5-haik-check` | yes, about 25 minutes: eyes, ears, hands | screen, sound, settings | every card above, `p4-cli-commands` | ready |
 
 Sizes, one worker's context: `p5-theme` about 40K tokens, `p5-icon-art` 120K, `p5-text` 80K, `p5-menu-paint` 110K,
@@ -252,3 +252,4 @@ Bundle (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p5-th
   frame needs a crate, which no longer holds (`png` is a stdlib deflate now); size not measured (next docs pass or
   Haik's call). `p5-tray-icon` running; its Part B (screen, the light/dark switch) runs only after 15 minutes with no
   user input, else it stops after Part A.
+- 2026-11-04 01:41: `p5-sounds` Part A running; the worker stops before Part B until no screen or sound card runs.
