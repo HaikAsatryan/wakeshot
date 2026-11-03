@@ -187,7 +187,7 @@ own Windows settings switched and put back.
 | `p5-tray-icon` | no | screen, settings (light and dark mode) | `p5-theme`, `p5-icon-art` | blocked: waiting for the screen slot (Part A done, committed 01:49: 16 tests) |
 | `p5-menu-view` | no (menu look answered 17:32) | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | ready |
 | `p5-notices` | no | screen, settings (Do not disturb) | Part A: contracts change card; Part B: `p5-tray-icon`, `p5-text`, `p5-icon-art` | in progress (Part A; Part B waits for the screen slot) |
-| `p5-sounds` | no (the "No sounds" question: honor it, Haik 2026-11-03 18:09) | sound | contracts change card | in progress (Part A; Part B waits for the sound slot) |
+| `p5-sounds` | no (the "No sounds" question: honor it, Haik 2026-11-03 18:09) | sound | contracts change card | blocked: waiting for the sound slot (Part A done, committed 02:01: 15 new tests) |
 | `p5-haik-check` | yes, about 25 minutes: eyes, ears, hands | screen, sound, settings | every card above, `p4-cli-commands` | ready |
 
 Sizes, one worker's context: `p5-theme` about 40K tokens, `p5-icon-art` 120K, `p5-text` 80K, `p5-menu-paint` 110K,
@@ -265,3 +265,14 @@ Bundle (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p5-th
   tested: a display scale change with no display message may leave the old size (`p5-haik-check`). The screen lane
   runs one Part B at a time, each only after 15 minutes with no input: tray icon, then menu view, then notices; sounds
   Part B after them. `p5-notices` Part A running. The laptop is on AC again (01:49).
+- 2026-11-04 02:01: `p5-sounds` Part A done and committed (chimes in code: lid closed rising 1046.5 to 1568 Hz at
+  -6 dBFS, going to sleep the same notes falling at -9 dBFS, battery floor two 659 Hz pulses; `ux_sounds` example).
+  Part B goes to a fresh worker (Part A used about 110K; notes for it in the card's Log; build folder kept). API:
+  `WasapiPlayer::new(sink, log)` (`Send + Sync`); `play(cue)` returns at once and posts `Done(Sound(..))`;
+  `play_and_wait(cue)` gives `Played`, `Skipped`, or error 1460 after 3 s; `p6-int-tray-mode` builds one player and
+  shares it with the hibernate thread. Decided by the worker, for Haik's review: the player takes a log too; going to
+  sleep is 3 dB softer; the battery floor chime has a soft second harmonic; the lid chime peak is exactly -6 dBFS;
+  log lines name the device type, never its name; unusual mix formats fall back to 16-bit mono; an unreadable or
+  changed sound scheme still plays; on a 3 s timeout the sound plays on and the hibernate cuts it; the device is the
+  one Windows plays system sounds on. "No sounds" is read as the scheme `.None` (inferred from this PC's registry and
+  third-party pages; no Microsoft page says so).
