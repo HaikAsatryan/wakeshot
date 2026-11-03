@@ -2745,3 +2745,37 @@ that build only). Not run live; `p4-live-claude` runs the stop from the VS Code 
   stop (`eLo`), the failed-task helpers (`Y`, near offset 304,059,851; `iqe`, near 319,923,901). The check-in notice
   for a quiet shell (near offset 298,210,086) and Monitor events (`Aq`) have no `<status>`. Code-read, not a full
   search of every caller.
+
+## Launch research checks
+
+Checked 2026-11-04 for card `docs/tasks/p6-launch-research.md`; details, quotes and links in
+`docs/research/launch.md`. Nothing installed or run.
+
+- **Rival stars** (`gh api repos/<o>/<r>`, 2026-11-04 00:45): PowerToys 140,491 (all of PowerToys), LidGuard 13,
+  Agents Don't Sleep (`itsmbaqer/agents-dont-sleep`, new) 10, LidKeeper 10 (no release), Nightcrew 9, Insomnia 7.
+  Picked for the README table: PowerToys Awake, LidGuard, Agents Don't Sleep; Nightcrew in reserve.
+- **Rival download sizes** (release and NuGet APIs): PowerToys user setup x64 323.9 MB (v0.102.3001); LidGuard
+  `lidguard.win-x64` 2.1.7 25.3 MB (a .NET tool, needs the .NET SDK to install); Agents Don't Sleep v0.4.0 x64 setup
+  1.9 MB (Tauri, no ARM64); Nightcrew v0.3.1 exe 1.8 MB. None publishes idle RAM or CPU, except a PowerToys PR
+  harness (C# Awake 14.3 MB private memory, PR #51181, closed) and Nightcrew's "less than 1% of one CPU core".
+- **winget and self-updating apps**: winget compares the ARP `DisplayVersion` with the manifest version
+  (winget-cli #1239, PM comment 2026-07-28). `RequireExplicitUpgrade: true` keeps a package out of `winget upgrade
+  --all`, but only when winget installed it (`PackageTrackingCatalog.cpp`, `UpdateFlow.cpp`). The 2026 loops came from
+  manifest data: VS Code 1.142.0 pointing at 1.141.2 installers (winget-pkgs #453148), Docker 4.78.0 published twice
+  (#389278).
+- **Velopack has no lock that stops Setup.exe** (source at tag 1.2.161): its only lock is `packages\.velopack_lock`,
+  taken by apply, download and start, and by Setup only after it has killed every process in the install folder
+  (`force_stop_package`, which also kills a running `Update.exe`) and renamed the old folder. Setup over an install
+  always wins. Source read; not tested.
+- **winget-pkgs merge time** (`gh api search/issues`, 7 days 2026-10-14 to 10-26, merged PRs only): new version
+  median 3.9 h, 90th percentile 51.8 h; new package median 1.8 h, 90th 33.3 h.
+- **Microsoft Store**: no registration fee for either account type (Learn, updated 2026-10-29); every PE file of an
+  EXE or MSI submission must be signed by a Microsoft Trusted Root CA (Store Policies 7.20, 10.2.9); Azure Artifact
+  Signing takes individual developers only in the US and Canada (Learn, updated 2026-10-08); winget may pick the
+  `msstore` copy of an app installed from the winget source (winget-cli #4347, open). Recommendation: no Store at
+  launch.
+- **GitHub README media**: videos up to 10 MB on a free plan (GitHub docs, attaching files); an uploaded video plays
+  muted with controls, an MP4 kept in the repo does not play (observed in rendered HTML, not in a browser);
+  `gh issue comment <n> --attach` uploads by script (gh 2.103.3 here). `<picture>` with `prefers-color-scheme` works.
+- **Video tool**: Remotion 4.0.540; its license is free for "an individual" and companies "with up to 3 employees"
+  (`LICENSE.md`). Node v26.13.0 is on this laptop; `ffmpeg` is not on the PATH (Remotion bundles its own).
