@@ -36,6 +36,9 @@ Close four small gaps the tray wiring found, each with the leanest fix and a tes
 5. Added after docs pass round 3: `core/lid.rs` treats an unread startup journal as "may be ours" until the first
    read lands, so a lid close in the first seconds after a start with an unread journal still gets the lid lock
    rules (`p2-6-unread-journal` "Found outside scope" 3). Test in the core scenarios.
+6. Log wording seen in the first smoke run (`p6-int-tray-mode` "Found outside scope" 6 and 7): `journal.rs` logs
+   "restored" for the save made before any write; the startup restore logs nothing when there is no journal, while
+   the restore at Quit does. Make each line say what happened; keep any line a test or `docs/` quotes, or update both.
 
 ## Acceptance checks
 
