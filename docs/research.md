@@ -1888,3 +1888,34 @@ unless a line names another source.
 - **Not tested here:** the guard's fallback wait when its tray cannot be opened (a denied open needs a token without
   SeDebugPrivilege, "Process module checks"); that `WaitForMultipleObjects` returns the lowest index when the tray
   and the event are both signaled (Microsoft's documented rule, which the guard relies on to check the journal first).
+
+## Claude status file checks
+
+Card `docs/tasks/p4-claude-status.md`, 2026-11-03.
+
+- **Every status file write of the 2.1.317 live sessions reads as the card's rules say.** The 13 cases in
+  `crates/wakeshot-core/tests/fixtures/claude/live/*.status.jsonl` hold 150 writes and 17 deletes of
+  `sessions/<pid>.json`: 20 with no `status` yet, 52 `busy`, 67 `idle`, 6 `shell`, 5 `waiting` / `dialog open`
+  (counted with `ConvertFrom-Json`). Test `every_live_status_write_reads` feeds each one to `ClaudeSource`: every
+  write gives `FormatHealth::Ok`, the pid and `procStart` of the file, and the activity the card's mapping gives;
+  every delete drops the session. No `permission prompt`, `input needed` or Remote Control off write is in that set;
+  those shapes come from the 2.1.316 log (`spikes/claude-watch/fixtures/live-tests.log`), rebuilt as whole files in
+  `tests/fixtures/claude/status/`.
+- **serde fills a struct from a JSON array.** A one-off test (serde 1.0.229, serde_json 1.0.154; added and removed)
+  read `[4242, "busy"]` into a derived struct with two `Option<Value>` fields as `pid: 4242, status: "busy"`, and
+  `[4242]` failed with "invalid length 1, expected struct P with 2 elements". So the status parser checks that the
+  first value opens with `{`; without it, an array with one value per read key would pass as a status file.
+- **`procStart` comes before `startedAt`, by 0.4 s to 21 s.** In the same live fixtures, the first write of each of
+  the 17 sessions (16 pids; 8784 ran twice): `startedAt` minus `procStart` (FILETIME / 10,000 minus
+  11,644,473,600,000 for Unix ms) was 8.1 to 20.9 s for the 10 fresh terminal sessions and 0.4 to 0.9 s for the 7
+  resumed or SDK ones. The fresh terminal ones
+  waited on the folder trust dialog, which comes before the status file (signals doc, "Other facts seen live"); that
+  the gap is that dialog: not verified. So the process start, not `startedAt`, is the earliest time a line can come
+  from this process (for the resume rule of `p4-claude-live-shapes`).
+- **`CLAUDE_CONFIG_DIR` moves the whole Claude folder.** Claude Code docs, `code.claude.com/docs/en/env-vars` (read
+  2026-11-03): "Override the configuration directory (default: `~/.claude`). All settings, session history, and
+  plugins are stored under this path", suggested for running several accounts side by side. That `sessions\` and
+  `projects\` follow it: not verified (no live test). `ClaudeSource` reads only `<home>\.claude\sessions`.
+- **Not verified:** whether the System process (pid 4) reports a creation time of 0; the parser refuses a
+  `procStart` of 0 and a pid of 0 either way, so no file can tie a session to a process that never ends by those
+  values.
