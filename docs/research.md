@@ -2976,8 +2976,8 @@ Checked 2026-11-04 between 01:30 and 01:40 for card `docs/tasks/p6-update-schedu
 ## Tray UX: tray icon
 
 Card `p5-tray-icon`, 2026-11-04 (code `crates/wakeshot-windows/src/tray/icon.rs`, harness
-`crates/wakeshot-windows/examples/ux_icon.rs`). Part A only so far: nothing below was run on the real taskbar yet (no
-test calls `Shell_NotifyIconW`; the tests use a fake shell). The screen results come with Part B.
+`crates/wakeshot-windows/examples/ux_icon.rs`). Part A facts first (no test calls `Shell_NotifyIconW`; the tests use a
+fake shell), then the Part B checks that ran on the real taskbar. The picture and click checks are still to come.
 
 - **Icon GUIDs** (made with PowerShell `[guid]::NewGuid()`, 01:37): Product `7db9403e-d4b9-4165-a99e-a69b8ea56744`,
   DryRun `c0d07dcd-dfd4-4a9d-b139-ad1e2ce9f987`, Demo `1e8c66d4-0fa3-4a54-95a1-61bb89b171e9` (`IconKind::guid`).
@@ -2995,6 +2995,29 @@ test calls `Shell_NotifyIconW`; the tests use a fake shell). The screen results 
   echo of `uID` and a 0 both pass); whether a `NIM_ADD` of a GUID left by a run that ended without `NIM_DELETE` fails
   (the code deletes the GUID and adds once more when an add fails); whether `Shell_TrayWnd`'s DPI is the tray slot's
   size and the shell shows the drawn icon 1:1.
+
+Part B, first run 2026-11-04 02:16 to 02:18, with the session locked (so no pictures, clicks or theme switch; card
+Log). The DELL 3840x2160 at 150% was the primary and held the taskbar.
+
+- **The demo at Medium adds its GUID icon.** `ux_icon` started with `explorer.exe <launch .cmd>`: `whoami /groups`
+  in the `.cmd` gave "Medium Mandatory Level" (S-1-16-8192); the demo logged `Added { attempt: 1 }` (`NIM_ADD` and
+  `NIM_SETVERSION` 4 both TRUE) while the session was locked.
+- **A GUID icon's settings entry.** Windows wrote `HKCU\Control Panel\NotifyIconSettings\<id>` with only `IconGuid`
+  (the demo GUID), `ExecutablePath` and `IconSnapshot`: no `UID` and no `IsPromoted`. Read with `Get-ItemProperty`.
+- **Tray slot and taskbar DPI.** `Shell_NotifyIconGetRect` by GUID from a per-monitor v2 caller: 48x72 physical
+  pixels. `GetDpiForWindow(Shell_TrayWnd)` 144, so the demo drew 24 px (`SM_CXSMICON` at 144), half the slot's width,
+  which is Windows 11's 16 px icon in a 32 px slot at 150% (inferred; whether the shell shows it 1:1 needs the
+  `--pattern` picture).
+- **A posted `TaskbarCreated` re-adds.** `RegisterWindowMessage("TaskbarCreated")` was `0xc07f`; posted to the demo's
+  window, the demo logged `TaskbarCreated` and `Added { attempt: 1 }` 14 ms later, and the rect stayed the same. Not in
+  the log: whether the first `NIM_ADD` of the GUID that was still there failed and the delete-and-add ran.
+- **`taskkill /PID` without `/F` quits the demo.** taskkill's `WM_CLOSE` reached the hidden window's thread: the demo
+  logged `WM_CLOSE: quitting` 0.2 s later and `icon removed`, exit 0; `Shell_NotifyIconGetRect` then failed with
+  `0x80004005` (no such icon).
+- **The session locks 5 minutes after the last input on AC.** `LogonUI` started 02:00:38, 301 s after the last input
+  (`GetLastInputInfo`); `VIDEOIDLE` AC is 300 s and `DelayLockInterval` 0 (lock when the display turns off);
+  `WTSSessionInfoEx` gave `SessionFlags` 0 (locked). So "Haik away 15 minutes" and "screen usable" cannot both hold
+  unless a display request keeps the display on from before the 5 minutes run out.
 
 ## Core lid round A checks
 

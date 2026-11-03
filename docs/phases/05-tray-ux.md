@@ -186,7 +186,7 @@ own Windows settings switched and put back.
 | `p5-icon-art` | one look at the icon sheet, not blocking | no | contracts change card | done (committed 01:29): three glyph sets (Cup, Eye, Sky) with holding, idle and off; app icon; ICO 16 to 64; 12 tests |
 | `p5-text` | one read of the text list, not blocking | no | contracts change card | done (00:02): every word in `text.rs`, 552 core tests; the text list for Haik is in its Result |
 | `p5-menu-paint` | no (menu look answered 17:32: an icon per item) | no | `p5-theme` | done (00:50): 15 tests; colours and row sizes match the Phase 1 renders by pixel; nine renders in `docs/research/img/ux/` |
-| `p5-tray-icon` | no | screen, settings (light and dark mode) | `p5-theme`, `p5-icon-art` | in progress (Part A done, committed 01:49: 16 tests; Part B started 02:11, screen slot) |
+| `p5-tray-icon` | no | screen, settings (light and dark mode) | `p5-theme`, `p5-icon-art` | blocked: waiting for the screen slot (Part A done, 16 tests; Part B partly run 02:19: launch at Medium, TaskbarCreated, leftovers passed; the session was locked) |
 | `p5-menu-view` | no (menu look answered 17:32) | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | in progress (Part A, started 02:05) |
 | `p5-notices` | no | screen, settings (Do not disturb) | Part A: contracts change card; Part B: `p5-tray-icon`, `p5-text`, `p5-icon-art` | blocked: waiting for the screen slot (Part A done, committed 02:07: 10 tests) |
 | `p5-sounds` | no (the "No sounds" question: honor it, Haik 2026-11-03 18:09) | sound | contracts change card | blocked: waiting for the sound slot (Part A done, committed 02:01: 15 new tests) |
@@ -284,3 +284,13 @@ Bundle (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p5-th
   Windows' warning icon; Windows' quiet-time flag is not set (with it a new user's first hour drops notices); a notice
   that comes during another balloon still shows, later; a click on an older banner may open the newer notice's action
   (Part B's `--pair` run settles it). `p5-menu-view` Part A started 02:05.
+- 2026-11-04 02:21 (orchestrator, session `wakeshot-46`): `p5-tray-icon` Part B ran in a locked session: the session
+  locked at 02:12:59, 301 s after Haik's last input (on AC the display turns off at 300 s, and `DelayLockInterval` 0
+  locks the session with it). No agent can unlock it. Passed without the screen: the demo starts at Medium and adds
+  its icon, a posted `TaskbarCreated` re-adds it, `taskkill /PID` without `/F` removes it, both leftovers removed and
+  checked. Not run: pictures, the light/dark switch (mode never switched; reads 02:14 and 02:18 both Dark), tooltip,
+  clicks, keyboard. The taskbar is on the DELL screen at 150% (24 px icon), so `--pattern` is checked at 150%, not
+  125%. So every screen Part B (`p5-tray-icon`, `p5-menu-view`, `p5-notices`) needs Haik: he unlocks, a worker starts a
+  DISPLAY request so the screen stays on, then he leaves the mouse and keyboard alone for about 20 minutes. Worker
+  note, not verified: `GetLastInputInfo` may count the worker's own synthetic input, so the idle check must leave it
+  out. Helper scripts: session `wakeshot-46`'s scratchpad, `p5-tray-icon\`.

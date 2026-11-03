@@ -291,3 +291,7 @@ limit; Copilot waiting does not hold. The cards build these.
   2 minutes after its time); pseudo console runs stand in for Windows Terminal. Left for Haik (`p5-haik-check`): the VS
   Code check, a real key press, the classic conhost window. Durable jobs are still off; the Esc cancel is still
   invisible, as known.
+- 2026-11-04 02:12 (orchestrator, session `wakeshot-46`): CI on 4945be6 failed on ARM64 only:
+  `restore::tests::a_tray_that_could_not_restore_says_what_is_still_changed` (`wakeshot-cli/src/restore.rs:456`). The
+  fake tray sleeps a fixed 300 ms, then expects the request file; on a slow runner `restore` writes it later. Test-only
+  fix (the fake tray waits for the file, with a timeout), routed to the next free build slot.

@@ -1,6 +1,6 @@
 # Build the tray icon: add, update, clicks, re-add, theme and display changes
 
-Phase: 5. Status: blocked: waiting for the screen slot. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 140K
+Phase: 5. Status: blocked: waiting for the screen slot (session locked). Needs Haik: no. Agent: `wakeshot-worker`. Size: about 140K
 tokens. Split trigger (review m13): if Part A ends above about 100K, the worker stops there (Status `blocked: waiting for the screen slot`, as
 usual) and the orchestrator runs Part B as its own card with a fresh worker, which reads this card's Log and Result.
 Real laptop: **screen** in Part B (one screen or sound card at a time, across all tracks), and **settings**: the
@@ -126,6 +126,15 @@ Each with the worker's default.
 
 None. The calls this card made are listed in the Result as "decided by the worker, for Haik's review".
 
+## Steps for Haik (Part B)
+
+The screen steps need an unlocked session, and Windows locks it 5 minutes after the last input (display off).
+
+1. When you are back at the laptop, unlock it.
+2. Tell the orchestrator the screen card may run, then leave the mouse and keyboard alone for about 20 minutes. The
+   worker first sets a display request, so the screen stays on and Windows does not lock. During the run Windows
+   switches to Light mode for about a minute and then back to Dark; a demo icon shows in the tray.
+
 ## Found outside scope
 
 Problems seen but not fixed.
@@ -137,6 +146,15 @@ Problems seen but not fixed.
   `p5-haik-check` covers scale changes (track note 3.10).
 - An elevated tray: only `TaskbarCreated` is let through UIPI. Whether Explorer's callback messages reach an elevated
   window: not verified. The tray never runs elevated by design.
+- For the orchestrator (Part B, 2026-11-04 02:18): the screen-slot rule "Haik away at least 15 minutes" cannot meet a
+  usable screen on this laptop. On AC the display turns off 300 s after the last input and the session locks at once
+  (`DelayLockInterval` 0); no agent can unlock it. Every screen card (`p5-menu-view` Part B, `p5-notices` Part B, and
+  any sound card that needs the screen) hits the same wall. Default: the screen card starts a display request holder
+  (Phase 0 `tray-screen-holder.ps1` pattern) while the session is still unlocked, and Haik steps away after that.
+- Also for those cards: `GetLastInputInfo` most likely counts the worker's own synthetic input (`mouse_event`,
+  `keybd_event`; expected from how Windows treats injected input, not verified here: no input was sent while locked).
+  An idle check after the worker's own clicks must compare the last input time with the end of its own last
+  injection, or use a low-level hook that skips input flagged as injected.
 
 ## Log
 
@@ -157,13 +175,64 @@ Problems seen but not fixed.
   (orchestrator rule: at least 15 minutes with no input). Part A also ends near the 100K split trigger. Research
   section "Tray UX: tray icon" added with the Part A facts. Build folder deleted (checked gone).
 - 2026-11-04 01:48, worker: Status `blocked: waiting for the screen slot`.
+- 2026-11-04 02:11, Part B worker: started (screen slot given by the orchestrator). Idle 940 s at 02:11:17.
+- 2026-11-04 02:14, Part B worker: **the session is locked**, so no picture, click or Settings step can run. Read at
+  02:12:59 (`<scratchpad>\p5-tray-icon\lockstate.ps1`): `WTSSessionInfoEx` SessionFlags 0 (`WTS_SESSIONSTATE_LOCK`),
+  `LogonUI` running, started 02:00:38. Last input 01:55:37 (02:11:17 minus 940 s), so it locked 301 s after the last
+  input: the AC display timeout (`VIDEOIDLE` AC 0x12c = 300 s, read with `powercfg /q`) with `DelayLockInterval` 0
+  (lock when the display turns off). No display request was held (`powercfg /requests`: only the orchestrator's two
+  SYSTEM requests). On AC, 82%. Primary display is the DELL (2560x1440 logical, so 3840x2160 at 150%), the laptop screen
+  1536x960 logical (1920x1200 at 125%). Theme read 02:14:26: `AppsUseLightTheme` 0, `SystemUsesLightTheme` 0. No demo
+  `NotifyIconSettings` entry and no `NotifyIconGeneratedAumid_` key of ours before the run (the one such key,
+  `11595054434325676090`, is Explorer's own). Plan: run the steps that need no screen now (build, Medium start, add,
+  `TaskbarCreated`, slot rect, stop, leftovers), then block for the screen steps.
+- 2026-11-04 02:15, Part B worker: `ux_icon` x64 release built (1 min 4 s), clean.
+- 2026-11-04 02:16:39, Part B worker: idle 1253 s, session still locked. Started `ux_icon --state holding --minutes 20`
+  with `explorer.exe <scratchpad>\p5-tray-icon\run1.cmd` (the `.cmd` writes `whoami /groups` "Mandatory Label" to the
+  log, then runs the demo with stdout to `run1.log`). Token line: `Mandatory Label\Medium Mandatory Level ...
+  S-1-16-8192`. Demo PID 19948 (parent cmd 31592), window `0x14e0306`, GUID `1e8c66d40fa34a5495a161bb89b171e9`.
+  `02:16:39.216 icon: Added { attempt: 1 }`. Windows wrote `NotifyIconSettings\12880751163260563509` with only
+  `IconGuid` (`{1E8C66D4-...-61BB89B171E9}`), `ExecutablePath` and `IconSnapshot`: no `UID`, no `IsPromoted` (so the
+  first add is in the overflow, as in Phase 0). `Shell_NotifyIconGetRect` by GUID (per-monitor v2 caller): 3371,2088 to
+  3419,2160, 48x72 physical. `Shell_TrayWnd`: DPI 144, rect 0,2088 to 3840,2160 (the DELL at 150%), so the demo draws
+  24 px (`SM_CXSMICON` at 144). Not promoted: no picture can be taken while locked, and the entry is deleted at the end.
+- 2026-11-04 02:17:00, Part B worker: `TaskbarCreated` (registered message `0xc07f`) posted to `0x14e0306` (window
+  owner checked: PID 19948). Log: `02:17:00.139 icon: TaskbarCreated`, `02:17:00.153 icon: Added { attempt: 1 }`;
+  the rect 2 s later was the same. Which add path ran (a plain `NIM_ADD`, or `NIM_ADD` failed on the GUID that was
+  still there and the delete-and-add ran) is not in the log: not verified.
+- 2026-11-04 02:17:12, Part B worker: `taskkill /PID 19948` (no `/F`): "SUCCESS: Sent termination signal". Log
+  `02:17:13.152 WM_CLOSE: quitting`, `02:17:13.296 icon removed`, `exit 0`; PID 19948 and cmd 31592 gone 2 s later;
+  `Shell_NotifyIconGetRect` then `0x80004005` (icon gone). No terminal process left from the launch.
+- 2026-11-04 02:17:24, Part B worker: leftovers. Exported `NotifyIconSettings\12880751163260563509` to
+  `<scratchpad>\p5-tray-icon\leftover-notifyiconsettings-run1.reg` and deleted it; `NotifyIconGeneratedAumid_12880751163260563509`
+  was never made (no balloon). First read 02:17:24: both absent, no `ux_icon` process.
+- 2026-11-04 02:18:29, Part B worker: second read, 65 s after the first: entry and `NotifyIconGeneratedAumid_` key
+  absent, no `NotifyIconSettings` entry with the demo GUID or an `ux_icon` path, no `ux_icon` process. Theme read
+  02:18:23 (never switched): `AppsUseLightTheme` 0, `SystemUsesLightTheme` 0, the same as 02:14:26. Still locked at
+  02:18:24. Research section extended with these facts.
+- 2026-11-04 02:18:48, Part B worker: build folder deleted, checked gone. Scripts kept for the next run in
+  `<scratchpad>\p5-tray-icon\` (`lockstate.ps1`, `p5-lib.ps1`, `run1.cmd`). Status `blocked: waiting for the screen
+  slot (session locked)`.
 
 ## Result
 
 What was done, files changed, checks and outcomes, open items. Include the public API as built and the three GUIDs.
 
-**Part A done (2026-11-04 01:48). Part B not run**: Haik's last input was 174 s before the check, and Part A ended
-near the split trigger. Next: a fresh worker runs Part B in a screen slot (steps 4 to 8), reading this Log and Result.
+**Part A done (2026-11-04 01:48). Part B partly done (2026-11-04 02:18), blocked: the session was locked** (Windows
+locked it 5 minutes after Haik's last input, when the display turned off), so no picture, click or theme switch could
+run. Haik's steps are in "Steps for Haik (Part B)". Next: a worker runs the rest of Part B in an unlocked screen slot.
+
+Part B so far (Log 02:14 to 02:18; facts in `docs/research.md` "Tray UX: tray icon"):
+
+| Step | Outcome |
+| --- | --- |
+| 4. Start at Medium | Passed. `explorer.exe <scratchpad>\p5-tray-icon\run1.cmd`; token line "Medium Mandatory Level" (S-1-16-8192); `Added { attempt: 1 }`. `IsPromoted` not written (nothing to see while locked; the entry was deleted at the end). |
+| 5. Pictures, theme switch, `--pattern` | Not run (locked). No theme switch: reads 02:14:26 and 02:18:23 both `AppsUseLightTheme` 0, `SystemUsesLightTheme` 0. Slot 48x72 physical, taskbar DPI 144 (DELL, 150%), drawn 24 px. 125% is only the laptop screen, which has no tray: check at 150% and note it for Haik. |
+| 6. Tooltip, clicks, keyboard | Not run (locked). `TaskbarCreated` passed by log: posted `0xc07f`, then `icon: TaskbarCreated` and `Added { attempt: 1 }` 14 ms later. Token line Medium (step 4). |
+| 7. Leftovers, stop by PID | Passed for this run. `taskkill /PID 19948` (no `/F`): quit in 0.2 s, `icon removed`, exit 0. Entry `NotifyIconSettings\12880751163260563509` exported and deleted; no `NotifyIconGeneratedAumid_` key was made; both absent at 02:17:24 and 02:18:29; no `ux_icon` process. |
+| 8. Research | Extended with the facts above; the screen facts come with the next run. |
+
+No code change in Part B. Build folder deleted (checked gone 02:18:48). No other file changed.
 
 Files: `crates/wakeshot-windows/src/tray/icon.rs` (new body), `crates/wakeshot-windows/examples/ux_icon.rs` (new),
 `docs/research.md` (new section "Tray UX: tray icon", Part A facts only), this card.
@@ -208,7 +277,8 @@ Checks (build folder in the scratchpad, deleted at the end and checked gone):
 - `cargo clippy --locked -p wakeshot-windows --target <t> -- -D warnings`, with and without `--all-targets`, x64 and
   ARM64: clean, with no hits in other cards' files either.
 - `cargo build --release --locked -p wakeshot-windows`, x64 and ARM64: clean; `--example ux_icon` x64 release: clean.
-- Part B checks (pictures, theme reads, clicks, `TaskbarCreated`, leftovers): not run yet.
+- Part B checks: `TaskbarCreated` (log), Medium token, stop by PID and leftovers passed (table above); pictures, the
+  theme switch and its reads, tooltip and clicks not run yet (session locked).
 
 Decided by the worker, for Haik's review (technical; each with a "change it when"):
 
@@ -226,8 +296,15 @@ Decided by the worker, for Haik's review (technical; each with a "change it when
 5. Theme and display triggers read at once and again 1 s later, and the size is read on the same triggers. `WM_CLOSE`
    on the icon window is ignored: the loop window owns quitting.
 6. `ux_icon` has `--state holding|idle|off` (one fixed state for pictures) beside the card's flags.
+7. Part B: with the session locked, the steps that need no screen ran anyway (Medium start, add, `TaskbarCreated`,
+   quit, leftovers), and the screen steps wait. Why: it checks the launch and the add path now, so a launch problem
+   does not eat the next screen slot. Change it when a locked-session result turns out to differ from an unlocked
+   one: then redo those steps in the next slot (it starts the demo again anyway).
+8. Part B: the next slot sets a display request first (default under "Found outside scope"), so the session stays
+   unlocked once Haik steps away. Change it when the orchestrator picks a different way to keep the screen usable.
 
-Needs another card: none.
+Needs another card: none. The orchestrator: the lock and idle-check notes under "Found outside scope" apply to every
+screen card (`p5-menu-view` Part B and `p5-notices` Part B, which use this demo icon next).
 
 Notes for Part B: build `ux_icon` (x64 release), start it at Medium through `explorer.exe <launch .cmd>` with stdout to a
 log. It prints its pid, window handle and GUID first, a `menu: anchor` line per click and an `icon: ...` line per
@@ -235,3 +312,18 @@ log. It prints its pid, window handle and GUID first, a `menu: anchor` line per 
 `TaskbarCreated` can be posted to the printed window handle (`RegisterWindowMessage("TaskbarCreated")`, then
 `PostMessage`). It quits after `--minutes` or on `taskkill /PID` without `/F`, and removes its icon. Leftovers: the
 Demo GUID's `NotifyIconSettings` entry and its `NotifyIconGeneratedAumid_` key (track note 4).
+
+Notes for the rest of Part B (02:18):
+
+- First check the lock: `pwsh -NoProfile -File <scratchpad>\p5-tray-icon\lockstate.ps1` must say `SessionFlags 1
+  (unlocked)`. Then start a display request holder (Phase 0 `tray-screen-holder.ps1`, in the old scratchpad below)
+  and stop it by its PID at the end; `powercfg /requests` must not list it after.
+- Ready in `<scratchpad>\p5-tray-icon\`: `run1.cmd` (Medium start with the token line; build `ux_icon` into
+  `<scratchpad>\p5-tray-icon\target` first), `p5-lib.ps1` (rect by GUID, taskbar DPI, demo entries, post
+  `TaskbarCreated` after checking the window's PID). The entry id was `12880751163260563509` and will be new again.
+- Phase 0 scripts to port (hover and right-click only inside the icon rect, MSAA on `#32768` menus, `Save-Rect`,
+  Settings mode switch by UI Automation on `SystemSettings_Personalize_Color_ColorMode_ComboBox`):
+  `C:\Users\haika\AppData\Local\Temp\claude\C--Users-haika-code-wakeshot\06511897-9625-4d7a-b494-37b2b0bd9eb2\scratchpad\tray-lib.ps1`,
+  `tray-t7open.ps1`, `tray-t7switch.ps1`, `tray-t7close.ps1`.
+- The idle check after your own clicks: see "Found outside scope" (own input counts).
+- The demo's `Added` note has no size; the size is `SM_CXSMICON` at `GetDpiForWindow(Shell_TrayWnd)` (24 at 144).
