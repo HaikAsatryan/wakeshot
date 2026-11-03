@@ -131,10 +131,10 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | `p2-present` | no | contracts card | done (20:02): 24 tests |
 | `p2-ownership-apply` | no | `p2-ownership-restore` | done (20:36): 46 tests, 10 of 11 mutants caught (the survivor cannot be caught) |
 | `p2-core-holds` | no | `p2-policy-holds`, `p2-policy-power`, `p2-present`, `p4-hold-files` | done (20:39): 40 scenarios and a proptest, 13 of 13 mutants caught |
-| `p2-ownership-props` | no | `p2-ownership-apply` | running (21:38) |
+| `p2-ownership-props` | no | `p2-ownership-apply` | done (22:31): 10 properties at 20,000 cases, 13 of 13 mutants caught |
 | `p2-core-settings` | no (Phase 1 Question 10: default, console part built; Haik 2026-11-03 18:09) | `p2-core-holds` | done (21:06): 34 tests, 12 of 12 mutants caught |
 | `p2-core-lid` | no | `p2-core-settings` | done (21:46): 57 scenarios, 19 of 19 mutants caught; fixed a lid lock gap in the first seconds of a hold |
-| `p2-core-props` | no | `p2-core-lid`, `p2-ownership-apply` | ready |
+| `p2-core-props` | no | `p2-core-lid`, `p2-ownership-apply` | running (22:33) |
 
 No card touches the real laptop (no power settings, screen, sound or installs) or needs Haik's hands. "Contracts
 card": the one card the orchestrator runs alone before the track builds.
@@ -213,3 +213,6 @@ Where each item this track owns is built. "Integration" is planned after the tra
   thread cannot be cancelled once started; the `policy::lid` module doc needs a line on the in-force view; docs pass
   lines are listed in its card. Design choices 8 (the floor countdown has no Do-nothing exception) and 13 (the
   closed-lid report waits for the lid to open) are near product calls; relayed to Haik.
+- 2026-11-03 22:33: `p2-ownership-props` done and committed; `p2-core-props` running. The power safety review
+  runs since 22:33 (report `docs/reviews/p2-6-power-safety.md`); its fixes go back to the cards' workers, or new
+  workers that read the card Logs.
