@@ -324,3 +324,9 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   the worker, for Haik's review). Left: the taskbar picture (needs Haik to unlock). Found outside scope, wording only:
   `journal.rs` logs "restored" for the save made before any write; the startup restore logs nothing when there is no
   journal, while the restore at Quit does.
+- 2026-11-04 03:07 (orchestrator, session `wakeshot-46`): the flaky `app::window` timer tests fixed and committed (Log in
+  `p6-int-window`, "Flaky timer tests fix"): `the_timer_fires_after_next_timer_ms_and_again_after_each_re_arm` and
+  `an_event_re_arms_the_timer` failed only in the whole crate binary (3 of 5), where loop threads stall 100 to 400 ms
+  while all tests start (cause not verified; not a product bug). A fire may now be up to 50 ms early and 1,000 ms
+  late; 20 of 20 whole-crate runs pass. Seen once before the fix: another test failed in 2 of 8 loaded runs (name not
+  captured; not seen in the 20 runs after).

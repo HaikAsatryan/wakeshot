@@ -171,3 +171,66 @@ Open items:
 - Whether Windows itself sends `WM_QUERYENDSESSION` and `WM_ENDSESSION` to this hidden window at a real sign-out:
   not verified (the tests send them; an end-to-end check).
 - "Found outside scope" 1 to 3.
+
+## Flaky timer tests fix (2026-11-04)
+
+Status: done. Scope: the test module of `crates/wakeshot-windows/src/app/window.rs` and this section only.
+Problem: two `app::window` timer tests failed in 2 of 5 `cargo test --workspace --locked` runs under load (names not
+recorded). Product code stays as it is.
+
+### Log
+
+- 2026-11-04 02:52, worker: started. Suspects from reading the tests:
+  `the_timer_fires_after_next_timer_ms_and_again_after_each_re_arm` (each fire within 50 ms of its arm, both ways) and
+  `an_event_re_arms_the_timer` (a fixed 100 ms sleep before the post, then the fire must come no later than 350 ms
+  after the first arm).
+- 2026-11-04 02:59, worker: before the fix. The test binary filtered to `app::window::` passed 30 of 30 runs without
+  load and 30 of 30 beside 32 busy threads (a `pwsh` started and stopped by its PID). The whole crate binary, as
+  `cargo test --workspace` runs it, passed 3 of 5 runs with no other load: both suspects failed together in runs 2
+  and 3. Run 2: the 150 ms timer fired after 359 ms; the event reached the loop 363 ms after the first arm (100 ms
+  sleep), so the re-armed fire came 560 ms after it (bound 350). Run 3: 266 ms, and 464 ms. Each re-armed fire itself
+  came on time (195, 197 ms): the stall hit both loop threads at the same moment, while the crate's tests all start
+  at once. Cause: the
+  tests put tight upper bounds on wall-clock delays of `WM_TIMER`, which comes only when the loop thread runs. Not a
+  product bug: nothing in `window.rs` runs between the arm and the fire. Fixed the two tests; rebuilt.
+- 2026-11-04 03:06, worker: after the fix. Filtered to `app::window::`: 30 of 30 without load, 30 of 30 beside 32
+  busy threads. Whole crate binary: 10 of 10 without load, 10 of 10 beside the busy threads. In 8 more whole-crate
+  runs with `--nocapture` beside the busy threads the worst fire was 396 ms late (a 150 ms arm fired after 546 ms,
+  and the other test's 200 ms re-arm at the same moment), the earliest 20 ms early (130 ms for 150). Clippy on both
+  targets, rustfmt and one `cargo test --locked -p wakeshot-windows app::window` pass. Build folder deleted.
+
+### Result
+
+Done 2026-11-04. Only the test module of `crates/wakeshot-windows/src/app/window.rs` and this section changed.
+
+- Failing tests: `the_timer_fires_after_next_timer_ms_and_again_after_each_re_arm` (a fire later than 50 ms past its
+  arm) and `an_event_re_arms_the_timer` (the event came 269 to 363 ms after the first arm, so its fire missed the
+  350 ms bound). They fail together, only in the whole crate binary: something in that process stalls every loop
+  thread for 100 to 400 ms while all its tests start (what exactly: not verified). Not a product bug.
+- Fix: new constants `EARLY_MS = 50` and `LATE_MS = 1_000`, with the reason in their comments. A fire must come in
+  `[ms - 50, ms + 1000]`. The first test's plan is now 150, 1,500, 80 ms, so no fixed delay and no arm that kept the
+  value before passes all three bounds. The second test arms 5,000 ms first, posts the event as soon as `run` armed
+  (no fixed sleep), and checks the fire came 150 to 1,200 ms after the re-arm and before the 5,000 ms arm was due;
+  a broken re-arm fails after 5 s instead of hanging.
+- Pass counts, before and after: filtered `app::window::` runs 30/30 and 30/30 without load, 30/30 and 30/30 with
+  load (the filter alone never reproduced it); whole crate binary 3/5 before, 20/20 after (10 without, 10 with load).
+- Checks: rustfmt `--check` exit 0; clippy `--all-targets -D warnings` on `x86_64-pc-windows-msvc` and
+  `aarch64-pc-windows-msvc` exit 0. LF line ends, no line over 120 characters, no dashes.
+- Cost: the `app::window` tests take 1.8 s instead of 0.6 s (the 1,500 ms arm).
+
+Decided by the worker, for Haik's review:
+
+1. A late timer is allowed up to 1 s (was 50 ms); the 50 ms early bound stays. The card's "tolerance 50 ms" now holds
+   only for early fires. Why: lateness under load has no real bound, and the wide plan still tells every arm apart.
+   Change it when a run shows a fire over 1 s late, or the tests need to be faster.
+2. `an_event_re_arms_the_timer` no longer sleeps 100 ms before the event, so it no longer shows the re-arm counts
+   from the event rather than from the first arm. `SetTimer` restarts the count on every call, so that case cannot
+   happen. Change it when the window stops using one `SetTimer` id.
+
+Found outside scope:
+
+1. In 2 of 8 whole-crate runs with `--nocapture` beside the busy threads (before the fix), one test outside
+   `app::window` failed; its name was not captured. It did not come back in the 20 whole-crate runs after the fix.
+2. The 100 to 400 ms stall of every window thread in the crate's test binary at start: its cause is not known (not
+   verified; perhaps the loader lock while other tests load DLLs). A product loop never shares a process with these
+   tests.

@@ -478,6 +478,14 @@ mod tests {
 
     const WAIT: Duration = Duration::from_secs(10);
 
+    /// Windows rounds a timer's due time to its clock tick (about 15.6 ms), so a fire may come a little early.
+    const EARLY_MS: i64 = 50;
+
+    /// `WM_TIMER` comes only when the loop thread runs and its queue is empty, so a busy laptop makes it late. With the
+    /// whole crate's tests starting at once a fire came 209 ms late (2026-11-04), and a 50 ms bound failed 2 runs in 5.
+    /// The arms in a test lie further apart than this, so even a fire this late tells one arm from another.
+    const LATE_MS: i64 = 1_000;
+
     #[derive(Clone, Debug, PartialEq, Eq)]
     enum Seen {
         Event(Event),
@@ -890,7 +898,9 @@ mod tests {
 
     #[test]
     fn the_timer_fires_after_next_timer_ms_and_again_after_each_re_arm() {
-        const PLAN: [u32; 3] = [150, 300, 80];
+        // The middle arm is more than `LATE_MS` past the others, so no single fixed delay, and no arm that kept the
+        // value before, passes all three bounds.
+        const PLAN: [u32; 3] = [150, 1_500, 80];
         let running = start(
             |rec, call| {
                 if *call == Seen::Timer && rec.timers() == PLAN.len() {
@@ -913,8 +923,9 @@ mod tests {
         for (fire, (at, ms)) in done.records.iter().zip(&done.arms) {
             let took = fire.at.duration_since(*at).as_millis() as i64;
             eprintln!("a {ms} ms timer fired after {took} ms");
+            let ms = i64::from(*ms);
             assert!(
-                (took - i64::from(*ms)).abs() <= 50,
+                (ms - EARLY_MS..=ms + LATE_MS).contains(&took),
                 "a {ms} ms timer fired after {took} ms"
             );
         }
@@ -922,6 +933,10 @@ mod tests {
 
     #[test]
     fn an_event_re_arms_the_timer() {
+        // Far past `AGAIN + LATE_MS`, so the event always comes before the first arm is due, however late the loop
+        // thread runs, and the one fire can only be the re-arm's. A broken re-arm fails after 5 s instead of hanging.
+        const FIRST: u32 = 5_000;
+        const AGAIN: u32 = 200;
         let (armed_tx, armed_rx) = mpsc::channel();
         let running = start(
             |_, call| {
@@ -934,34 +949,34 @@ mod tests {
             move |rec| {
                 if rec.count() == 0 {
                     let _ = armed_tx.send(());
-                    400
+                    FIRST
                 } else {
-                    200
+                    AGAIN
                 }
             },
         );
         armed_rx.recv_timeout(WAIT).expect("run arms the timer");
-        thread::sleep(Duration::from_millis(100));
         running.sink.post(idle(1)).expect("the post goes");
         let done = running.finish();
 
         assert_eq!(calls(&done.records), [Seen::Event(idle(1)), Seen::Timer]);
-        let [(first, 400), (second, 200)] = done.arms[..] else {
+        let [(first, FIRST), (second, AGAIN)] = done.arms[..] else {
             panic!("arms: {:?}", done.arms);
         };
         let fire = done.records[1].at;
         let since_event = fire.duration_since(second).as_millis() as i64;
         let since_start = fire.duration_since(first).as_millis() as i64;
         eprintln!(
-            "re-armed 200 ms timer fired after {since_event} ms, {since_start} ms after the first arm"
+            "re-armed {AGAIN} ms timer fired after {since_event} ms, {since_start} ms after the first arm"
         );
+        let again = i64::from(AGAIN);
         assert!(
-            (since_event - 200).abs() <= 50,
+            (again - EARLY_MS..=again + LATE_MS).contains(&since_event),
             "fired {since_event} ms after the re-arm"
         );
         assert!(
-            since_start <= 400 - 50,
-            "the first arm's 400 ms still ran: {since_start} ms"
+            since_start < i64::from(FIRST) - EARLY_MS,
+            "the first arm's {FIRST} ms still ran: {since_start} ms"
         );
     }
 
