@@ -1919,3 +1919,62 @@ Card `docs/tasks/p4-claude-status.md`, 2026-11-03.
 - **Not verified:** whether the System process (pid 4) reports a creation time of 0; the parser refuses a
   `procStart` of 0 and a pid of 0 either way, so no file can tie a session to a process that never ends by those
   values.
+
+## Core lid checks
+
+Checked 2026-11-03 for card `docs/tasks/p2-core-lid.md`, by the scenarios in `scenarios::lid` and hand-planted
+mutants in a scratch copy of the workspace.
+
+- **The plan copy lags an apply, so the lid rules need what is in force.** The core keeps the last plan read; after an
+  apply it shows the user's values (lid 1, Sleep) until the next read, up to 10 s later, while the journal copy says
+  Wakeshot wrote 0. `policy::lid::ours` on those values finds no entry whose `written` equals the live value, so a lid
+  close in the first seconds of a hold would get no lock. The core now passes the policy a view where each journal
+  entry on the active plan sets its key to `written`, and an apply not answered yet counts as written. A mutant that
+  drops the view failed 14 of the lid scenarios, among them `lid_closed_in_the_first_seconds_of_a_hold_locks`.
+- **The lid scenarios catch the card's mutants.** 19 mutants in two batches (`cargo test --locked -p wakeshot-core`,
+  the second batch `-- scenarios::`, since another card's `sources::cron` test failed for a while), each reverted: all
+  19 failed at least one test (list in the card's Result). The card's four: a lock at a lid close on the user's own
+  Do nothing, no lock at AC to battery with the lid closed, a hibernate without the resume clamp, `Play(GoingToSleep)`
+  with `Hibernate`.
+- **`lid_events_in_any_order` runs 10,000 cases in about 27 s.** `PROPTEST_CASES=10000`, debug build, this laptop:
+  27.4 s, no failure.
+- **Not verified: what `LockWorkStation` returns for a session that is already locked.** Microsoft's page could not be
+  fetched from the agent shell (the fetch tool refused `learn.microsoft.com`). The core sends `Lock` into a locked
+  session too, so a lost `Unlocked` never skips a lock, and a failure while locked is only logged, so either answer is
+  safe.
+
+## Stop point checks
+
+Checked 2026-11-03 for card `docs/tasks/p3-stop-points.md`, on AC with the dock, from an elevated (High) agent shell,
+by the four `real_stop_points_*` tests in `crates/wakeshot-windows/src/power/stop_points.rs` (final run 21:46:48 to
+21:47:46, `cargo test --locked -p wakeshot-windows real_stop_points -- --ignored --test-threads=1 --nocapture`).
+
+- **The real parts keep every held value journaled at every stop.** The core's apply, restore and ownership check ran
+  through `apply_locked`, `restore_locked` and `check_locked` over `CopyAsActive` on a "Wakeshot test <pid>" copy of
+  Balanced and `FileNet::tray` in a temp folder, with RunOnce under a `ScratchKey` and a `RecordingGuard`. A wrapper
+  stopped each run at call k (a panic before the call), for every k of 10 starts, then the next start's restore ran
+  with a fresh `FileNet` and guard; then the same stop with that restore failing at each of its calls in turn, and a
+  retry. 3142 cases, all passed: no key at the target, stored or in force on the copy, was without a known entry
+  holding the user's value; RunOnce and the guard stayed while a known entry did; after the next restore every key
+  on the copy had the user's value (lid 1 and 1, battery sleep 14400) stored and in force, and sleep AC and the energy
+  saver were unchanged. Calls per run (N): fresh apply 19, apply over E1 alone 12, over E1, E2, E3 16, with lid AC
+  released 14; restore after an apply 15, E1 alone 9, E1, E2, E3 and a deleted plan's entry 14 (all plans) and 12
+  (one plan); check with one user change 5, with the last entry changed 6.
+- **Where the next restore finds no journal, it does nothing, and what the stopped run left stays.** Two cases: a stop
+  between the clean-up's journal delete and its RunOnce clear (walk R6: the value stays; a stop at the guard's stop
+  leaves the guard), and a fresh apply stopped after `set_run_once` or `ensure_guard` but before its first journal
+  save (the value and the guard stay with no journal). Both are the harmless kind the design accepts: RunOnce and the
+  guard find no journal and do nothing.
+- **An unknown key's entry never blocks the clean-up.** With one in the file (on the copy, key `sleepAc`), the
+  clean-up saves the file with only that entry instead of deleting it, so the next restore always finds a file and
+  releases RunOnce and the guard: no R6 window. The entry, read back and parsed, had the same five fields after every
+  stop, failure and restore.
+- **The walk catches an order break in `FileNet`.** In a scratch copy, `FileNet::delete_journal` and
+  `FileNet::clear_run_once` swapped by name (RunOnce cleared before the journal delete): all four tests failed. With
+  only the stop walk on, the first failure was "restore all plans after an apply, stop at call 13 (clear_run_once)":
+  a known entry without RunOnce. The unknown-key walk lost the file with the unknown entry.
+- **Time.** 57 s for the 3142 cases, debug build, this laptop: about 18 ms a case, each with a dozen plan writes to the
+  copy, two or three write-through journal saves and RunOnce writes under the test key.
+- **Model, not verified.** A user's change in Settings is modelled as the value stored and the whole plan in force at
+  once (as `CopyAsActive` notes say a test must model it). That Settings applies every stored value of the plan at
+  once is inferred, not tested.
