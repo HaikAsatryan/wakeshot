@@ -133,7 +133,7 @@ laptop" cards run one at a time across all tracks.
 | `p3-power-io` | no | no | `p3-journal`, `p3-power-plan`, core `p2-ownership-apply` | done (21:04): 24 tests, 22 of 22 mutants caught |
 | `p3-recovery` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09) | no | `p3-journal`, `p3-process`, `p3-log`, `p3-power-plan` (verify review Minor 3), core `p2-ownership-restore` | done (21:22): 23 unit and 5 exe tests; real guard parent test passed |
 | `p3-stop-points` | no | yes: a plan copy, never active | `p3-power-plan`, `p3-journal`, core `p2-ownership-apply` | done (21:48): 3142 real cases passed, Haik's values same; no routine bug |
-| `p3-harness` | no | yes for the `cleanup` smoke run only (global lane, review M7); other smoke runs touch no setting | `p3-power-io`, `p3-recovery`, `p3-requests`, `p3-session`, `p3-system-events` | ready |
+| `p3-harness` | no | yes for the `cleanup` smoke run only (global lane, review M7); other smoke runs touch no setting | `p3-power-io`, `p3-recovery`, `p3-requests`, `p3-session`, `p3-system-events` | running (22:16; holds the laptop lane for the cleanup run) |
 | `p3-real-checks` | no | yes: an active plan copy, 50 cycles | `p3-harness`, `p3-stop-points` | ready |
 | `p3-haik-checks` | yes: about 60 min elapsed, about 15 min of hands | yes, whole laptop: battery, lid, sign-out, sleep, lock; no other agent or cargo command runs (review B2) | `p3-real-checks` | ready |
 

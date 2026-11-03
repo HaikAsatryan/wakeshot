@@ -136,7 +136,7 @@ those one at a time across all tracks.
 
 | Card | Needs Haik | Runs after | Status |
 |---|---|---|---|
-| `p6-velopack-facts` | no; real laptop: installs and uninstalls a throwaway app | Haik's sign-off of the track plans; the contracts card (it builds the repo's release exes; review m10) | running (21:51; holds the laptop lane) |
+| `p6-velopack-facts` | no; real laptop: installs and uninstalls a throwaway app | Haik's sign-off of the track plans; the contracts card (it builds the repo's release exes; review m10) | done (22:12): 11 facts checked; nothing left installed |
 | `p6-login-and-path` | no | the contracts card; `p3-store` (test key helper) | ready |
 | `p6-update-schedule` | no | the contracts card | ready |
 | `p6-hooks` | no (Question 2: the default, Haik 2026-11-03 18:09) | `p6-login-and-path`; `p3-store`, `p3-log`, `p3-process`, `p3-journal`, `p3-power-plan`; core `p2-ownership-restore` (review M1) | ready |
@@ -207,3 +207,9 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
 - 2026-11-03: Haik signed off the five track plans with every default (18:09); `p1-close-contracts` wrote the answers
   into this file and the cards, added `Event::Updated` and `Notice::Updated`, gave the clang install an owner
   (`p6-velopack-dependency` step 0) and settled `velo::feed()` (verify review Minor 5).
+- 2026-11-03 22:16: `p6-velopack-facts` done and committed. For `p6-velopack-dependency`: its Result recommends`
+  `set_auto_apply_on_startup(false)` in `velo.rs` and a 10 s inner limit for the updated hook (Velopack gives 15 s).
+  Open, for a docs pass: `architecture.md` section 6 still calls two now-checked facts unverified; this file's Updates
+  part should say Velopack kills a tray that has not quit 60 s after `wait_exit_then_apply_updates`. Optional cleanup
+  for Haik: Velopack logs in `%LocalAppData%\velopack`, an empty `%TEMP%\velopack` and two crash reports from the
+  panic tests (delete commands in the card).
