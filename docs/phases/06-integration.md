@@ -54,10 +54,10 @@ pub enum Flow { Go, Quit }
 
 /// Called on the loop thread by `app::window` for every message the loop window owns.
 pub trait LoopHandler {
-    fn event(&mut self, event: Event) -> Flow;          // an event posted through `WindowSink`
-    fn session(&mut self, change: SessionChange) -> Flow; // from `session::decode`, end-of-session messages included;
-                                                          // returns only after the end-of-session wait
-    fn timer(&mut self) -> Flow;                        // the one timer fired
+    fn event(&self, event: Event) -> Flow;              // an event posted through `WindowSink`
+    fn session(&self, change: SessionChange) -> Flow;   // from `session::decode`, end-of-session messages included;
+                                                        // returns only after the end-of-session wait
+    fn timer(&self) -> Flow;                            // the one timer fired
     fn next_timer_ms(&self) -> u32;                     // the window re-arms its timer after every call
 }
 
@@ -273,3 +273,5 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   the window takes `&dyn LoopHandler` (with `&mut self` a re-entered call is undefined behavior; `p6-int-dispatch`'s
   Result). Only the dispatcher's three forwarding methods change. Added for `p6-int-tray-mode`:
   `LoopRunners::lost_events()` on each safety tick, `Dispatcher::into_runners()` for the shutdown order.
+- 2026-11-03 23:36: the LoopHandler `&self` contract change is running (worker, Log in `p6-int-dispatch`), alone among cards that build `wakeshot-windows`. Then `p6-int-window` and the other Windows cards start.
+- 2026-11-03 23:42: the LoopHandler `&self` contract change is done (276 tests in `wakeshot-windows`, workspace check green; Log in `p6-int-dispatch`). Nested calls only queue and run after the outer batch. Note 2 above and `p6-int-window` deliverable 3 now say `&dyn LoopHandler`. `p6-int-window` and `p6-int-startup` start now; `p6-int-startup` also builds review finding 3 (the startup journal read retry).

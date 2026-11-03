@@ -269,3 +269,42 @@ order (`new` sorts them into the `event.rs` order). `Dispatcher` is not `Send`: 
 - Contract proposal 1, before `p6-int-window` starts.
 - `p6-int-tray-mode`: the runner notes above, `lost_events` among them.
 - Found outside scope 2 and 3 (minor).
+
+## Contract change: LoopHandler takes &self (2026-11-03)
+
+Status: done. Run by the orchestrator alone among the cards that build `wakeshot-windows` (contract proposal 1
+above). Owned: `crates/wakeshot-windows/src/app.rs`, `app/dispatch.rs`, the signature in `app/window.rs`. Build folder:
+`<scratchpad>\p6-loop-handler-ref\target`.
+
+### Log
+
+- 2026-11-03 23:37: worker started; read this card's Result, the phase file's 22:20 line, `app.rs`, `dispatch.rs`,
+  the `window.rs` stub and `p6-int-window`'s card. Only `app.rs` and `dispatch.rs` name `LoopHandler` in code.
+- 2026-11-03 23:39: trait and forwards changed, the window's signature written into the stub's doc, one test added;
+  rustfmt, both clippy runs, the crate's tests and the workspace check pass.
+- 2026-11-03 23:41: build folder deleted. Status done.
+
+### Result
+
+- `app.rs`: `LoopHandler::event`, `session` and `timer` take `&self` (`next_timer_ms` already did). The trait doc
+  now says why: a re-entered call through `&mut self` makes a second live `&mut`, so an implementation keeps its
+  state in cells and the window holds a `&dyn LoopHandler`.
+- `app/dispatch.rs`: the three forwards lose `mut`; no new interior mutability was needed (the `&self` methods and
+  their cells were already there). The impl's doc no longer talks about `&mut`. New test
+  `the_window_can_call_in_again_through_the_trait`: the outer call goes through a `&dyn LoopHandler`, and a nested
+  call from inside `show_tray` calls `event`, `timer`, `session` and `next_timer_ms` through the trait. The nested
+  three return `Go` and feed nothing, the core is free, the timer reads 10..=30,000, and after the outer batch the core
+  gets `OpenLog`, `InputIdle`, `Tick`, `Session(Locked)` in that order.
+- `app/window.rs`: the stub has no code, so the signature went into its module doc:
+  `LoopWindow::run(self, handler: &dyn LoopHandler) -> Result<(), WinError>`, with the reason. No window code written.
+- Checks (2026-11-03, own `CARGO_TARGET_DIR`, no `RUSTFLAGS`): `rustfmt --edition 2024 --check` on the three files
+  exit 0 (no other file rewritten; checked by write time); `cargo clippy -p wakeshot-windows --all-targets --locked
+  --target x86_64-pc-windows-msvc -- -D warnings` and the same without `--all-targets`: exit 0;
+  `cargo test -p wakeshot-windows --locked`: 276 passed, 0 failed, 17 ignored (`app::`: 27, of them 22 in
+  `app::dispatch::`); `cargo check --workspace --all-targets --locked --target x86_64-pc-windows-msvc`: exit 0 (tray
+  and CLI build). No line over 120 characters, no em or en dash. Build folder deleted.
+- No other file had to change to compile.
+- Stale docs I do not own (for the orchestrator): `docs/tasks/p6-int-window.md` deliverable 3 still says
+  `handler: &mut dyn LoopHandler`; `docs/phases/06-integration.md` note 2 (the seam listing, lines 56 to 60) still
+  shows `&mut self` on `event`, `session` and `timer`; `docs/tasks/p6-int-skeleton.md` deliverable text too (history,
+  harmless).

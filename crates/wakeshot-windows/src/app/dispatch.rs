@@ -440,19 +440,18 @@ fn ms_until(deadline: Deadline, now: Now) -> u64 {
     }
 }
 
-/// Each method forwards to the `&self` method of the same job. A window that calls in again through this trait holds
-/// two `&mut` to one dispatcher, which Rust does not allow even when the inner call only queues; the `&self` methods
-/// have no such problem.
+/// Each method forwards to the `&self` method of the same job, so a window that calls in again from a nested pump
+/// holds only shared references to the dispatcher, and the inner call queues.
 impl<R: LoopRunners> LoopHandler for Dispatcher<R> {
-    fn event(&mut self, event: Event) -> Flow {
+    fn event(&self, event: Event) -> Flow {
         self.on_event(event)
     }
 
-    fn session(&mut self, change: SessionChange) -> Flow {
+    fn session(&self, change: SessionChange) -> Flow {
         self.on_session(change)
     }
 
-    fn timer(&mut self) -> Flow {
+    fn timer(&self) -> Flow {
         self.on_timer()
     }
 
@@ -1360,6 +1359,51 @@ mod tests {
         let pos = |wanted: &str| names.iter().position(|n| *n == wanted).unwrap();
         assert!(pos("Apply") < pos("WriteHold"), "{names:?}");
         assert!(pos("WriteHold") < pos("OpenLog"), "{names:?}");
+    }
+
+    /// The window's own path: the pump holds a shared `&dyn LoopHandler` and a nested pump calls it again, every
+    /// method of the trait, while the outer call runs. With `&mut self` this test would not build.
+    #[test]
+    fn the_window_can_call_in_again_through_the_trait() {
+        let w = ready();
+        let during: Rc<RefCell<Vec<String>>> = Rc::default();
+        let note = Rc::clone(&during);
+        w.recorder().on_show.push_back(Box::new(move |d| {
+            let nested: &dyn LoopHandler = d;
+            let before = d.fed.borrow().len();
+            let event = nested.event(menu(MenuCommand::OpenLog));
+            let timer = nested.timer();
+            let session = nested.session(SessionChange::Locked);
+            let ms = nested.next_timer_ms();
+            let mut note = note.borrow_mut();
+            note.push(format!("{event:?} {timer:?} {session:?}"));
+            note.push(format!("fed {}", d.fed.borrow().len() - before));
+            note.push(format!(
+                "timer {}",
+                (TIMER_MIN_MS..=SAFETY_TICK_MS).contains(&ms)
+            ));
+            note.push(format!("core free {}", d.core.try_borrow_mut().is_ok()));
+        }));
+        let outer = working(1);
+        let handler: &dyn LoopHandler = &*w.d;
+        assert_eq!(handler.event(outer.clone()), Flow::Go);
+        assert_eq!(
+            *during.borrow(),
+            ["Go Go Go", "fed 0", "timer true", "core free true"],
+            "the nested calls only queued"
+        );
+
+        let fed = w.fed();
+        let outer_at = fed.iter().position(|e| *e == outer).unwrap();
+        let after = &fed[outer_at + 1..];
+        assert!(after.len() >= 5, "{fed:?}");
+        assert_eq!(after[0], Event::Done(Outcome::Requests(Ok(()))), "{fed:?}");
+        // Fed after the outer batch, in the order they came: the event, the timer's two, the session change.
+        assert_eq!(after[1], menu(MenuCommand::OpenLog), "{fed:?}");
+        assert!(matches!(after[2], Event::InputIdle { .. }), "{fed:?}");
+        assert_eq!(after[3], Event::Tick, "{fed:?}");
+        assert_eq!(after[4], Event::Session(SessionChange::Locked), "{fed:?}");
+        assert_eq!(handler.next_timer_ms(), w.d.timer_ms());
     }
 
     #[test]

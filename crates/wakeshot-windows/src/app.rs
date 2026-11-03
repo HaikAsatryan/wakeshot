@@ -31,17 +31,21 @@ pub enum Flow {
 /// event and returns, and the outer call feeds the queue to the core before it returns, so the core is never called
 /// while a call into it is on the stack (phase file note 4). After every call the window re-arms its one timer with
 /// `next_timer_ms`.
+///
+/// Every method takes `&self`, and the window holds a `&dyn LoopHandler`: a re-entered call through `&mut self` would
+/// make a second `&mut` while the outer one is still live, which is undefined behavior even when the inner call only
+/// queues (`p6-int-dispatch`, Found outside scope 1). So an implementation keeps its state in cells.
 pub trait LoopHandler {
     /// An event posted through `WindowSink`.
-    fn event(&mut self, event: Event) -> Flow;
+    fn event(&self, event: Event) -> Flow;
 
     /// A change from `session::decode`, end-of-session messages included. Returns only after the end-of-session wait
     /// (the `Ack`, up to 4 s), also when the call re-enters: Windows may end the process once the window answers
     /// `WM_ENDSESSION` (architecture section 4, "Tray threads").
-    fn session(&mut self, change: SessionChange) -> Flow;
+    fn session(&self, change: SessionChange) -> Flow;
 
     /// The one timer fired.
-    fn timer(&mut self) -> Flow;
+    fn timer(&self) -> Flow;
 
     /// Milliseconds until the timer should fire next: the nearer of the core's next deadline and the next safety
     /// tick, at least 10 (`USER_TIMER_MINIMUM`).

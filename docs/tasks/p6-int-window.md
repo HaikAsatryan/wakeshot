@@ -29,7 +29,7 @@ the session and end-of-session messages, all handed to a `LoopHandler`.
 2. `LoopWindow::sink(&self) -> Arc<WindowSink>`; `WindowSink: EventSink` posts `WM_APP + 1` with a boxed `Event`. A
    failed `PostMessageW` takes the box back, drops it and returns the `WinError`. `LoopWindow::hwnd()` for
    `session::register` and the guard of tests.
-3. `LoopWindow::run(self, handler: &mut dyn LoopHandler) -> Result<(), WinError>`: the pump
+3. `LoopWindow::run(self, handler: &dyn LoopHandler) -> Result<(), WinError>`: the pump
    (`GetMessageW`, `TranslateMessage`, `DispatchMessageW`, so `TrayIcon`'s and the menu's windows on this thread get
    theirs). The window procedure:
    - `WM_APP + 1`: unbox and call `handler.event`;
