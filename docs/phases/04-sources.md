@@ -106,14 +106,14 @@ Notes 7, 8 and 9 apply after v1: Codex and Copilot moved there (Haik, 2026-11-03
 | Card | Needs Haik | Runs after | Status |
 |---|---|---|---|
 | `p4-hold-files` | no | contracts card | done (20:03): 21 tests, `docs/hold-files.md` |
-| `p4-cron` | no | contracts card | running (21:21) |
+| `p4-cron` | no | contracts card | done (21:53): 34 tests; matches Claude's own scheduler in 400,000 cases |
 | `p4-claude-status` | no | contracts card | done (21:37): 34 tests |
 | `p4-claude-live-shapes` | no; runs Claude Code test sessions (Haiku); agent-session lane | contracts card | done (18:47): 27 fixtures; resume and rule 3, 5 changes in the signals doc |
 | `p4-codex-source` | no | contracts card | later (after v1, Haik 2026-11-03) |
 | `p4-watch-folders` | no | contracts card | ready |
 | `p4-watch-reads` | no | contracts card | done (21:12): 18 tests; `names` returns `io::Result` |
 | `p4-cli-args` | no | contracts card | ready |
-| `p4-claude-transcript` | no | `p4-claude-status`, `p4-cron`, `p4-claude-live-shapes` | ready |
+| `p4-claude-transcript` | no | `p4-claude-status`, `p4-cron`, `p4-claude-live-shapes` | running (21:54) |
 | `p4-copilot-source` | no | `p4-cron` | later (after v1, Haik 2026-11-03) |
 | `p4-watch-data` | no | `p4-hold-files`, `p4-watch-reads` | done (21:12): 19 tests |
 | `p4-watch-agents` | no | `p4-watch-reads` | ready |
@@ -223,3 +223,6 @@ limit; Copilot waiting does not hold. The cards build these.
 - 2026-11-03 21:14: the `p4-watch-reads` + `p4-watch-data` bundle done and committed; `p4-claude-status` running.
   Open, for the docs pass: `architecture.md` section 8 says this crate returns `WinError`, but `watch/read.rs` returns
   `io::Result` as its card says. For `p4-watch-agents`: on `restarted`, feed `Gone` and then `Appended`.
+- 2026-11-03 21:55: `p4-cron` done and committed; `p4-claude-transcript` running. For the Claude parsing review:
+  the jitter constants come from a remote flag (`tengu_kairos_cron_config`). For a docs pass:`
+  `docs/research/claude-code-signals.md` says "15 s early" for `*/5`; `p4-cron` found 285 s after the last fire.
