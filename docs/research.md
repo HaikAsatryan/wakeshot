@@ -1477,3 +1477,58 @@ NTFS, files in `%TEMP%`, test keys under `HKCU\Software\Wakeshot-test`), unless 
   held worked, and a 0 ms wait was signaled, so the sweep deleted that pid's key; the live test process's key stayed
   (`sweep_skips_live_pids`). Not tested: an open denied for a pid of another user's process (the sweep keeps such a
   key).
+
+## Hold file checks
+
+Checked 2026-11-03 for card `docs/tasks/p4-hold-files.md`.
+
+- **`procStart` from PowerShell.** `(Get-Process).StartTime.ToFileTimeUtc()` compared with the raw creation time from
+  `GetProcessTimes` (P/Invoke through `Add-Type`, `PROCESS_QUERY_LIMITED_INFORMATION`) for every process the shell
+  could open: equal for 337 of 337 in PowerShell 7.6.9 and 332 of 332 in Windows PowerShell 5.1 (1 skipped in each).
+  Run elevated. Not tested: a process that started inside the hour a daylight saving change repeats.
+- **Wall ms for the `expires` tests.** Every expected value in `holds::file` tests came from .NET
+  `[DateTimeOffset]::Parse(text, InvariantCulture).ToUnixTimeMilliseconds()` in pwsh 7.6.9, for example
+  `2026-11-03T18:00:00Z` = 1793728800000, `9999-12-31T23:59:59Z` = 253402300799000,
+  `2026-11-03T18:00:00.1234567-05:30` = 1793748600123 (fraction cut, not rounded, as ours).
+- **Date algorithms.** Howard Hinnant, "chrono-Compatible Low-Level Date Algorithms"
+  (`howardhinnant.github.io/date_algorithms.html`, read 2026-11-03): "Consider these donated to the public domain."
+  `holds::file` uses `days_from_civil` and `civil_from_days` from there, rewritten in Rust; no credit line is needed.
+- **The user doc's examples.** The PowerShell and cmd blocks of `docs/hold-files.md` were cut from the doc and run
+  in a scratch folder (only the folder line and the work line swapped) under pwsh 7.6.9, Windows PowerShell 5.1 and
+  cmd. Each wrote its file with the pid of the process that ran it (the cmd one through PowerShell's
+  `ParentProcessId`), UTF-8 with no byte order mark (`[IO.File]::WriteAllText`) or ASCII plus CRLF (cmd `echo`), and
+  deleted it at the end. The bytes parse with `holds::file::parse` (test `files_the_doc_examples_wrote_parse`).
+  `ToString('o')` on a UTC time gives `2026-11-03T20:05:00.2920348Z`, seven fraction digits, in both PowerShells.
+- **RFC 3339 grammar.** `rfc-editor.org/rfc/rfc3339.html`, read 2026-11-03. Section 5.6: `time-secfrac = "." 1*DIGIT`,
+  `time-numoffset = ("+" / "-") time-hour ":" time-minute`, `time-offset = "Z" / time-numoffset`,
+  `date-time = full-date "T" full-time`; a note says "T" and "Z" "may alternatively be lower case"; another says
+  applications "may choose" a space instead of `T` (an option, not the grammar, so `parse_expires` refuses it).
+  Section 5.7: `time-second` "may have the value "60" at the end of months in which a leap second occurs". Section
+  4.3: `-00:00` means the UTC time is known and the local offset is not.
+- **The examples' rename over an existing file.** In a scratch folder, `Move-Item -Force temp final` (pwsh 7.6.9 and
+  Windows PowerShell 5.1) and `move /y temp final` (cmd) each replaced an existing `final` with the new content and
+  left no temp file. Whether each does it in one rename or as a delete plus a move: not verified.
+
+## Tray view checks
+
+Checked 2026-11-03 for card `docs/tasks/p2-present.md`.
+
+- **Tooltip and balloon sizes.** Microsoft Learn, `NOTIFYICONDATAW` (`learn.microsoft.com/en-us/windows/win32/api/
+  shellapi/ns-shellapi-notifyicondataw`, page dated 2024-11-20, read 2026-11-03): `WCHAR szTip[128]`; "For Windows
+  2000 and later, szTip can have a maximum of 128 characters, including the terminating null character". In the `W`
+  struct a character is one `WCHAR`, one UTF-16 unit, so `text::TOOLTIP_MAX_UTF16 = 127` matches. Same page:
+  `szInfo[256]` (256 with the null, "should be restricted to 200 characters in English") and `szInfoTitle[64]` (64
+  with the null, "should be restricted to 48 characters in English"). Not tested here: what Windows 11 shows for a
+  tooltip of exactly 127 units.
+
+## Power rules checks
+
+Checked 2026-11-03 for card `docs/tasks/p2-policy-power.md`.
+
+- **The dock's short AC drops last longer than 5 s.** All Kernel-Power 105 events in the System log
+  (`Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-Kernel-Power'; Id = 105 }`,
+  28 events from 2026-11-02 00:35 to 2026-11-03 18:38, read 2026-11-03 20:10), paired `AcOnline` false then true:
+  two short drops, 5.3 s (01:50:47.050 to 01:50:52.369) and 6.3 s (12:27:54.032 to 12:28:00.285). Every other
+  battery period lasted 86 s or more. So the 5 s settle in `policy::lid` (product, "Never lower security") does not
+  cover the drops seen. Not verified: whether Wakeshot's `GUID_ACDC_POWER_SOURCE` callbacks come at the same times
+  as these events, and what caused the drops.
