@@ -114,7 +114,9 @@ Design calls the design leaves to Phase 5 (worker as principal designer). Each h
 - Loop thread: `TrayIcon::new(kind, Box::new(OwnerDrawnMenu::new(sink)))` at tray startup step 8; `Command::Tray(view)`
   runs `icon.show(&view)`; `icon.on_balloon_click(..)` takes `notifier.take_click()` and opens it with
   `shell::open_with_default_app`.
-- IO thread: `BalloonNotifier::new(icon.identity(), ..)` runs `Command::Notify` and gives `Outcome::Notified`.
+- IO thread: `let n = Arc::new(BalloonNotifier::new(icon.identity()));` the IO thread gets `Box::new(Arc::clone(&n))`,
+  runs `Command::Notify` and gives `Outcome::Notified`; the loop thread's `icon.on_balloon_click` calls `n.take_click()`.
+  The first `Command::Tray` runs before the first `Command::Notify`, or that notice fails as `Outcome::Notified(Err)`.
 - `Command::Play(cue)`: `player.play(cue)` on the loop thread (never blocks). The hibernate thread (Phase 3) holds an
   `Arc<dyn SoundPlayer>` and calls `play_and_wait(Cue::GoingToSleep)` after its last check.
 - `Command::OpenLog`: `shell::open_with_default_app(<log path from store>)` off the loop thread.
@@ -185,8 +187,8 @@ own Windows settings switched and put back.
 | `p5-text` | one read of the text list, not blocking | no | contracts change card | done (00:02): every word in `text.rs`, 552 core tests; the text list for Haik is in its Result |
 | `p5-menu-paint` | no (menu look answered 17:32: an icon per item) | no | `p5-theme` | done (00:50): 15 tests; colours and row sizes match the Phase 1 renders by pixel; nine renders in `docs/research/img/ux/` |
 | `p5-tray-icon` | no | screen, settings (light and dark mode) | `p5-theme`, `p5-icon-art` | blocked: waiting for the screen slot (Part A done, committed 01:49: 16 tests) |
-| `p5-menu-view` | no (menu look answered 17:32) | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | ready |
-| `p5-notices` | no | screen, settings (Do not disturb) | Part A: contracts change card; Part B: `p5-tray-icon`, `p5-text`, `p5-icon-art` | in progress (Part A; Part B waits for the screen slot) |
+| `p5-menu-view` | no (menu look answered 17:32) | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | in progress (Part A, started 02:05) |
+| `p5-notices` | no | screen, settings (Do not disturb) | Part A: contracts change card; Part B: `p5-tray-icon`, `p5-text`, `p5-icon-art` | blocked: waiting for the screen slot (Part A done, committed 02:07: 10 tests) |
 | `p5-sounds` | no (the "No sounds" question: honor it, Haik 2026-11-03 18:09) | sound | contracts change card | blocked: waiting for the sound slot (Part A done, committed 02:01: 15 new tests) |
 | `p5-haik-check` | yes, about 25 minutes: eyes, ears, hands | screen, sound, settings | every card above, `p4-cli-commands` | ready |
 
@@ -276,3 +278,9 @@ Bundle (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p5-th
   changed sound scheme still plays; on a 3 s timeout the sound plays on and the hibernate cuts it; the device is the
   one Windows plays system sounds on. "No sounds" is read as the scheme `.None` (inferred from this PC's registry and
   third-party pages; no Microsoft page says so).
+- 2026-11-04 02:07 (orchestrator, session `wakeshot-46`): `p5-notices` Part A done and committed (10 tests; whole
+  package 513 passed); Part B waits for the screen slot, fresh worker, build folder kept in session `wakeshot-9d`'s
+  scratchpad. Track note 5 now gives the `Arc` wiring. Decided by the worker, for Haik's review: warnings always show
+  Windows' warning icon; Windows' quiet-time flag is not set (with it a new user's first hour drops notices); a notice
+  that comes during another balloon still shows, later; a click on an older banner may open the newer notice's action
+  (Part B's `--pair` run settles it). `p5-menu-view` Part A started 02:05.

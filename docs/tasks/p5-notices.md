@@ -1,6 +1,6 @@
 # Show notices as tray balloons
 
-Phase: 5. Status: ready. Needs Haik: no (the locked-session check is in `p5-haik-check`). Agent: `wakeshot-worker`.
+Phase: 5. Status: blocked: waiting for the screen slot (Part A done 2026-11-04 02:03). Needs Haik: no (the locked-session check is in `p5-haik-check`). Agent: `wakeshot-worker`.
 Size: about 110K tokens.
 Real laptop: **screen** in Part B (one screen or sound card at a time, across all tracks), and **settings**: Do not
 disturb is switched on and back. Build folder: `CARGO_TARGET_DIR=<scratchpad>\p5-notices\target`.
@@ -106,14 +106,135 @@ Run from the repo root with the build folder above. Record each outcome.
 
 Each with the worker's default.
 
+None blocking. Part A's open calls were decided by the worker (Result, "Decisions for Haik's review").
+
 ## Found outside scope
 
 Problems seen but not fixed.
 
+1. `docs/phases/05-tray-ux.md` track note 5 says "`BalloonNotifier::new(icon.identity(), ..)` runs `Command::Notify`".
+   As built, `new` takes only the identity, and the notifier must be shared by two threads: `Arc::new(...)`, one
+   clone boxed as the IO thread's `Box<dyn Notifier>`, one in the balloon click hook (Result, "API"). For the
+   orchestrator (phase file; workers never edit it) and `p6-int-tray-mode`.
+2. `taskbar_dpi` is now in both `tray/icon.rs` (private there, `p5-tray-icon`) and `notify.rs`: eight lines, the same
+   rule. One `pub(crate)` copy in `icon.rs` would serve both; that is an `icon.rs` edit, so it waits for that file's
+   owner.
+
+## Needs another card
+
+None from Part A. Wording that reads badly on the banner can only show in Part B.
+
 ## Log
 
 - 2026-11-03: card written by `p5-plan-tray-ux`.
+- 2026-11-04 01:50: Part A started (worker). Part B waits for the screen slot.
+- 2026-11-04 01:58: `notify.rs` written: `BalloonNotifier` (`Send + Sync`, `Arc` is a `Notifier` too), `IconChoice`,
+  `fill`, `info_flags`, the app icon through `art::ico` and `CreateIconFromResourceEx`. 10 tests, 9 passed at the
+  first run; the one failure was a wrong count in the test itself (6 notices, not 7), fixed.
+- 2026-11-04 02:03: `examples/ux_notices.rs` written; clippy `--all-targets` x64 clean; rustfmt applied to both owned
+  files (one assert joined). Full check run started (both targets, tests, release builds).
+- 2026-11-04 02:03: every Part A check passed (Result). `docs/research.md` section "Tray UX: notices" added (Part A
+  facts: the two Microsoft pages, `CreateIconFromResourceEx` alpha). Part A done; Status set to blocked, waiting for
+  the screen slot. Build folder kept for Part B.
 
 ## Result
 
-What was done, files changed, checks and outcomes, open items. Include the public API as built.
+Part A: done (2026-11-04 02:03). Part B: not started, waiting for the screen slot.
+
+### What was done
+
+- `crates/wakeshot-windows/src/notify.rs`: `BalloonNotifier` and `IconChoice` added; the `Notifier` trait and
+  `FakeNotifier` unchanged. `show` turns `text::notice` into a `NOTIFYICONDATAW` with `NIF_INFO | NIF_GUID` only (the
+  icon, tooltip and callback stay as `TrayIcon` set them), title and body cut to 63 and 255 UTF-16 units on a
+  character boundary, then `Shell_NotifyIconW(NIM_MODIFY)`; FALSE gives `WinError { call: "Shell_NotifyIconW", code }`
+  (last error cleared first, so 0 means Windows gave no code). The large app icon is `art::app_icon` at `SM_CXICON`
+  for the primary taskbar's DPI, made with `CreateIconFromResourceEx` from one frame of `art::ico` (so it reuses the
+  tested ICO writer instead of copying `icon.rs`'s private `make_icon`).
+- `crates/wakeshot-windows/examples/ux_notices.rs`: demo icon on the main thread, notices from a second thread as the
+  IO thread does. Flags `--all` (14 notices, 10 s apart, first after 2 s), `--one <name>`, `--list`, `--pair`
+  (first-run then restore-failed, 1 s apart: two different click actions), `--icon user|info`, `--cycle` (icon state
+  every 3 s), `--minutes N` (default 10). Prints each notice's warning, silent and click, each `show` result, every
+  icon note, and `balloon click: <take_click>`; opens nothing. Quits on time or `WM_CLOSE`, removing the icon.
+- `docs/research.md`: new section "Tray UX: notices" (Part A facts only).
+
+### API (for `p6-int-tray-mode`)
+
+```rust
+pub enum IconChoice { App, Info }            // IconChoice::PRODUCT = App until Part B decides
+pub struct BalloonNotifier;                   // Send + Sync
+impl BalloonNotifier {
+    pub fn new(icon: IconIdentity) -> Self;
+    pub fn with_choice(icon: IconIdentity, choice: IconChoice) -> Self;   // demos
+    pub fn take_click(&self) -> NoticeClick;
+}
+impl Notifier for BalloonNotifier {}
+impl Notifier for Arc<BalloonNotifier> {}
+```
+
+Wiring: `let n = Arc::new(BalloonNotifier::new(icon.identity()));` the IO thread gets `Box::new(Arc::clone(&n))` as
+its `Box<dyn Notifier>`; `icon.on_balloon_click(Box::new(move || open(n.take_click())))` on the loop thread. The icon
+must be added (the first `Command::Tray`) before the first `Command::Notify`, else that notice fails with
+`Shell_NotifyIconW` and comes back as `Outcome::Notified(Err)`; the notifier does not retry. While Explorer is
+restarting, a notice fails the same way.
+
+### Checks (2026-11-04 01:59 to 02:03, build folder `<scratchpad>\p5-notices\target`)
+
+| Check | Outcome |
+|---|---|
+| `rustfmt --edition 2024 --check` on `notify.rs`, `ux_notices.rs` | clean (after one `rustfmt` of both owned files) |
+| `cargo clippy --locked -p wakeshot-windows --all-targets --target <t> -- -D warnings`, x64 and ARM64 | clean |
+| the same without `--all-targets`, x64 and ARM64 | clean |
+| `cargo test --locked -p wakeshot-windows notify` | 10 passed |
+| `cargo test --locked -p wakeshot-windows` | 513 passed, 21 ignored, 0 failed |
+| `cargo build --release --locked -p wakeshot-windows --target <t>`, x64 and ARM64, lib and `--example ux_notices` | built |
+
+Tests (all in `notify::tests`): `fills_title_and_body_within_limits`, `warning_and_silent_set_the_flags`,
+`uses_the_guid_identity`, `click_is_kept_for_the_last_notice_only`, `take_click_clears_it`, `notifier_is_send`
+(compile-time `Send + Sync`, and both `BalloonNotifier` and `Arc<BalloonNotifier>` are a `Notifier`),
+`show_sends_the_words_flags_and_app_icon`, `first_frame_of_one_frame_ico`, `large_icon_reads_back`,
+`large_icon_size_is_the_large_metric`. No test calls `Shell_NotifyIconW` (a fake shell behind a private seam). No
+other card's file showed a fmt or clippy hit. Only the owned files, this card and the new `research.md` section
+changed.
+
+### Design calls (worker as designer; each with its trigger)
+
+1. A warning always shows Windows' warning icon (`NIIF_WARNING`); `IconChoice` picks only the icon of the other
+   notices (app icon or `NIIF_INFO`). Why: the goal asks for a warning look in either case. Change it when Part B
+   shows the warning icon does not show on the banner.
+2. `NIIF_LARGE_ICON` on every notice, stock icons included (the page allows it). Change it when Part B shows the
+   stock icon looks wrong large.
+3. The large app icon is kept for the notifier's life and redrawn only when the size changes (the old one freed after
+   the next call). So the card's "free it after the call if the shell copies it" check is not needed for safety:
+   one handle costs nothing, and freeing early could blank a queued balloon. Change it when a leak check shows more
+   than one icon handle per notifier.
+4. Size `SM_CXICON` at the primary taskbar's DPI, the size `NIIF_LARGE_ICON` names. Change it when Part B shows a blurry icon on the
+   banner.
+5. If the app icon cannot be made (no handles left), the notice shows with the info icon instead of failing.
+6. The click action is set only after Windows took the notice; a refused notice leaves the earlier click in place.
+7. `Arc<BalloonNotifier>` implements `Notifier` (an addition to the contract module, nothing changed): the one way to
+   serve both threads with the IO thread's `Box<dyn Notifier>` as it is.
+8. The large-icon lock is held through the shell call; `take_click` uses a separate lock, so a slow Explorer never
+   holds up the loop thread.
+
+### Decisions for Haik's review (decided by the worker)
+
+1. **No quiet time flag** (`NIIF_RESPECT_QUIET_TIME`). With it, Windows silently drops a notice in a new user's first
+   hour (or after an OS upgrade). Every Wakeshot notice tells of something it did or could not do (decision 0), most
+   in answer to the user's own act, which Microsoft exempts. Change it when a notice is pure news (only `Updated` is
+   close), or if Haik wants `Updated` held back then.
+2. **No "real time only" flag** (`NIF_REALTIME`): a notice queued behind another balloon still shows, later. A late
+   notice beats a lost one. Change it when Part B shows a queued notice shows words that are no longer true.
+3. **Warnings keep the warning icon** even if Part B picks the app icon for the rest (design call 1).
+4. **A click on an older banner** may give the newer notice's action: Windows' click message does not say which
+   balloon. If Part B `--pair` shows two banners at once, the safe fix is to drop the click action when two notices
+   with different actions come close together. Part B decides with the picture.
+
+### Open for Part B (steps 4 to 11)
+
+- Part B steps unchanged, except the "does the shell copy the icon" check (design call 3: not needed).
+- To record: does `NIM_MODIFY` from the second thread work (never tried before: the spike called it from the
+  window's thread); does `--cycle` show any clash; the large icon's sharpness at 150% (design call 4); the high word
+  of the callback `lParam` (from `p5-tray-icon`, if not settled there).
+- Then IconChoice: set `IconChoice::PRODUCT` to the pick and record why.
+
+Context used by Part A: about 110K tokens.

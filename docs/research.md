@@ -3095,3 +3095,28 @@ Card `docs/tasks/p6-hooks.md`, 2026-11-04. Tests in `crates/wakeshot-windows/src
 - **Updated hook limit: 10 s, not 12 s.** `p6-velopack-facts` (Result, "Design calls") and `architecture.md`
   section 5, restore step 7, give 10 s; `06-ship.md` "Hooks" still said 12 s (read 2026-11-04 01:50). The code uses
   10 s.
+
+## Tray UX: notices
+
+Card `p5-notices`, 2026-11-04 (code `crates/wakeshot-windows/src/notify.rs`, harness
+`crates/wakeshot-windows/examples/ux_notices.rs`). Part A only so far: no balloon was shown yet (no test calls
+`Shell_NotifyIconW`; the tests use a fake shell). The screen results (icon choice, click, pair, Do not disturb) come
+with Part B.
+
+- **Microsoft's `NOTIFYICONDATAW` page** (learn.microsoft.com/windows/win32/api/shellapi/ns-shellapi-notifyicondataw,
+  updated 2024-11-20, read 2026-11-04): with `NIIF_USER`, Vista and later show `hBalloonIcon`; `NIIF_LARGE_ICON` asks
+  for the `SM_CXICON` size, "can be used with all stock icons", and with `hBalloonIcon` the app "must supply an
+  SM_CXICON x SM_CYICON version". An empty `szInfoTitle` hides the icon; an empty `szInfo` removes a balloon.
+  `NIF_REALTIME` discards a balloon that cannot show at once. `NIIF_RESPECT_QUIET_TIME` drops a balloon, without
+  queueing it, in the user's first hour after the first sign-in or after an OS upgrade or clean install. `uTimeout`
+  is ignored since Vista. One balloon at a time: a new one "is queued and displayed when the older notification goes
+  away". The page does not say whether the shell copies `hBalloonIcon`.
+- **Microsoft's `Shell_NotifyIconW` page** (updated 2025-07-01, read 2026-11-04): the return value section names no
+  last error for FALSE. `NIN_BALLOONUSERCLICK` is "Sent when the balloon is dismissed because the user clicked the
+  mouse", with no word of which balloon. "On Windows 11 ... When a banner notification times out or is otherwise
+  dismissed, it will not be displayed in the Notification Center." This agrees with "Notification centre" above (no
+  entry for the balloon). Whether a banner held back by Do not disturb shows later or is lost: not verified (Part B).
+- **`CreateIconFromResourceEx` keeps 32-bit alpha** (test `large_icon_reads_back`, 2026-11-04): one frame of
+  `art::ico` (a BITMAPINFOHEADER of twice the height, bottom-up BGRA, then the AND mask) at 48 px, format version
+  0x00030000 and `LR_DEFAULTCOLOR`, gives a 48 by 48, 32 bpp colour bitmap; `GetDIBits` returns the disc's centre
+  pixel as B, G, R with its alpha, and alpha 0 at the clear corner.
