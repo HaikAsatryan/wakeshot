@@ -194,7 +194,7 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | Card | Needs Haik | Laptop | Runs after | Status |
 |---|---|---|---|---|
 | `p6-int-skeleton` | no | no; runs alone (edits a contract module list) | `p1-close-contracts` | done (19:28): whole-workspace checks green, closes wave 1 |
-| `p6-int-io-thread` | no | no | `p6-int-skeleton`, `p3-power-io`, `p3-store`, `p3-log`, `p4-cli-commands` | ready |
+| `p6-int-io-thread` | no | no | `p6-int-skeleton`, `p3-power-io`, `p3-store`, `p3-log`, `p4-cli-commands` | in progress |
 | `p6-int-window` | no | no (hidden windows only) | `p6-int-skeleton`, `p3-session` | done (00:05): 16 window tests, 314 in the crate |
 | `p6-int-dispatch` | no | no | `p6-int-skeleton`, `p2-core-lid`, `p3-power-io` | done (22:18): 21 tests, 22 of 22 mutants caught |
 | `p6-int-startup` | no | no | `p6-int-skeleton`, `p3-store`, `p3-log`, `p3-process`, `p3-session`, `p3-journal`, `p3-power-io` | done (00:05): 22 tests; journal read retried once after 500 ms |
@@ -276,3 +276,4 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
 - 2026-11-03 23:36: the LoopHandler `&self` contract change is running (worker, Log in `p6-int-dispatch`), alone among cards that build `wakeshot-windows`. Then `p6-int-window` and the other Windows cards start.
 - 2026-11-03 23:42: the LoopHandler `&self` contract change is done (276 tests in `wakeshot-windows`, workspace check green; Log in `p6-int-dispatch`). Nested calls only queue and run after the outer batch. Note 2 above and `p6-int-window` deliverable 3 now say `&dyn LoopHandler`. `p6-int-window` and `p6-int-startup` start now; `p6-int-startup` also builds review finding 3 (the startup journal read retry).
 - 2026-11-04 00:05: `p6-int-window` and `p6-int-startup` done and committed (the window's research section went into the startup commit). For `p6-int-tray-mode` (in its Log): call `session::register` with `hwnd()` and own the 1702 retry, then `started` and `locked_at_start`; after Quit every post fails with 1400, so the IO thread's answers during `finish` each log a failed post; `try_settings` gives `None` for both a held and a denied mutex and logs neither. Finding 3 core side: `Startup` gains `unread: bool` in `executor.rs`, `started()` copies it (about three lines); goes to the second core fix round with `core.rs:159` (an Automatic toggle writes version 1 over a newer `config.json`).
+- 2026-11-04 01:14: `p6-int-io-thread` running (owns `app/io_thread.rs`).

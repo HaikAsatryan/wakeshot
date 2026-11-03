@@ -143,8 +143,8 @@ those one at a time across all tracks.
 | Card | Needs Haik | Runs after | Status |
 |---|---|---|---|
 | `p6-velopack-facts` | no; real laptop: installs and uninstalls a throwaway app | Haik's sign-off of the track plans; the contracts card (it builds the repo's release exes; review m10) | done (22:12): 11 facts checked; nothing left installed |
-| `p6-login-and-path` | no | the contracts card; `p3-store` (test key helper) | ready |
-| `p6-update-schedule` | no | the contracts card | ready |
+| `p6-login-and-path` | no | the contracts card; `p3-store` (test key helper) | in progress |
+| `p6-update-schedule` | no | the contracts card | in progress (bundle, after `p6-login-and-path`) |
 | `p6-hooks` | no (Question 2: the default, Haik 2026-11-03 18:09) | `p6-login-and-path`; `p3-store`, `p3-log`, `p3-process`, `p3-journal`, `p3-power-plan`; core `p2-ownership-restore` (review M1) | ready |
 | `p6-velopack-dependency` | yes, once: the elevated clang install of its step 0 (Question 4: yes); runs alone on the whole laptop: no other card and no cargo command (review M5) | `p6-hooks`, `p6-update-schedule`, `p6-velopack-facts` | ready |
 | `p6-pack-and-release` | no (Question 5: yes, the first real run is a public pre-release) | `p6-velopack-facts` | ready |
@@ -239,3 +239,4 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   needs a `media/.gitignore` and the 125% change; the smoke test's DisplayVersion check and the winget job belong to
   `p6-pack-and-release`. The LidGuard and HyperFrames READMEs hold prompts aimed at their users' agents; the worker
   treated them as data and ran nothing.
+- 2026-11-04 01:14: the `p6-login-and-path` + `p6-update-schedule` bundle running (owns `install.rs`, `update.rs`).

@@ -112,13 +112,13 @@ Notes 7, 8 and 9 apply after v1: Codex and Copilot moved there (Haik, 2026-11-03
 | `p4-codex-source` | no | contracts card | later (after v1, Haik 2026-11-03) |
 | `p4-watch-folders` | no | contracts card | done (00:26): 20 tests, no handle leak in 1,000 cycles |
 | `p4-watch-reads` | no | contracts card | done (21:12): 18 tests; `names` returns `io::Result` |
-| `p4-cli-args` | no | contracts card | in progress |
+| `p4-cli-args` | no | contracts card | done (committed 01:14): every command routed; the child text comes from the raw command line |
 | `p4-claude-transcript` | no | `p4-claude-status`, `p4-cron`, `p4-claude-live-shapes` | done (22:35): 46 tests; no contract change |
 | `p4-copilot-source` | no | `p4-cron` | later (after v1, Haik 2026-11-03) |
 | `p4-watch-data` | no | `p4-hold-files`, `p4-watch-reads` | done (21:12): 19 tests |
 | `p4-watch-agents` | no | `p4-watch-reads` | done (22:43): 19 tests; API changes for `p4-watch-thread` in its Result |
 | `p4-watch-thread` | no | `p4-watch-folders`, `p4-watch-data`, `p4-watch-agents`, `p3-process` | done (committed 00:54): 14 thread tests, 2 m3 tests; each of 4 behaviours caught by its tests when broken |
-| `p4-cli-run` | no | `p4-cli-args`, `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | in progress |
+| `p4-cli-run` | no | `p4-cli-args`, `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | done (committed 01:14): `child.rs`, `run.rs`, core `holds::file::render`; 75 CLI tests, 3 exe, 5 run, 14 child, 24 holds file |
 | `p4-cli-commands` | no; screen once (opens one file in the default app; global lane, review M6) | `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 30 tests; screen step ran once |
 | `p4-cli-restore` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09; nothing to add) | `p3-journal`, `p3-power-plan`, `p2-ownership-restore`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 10 tests |
 | `p4-live-claude` | optional: 3 minutes for the VS Code check; agent-session lane | `p4-watch-thread`, `p4-claude-transcript`, `p4-cli-run`, `p3-process`, the Claude parsing review (`docs/phases/02-06-lighter.md`) | ready |
@@ -262,3 +262,13 @@ limit; Copilot waiting does not hold. The cards build these.
   because the output file is "the only other trace" (wrong now; proposed text in the card); `docs/architecture.md`
   899-900, the `timers` and `open_tasks` comments, do not match the Monitor rules. Harmless: `watch/read.rs:577`
   writes pid 4 bytes it never parses. The second verify (M1 part b) runs: `docs/reviews/p4-claude-parsing-verify2.md`.
+- 2026-11-04 01:14: the `p4-cli-args` + `p4-cli-run` bundle done and committed. `wakeshot --dry-run run -- cmd /c
+  echo hi` from the built exe printed hi and exited 0; the five open `--dry-run` exe checks of `p4-cli-commands` and
+  `p4-cli-restore` matched the in-process results. Decided by the worker, for Haik's review: wrapper exit codes 127
+  (not found), 126 (cannot start), 125 (child lost); a batch file runs through its resolved full path, so cmd never
+  searches the current folder; ASCII case-insensitive words; `-h` and `/?` also show help; the warning words. For
+  `p4-live-claude`: untested are a real Ctrl+C in Windows Terminal and conhost, Ctrl+Break, closing the window while run
+  waits, and run against a live tray. For `p6-int-dry-run-e2e`: `tests/run.rs` drives the exe on a temp folder with
+  `WAKESHOT_DATA_DIR` (debug builds only). Outside scope: `keep_awake.rs` writes its hold file by hand and could use
+  `render`; architecture section 4 does not name the exit codes (next docs pass). Session `wakeshot-91` has no agent
+  left; this orchestrator runs every card from here.
