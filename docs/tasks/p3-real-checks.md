@@ -68,6 +68,9 @@ Problems seen but not fixed.
 - 2026-11-03 20:27, orchestrator, from `p3-journal`'s "Found outside scope" item 3: add a check that a Medium tray
   can open the journal lock while an elevated process (for example `wakeshot restore` from an admin terminal) holds
   it, and the reverse. Not tested by `p3-journal`.
+- 2026-11-03 20:50, orchestrator, from `p3-session`'s Result: rerun `real_locked_now_here` on the final code (its
+  unlocked pass ran before a clippy-only change); `real_lock_locks` was never run. The ignored tests' filter needs the
+  full path, `session::tests::...`; `session::real_on_console_here` matches no test.
 
 ## Result
 

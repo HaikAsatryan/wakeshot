@@ -80,6 +80,9 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03: card written by `p6-plan-integration`.
+- 2026-11-03 20:50, orchestrator, from `p3-session`'s Result (not verified): `register` may fail with error 1702
+  very early at sign-in, and `on_console` reads false while the console is attaching. A retry on the tick would
+  cover both.
 
 ## Result
 

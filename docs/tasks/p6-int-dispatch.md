@@ -93,6 +93,11 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03: card written by `p6-plan-integration`.
+- 2026-11-03 20:50, orchestrator, from `p3-system-events`' Result: a lost Lid, Power, Suspending or Resumed post is
+  never sent again, since the 30 s tick reads none of these states (decide whether the tick should read lid and
+  source); `LoopRunners::input_idle_ms() -> u64` cannot return an error, so the runner must pick a value for a failed
+  read (0 is safe). `testing.rs` does not re-export `FakeRequests` or `FakeLocker` (`p3-session`): a contract
+  change the orchestrator runs alone, if you need them.
 
 ## Result
 
