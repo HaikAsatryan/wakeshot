@@ -3300,3 +3300,28 @@ the laptop or its power settings.
   failures around a lid close are rare in it.
 - **Windows callers unchanged.** `cargo check -p wakeshot-windows --all-targets` exit 0, and its `power::` and `app::`
   tests (182 passed, 10 ignored real-laptop tests) pass with the changed apply and check routines.
+
+## Tray mode checks
+
+Card `p6-int-tray-mode` Part A, 2026-11-04. No tray started, no screen, no power setting.
+
+- **The core gives the first-run notice before the first icon view.** In `core.rs`, `take` handles `Started` and
+  pushes `Notify(FirstRun)` (and `WriteConfig`); `settle` runs after it and ends with `view::show`, which pushes the
+  first `Tray`. So in the `Started` batch `Notify` comes before `Tray`. The dispatcher pushes `Notify` onto the IO
+  queue at its place and runs `Tray` on the loop later in the same batch, so an IO thread that already runs could call
+  the shell for the balloon before `NIM_ADD`, and `BalloonNotifier` does not retry (`p5-notices`). Read in the code;
+  `tray_mode` therefore starts the IO thread right after `Dispatcher::new`.
+- **`LoopWindow::run` destroys its window before it returns** (`window.rs`: `run(self, ..)`, `Drop` calls
+  `DestroyWindow`). Microsoft, `WTSRegisterSessionNotification` Remarks (fetched 2026-11-04): "When a window no
+  longer requires these notifications, it must call WTSUnRegisterSessionNotification before being destroyed." So the
+  unregister cannot wait for step 9 of the shutdown; `tray_mode` does it when the dispatcher returns Quit. The same
+  page: `RPC_S_INVALID_BINDING` may come before the Remote Desktop services have started, and they have all started
+  once the event `Global\TermSrvReadyEvent` is set. `tray_mode` retries on each safety tick instead of waiting on
+  that event (not tested: no early sign-in here).
+- **The profile folder is found the way Node finds it.** Rust's `std::env::home_dir` on Windows returns
+  `USERPROFILE` when it is set and not empty, else `GetUserProfileDirectory`; before Rust 1.85 it read `HOME` (std
+  docs, fetched 2026-11-04; the repo pins 1.99.1, where it is not deprecated: clippy `-D warnings` is clean). Node's
+  `os.homedir()` on Windows "uses the USERPROFILE environment variable if defined. Otherwise it uses the path to the
+  profile directory of the current user" (Node docs, fetched 2026-11-04). Claude Code 2.1.317 builds its folder from
+  `homedir()` (`p4-live-claude`, Log 01:41). Whether the runtime the installed Claude Code runs on follows Node's rule
+  here: not verified.

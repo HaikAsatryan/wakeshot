@@ -135,18 +135,23 @@ is 10 s, `03-windows-power.md` note 9), then exits anyway: the guard covers what
 3. `startup`: data folder and mutex names, real or dry run; 4. `Local\Wakeshot.Tray` taken, or exit 0;
 5. log roll and open (process `tray`), then the panic hook (log, abort); 6. the startup restore
 (`PowerExecutor::startup`), on this thread, before any other thread starts; 7. `Global\Wakeshot.Settings` tried.
-8. Loop window and `WindowSink`; `TrayIcon::new(kind, OwnerDrawnMenu::new(sink))`; `BalloonNotifier::new(identity)`
-and the balloon click hook (`take_click`, then `shell::open_with_default_app`); the sound player; requests and locker
-(real or dry run); `IoQueue`; the executor (real or dry run, `TrayGuard` or `NoGuard`); `IoThread::start`;
-`session::register(hwnd)`; `Subscriptions::start(sink)`; `Dispatcher::new`, which feeds `Started` first, then
-`Session(Locked)` if the session was locked at start (`startup::locked_at_start`; `docs/reviews/p1-close-verify.md`
-Major 1), then `JournalCorrupt` if a corrupt journal was left by another process, then `Updated` if Velopack
-restarted the tray;
-`WatchThread::start` with the Claude source (home, `SystemZone`) and `SystemLiveness` (Codex and Copilot after v1); the update
-thread (tray mode only, installed only); then the pump. Events posted before the pump runs wait in the window's queue,
-so the core always sees `Started` first.
-9. After the pump: `IoThread::finish(10 s)`, update thread stop, `WatchHandle::stop`, subscriptions, session
-registration, icon (`NIM_DELETE`) and requests dropped in that order, a last log line, mutexes released, exit 0.
+8. As built by `p6-int-tray-mode` (its card, Result; why in `tray_mode.rs`'s module doc): `LoopWindow` and
+`WindowSink`; `IoQueue`; `OwnerDrawnMenu::new(sink)?` and `TrayIcon::new(kind, Box::new(menu))?`, each with a note
+hook; `Arc<BalloonNotifier>` and the balloon click hook (`take_click`, then `shell::open_with_default_app` on a short
+thread of its own); the sound player (`Arc<dyn SoundPlayer>`, shared with the hibernate thread);
+`session::register(hwnd)` with its retry; `Subscriptions::start(sink)`; `WatchThread::start` with the Claude source
+only (`ClaudeSource::in_folder(claude_folder(home, CLAUDE_CONFIG_DIR), SystemZone::current())`) and
+`SystemLiveness`, before `Dispatcher::new` so its handle goes into the runners; `started` and `locked_at_start`;
+`JournalCorrupt` when `Startup.corrupt`; `Dispatcher::new`, which feeds `Started` first, then `Session(Locked)` if
+the session was locked at start (`docs/reviews/p1-close-verify.md` Major 1), then `JournalCorrupt`, then `Updated` if
+Velopack restarted the tray (`p6-int-update-wiring`); then `IoThread::start`, after `Dispatcher::new`, so the core's
+first `Tray` is queued before its first `Notify`; the update thread (`p6-int-update-wiring`: after
+`IoThread::start`, tray mode only, installed only); then the pump. Events posted before the pump runs wait in the
+window's queue, so the core always sees `Started` first.
+9. The session registration is dropped at Quit, before `LoopWindow::run` destroys the window (Microsoft: unregister
+before that). After the pump: `IoThread::finish(10 s)`, update thread stop, `WatchHandle::stop`, subscriptions, icon
+(`NIM_DELETE`), requests, the settings mutex, in that order; a last log line; the tray mutex; exit 0, or 1 after a
+start failure.
 
 ### 7. Tests in layers
 
@@ -198,7 +203,7 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | `p6-int-window` | no | no (hidden windows only) | `p6-int-skeleton`, `p3-session` | done (00:05): 16 window tests, 314 in the crate |
 | `p6-int-dispatch` | no | no | `p6-int-skeleton`, `p2-core-lid`, `p3-power-io` | done (22:18): 21 tests, 22 of 22 mutants caught |
 | `p6-int-startup` | no | no | `p6-int-skeleton`, `p3-store`, `p3-log`, `p3-process`, `p3-session`, `p3-journal`, `p3-power-io` | done (00:05): 22 tests; journal read retried once after 500 ms |
-| `p6-int-tray-mode` | no | Part B: screen, about 10 min (a dry-run icon) | `p6-int-io-thread`, `p6-int-window`, `p6-int-dispatch`, `p6-int-startup`, `p3-requests`, `p3-system-events`, `p3-hibernate`, `p3-recovery`, `p4-watch-thread`, `p4-claude-transcript`, `p4-cron`, `p5-tray-icon`, `p5-menu-view`, `p5-notices`, `p5-sounds` | in progress (Part A, started 02:28) |
+| `p6-int-tray-mode` | no | Part B: screen, about 10 min (a dry-run icon) | `p6-int-io-thread`, `p6-int-window`, `p6-int-dispatch`, `p6-int-startup`, `p3-requests`, `p3-system-events`, `p3-hibernate`, `p3-recovery`, `p4-watch-thread`, `p4-claude-transcript`, `p4-cron`, `p5-tray-icon`, `p5-menu-view`, `p5-notices`, `p5-sounds` | blocked: waiting for the screen slot (Part A done, committed 02:56: 11 tests; the smoke run is Part B) |
 | `p6-int-update-wiring` | no | no | `p6-int-tray-mode`, `p6-velopack-dependency`, `p6-update-schedule` | ready |
 | `p6-int-dry-run-e2e` | no | screen (dry-run icon, balloons, pictures); agent-session lane (one Claude Code test session) | `p6-int-update-wiring`, `p4-cli-args`, `p4-cli-run`, `p4-cli-commands`, `p4-cli-restore`, `p4-live-claude` | ready |
 | `p6-int-real-e2e` | no | global: power settings on active plan copies, RunOnce, a guard | `p6-int-dry-run-e2e`, `p3-real-checks` | ready |
@@ -299,3 +304,14 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   tray cards; their Part A (API, code, tests) is done and committed, their Part B waits for the screen and Haik (the
   session locks when the display turns off, `05-tray-ux.md` 02:20). Their APIs are fixed by Part A, so the wiring
   starts now; a Part B fix that changes an API gets a small follow-up here.
+- 2026-11-04 02:56 (orchestrator, session `wakeshot-46`): `p6-int-tray-mode` Part A done and committed: `tray_mode::run`
+  wires the whole product, 11 unit tests, clippy clean 8 ways; the wiring itself is first run by the Part B smoke test.
+  Note 6 above now gives the built order: the watch thread before `Dispatcher::new`, the IO thread after it (the
+  core's first `Notify(FirstRun)` comes before its first `Tray`), the session registration dropped at Quit. Decided by
+  the worker, for Haik's review (16 in the card; main ones): that order; the session register retried on each safety
+  tick; the tray makes its own settings mutex tries so the log says why it was not taken; OpenLog stays on the IO
+  thread (risk weighed); the balloon click opens on a short thread. Found outside scope, for a small fix card: a
+  first-run notice is lost for good when the first icon add fails (start at sign-in before the taskbar); a
+  `Done(Hibernate)` whose post fails (queue full) leaves `hibernating` set, so no later hibernate starts in that run;
+  `SystemZone` errors are never logged once boxed in the Claude source; `log::log_file` (a third copy of
+  "wakeshot.log").
