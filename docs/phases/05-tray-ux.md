@@ -184,9 +184,9 @@ own Windows settings switched and put back.
 | `p5-icon-art` | one look at the icon sheet, not blocking | no | contracts change card | done (committed 01:29): three glyph sets (Cup, Eye, Sky) with holding, idle and off; app icon; ICO 16 to 64; 12 tests |
 | `p5-text` | one read of the text list, not blocking | no | contracts change card | done (00:02): every word in `text.rs`, 552 core tests; the text list for Haik is in its Result |
 | `p5-menu-paint` | no (menu look answered 17:32: an icon per item) | no | `p5-theme` | done (00:50): 15 tests; colours and row sizes match the Phase 1 renders by pixel; nine renders in `docs/research/img/ux/` |
-| `p5-tray-icon` | no | screen, settings (light and dark mode) | `p5-theme`, `p5-icon-art` | in progress |
+| `p5-tray-icon` | no | screen, settings (light and dark mode) | `p5-theme`, `p5-icon-art` | blocked: waiting for the screen slot (Part A done, committed 01:49: 16 tests) |
 | `p5-menu-view` | no (menu look answered 17:32) | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | ready |
-| `p5-notices` | no | screen, settings (Do not disturb) | Part A: contracts change card; Part B: `p5-tray-icon`, `p5-text`, `p5-icon-art` | ready |
+| `p5-notices` | no | screen, settings (Do not disturb) | Part A: contracts change card; Part B: `p5-tray-icon`, `p5-text`, `p5-icon-art` | in progress (Part A; Part B waits for the screen slot) |
 | `p5-sounds` | no (the "No sounds" question: honor it, Haik 2026-11-03 18:09) | sound | contracts change card | in progress (Part A; Part B waits for the sound slot) |
 | `p5-haik-check` | yes, about 25 minutes: eyes, ears, hands | screen, sound, settings | every card above, `p4-cli-commands` | ready |
 
@@ -253,3 +253,15 @@ Bundle (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p5-th
   Haik's call). `p5-tray-icon` running; its Part B (screen, the light/dark switch) runs only after 15 minutes with no
   user input, else it stops after Part A.
 - 2026-11-04 01:41: `p5-sounds` Part A running; the worker stops before Part B until no screen or sound card runs.
+- 2026-11-04 01:50: `p5-tray-icon` Part A done and committed (16 tests, a fake shell; `examples/ux_icon.rs`). Part B
+  did not run: input 174 s before 01:47, so Haik may be at the laptop. API: `TrayIcon::new(IconKind, Box<dyn MenuView>)`,
+  `show`, `on_balloon_click`, `on_note` (log `AddFailed` and `ModifyFailed` through it in `p6-int-tray-mode`),
+  `identity()`; GUIDs: product `7db9403e-d4b9-4165-a99e-a69b8ea56744`, dry run `c0d07dcd-dfd4-4a9d-b139-ad1e2ce9f987`,
+  demo `1e8c66d4-0fa3-4a54-95a1-61bb89b171e9`. Decided by the worker, for Haik's review: no shell call while the menu
+  is open (a new view, theme or size waits; a click does nothing); a failed add deletes our own GUID and adds once more
+  before backing off (not verified as needed); a failed version 4 or later change adds the icon again; in high
+  contrast the icon takes the window text colour (Windows' own taskbar colour there not verified); theme and display
+  messages are checked at once and 1 s later; `WM_CLOSE` to the icon's window is ignored; `ux_icon --state`. Not
+  tested: a display scale change with no display message may leave the old size (`p5-haik-check`). The screen lane
+  runs one Part B at a time, each only after 15 minutes with no input: tray icon, then menu view, then notices; sounds
+  Part B after them. `p5-notices` Part A running. The laptop is on AC again (01:49).
