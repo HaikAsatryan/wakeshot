@@ -132,8 +132,8 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | `p2-ownership-apply` | no | `p2-ownership-restore` | done (20:36): 46 tests, 10 of 11 mutants caught (the survivor cannot be caught) |
 | `p2-core-holds` | no | `p2-policy-holds`, `p2-policy-power`, `p2-present`, `p4-hold-files` | done (20:39): 40 scenarios and a proptest, 13 of 13 mutants caught |
 | `p2-ownership-props` | no | `p2-ownership-apply` | ready |
-| `p2-core-settings` | no (Phase 1 Question 10: default, console part built; Haik 2026-11-03 18:09) | `p2-core-holds` | running (20:40) |
-| `p2-core-lid` | no | `p2-core-settings` | ready |
+| `p2-core-settings` | no (Phase 1 Question 10: default, console part built; Haik 2026-11-03 18:09) | `p2-core-holds` | done (21:06): 34 tests, 12 of 12 mutants caught |
+| `p2-core-lid` | no | `p2-core-settings` | running (21:08) |
 | `p2-core-props` | no | `p2-core-lid`, `p2-ownership-apply` | ready |
 
 No card touches the real laptop (no power settings, screen, sound or installs) or needs Haik's hands. "Contracts
@@ -200,3 +200,8 @@ Where each item this track owns is built. "Integration" is planned after the tra
   after an apply fails with `JOURNAL_CORRUPT`, the core sends one `Restore { plan: None }`. Open, for the docs pass:
   `architecture.md` section 5 Apply steps 3 and 4 and the accepted cases under "Ownership" (`p2-ownership-apply`'s
   Found outside scope 1, 2, 6). Later, low priority: a `user_changed` field in `Outcome::Applied` (item 5).
+- 2026-11-03 21:08: `p2-core-settings` done and committed; `p2-core-lid` running. Open, for the docs pass: plan
+  reads and retries at a tick at most once per 10 s, and the restore at hold end only when something may be owned
+  (`p2-core-settings` Found outside scope 2). For `p3-power-io`'s worker (next free slot): a `Leftover` restore not
+  run because the owner is Unknown must answer `Err`, not `Ok` (item 3). Later, contract: a `RestoreWhy` for the
+  restore after a failed apply (item 1; today `WorkEnded`).
