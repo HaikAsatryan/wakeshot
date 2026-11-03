@@ -2347,3 +2347,28 @@ Card `p2-core-props`, 2026-11-03, on this laptop, each with how it was checked.
 - **pwsh splat of a one-flag array.** `$a = if ($all) { @("--all-targets") } else { @() }` then `& cargo clippy @a`
   failed with "unexpected argument '-' found"; written out literally, the flag worked. Why the splat broke it: not
   verified (most likely the `if` unrolled the array to a string). Pass such flags literally.
+
+## Tray words checks
+
+Checked 2026-11-03 for card `docs/tasks/p5-text.md`.
+
+- **Balloon text limits and the empty body.** Microsoft Learn, `NOTIFYICONDATAW`
+  (`learn.microsoft.com/en-us/windows/win32/api/shellapi/ns-shellapi-notifyicondataw`, updated 2024-11-20, read
+  2026-11-03): `szInfo` "can have a maximum of 256 characters, including the terminating null character, but should
+  be restricted to 200 characters in English"; `szInfoTitle` "a maximum of 64 characters, including the terminating
+  null character, but should be restricted to 48 characters in English". So `text::notice` cuts at 63 and 255 UTF-16
+  units, and its tests hold the fixed words to 48 and 200. Same page, `NIF_INFO`: "To remove a balloon notification,
+  specify NIF_INFO and provide an empty string through szInfo", so no notice has an empty body (`Updated` gets one).
+  `NIIF_NOSOUND`: "Do not play the associated sound".
+- **The `&` prefix rule.** Microsoft Learn, `DrawText`
+  (`learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-drawtext`, updated 2024-02-22, read 2026-11-03),
+  `DT_NOPREFIX`: "Normally, DrawText interprets the mnemonic-prefix character & as a directive to underscore the
+  character that follows, and the mnemonic-prefix characters && as a directive to print a single &." So
+  `text::status_line`, a menu `Label`, doubles `&` in hold reasons. Whether `p5-menu-paint` draws with this rule is
+  that card's; the `MenuItem` doc in `view.rs` asks for it.
+- **Two-line tooltip.** Not checked again here: the Phase 0 tray spike showed both lines of
+  `"Wakeshot spike\nHolding awake: Claude Code, 2 sessions"` in the native tooltip (this file, "Tooltip";
+  `img/tray-tooltip-dark.png`). `text::tooltip` uses the same `\n` form.
+- **"Other system tray icons".** The first-run notice names this section of Settings > Personalization > Taskbar, the
+  page `ms-settings:taskbar` opens. The label on Windows 11 build 26300: not verified (no screen use in this card);
+  `p5-haik-check` and `p6-int-haik-checks` look at it.
