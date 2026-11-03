@@ -1,5 +1,5 @@
 //! The tray view and `state.json` through `present`, each sent only when it changed; `state.json` at most once a
-//! second (track note 5).
+//! second, except as `FinishRestoreRequest` (track note 5).
 //!
 //! Owner: `p2-core-holds`, then `p2-core-settings`, then `p2-core-lid`.
 
@@ -44,6 +44,13 @@ pub(super) fn show(
     if state.view.as_ref() != Some(&view) {
         out.push(Command::Tray(view.clone()));
         state.view = Some(view);
+    }
+    // `wakeshot restore` waits for this file to print the result, so it skips the 1 s wait (track note 5).
+    if std::mem::take(&mut state.finish_restore_request) {
+        out.push(Command::FinishRestoreRequest(file.clone()));
+        state.state_file = Some(file);
+        state.state_written_mono = Some(now.mono_ms);
+        return None;
     }
     if state.state_file.as_ref() == Some(&file) {
         return None;

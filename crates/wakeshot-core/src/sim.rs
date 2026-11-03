@@ -16,7 +16,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
-use crate::command::{Command, FileKind, Outcome};
+use crate::command::{ApplyError, Command, Failure, FileKind, Outcome, RestoreWhy};
 use crate::core::Core;
 use crate::event::Event;
 use crate::files::{Config, HoldFile, StateFile};
@@ -24,7 +24,7 @@ use crate::holds::file::{self, Parsed};
 use crate::holds::{HoldFacts, HoldId, HoldKind};
 use crate::policy::requests::Requests;
 use crate::process::{Alive, FileTime, ProcessRef};
-use crate::settings::Journal;
+use crate::settings::{Guid, Journal, JournalEntry, PlanValues, SettingKey};
 use crate::sources::{Activity, FormatHealth, Liveness, SessionFacts, SessionKey, SourceId};
 use crate::testing::FakeClock;
 use crate::time::{Clock, Deadline, Now};
@@ -47,6 +47,80 @@ pub const SAFETY_TICK_MS: u64 = 30_000;
 
 /// The Keep awake hold file the core writes.
 pub const KEEP_AWAKE: &str = crate::state::KEEP_AWAKE_FILE;
+
+/// The test laptop's Balanced plan.
+pub const BALANCED: Guid = Guid(0x381b4222_f694_41f0_9685_ff5bb260df2e);
+
+/// A second plan (High performance), for plan switches.
+pub const OTHER_PLAN: Guid = Guid(0x8c5e7fda_e8bf_4a96_9a85_a6e23a8c635c);
+
+/// The three keys an apply writes, in the order the core sends them.
+pub const KEYS: [SettingKey; 3] = [SettingKey::LidAc, SettingKey::LidDc, SettingKey::SleepDc];
+
+/// A plan read of `active` holding Haik's own values: lid Sleep on AC and battery, sleep after 3 h on AC and 10 min
+/// on battery, energy saver at 20 %.
+pub fn plan(active: Guid) -> PlanValues {
+    PlanValues {
+        active,
+        lid_ac: 1,
+        lid_dc: 1,
+        sleep_ac: 10_800,
+        sleep_dc: 600,
+        saver_threshold_dc: 20,
+    }
+}
+
+/// The journal entries an apply leaves on `plan_id` for `keys`: each target 0 over the values of [`plan`].
+pub fn entries(plan_id: Guid, keys: &[SettingKey]) -> Vec<JournalEntry> {
+    let values = plan(plan_id);
+    keys.iter()
+        .map(|&key| JournalEntry {
+            plan: plan_id,
+            key,
+            original: match key {
+                SettingKey::LidAc => values.lid_ac,
+                SettingKey::LidDc => values.lid_dc,
+                SettingKey::SleepDc => values.sleep_dc,
+            },
+            written: 0,
+            restored: false,
+        })
+        .collect()
+}
+
+/// `Done(Applied)` for an apply to `plan` that left `journal`; `written` is every key of `journal` on `plan` when
+/// it worked, none otherwise.
+pub fn applied(plan: Guid, result: Result<(), ApplyError>, journal: Vec<JournalEntry>) -> Event {
+    let written = match result {
+        Ok(()) => journal
+            .iter()
+            .filter(|e| e.plan == plan)
+            .map(|e| e.key)
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+    Event::Done(Outcome::Applied {
+        plan,
+        written,
+        result,
+        journal,
+    })
+}
+
+/// `Done(Restored)` for a restore that left `journal`.
+pub fn restored(
+    plan: Option<Guid>,
+    why: RestoreWhy,
+    result: Result<(), Failure>,
+    journal: Vec<JournalEntry>,
+) -> Event {
+    Event::Done(Outcome::Restored {
+        plan,
+        why,
+        result,
+        journal,
+    })
+}
 
 /// One event as the core got it, with the commands it gave.
 #[derive(Clone, Debug)]

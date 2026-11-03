@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::command::CountdownReason;
+use crate::command::{CountdownReason, RestoreWhy};
 use crate::files::{Config, StateFile};
 use crate::holds::{HoldFacts, HoldId, HoldKind};
 use crate::policy::floor;
@@ -14,7 +14,7 @@ use crate::policy::lid::SourceLock;
 use crate::policy::requests::Requests;
 use crate::policy::sessions::SessionMemory;
 use crate::process::{Alive, FileTime, ProcessRef};
-use crate::settings::{JournalEntry, PlanValues, SettingKey};
+use crate::settings::{Guid, JournalEntry, PlanValues, SettingKey};
 use crate::sources::{SessionFacts, SessionKey, SourceId};
 use crate::time::Deadline;
 use crate::view::{KeepAwake, Notice, TrayView};
@@ -32,7 +32,6 @@ pub(crate) struct State {
     pub tray: ProcessRef,
     pub automatic: bool,
     /// This tray holds the settings mutex.
-    #[expect(dead_code, reason = "p2-core-settings fills it")]
     pub owner: bool,
     /// This session is on the PC's own screen and keyboard.
     pub on_console: bool,
@@ -59,19 +58,34 @@ pub(crate) struct State {
     pub requests_failed: bool,
     /// From the first counted hold to the last.
     pub episode: Option<Episode>,
-    /// The last plan read.
-    #[expect(dead_code, reason = "p2-core-settings fills it")]
+    /// The last plan read that worked.
     pub plan: Option<PlanValues>,
+    /// When the last `ReadPlan` went out (run time).
+    pub plan_read_mono: Option<u64>,
     /// A copy of the journal from `Started`, `Done(Applied)` and `Done(Restored)`, less the keys `UserChanged` names.
+    /// A failed outcome with an empty `journal` read nothing (the load failed), so the copy before it stays.
     pub journal: Vec<JournalEntry>,
-    /// `Started` brought a journal from an earlier run: restore it on each tick until it is gone (track note 9).
-    #[expect(dead_code, reason = "p2-core-settings fills it")]
-    pub leftover: bool,
+    /// The plan of each `Apply` sent and not yet answered, oldest first: what it writes is not in the copy yet.
+    pub applying: Vec<Guid>,
+    /// A restore failed and is still wanted, or `Started` brought a journal from an earlier run (`Leftover`, track
+    /// note 9): retried on each tick, with this reason, until a restore of every plan works.
+    pub retry: Option<RestoreWhy>,
+    /// `Notice::RestoreFailed` was shown in this failure streak.
+    pub retry_warned: bool,
+    /// `Notice::RequestsOnly` was shown since the last apply that worked.
+    pub requests_only_warned: bool,
+    /// The one restore for a journal the apply found corrupt went out; `JournalCorrupt` says the file is set aside.
+    pub corrupt_restore_sent: bool,
+    /// `Menu(Restore)` waits for its `Done(Restored)`, then `FinishRestoreRequest` (track note 5).
+    pub restore_request: bool,
+    /// The next `state.json` goes out as `FinishRestoreRequest`, at once.
+    pub finish_restore_request: bool,
     /// Settings are blocked for this run (access denied, 5 or 1260): requests only.
     pub requests_only_run: bool,
-    /// `Session(Ending)` came and no `EndCancelled` yet: no `Apply`.
-    #[expect(dead_code, reason = "p2-core-settings fills it")]
+    /// `Session(Ending)` or `Ended` came and no `EndCancelled` yet: no `Apply`.
     pub session_ending: bool,
+    /// `Menu(Quit)` went out: nothing more.
+    pub quit: bool,
     /// `None` until the first `Lid` event.
     #[expect(dead_code, reason = "p2-core-lid fills it")]
     pub lid_closed: Option<bool>,
@@ -135,10 +149,18 @@ impl State {
             requests_failed: false,
             episode: None,
             plan: None,
+            plan_read_mono: None,
             journal: Vec::new(),
-            leftover: false,
+            applying: Vec::new(),
+            retry: None,
+            retry_warned: false,
+            requests_only_warned: false,
+            corrupt_restore_sent: false,
+            restore_request: false,
+            finish_restore_request: false,
             requests_only_run: false,
             session_ending: false,
+            quit: false,
             lid_closed: None,
             ac: None,
             battery_pct: None,
@@ -199,13 +221,27 @@ pub(crate) struct Episode {
     /// `Notice::CannotHold` was shown in this episode.
     pub cannot_hold_shown: bool,
     /// Keys the user took back in this episode, on every plan (decision 26).
-    #[expect(dead_code, reason = "p2-core-settings fills it")]
     pub released: BTreeSet<SettingKey>,
     /// An apply failed (`SafetyNet` or `Write`): requests only for the rest of the episode.
     pub requests_only: bool,
+    /// Where this episode's apply stands.
+    pub apply: ApplyStep,
     /// When the lid closed while holding (run time), for the closed-lid report.
     #[expect(dead_code, reason = "p2-core-lid fills it")]
     pub lid_closed_since_mono: Option<u64>,
+}
+
+/// Where an episode's apply stands (architecture section 3, "Holding starts", step 2).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum ApplyStep {
+    /// Nothing to send: sent, or the core does not apply now.
+    #[default]
+    Idle,
+    /// Send `Apply` at the end of this step, after the requests: a hold start, `SettingsOwner`, `ConsoleBack`,
+    /// `EndCancelled` or a plan switch.
+    Wanted,
+    /// A fresh `Plan(Ok)` first: no plan read yet, or the last apply found another plan active.
+    WaitPlan,
 }
 
 /// A countdown to hibernate (`policy::ending`).

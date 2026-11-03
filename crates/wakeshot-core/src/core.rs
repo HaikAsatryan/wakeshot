@@ -8,21 +8,26 @@
 //! the next deadline. The settle pass reads only the state, never the event, so a `Tick`, a late event or a repeated
 //! snapshot all give the same answer for the same facts and time.
 //!
-//! Seams for the next cards: `Core::holding_starts` and `Core::holding_ends` (the apply and the restore),
-//! `Core::notify` (notices held while locked), and the event and outcome arms that name their card.
+//! Power settings live in `settings`: the apply goes out from the settle pass after the requests, whenever the
+//! episode wants one and the core applies now; restores go out at the edges and as retries on the tick.
+//!
+//! Seams for `p2-core-lid`: `Core::notify` (notices held while locked), `Core::want_apply` (apply as at a hold
+//! start, for the end of a step back), `Core::restore_all` (for the step back), `Core::applies`, and the event and
+//! outcome arms that name their card.
 
 mod holds;
+mod settings;
 mod view;
 
 use std::collections::BTreeSet;
 
-use crate::command::{Command, FileKind, Outcome};
+use crate::command::{Command, FileKind, Outcome, RestoreWhy};
 use crate::event::Event;
 use crate::files::{Config, HoldFile};
 use crate::holds::file::{format_expires, parse_expires};
 use crate::holds::{HoldId, HoldKind};
 use crate::policy::requests::{self, RequestFacts};
-use crate::state::{Episode, Held, KEEP_AWAKE_FILE, KeepAwakeMemo, State};
+use crate::state::{ApplyStep, Episode, Held, KEEP_AWAKE_FILE, KeepAwakeMemo, State};
 use crate::time::{Deadline, Now};
 use crate::view::{KeepAwake, MenuCommand, Notice};
 
@@ -47,12 +52,15 @@ impl Core {
 
     pub fn handle(&mut self, now: Now, event: Event) -> Vec<Command> {
         let mut out = Vec::new();
-        if !self.state.started && !matches!(event, Event::Started { .. }) {
+        if self.state.quit || (!self.state.started && !matches!(event, Event::Started { .. })) {
             return out;
         }
         let resumed = event == Event::Resumed;
         self.take(now, event, &mut out);
-        self.settle(now, resumed, &mut out);
+        // Quit's commands are the last: a settle would take the requests again.
+        if !self.state.quit {
+            self.settle(now, resumed, &mut out);
+        }
         out
     }
 
@@ -66,7 +74,7 @@ impl Core {
             Event::Started {
                 config,
                 journal,
-                owner: _,
+                owner,
                 on_console,
                 tray,
                 first_run,
@@ -78,10 +86,14 @@ impl Core {
                 let state = &mut self.state;
                 state.started = true;
                 state.automatic = config.automatic;
+                state.owner = owner;
                 state.on_console = on_console;
                 state.tray = tray;
                 state.journal = journal.map(|j| j.entries).unwrap_or_default();
-                // p2-core-settings: `owner`, and a leftover journal to restore on each tick (track note 9).
+                // Start-up already tried this restore once; the tick retries it until it works (track note 9).
+                if !state.journal.is_empty() {
+                    state.retry = Some(RestoreWhy::Leftover);
+                }
                 if first_run {
                     self.notify(Notice::FirstRun, out);
                     out.push(Command::WriteConfig(config));
@@ -93,24 +105,44 @@ impl Core {
                 holds::take_sources(&mut self.state, now, source, sessions, out);
             }
             Event::Holds(files) => holds::take_files(&mut self.state, now, files, out),
-            Event::Done(outcome) => self.done(outcome, out),
-            // The settle pass does all of their work.
-            Event::Tick | Event::Resumed => {}
-            // p2-core-settings.
-            Event::SettingsOwner
-            | Event::Plan(_)
-            | Event::ActivePlan(_)
-            | Event::UserChanged(_)
-            | Event::JournalCorrupt => {}
-            // p2-core-lid; `Session` also p2-core-settings (end of session, console left and back).
+            Event::Done(outcome) => self.done(now, outcome, out),
+            Event::Tick => self.tick(now, out),
+            // The settle pass does all of its work.
+            Event::Resumed => {}
+            Event::SettingsOwner => {
+                self.state.owner = true;
+                self.want_apply();
+            }
+            Event::Plan(read) => self.take_plan(read, out),
+            Event::ActivePlan(id) => self.take_active_plan(id, now, out),
+            Event::UserChanged(changed) => self.take_user_changed(changed, out),
+            Event::JournalCorrupt => self.take_journal_corrupt(out),
+            // `Locked` and `Unlocked` are p2-core-lid's.
+            Event::Session(change) => self.take_session(change, out),
+            // p2-core-lid.
             Event::Lid { .. }
             | Event::Power { .. }
             | Event::InputIdle { .. }
             | Event::Suspending
-            | Event::Session(_)
             | Event::UpdateReady { .. }
             | Event::Updated { .. } => {}
         }
+    }
+
+    /// The Keep awake files to delete: by the name the snapshot has, since the parser ignores case and a script may
+    /// write any case; `keep-awake.json` when the snapshot has none.
+    fn keep_awake_files(&self) -> BTreeSet<HoldId> {
+        let mut ids: BTreeSet<HoldId> = self
+            .state
+            .files
+            .values()
+            .filter(|f| f.facts.kind == HoldKind::KeepAwake)
+            .map(|f| f.facts.id.clone())
+            .collect();
+        if ids.is_empty() {
+            ids.insert(HoldId(KEEP_AWAKE_FILE.to_owned()));
+        }
+        ids
     }
 
     fn menu(&mut self, now: Now, command: MenuCommand, out: &mut Vec<Command>) {
@@ -122,18 +154,7 @@ impl Core {
                 }
             }
             MenuCommand::KeepAwake(KeepAwake::Off) => {
-                // The name as the snapshot has it: the parser ignores case, and a script may write any case.
-                let mut ids: BTreeSet<HoldId> = self
-                    .state
-                    .files
-                    .values()
-                    .filter(|f| f.facts.kind == HoldKind::KeepAwake)
-                    .map(|f| f.facts.id.clone())
-                    .collect();
-                if ids.is_empty() {
-                    ids.insert(HoldId(KEEP_AWAKE_FILE.to_owned()));
-                }
-                out.extend(ids.into_iter().map(Command::DeleteHold));
+                out.extend(self.keep_awake_files().into_iter().map(Command::DeleteHold));
             }
             MenuCommand::KeepAwake(choice) => {
                 let expires = match choice {
@@ -159,8 +180,8 @@ impl Core {
                 }
             }
             MenuCommand::OpenLog => out.push(Command::OpenLog),
-            // p2-core-settings.
-            MenuCommand::Restore | MenuCommand::Quit => {}
+            MenuCommand::Restore => self.menu_restore(out),
+            MenuCommand::Quit => self.menu_quit(out),
         }
     }
 
@@ -191,7 +212,7 @@ impl Core {
         });
     }
 
-    fn done(&mut self, outcome: Outcome, out: &mut Vec<Command>) {
+    fn done(&mut self, now: Now, outcome: Outcome, out: &mut Vec<Command>) {
         match outcome {
             Outcome::Requests(Ok(())) => self.state.requests_failed = false,
             // A failed release keeps nothing awake that a notice could explain.
@@ -207,8 +228,9 @@ impl Core {
                 }
             }
             Outcome::Requests(Err(_)) => {}
+            // A failed `FinishRestoreRequest` may have failed at its `state.json` write: write it again.
             Outcome::Written {
-                file: FileKind::State,
+                file: FileKind::State | FileKind::RestoreRequest,
                 result: Err(_),
             } => self.state.state_file = None,
             Outcome::Written {
@@ -218,14 +240,22 @@ impl Core {
                 // Answered either way: a delete that failed is asked again at the next snapshot that shows it.
                 self.state.deleting.remove(&id);
             }
-            // `Config`: its runner logs a failure; `RestoreRequest`: p2-core-settings.
+            // `Config`: its runner logs a failure.
             Outcome::Written { .. } => {}
-            // p2-core-settings: `Applied`, `Restored`; p2-core-lid: `Locked`, `Hibernate`, `Update`.
-            Outcome::Applied { .. }
-            | Outcome::Restored { .. }
-            | Outcome::Locked(_)
-            | Outcome::Hibernate(_)
-            | Outcome::Update(_) => {}
+            Outcome::Applied {
+                plan,
+                written: _,
+                result,
+                journal,
+            } => self.done_applied(plan, result, journal, now, out),
+            Outcome::Restored {
+                plan,
+                why,
+                result,
+                journal,
+            } => self.done_restored(plan, why, result, journal, out),
+            // p2-core-lid.
+            Outcome::Locked(_) | Outcome::Hibernate(_) | Outcome::Update(_) => {}
             // Their runners log them.
             Outcome::Sound(_) | Outcome::Notified(_) => {}
         }
@@ -269,12 +299,14 @@ impl Core {
             }
             _ => {}
         }
+        self.send_apply(now, out);
 
         let state_due = view::show(&mut self.state, &found, now, out);
-        self.state.next = nearest(found.next, state_due, now);
+        let plan_due = self.plan_read_due(now);
+        self.state.next = nearest(nearest(found.next, state_due, now), plan_due, now);
     }
 
-    /// The first hold counts. p2-core-settings adds the apply here (section 3, "Holding starts", step 2).
+    /// The first hold counts; the settle pass sends its apply after the requests (section 3, "Holding starts").
     fn holding_starts(&mut self, holding: BTreeSet<Held>, out: &mut Vec<Command>) {
         out.push(Command::Log(format!(
             "Holding starts: {}",
@@ -283,11 +315,12 @@ impl Core {
         self.state.episode = Some(Episode {
             held_by: holding.clone(),
             holding,
+            apply: ApplyStep::Wanted,
             ..Episode::default()
         });
     }
 
-    /// The last hold stopped counting. p2-core-settings adds the restore here (section 3, "Holding ends").
+    /// The last hold stopped counting: every entry back at once, behind the requests (section 3, "Holding ends").
     fn holding_ends(&mut self, out: &mut Vec<Command>) {
         if let Some(episode) = self.state.episode.take() {
             out.push(Command::Log(format!(
@@ -295,6 +328,7 @@ impl Core {
                 labels(&episode.held_by)
             )));
         }
+        self.restore_all(RestoreWhy::WorkEnded, out);
     }
 
     /// Every notice goes out here, so p2-core-lid can hold them while the session is locked (track note 18).
