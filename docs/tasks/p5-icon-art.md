@@ -1,6 +1,6 @@
 # Design the tray icons and the app icon as code
 
-Phase: 5. Status: ready. Needs Haik: one look at the icon sheet, not blocking (batched for the plan sign-off or
+Phase: 5. Status: done. Needs Haik: one look at the icon sheet, not blocking (batched for the plan sign-off or
 `p5-haik-check`). Agent: `wakeshot-worker`. Size: about 120K tokens.
 Real laptop: no (pure code; pictures are rendered, not captured). Build folder:
 `CARGO_TARGET_DIR=<scratchpad>\p5-icon-art\target`.
@@ -97,15 +97,131 @@ Run from the repo root with the build folder above. Record each outcome.
 
 Each with the worker's default.
 
+None blocking. His one look at the sheets is batched for `p5-haik-check`: the default is the Cup (see Result).
+
 ## Found outside scope
 
 Problems seen but not fixed.
 
+- 2026-11-04 01:24 to 01:26: `crates/wakeshot-windows/src/install.rs` (another card's file, mid-edit) failed to compile
+  in clippy, then failed clippy's `chunks_exact` with a constant size lint. Gone at 01:27; noted in case it comes back.
+- Track note 3.2 (`docs/phases/05-tray-ux.md`) leaves out a 256 px frame because "a small one needs a deflate encoder,
+  which means a crate". `tray::art::png` is now a stdlib deflate (fixed codes, runs, palette), so a PNG-compressed
+  256 frame needs no crate. Its size in the exe was not measured. The orchestrator decides; this card did not add one.
+
 ## Log
 
 - 2026-11-03: card written by `p5-plan-tray-ux`.
+- 2026-11-04 00:55: started by a `wakeshot-worker`. Read the card, the plan, track notes 1, 3, 4 and 7.
+- 2026-11-04, between 00:55 and 01:20 (clock not read for these two lines): measured the pictures with a stdlib
+  Python script (scratchpad `p5-icon-art\pngread.py`, `measure*.py`): dark taskbar 202021, light taskbar d8dadc,
+  hover plates 2d2d2e and ecedee, Windows' glyph ffffff on dark; on light, Windows' glyphs in the Quick Settings
+  picture are 191919 to 1b1b1b (they fit black at alpha e4 over the plate, worked out from the numbers). Windows' own
+  tray glyphs at 24 px: about 1.5 px strokes, wifi 24 px wide. Read Microsoft's app icon pages (sizes table: tray 16
+  to 64 px for 100% to 400%) and the Fluent icon keyline (2 px at 20 px).
+- Same span: wrote the unit tests and stub bodies first; 11 of 12 failed as expected (only the CRC check passed on
+  its own).
+- 2026-11-04 01:20: built the art (three concepts, app icon, ICO, PNG). Trial renders in the scratchpad showed a
+  soft cup handle at 16 and 20 px (tightened its corners) and stubby steam at 24 px (steam now runs to a gap above
+  the rim). A stored PNG of a sheet would be 28 MB, so `png` deflates with fixed codes and runs, and uses a palette
+  when an image has at most 256 colours: sheets 107 KB, the app sheet 333 KB. Python's zlib inflates the streams and
+  every chunk CRC matches. Wrote `assets/wakeshot.ico` and the four PNGs with the ignored writer; all 12 art tests
+  pass.
+- 2026-11-04 01:26: rustfmt clean; release builds of `wakeshot-tray` and `wakeshot-cli` pass for x64 and ARM64, and
+  both x64 exes carry the new icon (.NET `ExtractAssociatedIcon`: orange disc, transparent corner). Clippy fails at
+  once in `crates/wakeshot-windows/src/install.rs` (another card's file, being edited: its lines moved between runs;
+  first unresolved functions, then `chunks_exact` with a constant size); nothing in `art.rs`. Waiting to run again.
+- 2026-11-04 01:27: clippy again, with and without `--all-targets`, x64 and ARM64: all four clean (`install.rs` had
+  settled). Art tests at 01:28: 12 passed, 1 ignored (the writer).
+- 2026-11-04 01:29: Result written, Status done. Deleted the build folder; the measuring scripts stay in the
+  scratchpad (`p5-icon-art\*.py`).
 
 ## Result
 
 What was done, files changed, checks and outcomes, open items. Include the public API as built and the paragraph for
 Haik.
+
+**Done.** Three tray glyph concepts as code, each with holding, idle and off; the app icon; ICO and PNG writers; the
+icon file and the review sheets.
+
+Files changed (all owned):
+- `crates/wakeshot-windows/src/tray/art.rs`: the art, the writers, 12 unit tests and the ignored writer
+  `tray::art::write_art_files` (set `WAKESHOT_ART_DIR` to write a trial set elsewhere and leave the repo alone).
+- `assets/wakeshot.ico`: frames 16, 20, 24, 32, 40, 48 and 64, 43,006 bytes, made by the writer.
+- `docs/research/img/ux/icon-sheet-dark.png`, `icon-sheet-light.png`, `icon-sheet-contrast.png` (107 KB each),
+  `icon-app.png` (333 KB).
+- `docs/research.md`: new section "Tray UX: icon art" (measured colours, Microsoft's guidance, sizes, padding, stroke,
+  the pick, the ICO and PNG checks).
+
+**For Haik** (one look, not blocking). Sheets: in each tray sheet, rows are Cup, Eye and Sky, each with holding, idle
+and off; a grey bar at the left marks the pick. Columns: 16, 20, 24, 32, 40 and 48 px at real size, then 8 times
+larger. Dark and light use the measured taskbar colours; contrast is a sample yellow on black. `icon-app.png` shows
+each concept's app icon at every frame size on light and dark, real size then 4 times larger.
+- **Cup (picked).** Holding: a full cup with three wisps of steam. Idle: an empty cup. Off: the empty cup struck
+  through. Why: a cup is the plain, widely known sign for "stay awake", and it ties to the name (a wake shot). The
+  idle cup is quiet, so with no work going on the icon says "nothing happening". Its strokes are straight lines on
+  whole pixels, so it is the sharpest of the three at 16 to 32 px (at most 13% grey pixels). Risk: PowerToys Awake
+  also uses a cup (from memory, not checked here).
+- **Eye.** Holding: an open eye. Idle: a closed eye with lashes (the PC sleeps). Off: the closed eye struck through.
+  Clear when holding, but idle and off read alike, and it is all curves, so it blurs at 16 px (up to 42% grey).
+- **Sky.** Holding: a sun. Idle: a moon. Off: the moon struck through. The meaning is the clearest (awake, sleeps as
+  usual), but it looks like Windows' own brightness and night light glyphs, and the struck-through moon is messy at
+  16 px.
+
+His answer is one word (cup, eye or sky) or "redo". A new pick changes `PICK` in `art.rs`; then run the writer
+(`cargo test --locked -p wakeshot-windows tray::art::write_art_files -- --ignored`) so the icon file follows, and the
+golden test checks it.
+
+Decided by the worker, for Haik's review (each with its trigger):
+1. The Cup as the pick (above). Change it when Haik picks another.
+2. App icon: the holding cup in white on an orange disc (e06a22 at the top left to c2501a at the bottom right).
+   Why: a plate keeps 3:1 on light, dark and accent backgrounds and stays readable at 16 px; orange stands apart from
+   the many blue icons. Change it when Haik wants an unplated cup or another colour.
+3. Strokes in whole pixels: 1 px at 16 and 20 px, 2 px at 24 to 36. Windows' own glyphs use about 1.5 px at 24 px,
+   blurred; ours are sharp and a little heavier. Change it when the cup looks heavy next to Windows' icons at 150%.
+4. Padding size / 16 (1 px at 100%), between Fluent's keyline and Windows' tray glyphs, which fill the slot. Change it
+   when the cup looks too large or too small next to its neighbours on the real taskbar (`p5-tray-icon` Part B).
+5. Glyph colour on light: solid 1a1a1a, what Windows' own light glyphs measure. White on dark.
+6. Off is the idle glyph struck through, with a gap each side of the bar, as Windows marks its own off states.
+7. `png` compresses (fixed-code deflate with runs, and a palette up to 256 colours) instead of the card's stored
+   deflate: a stored sheet would be 28 MB. Still stdlib only.
+8. No polygon primitive: no shape needed one (disc, ring, arc, rounded rect and round-capped line cover all three
+   concepts). Add one when a design needs it.
+
+**Public API as built** (`wakeshot_windows::tray::art`, no Windows API in the file):
+- `Mask { size: u32, alpha: Vec<u8> }` (top-down rows); `Rgba { width: u32, height: u32, pixels: Vec<u8> }` (straight
+  alpha RGBA, top-down).
+- `tray_mask(state: IconState, size: u32) -> Mask`; `colorize(mask: &Mask, rgb: [u8; 3]) -> Rgba`;
+  `app_icon(size: u32) -> Rgba`; `app_icon_file() -> Vec<u8>` (the bytes of `assets/wakeshot.ico`);
+  `ico(frames: &[Rgba]) -> Vec<u8>` (square frames, 1 to 256 px; panics otherwise); `png(img: &Rgba) -> Vec<u8>`;
+  `padding(size: u32) -> u32`.
+- Constants: `TRAY_SIZES` (16 to 64), `APP_ICON_SIZES`, `GLYPH_ON_DARK` (ffffff), `GLYPH_ON_LIGHT` (1a1a1a),
+  `TASKBAR_DARK` (202021), `TASKBAR_LIGHT` (d8dadc), `HOVER_DARK` (2d2d2e), `HOVER_LIGHT` (ecedee).
+- Review only, removed by `p5-haik-check`: `Concept { Cup, Eye, Sky }`, `Concept::ALL`, `PICK`, `concept_mask`,
+  `concept_app_icon`.
+- For `p5-tray-icon`: `colorize(&tray_mask(view.icon, size), colour)` with `GLYPH_ON_DARK`, `GLYPH_ON_LIGHT` or the
+  high contrast text colour (`theme::Rgb` converts to `[u8; 3]`). A 32-bit DIB for `CreateIconIndirect` is BGRA, so
+  swap R and B. For `p5-notices`: the exes' icon resource 1 holds the same seven frames; `app_icon(size)` draws any
+  size. `menu_paint` can write its renders with `png`.
+
+**Checks** (build folder `<scratchpad>\p5-icon-art\target`, deleted at the end):
+- `cargo test --locked -p wakeshot-windows tray::art`: 12 passed, 1 ignored (the writer). Names:
+  `every_state_draws_at_every_size`, `states_differ_in_shape`, `strokes_are_crisp_at_small_sizes`,
+  `glyph_contrast_on_taskbars`, `glyph_stays_inside_its_box`, `ico_frames_parse_back`, `png_is_valid`,
+  `app_icon_file_matches_the_art`, and four more: `colorize_keeps_alpha_and_sets_colour`,
+  `app_icon_draws_at_every_frame_size`, `png_compresses_flat_areas`, `crc_table_matches_the_bitwise_crc`. Written first
+  against stubs: 11 of 12 failed then.
+- The writer ran just after 01:20 and wrote the five files; `app_icon_file_matches_the_art` passes after it (exact
+  compare: no `sin` or `cos` in the shapes).
+- `rustfmt --edition 2024 --check` on `art.rs`: clean.
+- `cargo clippy --locked -p wakeshot-windows` with and without `--all-targets`, `-D warnings`, x64 and ARM64: all four
+  clean at 01:27 (earlier runs stopped on `install.rs`, see Found outside scope).
+- `cargo build --release --locked -p wakeshot-tray -p wakeshot-cli`, x64 and ARM64: pass (no `velopack` yet, so no
+  clang needed). Both x64 exes carry the new icon (.NET `ExtractAssociatedIcon`).
+- `windows::` in `art.rs`: none.
+- Only the owned files and the new research section changed.
+- Outside the tests: Python's `zlib` inflated all four PNGs and every chunk CRC matched; .NET `System.Drawing.Icon`
+  loaded all seven ICO frames with a transparent corner.
+
+**Open items:** Haik's look (`p5-haik-check`); after it, remove the other concepts. Not tested on ARM64 hardware (CI
+or a device runs the golden test there). The 256 px frame note under Found outside scope.

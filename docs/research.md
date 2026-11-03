@@ -2847,3 +2847,61 @@ Checked 2026-11-04 between 01:00 and 01:11 for card `docs/tasks/p4-cli-run.md` (
   is not running, so nothing keeps the PC awake for this command until it starts.` It made `dry-run\holds` (empty
   after: the hold file was deleted) and `dry-run\logs\wakeshot.log` with `cli: run: cmd started, pid 32640` and `cli:
   run: cmd exited with 0`. Both and the empty folders were removed after.
+
+## Tray UX: icon art
+
+Checked 2026-11-04 by `p5-icon-art` (code `crates/wakeshot-windows/src/tray/art.rs`, sheets
+`docs/research/img/ux/icon-*.png`). Colours were read from Phase 0's pictures of this laptop (build 26300) with a
+stdlib Python PNG reader in the card's scratchpad (`p5-icon-art\pngread.py`, `measure.py` to `measure3.py`).
+
+- **Taskbar colours.** Dark: 202021, and 1f1f20 to 222223 along the bar (`tray-taskbar-after-promote.png`,
+  `tray-icon-add2-dark-taskbar.png`); the bar is translucent, so it follows the wallpaper a little. The plate under an
+  icon the mouse rests on, dark: 2d2d2e (`tray-icon-switch4-dark-taskbar.png`). Light: d8dadc, from d4d7d8 to dadcde,
+  with a hover plate of ecedee (`tray-icon-switch3-light-taskbar.png`).
+- **Windows' own glyph colour.** On the dark taskbar: ffffff (887 pure white pixels in the chevron, wifi, volume and
+  battery glyphs of `tray-taskbar-after-promote.png`). No picture shows Windows' tray glyphs on a light taskbar. In the
+  light Quick Settings picture (`tray-look-light-quick-settings.png`) the darkest glyph pixels are 1a1a1a on f5f5f5,
+  1b1b1b on fcfcfc and 191919 on f1f1f1; each fits black at alpha e4 over its plate (worked out from the numbers;
+  Microsoft's token value not checked). Wakeshot uses solid 1a1a1a on light (the spike used 1c1c1c) and white on dark:
+  `GLYPH_ON_LIGHT`, `GLYPH_ON_DARK`.
+- **Contrast** (WCAG 2, test `glyph_contrast_on_taskbars` and a Python check): white on 202021 16.3:1, on 2d2d2e
+  13.8:1; 1a1a1a on d8dadc 12.4:1, on d4d7d8 12.0:1, on ecedee 14.9:1. The sample high contrast pair, yellow on black:
+  19.6:1. App icon disc: white mark on e06a22 3.4:1 and on c2501a 4.7:1; the disc on f3f3f3 3.0:1 and 4.3:1, on
+  202020 4.9:1 and 3.5:1. All at or above Microsoft's 3:1.
+- **Windows' own glyph shapes at 150% (24 px slot).** Strokes about 1.5 px, antialiased, not snapped to pixels. Wifi
+  24 px wide and 17 tall, volume 18 tall, battery 30 wide (coverage grids printed by `measure3.py`). So Windows' own
+  glyphs fill the slot's width.
+- **Microsoft's guidance used** (read 2026-11-04):
+  - "Construct your Windows app's icon" (learn.microsoft.com/windows/apps/design/iconography/app-icon-construction,
+    dated 2026-07-21): "Context menu, title bar, system tray: 16px, 20px, 24px, 32px, 40px, 48px, 64px" for 100% to
+    400%; Windows looks for an exact size, else "the next size above and scale down"; the bare minimum is 16, 24, 32,
+    48 and 256. Wakeshot ships 16, 20, 24, 32, 40, 48 and 64, no 256 (track note 3.2).
+  - "Design guidelines for Windows app icons" (app-icon-design, updated 2026-07-14): do not rely on colour alone; make
+    "at least half of your icon" pass 3:1 on light and dark; subtle gradients, default angle 120 degrees; literal
+    metaphors ("an envelope for mail"); no letters in the icon. The construction page allows a plate behind the icon.
+  - "Segoe Fluent Icons font" (dated 2026-10-13): glyphs look best at 16, 20, 24, 32, 40, 48 and 64.
+  - No Microsoft page on notification area glyph style or padding: `.../iconography/system-tray-icons` returns 404.
+    Fluent's icon keyline: 2 px padding on a 20 px icon, doubled at 48 px, and a 2 px stroke at 32 px (Fluent icon
+    designer Jason Custer, github.com/microsoft/fluentui-system-icons issue 44, 2020 and 2021).
+- **Padding rule taken:** size / 16, at least 1 px (1 px at 16 to 28, 2 at 32 to 40, 3 at 48 and 56, 4 at 64). Between
+  Fluent's keyline and Windows' tray glyphs, which use the whole slot width: the glyph reads as large as its
+  neighbours and never touches the hover plate's edge. Test `glyph_stays_inside_its_box`.
+- **Stroke:** whole pixels, size / 16 rounded (1 px at 16 and 20, 2 at 24 to 36, 3 at 40 and 48, 4 at 56 and 64), with
+  straight edges snapped to pixel edges. At 16 to 32 px the cup has at most 13% half-covered pixels (its round bottom
+  and the off bar); a stroke off the grid would give 50% or more. At 24 px the cup's 2 px strokes are a little heavier
+  than Windows' 1.5 px.
+- **Concepts and pick.** Cup (picked): a full cup with steam (holding), an empty cup (idle), the empty cup struck
+  through (off). Eye: open eye, closed eye with lashes, struck through. Sky: sun, moon, struck-through moon. States
+  differ in shape: test `states_differ_in_shape` asks that at least 25% of two states' ink sits in different pixels at
+  16 and 24 px; measured 34% to 90% (the cup: 38% idle to off, over 50% against holding; read before the last steam
+  change, which only adds ink to holding). App icon: the holding glyph in white on a disc from e06a22 to c2501a.
+- **ICO and PNG.** `ico` writes 32-bit BGRA frames with an AND mask (bit set where alpha is 0; those pixels carry no
+  colour). .NET `System.Drawing.Icon` loaded each of the seven frames of `assets/wakeshot.ico` at its size, with a
+  transparent corner and the disc's orange inside (2026-11-04, between 01:20 and 01:26); both x64 release exes carry
+  it (`ExtractAssociatedIcon`). `png` deflates with fixed codes and runs only,
+  and writes a palette when an image has at most 256 colours: the sheets are 1892 by 3712 px and 107 KB each (a stored
+  PNG would be about 28 MB); the app sheet (1582 colours, RGBA) is 333 KB. Python's `zlib` inflated every IDAT stream
+  and every chunk CRC matched (`colours.py`).
+- **Same bytes on x64 and ARM64:** the shapes use `+`, `-`, `*`, `/`, `sqrt` and `round` only, all exact in IEEE 754,
+  and Rust does not fuse a multiply and an add on its own. So the golden test compares exactly. Tests ran on x64 only;
+  ARM64 got clippy and builds, not a test run.
