@@ -81,11 +81,11 @@ minutes).** Haik's dock is always plugged in (2026-11-03), so this block runs.
 1. Short AC drop: docked, lid open, run `floor-on.cmd`, Keep awake > 30 minutes. Pull the dock's cable and plug it
    back within 2 seconds. Say what you saw and heard. Run `floor-off.cmd`.
 2. Your own AC lid action Do nothing: Keep awake > Off; run `dock-on.cmd`; Keep awake > 30 minutes; close the lid and
-   work on the external screen for a minute; pull the dock's cable. Hear after about 5 seconds: the lid chime. Open
+   work on the external screen for a minute; pull the dock's cable. Hear after about 30 seconds: the lid chime. Open
    the lid. See: the lock screen. Sign in; Keep awake > Off; run `dock-off.cmd`.
 3. Signed in on the external screen: plug the dock in, Keep awake > 30 minutes, close the lid (chime and lock, as in
    block 2), sign in on the external screen. Pull the dock's cable and plug it back within 2 seconds. See and hear:
-   nothing. Pull it again and leave it out. Hear after about 5 seconds: the lid chime. Open the lid. See: the lock
+   nothing. Pull it again and leave it out. Hear after about 30 seconds: the lid chime. Open the lid. See: the lock
    screen. Sign in, plug the dock in.
 4. Not while typing: docked, lid closed, Keep awake > Off, in Terminal `wakeshot run -- ping -n 31 127.0.0.1`, then
    keep typing on the external keyboard for 6 minutes (any text in Notepad). See: no hibernate. Open the lid.

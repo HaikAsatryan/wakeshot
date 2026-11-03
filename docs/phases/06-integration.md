@@ -196,7 +196,7 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | `p6-int-skeleton` | no | no; runs alone (edits a contract module list) | `p1-close-contracts` | done (19:28): whole-workspace checks green, closes wave 1 |
 | `p6-int-io-thread` | no | no | `p6-int-skeleton`, `p3-power-io`, `p3-store`, `p3-log`, `p4-cli-commands` | ready |
 | `p6-int-window` | no | no (hidden windows only) | `p6-int-skeleton`, `p3-session` | ready |
-| `p6-int-dispatch` | no | no | `p6-int-skeleton`, `p2-core-lid`, `p3-power-io` | ready |
+| `p6-int-dispatch` | no | no | `p6-int-skeleton`, `p2-core-lid`, `p3-power-io` | running (21:49) |
 | `p6-int-startup` | no | no | `p6-int-skeleton`, `p3-store`, `p3-log`, `p3-process`, `p3-session`, `p3-journal`, `p3-power-io` | ready |
 | `p6-int-tray-mode` | no | Part B: screen, about 10 min (a dry-run icon) | `p6-int-io-thread`, `p6-int-window`, `p6-int-dispatch`, `p6-int-startup`, `p3-requests`, `p3-system-events`, `p3-hibernate`, `p3-recovery`, `p4-watch-thread`, `p4-claude-transcript`, `p4-cron`, `p5-tray-icon`, `p5-menu-view`, `p5-notices`, `p5-sounds` | ready |
 | `p6-int-update-wiring` | no | no | `p6-int-tray-mode`, `p6-velopack-dependency`, `p6-update-schedule` | ready |

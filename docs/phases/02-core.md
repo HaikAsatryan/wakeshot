@@ -133,7 +133,7 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | `p2-core-holds` | no | `p2-policy-holds`, `p2-policy-power`, `p2-present`, `p4-hold-files` | done (20:39): 40 scenarios and a proptest, 13 of 13 mutants caught |
 | `p2-ownership-props` | no | `p2-ownership-apply` | running (21:38) |
 | `p2-core-settings` | no (Phase 1 Question 10: default, console part built; Haik 2026-11-03 18:09) | `p2-core-holds` | done (21:06): 34 tests, 12 of 12 mutants caught |
-| `p2-core-lid` | no | `p2-core-settings` | running (21:08) |
+| `p2-core-lid` | no | `p2-core-settings` | done (21:46): 57 scenarios, 19 of 19 mutants caught; fixed a lid lock gap in the first seconds of a hold |
 | `p2-core-props` | no | `p2-core-lid`, `p2-ownership-apply` | ready |
 
 No card touches the real laptop (no power settings, screen, sound or installs) or needs Haik's hands. "Contracts
@@ -209,3 +209,7 @@ Where each item this track owns is built. "Integration" is planned after the tra
   with the lid closed: 30 s (Haik: 15 s or more, even a minute; the orchestrator picked 30 s). `product.md` and
   `architecture.md` updated; `p2-core-lid` changes `SOURCE_SETTLE_MS`. (2) A source change during a work-end countdown:
   if the user's own lid action for the new source is Do nothing, cancel and only release; otherwise hibernate on time.
+- 2026-11-03 21:50: `p2-core-lid` done and committed (settle 30 s, countdown rule built). Open: the hibernate
+  thread cannot be cancelled once started; the `policy::lid` module doc needs a line on the in-force view; docs pass
+  lines are listed in its card. Design choices 8 (the floor countdown has no Do-nothing exception) and 13 (the
+  closed-lid report waits for the lid to open) are near product calls; relayed to Haik.

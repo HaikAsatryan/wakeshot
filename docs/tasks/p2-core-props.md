@@ -45,7 +45,7 @@ design: you are a second pair of eyes on the three core cards.
    - no `Lock` when the lid action in force is the user's own;
    - every `Lock`, step back and user change comes with a notice or a sound in the same step; every `Hibernate`
      counts as its own explanation (track note 4); each run of failed restores gets one `RestoreFailed` (decision 0);
-   - a closed laptop never runs on battery on our Do nothing unlocked for more than 5 s (power verify minor 11);
+   - a closed laptop never runs on battery on our Do nothing unlocked for more than 30 s (power verify minor 11; settle 30 s, Haik 2026-11-03);
    - no `ApplyUpdate` while a hold counts, a hold file names a live process, or a key is owned (if `p2-core-lid` built
      the update item);
    - `handle` never panics, and `next_deadline` is never in the past after a `Tick`.
