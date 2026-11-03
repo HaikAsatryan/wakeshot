@@ -194,7 +194,7 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | Card | Needs Haik | Laptop | Runs after | Status |
 |---|---|---|---|---|
 | `p6-int-skeleton` | no | no; runs alone (edits a contract module list) | `p1-close-contracts` | done (19:28): whole-workspace checks green, closes wave 1 |
-| `p6-int-io-thread` | no | no | `p6-int-skeleton`, `p3-power-io`, `p3-store`, `p3-log`, `p4-cli-commands` | in progress |
+| `p6-int-io-thread` | no | no | `p6-int-skeleton`, `p3-power-io`, `p3-store`, `p3-log`, `p4-cli-commands` | done (committed 01:32): 18 tests (16 of 17 failed with the loop off) |
 | `p6-int-window` | no | no (hidden windows only) | `p6-int-skeleton`, `p3-session` | done (00:05): 16 window tests, 314 in the crate |
 | `p6-int-dispatch` | no | no | `p6-int-skeleton`, `p2-core-lid`, `p3-power-io` | done (22:18): 21 tests, 22 of 22 mutants caught |
 | `p6-int-startup` | no | no | `p6-int-skeleton`, `p3-store`, `p3-log`, `p3-process`, `p3-session`, `p3-journal`, `p3-power-io` | done (00:05): 22 tests; journal read retried once after 500 ms |
@@ -277,3 +277,14 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
 - 2026-11-03 23:42: the LoopHandler `&self` contract change is done (276 tests in `wakeshot-windows`, workspace check green; Log in `p6-int-dispatch`). Nested calls only queue and run after the outer batch. Note 2 above and `p6-int-window` deliverable 3 now say `&dyn LoopHandler`. `p6-int-window` and `p6-int-startup` start now; `p6-int-startup` also builds review finding 3 (the startup journal read retry).
 - 2026-11-04 00:05: `p6-int-window` and `p6-int-startup` done and committed (the window's research section went into the startup commit). For `p6-int-tray-mode` (in its Log): call `session::register` with `hwnd()` and own the 1702 retry, then `started` and `locked_at_start`; after Quit every post fails with 1400, so the IO thread's answers during `finish` each log a failed post; `try_settings` gives `None` for both a held and a denied mutex and logs neither. Finding 3 core side: `Startup` gains `unread: bool` in `executor.rs`, `started()` copies it (about three lines); goes to the second core fix round with `core.rs:159` (an Automatic toggle writes version 1 over a newer `config.json`).
 - 2026-11-04 01:14: `p6-int-io-thread` running (owns `app/io_thread.rs`).
+- 2026-11-04 01:32: `p6-int-io-thread` done and committed. For `p6-int-tray-mode`: `IoThread::start(IoParts) ->
+  Result<IoThread, WinError>`; `finish(self, timeout_ms) -> bool`; a drop finishes with `FINISH_MS` (10 s); `IoParts`
+  holds `queue`, `power: Box<dyn PowerRunner>` (any `PowerExecutor`), `dir`, `notifier`, `open` (pass
+  `Box::new(shell::open_with_default_app)`), `log`, `sink`, `ack`. Decided by the worker, for Haik's review (14, all in
+  the card; none changes how the laptop behaves with no work going on), among them: `start` returns a `Result`;
+  `finish` pushes a `Quit` marker plus a stop flag (the idle thread never wakes on a timer); after the quit, a failed
+  post (code 1400) gives one log line in total; a hold id that is not a bare file name is refused. Needs another card
+  (not urgent): `log.rs` should add `pub fn log_file(logs_dir: &Path) -> PathBuf`, so `OpenLog` and the CLI's
+  `open_log.rs` drop their own copies of "wakeshot.log". Outside scope: `OpenLog` can hold the IO thread up to 10 s if
+  the shell hangs, which delays a restore queued behind it (weigh at `p6-int-tray-mode`). The laptop is on battery
+  (73% at 01:32): the heavy `p6-pack-and-release` bundle waits for AC; a docs pass (round 2) runs.
