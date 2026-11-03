@@ -111,9 +111,9 @@ Design calls the design leaves to Phase 5 (worker as principal designer). Each h
 
 ### 5. Integration notes (for the wiring cards, planned later)
 
-- Loop thread: `TrayIcon::new(kind, Box::new(OwnerDrawnMenu::new(sink)))` at tray startup step 8; `Command::Tray(view)`
-  runs `icon.show(&view)`; `icon.on_balloon_click(..)` takes `notifier.take_click()` and opens it with
-  `shell::open_with_default_app`.
+- Loop thread: `TrayIcon::new(kind, Box::new(OwnerDrawnMenu::new(sink)?))?` (both return a `Result`) at tray startup
+  step 8; `Command::Tray(view)` runs `icon.show(&view)`; `icon.on_balloon_click(..)` takes `notifier.take_click()` and
+  opens it with `shell::open_with_default_app`.
 - IO thread: `let n = Arc::new(BalloonNotifier::new(icon.identity()));` the IO thread gets `Box::new(Arc::clone(&n))`,
   runs `Command::Notify` and gives `Outcome::Notified`; the loop thread's `icon.on_balloon_click` calls `n.take_click()`.
   The first `Command::Tray` runs before the first `Command::Notify`, or that notice fails as `Outcome::Notified(Err)`.
@@ -187,7 +187,7 @@ own Windows settings switched and put back.
 | `p5-text` | one read of the text list, not blocking | no | contracts change card | done (00:02): every word in `text.rs`, 552 core tests; the text list for Haik is in its Result |
 | `p5-menu-paint` | no (menu look answered 17:32: an icon per item) | no | `p5-theme` | done (00:50): 15 tests; colours and row sizes match the Phase 1 renders by pixel; nine renders in `docs/research/img/ux/` |
 | `p5-tray-icon` | no | screen, settings (light and dark mode) | `p5-theme`, `p5-icon-art` | blocked: waiting for the screen slot (Part A done, 16 tests; Part B partly run 02:19: launch at Medium, TaskbarCreated, leftovers passed; the session was locked) |
-| `p5-menu-view` | no (menu look answered 17:32) | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | in progress (Part A, started 02:05) |
+| `p5-menu-view` | no (menu look answered 17:32) | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | blocked: waiting for the screen slot (Part A done, committed 02:27: 10 tests) |
 | `p5-notices` | no | screen, settings (Do not disturb) | Part A: contracts change card; Part B: `p5-tray-icon`, `p5-text`, `p5-icon-art` | blocked: waiting for the screen slot (Part A done, committed 02:07: 10 tests) |
 | `p5-sounds` | no (the "No sounds" question: honor it, Haik 2026-11-03 18:09) | sound | contracts change card | in progress (Part A done, committed 02:01: 15 new tests; Part B started 02:26, sound slot, session locked) |
 | `p5-haik-check` | yes, about 25 minutes: eyes, ears, hands | screen, sound, settings | every card above, `p4-cli-commands` | ready |
@@ -294,3 +294,9 @@ Bundle (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p5-th
   DISPLAY request so the screen stays on, then he leaves the mouse and keyboard alone for about 20 minutes. Worker
   note, not verified: `GetLastInputInfo` may count the worker's own synthetic input, so the idle check must leave it
   out. Helper scripts: session `wakeshot-46`'s scratchpad, `p5-tray-icon\`.
+- 2026-11-04 02:27 (orchestrator, session `wakeshot-46`): `p5-menu-view` Part A done and committed (10 new tests, 25 in
+  `tray::menu`); Part B waits for the screen slot (needs Haik, see 02:20). Decided by the worker, for Haik's review: the
+  screen-reader text keeps the `&` marks (Windows drops them itself, seen in Phase 1; stripping them would lose a real
+  `&` in a status line; inferred), so the card's `strip_access_keys` is not built; command ids from a table built per
+  menu; the status line is greyed out (Enter does nothing, a screen reader says "unavailable"); in high contrast the
+  menu frame is left to Windows. Track note 5 now has the `?` on both `new` calls.
