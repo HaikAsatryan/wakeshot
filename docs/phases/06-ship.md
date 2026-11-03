@@ -281,3 +281,8 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   his own). Before the first tag: `actionlint` on `release.yml`; push, then the manual dry run from Actions (its smoke
   test fails until `p6-velopack-dependency` wires `VelopackApp`); then version `0.1.0-rc.1`, `cargo update
   --workspace`, commit, tag `v0.1.0-rc.1`, push.
+- 2026-11-04 02:30 (orchestrator, session `wakeshot-46`): orchestrator decision, for Haik's review:
+  `p6-velopack-dependency` runs without step 0 while Haik is away, alone on the whole laptop as its header says, as
+  soon as the running cards end. Its own fallback applies: ARM64 builds of `wakeshot-tray` are checked by CI only (the
+  runner image has LLVM) until Haik installs clang; step 0 stays his, and every later card records "ARM64 tray: CI
+  only" until then. Why: it unblocks `p6-int-update-wiring` and `p6-install-e2e` overnight.

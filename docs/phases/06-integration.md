@@ -198,7 +198,7 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | `p6-int-window` | no | no (hidden windows only) | `p6-int-skeleton`, `p3-session` | done (00:05): 16 window tests, 314 in the crate |
 | `p6-int-dispatch` | no | no | `p6-int-skeleton`, `p2-core-lid`, `p3-power-io` | done (22:18): 21 tests, 22 of 22 mutants caught |
 | `p6-int-startup` | no | no | `p6-int-skeleton`, `p3-store`, `p3-log`, `p3-process`, `p3-session`, `p3-journal`, `p3-power-io` | done (00:05): 22 tests; journal read retried once after 500 ms |
-| `p6-int-tray-mode` | no | Part B: screen, about 10 min (a dry-run icon) | `p6-int-io-thread`, `p6-int-window`, `p6-int-dispatch`, `p6-int-startup`, `p3-requests`, `p3-system-events`, `p3-hibernate`, `p3-recovery`, `p4-watch-thread`, `p4-claude-transcript`, `p4-cron`, `p5-tray-icon`, `p5-menu-view`, `p5-notices`, `p5-sounds` | ready |
+| `p6-int-tray-mode` | no | Part B: screen, about 10 min (a dry-run icon) | `p6-int-io-thread`, `p6-int-window`, `p6-int-dispatch`, `p6-int-startup`, `p3-requests`, `p3-system-events`, `p3-hibernate`, `p3-recovery`, `p4-watch-thread`, `p4-claude-transcript`, `p4-cron`, `p5-tray-icon`, `p5-menu-view`, `p5-notices`, `p5-sounds` | in progress (Part A, started 02:28) |
 | `p6-int-update-wiring` | no | no | `p6-int-tray-mode`, `p6-velopack-dependency`, `p6-update-schedule` | ready |
 | `p6-int-dry-run-e2e` | no | screen (dry-run icon, balloons, pictures); agent-session lane (one Claude Code test session) | `p6-int-update-wiring`, `p4-cli-args`, `p4-cli-run`, `p4-cli-commands`, `p4-cli-restore`, `p4-live-claude` | ready |
 | `p6-int-real-e2e` | no | global: power settings on active plan copies, RunOnce, a guard | `p6-int-dry-run-e2e`, `p3-real-checks` | ready |
@@ -294,3 +294,8 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   cites in `claude-code-signals.md`. Left for the next docs pass: `architecture.md` 652, 656, 1017 (now tested by
   `p3-real-checks`), `sim.rs:79` old values, rule 2's `research.md:82-130` cite, the rest of the launch research
   proposals (with `p6-readme`), track note 3.2 of `05-tray-ux.md` (a 256 px frame no longer needs a crate).
+- 2026-11-04 02:30 (orchestrator, session `wakeshot-46`): `p6-int-tray-mode` Part A started 02:28 (code and unit
+  tests; no smoke run, no picture). Orchestrator decision, for Haik's review: the card's "Runs after" lists the four
+  tray cards; their Part A (API, code, tests) is done and committed, their Part B waits for the screen and Haik (the
+  session locks when the display turns off, `05-tray-ux.md` 02:20). Their APIs are fixed by Part A, so the wiring
+  starts now; a Part B fix that changes an API gets a small follow-up here.
