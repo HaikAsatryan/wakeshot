@@ -289,7 +289,19 @@ impl Replay {
             (Some(Word::User), _) => self.results(line, zone),
             (Some(Word::System), Some(Word::ScheduledTaskFire)) => self.fired(&line),
             (Some(Word::Attachment), _) => self.attachment(line, zone),
+            (Some(Word::QueueOperation), _) => self.queued(&line),
             _ => {}
+        }
+    }
+
+    /// A `queue-operation` line. Claude Code writes each notification it queues as an `enqueue` line with the text as
+    /// `content` before it delivers it as a user line (live fixtures 01, 02, 08, 12). A stop from the UI queues its
+    /// `killed` notice as passive, so its user line may wait for the next prompt (2.1.317, `tUr`); this line is on disk
+    /// at once (review M1 part b; not checked live, `p4-live-claude` checks it). A notice with a `<status>` is queued
+    /// only after its task ended, so this never ends a running task.
+    fn queued(&mut self, line: &Line) {
+        if let (Some(Word::Enqueue), Some(ids)) = (line.operation, &line.notice) {
+            self.close(ids);
         }
     }
 
@@ -1048,6 +1060,7 @@ enum Key {
     RunInBackground,
     TimeoutMs,
     Persistent,
+    Operation,
     Other,
 }
 
@@ -1097,6 +1110,7 @@ impl<'de> Deserialize<'de> for Key {
                     "run_in_background" => Key::RunInBackground,
                     "timeoutMs" => Key::TimeoutMs,
                     "persistent" => Key::Persistent,
+                    "operation" => Key::Operation,
                     _ => Key::Other,
                 })
             }
@@ -1106,13 +1120,15 @@ impl<'de> Deserialize<'de> for Key {
     }
 }
 
-/// The values of `type`, `subtype`, `name` and `taskKind` that matter.
+/// The values of `type`, `subtype`, `name`, `taskKind` and `operation` that matter.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Word {
     Assistant,
     User,
     System,
     Attachment,
+    QueueOperation,
+    Enqueue,
     ScheduledTaskFire,
     ToolUse,
     ToolResult,
@@ -1135,6 +1151,8 @@ impl Shape<'_> for Word {
             "user" => Word::User,
             "system" => Word::System,
             "attachment" => Word::Attachment,
+            "queue-operation" => Word::QueueOperation,
+            "enqueue" => Word::Enqueue,
             "scheduled_task_fire" => Word::ScheduledTaskFire,
             "tool_use" => Word::ToolUse,
             "tool_result" => Word::ToolResult,
@@ -1205,6 +1223,9 @@ struct Line {
     task_id: Option<String>,
     task_kind: Option<Word>,
     attachment: Option<Attachment>,
+    operation: Option<Word>,
+    /// A `queue-operation` line's `content`, read only as a notification.
+    notice: Option<Vec<String>>,
 }
 
 impl<'de> Shape<'de> for Line {
@@ -1220,6 +1241,8 @@ impl<'de> Shape<'de> for Line {
                 Key::TaskId => line.task_id = read_text(&mut map)?,
                 Key::TaskKind => line.task_kind = read(&mut map)?,
                 Key::Attachment => line.attachment = read(&mut map)?,
+                Key::Operation => line.operation = read(&mut map)?,
+                Key::Content => line.notice = read_notice(&mut map)?,
                 _ => skip(&mut map)?,
             }
         }
@@ -2386,6 +2409,70 @@ mod tests {
         assert_eq!(tasks(&replay(&lines)), 0);
     }
 
+    fn queued(operation: &str, content: Option<&str>, at: i64) -> String {
+        let mut fields = json!({"type": "queue-operation", "operation": operation});
+        if let Some(content) = content {
+            fields["content"] = json!(content);
+        }
+        line(fields, at)
+    }
+
+    /// Review M1 part b: Claude Code writes a notification as a `queue-operation` `enqueue` line when it queues it. A
+    /// stop from the UI queues its `killed` notice as passive (2.1.317, `tUr`), so the user line may come only at the
+    /// next prompt; the queued line ends the task at once. Not checked live for a UI stop (`p4-live-claude`).
+    #[test]
+    fn a_queued_notice_ends_its_task_at_once() {
+        let killed = notification(&["b1irxlyqr"], Some("killed"));
+        let opened = shell("toolu_1", "b1irxlyqr", T);
+        let mut lines = opened.to_vec();
+        lines.push(queued("enqueue", Some(&killed), T + 2));
+        let r = replay(&lines);
+        assert_eq!(tasks(&r), 0);
+        assert_eq!(r.problem(), None);
+        // Its later delivery changes nothing.
+        lines.push(queued("dequeue", None, T + 3));
+        lines.push(user_text(&killed, T + 4));
+        assert_eq!(tasks(&replay(&lines)), 0);
+
+        // A Monitor's timer ends too, persistent or not, and so does a notice after Claude Code's header.
+        let header = format!("[SYSTEM NOTIFICATION - NOT USER INPUT]\n<str 64>\n\n{killed}");
+        for persistent in [false, true] {
+            let mut lines = monitor("toolu_2", "b1irxlyqr", 120_000, persistent, T).to_vec();
+            lines.push(queued("enqueue", Some(&header), T + 2));
+            let r = replay(&lines);
+            assert_eq!((tasks(&r), ends(&r)), (0, vec![]), "{persistent}");
+        }
+
+        // Other operations, a notice with no `<status>`, a notice not at the start, a typed prompt and no content end
+        // nothing and name nothing.
+        let event = "<task-notification>\n<task-id>b1irxlyqr</task-id>\n<summary><str 70></summary>\n<event><str 5></event><str 123></task-notification>";
+        let quoted = format!("<str 29> {killed}");
+        for (operation, content) in [
+            ("remove", Some(killed.as_str())),
+            ("dequeue", None),
+            ("enqueue", Some(event)),
+            ("enqueue", Some(quoted.as_str())),
+            ("enqueue", Some("<str 29>")),
+            ("enqueue", None),
+        ] {
+            let mut lines = opened.to_vec();
+            lines.push(queued(operation, content, T + 2));
+            let r = replay(&lines);
+            assert_eq!(tasks(&r), 1, "{operation} {content:?}");
+            assert_eq!(r.problem(), None);
+        }
+        let mut lines = opened.to_vec();
+        lines.push(line(
+            json!({"type": "queue-operation", "operation": 5, "content": killed}),
+            T + 2,
+        ));
+        lines.push(line(
+            json!({"type": "queue-operation", "operation": "enqueue", "content": [killed]}),
+            T + 2,
+        ));
+        assert_eq!(tasks(&replay(&lines)), 1);
+    }
+
     #[test]
     fn only_a_notification_at_the_start_of_the_text_counts() {
         let closing = notification(&["b1irxlyqr"], Some("completed"));
@@ -2636,7 +2723,7 @@ mod tests {
             .to_string(),
             line(json!({"type": "assistant", "message": "tool_use"}), T),
             line(
-                json!({"type": "queue-operation", "operation": "enqueue",
+                json!({"type": "queue-operation", "operation": "remove",
                     "content": notification(&["b1irxlyqr"], Some("completed"))}),
                 T,
             ),
@@ -2783,6 +2870,18 @@ mod tests {
             ),
             attachment(json!({"type": "queued_command", "prompt": secret}), T + 3),
             fire("aaaa0001", "0 9 * * *", None, T + 4).replace("<str 29>", secret),
+            queued(
+                "enqueue",
+                Some(&format!(
+                    "<task-notification>\n<task-id>b0ther001</task-id>\n<output-file>{secret}</output-file>\n<status>killed</status>\n<summary>{secret}</summary>\n</task-notification>"
+                )),
+                T + 4,
+            ),
+            queued(
+                "enqueue",
+                Some(&format!("<task-notification>{secret}")),
+                T + 4,
+            ),
         ];
         let mut r = replay(&lines);
         assert_eq!(r.problem(), None);
@@ -2821,8 +2920,14 @@ mod tests {
         ];
         lines.extend(shell("toolu_4", "b1irxlyqr", T));
         lines.extend(shell("toolu_5", "b0000000b", T + 3));
+        lines.extend(shell("toolu_6", "b0000000c", T + 4));
         lines.push(user_text(
             &notification(&["b1irxlyqr"], Some("completed")),
+            T + 2 * MIN,
+        ));
+        lines.push(queued(
+            "enqueue",
+            Some(&notification(&["b0000000c"], Some("killed"))),
             T + 2 * MIN,
         ));
         lines

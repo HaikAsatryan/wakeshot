@@ -2649,3 +2649,36 @@ High). Times are from one run with the crate's other tests running beside them.
   copy after a mutated build therefore looks older than the build, and cargo ran the mutated test binary again until
   the file was touched (seen 2026-11-04: the restored tests failed exactly as under the mutation). Touch the file, or
   restore it with a write, after such a check.
+
+## Claude UI stop notice checks
+
+Card `docs/tasks/p4-claude-transcript.md`, section "Claude parsing review fixes, round 2 (2026-11-04)"; verify
+`docs/reviews/p4-claude-parsing-verify.md`, "Left from M1 part b". Read in Claude Code 2.1.317's bundled code
+(`C:\Users\haika\.local\bin\claude.exe`, read only, a byte search with context; minified names and byte offsets from
+that build only). Not run live; `p4-live-claude` runs the stop from the VS Code panel.
+
+- **The UI stop queues its notice through the logged enqueue.** The stop path (`ILe`, near offset 302,206,558) calls
+  `tUr` for a shell or shell Monitor (`Td(w)`) owned by the main agent when the stop has a `source` (a stop from the
+  user or the connected app) and `Ube()` is on. `Ube()` is `k("tengu_rosy_donut", true)` (offset 293,636,218): a
+  remote flag, on by default. `tUr` (offset 301,313,178) builds `Ai({taskId, toolUseId, outputFile, status: "killed",
+  summary})` and calls `dl` with `passive: true`, priority `next`. In that build `dl` is
+  `(...e) => Pg().enqueuePendingNotification(...e)` (offset 293,970,042), and the queue's
+  `enqueuePendingNotification` is `vr` (export list near offset 293,967,544). Verified in code.
+- **`vr` writes the line when it queues.** After its admission check (`rr`, which refuses only peer messages) it pushes
+  the item and calls `s("enqueue", $fe(pi))` unless the item is `unlogged`; `tUr` does not set `unlogged`. `passive`
+  changes only delivery. `$fe` gives the value text for a string value that is not a prompt under screening. `s`
+  (inside `I3o`, offset 293,948,812) builds `{type: "queue-operation", operation, timestamp, sessionId, content}` and
+  hands it to the default recorder (`Pgo`), which records it unless the session is diskless. Verified in code.
+- **Two ways the line may not come at once** (not verified): `$r` lets a hook set in `lSn` take the enqueue over and run
+  it later; what sets that hook was not traced. With `tengu_rosy_donut` off, `tUr` is not called. How soon the
+  recorder's write reaches the disk was not timed.
+- **The same line shape is live for other ends.** Every task notification in the live fixtures has its `enqueue` line
+  first, with the whole notice as `content`: `01-bg-shell` line 5 (`completed`, user line 7), `02-monitor` lines 6, 12,
+  29 (`failed`, `failed`, `completed`) and the events at 21 and 25 (no `<status>`), `08-sdk-bg-shell` line 6,
+  `12-sdk-close-during-shell` line 6, `13-sdk-resume-kill` line 16 (`stopped`). Verified (fixtures, read by
+  `the_live_open_tasks` and `the_live_monitors_hold_until_their_timeout`). In `07-subagent` a notice had an `enqueue`
+  (21), then a `remove` (27) and an `attachment` (28).
+- **Every `<status>` notice found is queued after its task ended**: the UI stop (`tUr`, after the kill), the subagent
+  stop (`eLo`), the failed-task helpers (`Y`, near offset 304,059,851; `iqe`, near 319,923,901). The check-in notice
+  for a quiet shell (near offset 298,210,086) and Monitor events (`Aq`) have no `<status>`. Code-read, not a full
+  search of every caller.

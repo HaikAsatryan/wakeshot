@@ -548,8 +548,8 @@ mod tests {
     #[test]
     fn a_bad_file_is_retried_once_then_logged_once() {
         let mut f = Folder::new("bad");
-        let live = liveness(&[(4, Lookup::Running(NOON))]);
-        let path = f.hold("job.json", "{\"version\":1,\"pid\":4,\"reas");
+        let live = liveness(&[(40, Lookup::Running(NOON))]);
+        let path = f.hold("job.json", "{\"version\":1,\"pid\":40,\"reas");
 
         let first = f.data.holds(&live);
         assert!(first.holds.is_empty());
@@ -567,7 +567,7 @@ mod tests {
         assert!(third.holds.is_empty() && third.retry.is_empty());
         assert_eq!(f.lines().len(), 1, "one line per file and version");
 
-        fs::write(&path, "{\"version\":1,\"pid\":4}").unwrap();
+        fs::write(&path, "{\"version\":1,\"pid\":40}").unwrap();
         set_written(&path, later(1));
         assert_eq!(ids(&f.data.holds(&live)), ["job.json"]);
 
@@ -582,10 +582,10 @@ mod tests {
     #[test]
     fn a_bad_file_fixed_before_its_retry_counts_with_no_line() {
         let mut f = Folder::new("fixed");
-        let live = liveness(&[(4, Lookup::Running(NOON))]);
+        let live = liveness(&[(40, Lookup::Running(NOON))]);
         let path = f.hold("job.json", "{\"vers");
         assert_eq!(f.data.holds(&live).retry.len(), 1);
-        fs::write(&path, "{\"version\":1,\"pid\":4}").unwrap();
+        fs::write(&path, "{\"version\":1,\"pid\":40}").unwrap();
         set_written(&path, later(1));
         let read = f.data.holds(&live);
         assert_eq!(ids(&read), ["job.json"]);
@@ -596,10 +596,10 @@ mod tests {
     #[test]
     fn a_bad_expires_is_left_out_like_a_bad_file() {
         let mut f = Folder::new("bad-expires");
-        let live = liveness(&[(4, Lookup::Running(NOON))]);
+        let live = liveness(&[(40, Lookup::Running(NOON))]);
         f.hold(
             "job.json",
-            "{\"version\":1,\"pid\":4,\"expires\":\"2026-11-03 18:00\"}",
+            "{\"version\":1,\"pid\":40,\"expires\":\"2026-11-03 18:00\"}",
         );
         assert_eq!(f.data.holds(&live).retry.len(), 1);
         let read = f.data.holds(&live);
@@ -613,8 +613,8 @@ mod tests {
     #[test]
     fn an_unreadable_file_is_retried_then_logged() {
         let mut f = Folder::new("unreadable");
-        let live = liveness(&[(4, Lookup::Running(NOON))]);
-        let path = f.hold("job.json", "{\"version\":1,\"pid\":4}");
+        let live = liveness(&[(40, Lookup::Running(NOON))]);
+        let path = f.hold("job.json", "{\"version\":1,\"pid\":40}");
         let held = OpenOptions::new()
             .read(true)
             .share_mode(0)
@@ -633,8 +633,8 @@ mod tests {
     #[test]
     fn a_newer_file_is_left_out_and_logged_once_without_a_retry() {
         let mut f = Folder::new("newer");
-        let live = liveness(&[(4, Lookup::Running(NOON))]);
-        f.hold("job.json", "{\"version\":2,\"pid\":4,\"shape\":[1]}");
+        let live = liveness(&[(40, Lookup::Running(NOON))]);
+        f.hold("job.json", "{\"version\":2,\"pid\":40,\"shape\":[1]}");
         let read = f.data.holds(&live);
         assert!(read.holds.is_empty() && read.retry.is_empty());
         f.data.holds(&live);
@@ -647,7 +647,7 @@ mod tests {
     #[test]
     fn temp_names_and_folders_are_never_opened() {
         let mut f = Folder::new("temp");
-        let live = liveness(&[(4, Lookup::Running(NOON))]);
+        let live = liveness(&[(40, Lookup::Running(NOON))]);
         let temps = [
             "keep-awake.json.1234.5.tmp",
             "run-4242.json.tmp",
@@ -658,7 +658,7 @@ mod tests {
         let held: Vec<File> = temps
             .iter()
             .map(|name| {
-                let path = f.hold(name, "{\"version\":1,\"pid\":4}");
+                let path = f.hold(name, "{\"version\":1,\"pid\":40}");
                 OpenOptions::new()
                     .read(true)
                     .share_mode(0)
@@ -667,7 +667,7 @@ mod tests {
             })
             .collect();
         fs::create_dir_all(f.dir.holds().join("folder.json")).unwrap();
-        f.hold("real.json", "{\"version\":1,\"pid\":4}");
+        f.hold("real.json", "{\"version\":1,\"pid\":40}");
         let read = f.data.holds(&live);
         assert_eq!(ids(&read), ["real.json"]);
         assert!(read.retry.is_empty());
@@ -685,8 +685,8 @@ mod tests {
     #[test]
     fn a_holds_folder_that_cannot_be_listed_is_logged_once() {
         let mut f = Folder::new("holds-file");
-        let live = liveness(&[(4, Lookup::Running(NOON))]);
-        f.hold("job.json", "{\"version\":1,\"pid\":4}");
+        let live = liveness(&[(40, Lookup::Running(NOON))]);
+        f.hold("job.json", "{\"version\":1,\"pid\":40}");
         assert_eq!(ids(&f.data.holds(&live)), ["job.json"]);
 
         // `holds` becomes a file: the listing fails, and the last listing's file, read again, is gone.
@@ -701,7 +701,7 @@ mod tests {
 
         // Listed again, a later failure is logged again.
         fs::remove_file(f.dir.holds()).unwrap();
-        f.hold("job.json", "{\"version\":1,\"pid\":4}");
+        f.hold("job.json", "{\"version\":1,\"pid\":40}");
         assert_eq!(ids(&f.data.holds(&live)), ["job.json"]);
         fs::remove_dir_all(f.dir.holds()).unwrap();
         fs::write(f.dir.holds(), b"not a folder").unwrap();

@@ -364,3 +364,110 @@ sources); `docs/hold-files.md`; `docs/research.md` (new section at the end); thi
    the `killed` line lands), whether a header form ever shows in a transcript, and `Replay::scheduler_drift_ms()` on
    live jobs.
 4. Logging the drift needs a log path from a source (a contract change): `sessions()` carries no log line.
+
+## Claude parsing review fixes, round 2 (2026-11-04)
+
+Status: done. Agent: `wakeshot-worker` (work name `claude-fix2`). From `docs/reviews/p4-claude-parsing-verify.md`:
+"Left from M1 part b" (major) and the minors N1 to N3 where the fix is one line or a doc line.
+
+### Log
+
+- 2026-11-04 00:52: started. Read this card's review-fix section, the review (M1) and the verify.
+- 2026-11-04 00:58: checked the verify's claim in Claude Code 2.1.317 (`claude.exe`, read only): the stop path `ILe`
+  kills the task, then calls `tUr` for a shell or shell Monitor stopped with a `source` while `tengu_rosy_donut` is on
+  (default on); `tUr` calls `dl`, which is `enqueuePendingNotification` (`vr`); `vr` writes a `queue-operation`
+  `enqueue` line with the notice as `content` unless the item is `unlogged` (`tUr` does not set it) or a hook takes the
+  enqueue over. The claim holds. The live fixtures show the same line before each delivered notice. Details:
+  `docs/research.md`, "Claude UI stop notice checks".
+- 2026-11-04 01:00: built: `transcript.rs` reads `operation` and the line's `content` (as a notice only) and closes
+  the listed tasks on an `enqueue` line. Unit test, hand fixture `ui-stop.jsonl`, integration test, and live checks
+  at the enqueue lines of fixtures 02, 08, 12. A mutation (the `queue-operation` arm ignored) fails 4 tests.
+- 2026-11-04 01:04: docs (rule 3, fixture README, research), every check run (Result). `wakeshot-windows` clippy with
+  `--all-targets` stops at a lint in `child.rs`, a file of the running `p4-cli-run` card; not this round's file.
+- 2026-11-04 01:06: that clippy run tried 3 times from 01:03 to 01:06, same lint each time (`child.rs` unchanged
+  since 01:02). Build folder and scratch scripts deleted.
+
+### Result
+
+Status: done. The verify's claim holds in the 2.1.317 code, so M1 part b is fixed as it proposed. No contract change.
+
+**What was done.**
+
+- `transcript.rs`: a `queue-operation` line with `operation: "enqueue"` closes every task its `content` lists, read
+  with the same `notice_ids` as a user line (any `<status>`, header and joined forms; only the start of the text
+  counts). New keys read: `operation`, and the line's own `content`, kept only as task ids. `dequeue`, `remove` and
+  other operations change nothing; a missing or non-text `content` is no problem. Effect: a shell or Monitor stopped
+  from the VS Code panel ends when Claude Code queues its `killed` notice, not when the passive notice is delivered
+  at the next prompt. Every other notice also ends its task a little earlier (live fixtures: the enqueue line comes 0
+  to 3.4 s before the line that delivers the same notice, 10 cases).
+- Not checked live; `p4-live-claude` checks it (stop a background shell from the panel; expect the `enqueue` line
+  within a second and `open_tasks` 0 right after it).
+- Docs: rule 3 of `docs/research/claude-code-signals.md` (the enqueue line, the UI stop, N1 and N3's Monitor
+  details); fixture README row; `docs/research.md`, "Claude UI stop notice checks" (the code path with offsets, what
+  is not verified).
+
+**Verify minors.**
+
+- N1 (failed `TaskStop` closes nothing): no code change; its main case (a UI stop whose notice had not landed) is now
+  closed by the enqueue line. Rule 3 now says a failed stop closes nothing.
+- N2 (Monitor end on the wall clock across a PC sleep): not a one-line fix. For `p4-live-claude`: sleep the PC for 5
+  minutes during a 10 minute Monitor and see when its timeout event comes.
+- N3 (docs): rule 3 fixed. Two lines are in files this round does not own (list below).
+
+**Decided by the worker, for Haik's review.**
+
+1. This replaces decision 3 of the first round: a task stopped from the UI now stops holding when Claude Code writes
+   its `killed` notice to the queue, which the code does at once; it holds longer only if the remote flag
+   `tengu_rosy_donut` is off or a hook holds the enqueue back (not verified). Change it when `p4-live-claude` shows
+   the line comes late or not at all.
+2. Only `enqueue` is read, not `remove`: in every case seen a `remove` follows the same notice's `enqueue`. Change it
+   when a live session shows a `remove` (or other operation) with a notice that had no `enqueue` line.
+3. The line's `content` is read (as ids only) on every line kind and used only for `queue-operation`, since key order
+   is not fixed. Cost: one prefix check per line that has a marker.
+4. `ui-stop.jsonl` has no delivery line after the enqueue: how a passive notice is delivered at the next prompt is
+   not known. The unit test covers a later user line.
+
+**Tests.**
+
+- `transcript.rs` (1 new): `a_queued_notice_ends_its_task_at_once` (a shell, a Monitor persistent or not, the header
+  form; `remove`, `dequeue`, an event, a quoted notice, a prompt, no content, a non-text content and a non-text
+  operation close nothing and name nothing). Changed: `other_kinds_and_shapes_are_ignored_silently` now uses a
+  `remove` line (an `enqueue` is read now); `the_replay_keeps_no_text` and the proptest `sample()` gain enqueue lines.
+- `tests/claude_transcript.rs` (1 new): `a_stop_from_the_ui_ends_the_shell_at_its_queued_notice` on the new fixture
+  `ui-stop.jsonl`. `the_live_open_tasks` checks fixtures 08 and 12 at line 6 (the enqueue, 0 open);
+  `the_live_monitors_hold_until_their_timeout` checks 02 at lines 6, 12, 29 (timer gone) and 21, 25 (events: timer
+  kept).
+- Mutation: with the `queue-operation` arm ignored, 4 tests fail (the two new ones and the two live ones).
+
+**Checks** (2026-11-04 01:02 to 01:04, build folder `<scratchpad>\claude-fix2\target`).
+
+- `cargo fmt --all --check`: my files clean (`rustfmt --edition 2024 --check` on `transcript.rs`,
+  `tests/claude_transcript.rs`, `watch/data.rs`: exit 0). The workspace run shows diffs only in
+  `crates/wakeshot-windows/src/child.rs`, a file of the running `p4-cli-run` card.
+- `cargo clippy -p wakeshot-core --locked --target x86_64-pc-windows-msvc -- -D warnings`, with and without
+  `--all-targets`: both exit 0.
+- `cargo test -p wakeshot-core --locked`: lib 565 passed, 2 ignored (not mine), `claude_status` 10, `claude_transcript`
+  25, all pass.
+- Privacy: `content` and `operation` are read only through `read_notice` (task ids) and `Word`; no text is kept
+  (`the_replay_keeps_no_text`). No new file is opened; no `.key` path is involved. Secret scan (the patterns of
+  `docs/phases/01-design-skeleton.md`, plus `haika`, the host name, and any UUID that is not a `5e55` fake) over the
+  new fixture, its README and the three changed Rust files: 0 hits (self-test: 1 hit on a planted token).
+- `wakeshot-windows` (for `data.rs`): `cargo test -p wakeshot-windows --lib --locked` 387 passed, 20 ignored; clippy
+  without `--all-targets` exit 0; with it, one lint in `child.rs:489`, not this round's file.
+
+**Files changed.** `crates/wakeshot-core/src/sources/claude/transcript.rs`, `crates/wakeshot-core/tests/
+claude_transcript.rs`, `crates/wakeshot-core/tests/fixtures/claude/transcript/ui-stop.jsonl` (new) and `README.md`,
+`docs/research/claude-code-signals.md` (rule 3 only), `docs/research.md` (new section at the end), this card.
+
+**Left, and found outside scope.**
+
+1. `docs/product.md:41-46` (not this round's file): the sentence "A task stopped from the app's UI may hold until ...
+   the only other trace, is a new file kind and is not built" is now wrong. Proposed: "A task stopped from the app's
+   UI ends when Claude Code queues its stop notice, which it writes to the transcript at once (2.1.317 code; not
+   checked live)."
+2. `docs/architecture.md:899-900` (verify N3, not this round's file): `timers` also holds a Monitor's timeout, and
+   `open_tasks` counts only tasks with no known end. Proposed: `// next due times, wall ms: jobs, wakeups, Monitor
+   timeouts` and `// background tasks with no known end, seen open in the transcript`.
+3. N2 and the panel stop go to `p4-live-claude` (its card is not this round's file).
+4. The README should say that a task stopped from Claude Code's UI may hold only if its queued notice is late (first
+   round's item 2, now weaker).

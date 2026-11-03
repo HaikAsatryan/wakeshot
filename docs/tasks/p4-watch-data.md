@@ -81,6 +81,15 @@ None.
   all clean (list in the Result). `docs/research.md` "Watch data checks" added. Card done.
 - 2026-11-03 21:13: the bundle's build folder (`<scratchpad>\p4-watch-reads\target`) and scratch files deleted; no
   `%TEMP%\wakeshot-watch-*` folder left by the tests.
+- 2026-11-04 00:54, `wakeshot-worker` (work name `claude-fix2`): CI on main failed 6 tests here, since the Claude fix
+  round made `holds/file.rs` refuse pid 4 (the System process) and these tests used pid 4 as the fake writer. Tests
+  only: every hold file and fake lookup that used pid 4 now uses pid 40 (each test's intent kept). `cargo test -p
+  wakeshot-windows --lib --locked`: 373 passed, 0 failed, 20 ignored; the 19 `watch::data` tests pass. Grep of the
+  workspace for hold files with pid 0 or 4: only `watch/read.rs:577`, which reads the bytes back and never parses them
+  (harmless, not this card's file).
+- 2026-11-04 01:04: `rustfmt --edition 2024 --check` on `data.rs`: clean. `cargo clippy -p wakeshot-windows --locked
+  --target x86_64-pc-windows-msvc -- -D warnings`: clean; with `--all-targets` it stops at one lint in
+  `child.rs:489` (`chunks_exact`), a file the running `p4-cli-run` card owns, and names nothing in `data.rs`.
 
 ## Result
 

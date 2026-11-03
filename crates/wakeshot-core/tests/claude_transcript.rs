@@ -484,8 +484,17 @@ fn the_live_open_tasks() {
         ),
         // A background subagent keeps the status `busy` itself; it opens no task.
         ("07-subagent", true, vec![(3, 0), (13, 0), (18, 0), (28, 0)]),
-        ("08-sdk-bg-shell", false, vec![(4, 0), (5, 1), (8, 0)]),
-        ("12-sdk-close-during-shell", false, vec![(5, 1), (8, 0)]),
+        // The notification's `queue-operation` line (6) ends the shell before its user line (8).
+        (
+            "08-sdk-bg-shell",
+            false,
+            vec![(4, 0), (5, 1), (6, 0), (8, 0)],
+        ),
+        (
+            "12-sdk-close-during-shell",
+            false,
+            vec![(5, 1), (6, 0), (8, 0)],
+        ),
         // The killed process's shell was open; the resumed process does not count it, before or after its notice.
         ("13-sdk-resume-kill", false, vec![(11, 1), (16, 0), (18, 0)]),
     ];
@@ -509,18 +518,23 @@ fn the_live_open_tasks() {
 }
 
 /// Review M1 on live fixture 02: each Monitor (120 s, not persistent) holds as a timer at its result's time plus its
-/// timeout, until a notification with a `<status>` ends it; events change nothing. A terminal session's status says
-/// `shell` for it, so there it adds no timer.
+/// timeout, until a notification with a `<status>` ends it, from its `queue-operation` line on; events change nothing.
+/// A terminal session's status says `shell` for it, so there it adds no timer.
 #[test]
 fn the_live_monitors_hold_until_their_timeout() {
-    let want: [(usize, &[i64]); 8] = [
+    let want: [(usize, &[i64]); 13] = [
         (5, &[1_793_715_683_407]),
+        (6, &[]),
         (9, &[]),
         (11, &[1_793_715_689_001]),
+        (12, &[]),
         (15, &[]),
         (19, &[1_793_715_695_984]),
+        (21, &[1_793_715_695_984]),
         (23, &[1_793_715_695_984]),
+        (25, &[1_793_715_695_984]),
         (27, &[1_793_715_695_984]),
+        (29, &[]),
         (31, &[]),
     ];
     let live = live("02-monitor");
@@ -707,7 +721,7 @@ fn only(source: &ClaudeSource) -> SessionFacts {
     session
 }
 
-const HAND: [&str; 11] = [
+const HAND: [&str; 12] = [
     "broken-line.jsonl",
     "carry-after-clear.jsonl",
     "deleted.jsonl",
@@ -718,6 +732,7 @@ const HAND: [&str; 11] = [
     "resume.jsonl",
     "seven-days.jsonl",
     "task-stop.jsonl",
+    "ui-stop.jsonl",
     "unknown-kind.jsonl",
 ];
 
@@ -840,6 +855,17 @@ fn a_task_stop_ends_the_shell_it_names() {
     assert_eq!(
         sdk_steps("task-stop.jsonl"),
         [(vec![], 0), (vec![], 1), (vec![], 1), (vec![], 0)]
+    );
+}
+
+/// Review M1 part b: a shell stopped from the UI ends at its `killed` notice's `queue-operation` line, written when
+/// Claude Code queues the notice; its user line may come only at the next prompt. The shape is from the 2.1.317 code
+/// (`tUr`), not checked live; `p4-live-claude` checks it.
+#[test]
+fn a_stop_from_the_ui_ends_the_shell_at_its_queued_notice() {
+    assert_eq!(
+        sdk_steps("ui-stop.jsonl"),
+        [(vec![], 0), (vec![], 1), (vec![], 0)]
     );
 }
 
