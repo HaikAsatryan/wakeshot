@@ -86,11 +86,11 @@ impl Default for Config {
     }
 }
 
-/// `holds\*.json`: one hold from `wakeshot run`, Keep awake, or any script (documented for users in Phase 4).
+/// `holds\*.json`: one hold from `wakeshot run`, Keep awake, or any script (the user doc is `docs/hold-files.md`).
 ///
 /// Owner: sources track (Phase 4) parses it into `HoldFacts`. Scripts write it, so it stays loose: only `version`
-/// and `pid` are required. `expires` is kept as the text the writer gave (RFC 3339, UTC), because turning it into
-/// wall ms is parsing, which Phase 4 owns. `screen` counts only in `keep-awake.json`.
+/// and `pid` are required. `expires` is kept as the text the writer gave (RFC 3339, `Z` or an offset), because
+/// turning it into wall ms is parsing, which `holds::file` owns. `screen` counts only in `keep-awake.json`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HoldFile {

@@ -2,8 +2,10 @@
 //!
 //! The core calls [`ours`] when the lid closes (`Lock` and `Play(LidClosedHolding)` side by side when true),
 //! [`source_change`] at a power source change, [`settle`] at each later event while a [`SourceLock`] waits, and
-//! [`user_action`] when holding ends (the countdown rule in `policy::ending`). Each rule reads the last plan read and
-//! the core's journal mirror as they are at that event.
+//! [`user_action`] when holding ends (the countdown rule in `policy::ending`). Each rule takes the plan and journal as
+//! they are in force at that event, which the core builds (`Core::in_force`: each journal entry on the active plan
+//! sets its key to `written`, and an apply with no answer yet counts as written). The last plan read can be up to
+//! 10 s behind an apply, so a rule fed it would miss our Do nothing at a lid close in the first seconds of a hold.
 //!
 //! Owner: `p2-policy-power`.
 

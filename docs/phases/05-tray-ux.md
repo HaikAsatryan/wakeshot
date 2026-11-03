@@ -182,7 +182,7 @@ own Windows settings switched and put back.
 |---|---|---|---|---|
 | `p5-theme` | no | no | contracts change card | ready |
 | `p5-icon-art` | one look at the icon sheet, not blocking | no | contracts change card | ready |
-| `p5-text` | one read of the text list, not blocking | no | contracts change card | in progress |
+| `p5-text` | one read of the text list, not blocking | no | contracts change card | done (00:02): every word in `text.rs`, 552 core tests; the text list for Haik is in its Result |
 | `p5-menu-paint` | no (menu look answered 17:32: an icon per item) | no | `p5-theme` | ready |
 | `p5-tray-icon` | no | screen, settings (light and dark mode) | `p5-theme`, `p5-icon-art` | ready |
 | `p5-menu-view` | no (menu look answered 17:32) | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | ready |
@@ -234,3 +234,4 @@ Bundle (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p5-th
 - 2026-11-03: Haik signed off with every default (18:09); `p1-close-contracts` wrote the answers into this file and
   the cards, and added `Notice::Updated { version }` for `p5-text` to word.
 - 2026-11-03 23:36: `p5-text` running (core only, beside the app.rs contract change).
+- 2026-11-04 00:02: `p5-text` done and committed. Its Result holds the text list for Haik (`p5-haik-check`). The fix round now words the LockFailed notice for the new step back (`text.rs` handed to it). Next tray cards: `p5-theme` + `p5-menu-paint`, `p5-icon-art`, `p5-sounds` (sound is fine at night, Haik 23:45).

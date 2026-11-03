@@ -231,7 +231,8 @@ pub enum Event {
 pub enum Command {
     Requests { system: bool, display: bool },   // system means SYSTEM plus EXECUTION
     Retake,                                     // after resume; answers as Outcome::Requests
-    ReadPlan,                                   // every 10 s while anything is owned, and on each tick
+    ReadPlan,                                   // every 10 s while anything is owned, and at a tick once the
+                                                // last read is 10 s old or more (at most one per 10 s)
     Apply { plan: Guid, writes: Vec<(SettingKey, u32)> },
                                                 // writes: the three keys less the released ones, never less a key
                                                 // already at its target; the apply restores this plan's entries
@@ -252,8 +253,11 @@ pub enum Command {
                                                 // delete restore-request.json
     Log(String),                                // a line only the core can write (section 8); no answer
     OpenLog,
-    ApplyUpdate,                                // only when no hold counts, no hold file names a live process and
-                                                // nothing is owned (ship track runs it)
+    ApplyUpdate,                                // only when no hold counts, no hold file other than Keep awake
+                                                // names a live or Unknown process, nothing may be owned, no
+                                                // countdown, work end or hibernate is on, and the session is not
+                                                // ending (ship track runs it); an expired Keep awake file does not
+                                                // wait: it names this tray, which quits for the update
     Quit,
 }
 
@@ -288,7 +292,8 @@ pub enum Outcome {
     Sound(Result<SoundEnd, Failure>),  // logged only
     Notified(Result<(), Failure>),
     Written { file: FileKind, result: Result<(), Failure> },
-    Update(Result<(), Failure>),       // Ok: the updater waits for this process to exit, so the core issues Quit
+    Update(Result<(), Failure>),       // Ok: the updater waits for this process to exit, so the core takes the
+                                       // menu's Quit path (requests off, restore, Keep awake file deleted, Quit)
 }
 pub enum ApplyError {
     PlanChanged,                       // the active plan is not `plan`: at step 1 nothing written; at step 6 written
@@ -303,13 +308,21 @@ pub enum ApplyError {
 `RequestsOnly` (settings blocked or a failed apply), `CannotHold`, `RestoreFailed`, `HibernateFailed`, `LockFailed`,
 `ClosedLidReport { ran_ms, held_by }`, `UpdateWakeshot { agent }`, `JournalCorrupt` (a corrupt journal was set aside,
 so an override may be left), `IdleLocked` (Keep screen on locked the PC), `Updated { version }` (Wakeshot updated
-itself; Haik's yes, 2026-11-03). The tray track words each one in `text::notice`.
+itself; Haik's yes, 2026-11-03). The tray track words each one in `text::notice`. A notice raised while the session
+is locked or another session has the PC's screen waits, and the waiting ones go out in order once the session is
+unlocked and on the console again: a balloon shown to nobody is lost. The same notice twice in one absence waits once.
+Sounds never wait.
 
 State is one struct owned by the loop thread: `automatic`; holds by source; live `PlanValues`; `ac`, `battery_pct`,
 `floor_pct`, `lid`; `episode: Option<Episode>` (from the first hold to the last: `released: Set<SettingKey>`, on every
 plan, `lid_closed_since`, labels of what held); a mirror of the journal, a copy of the entries that `Done(Applied)` and
 `Done(Restored)` carry, less the keys `UserChanged` names; `requests`; `stepped_back` (battery floor); `on_console`;
 `session_ending`; `ending: Option<Countdown>`; `last_resume_mono`; notices already shown.
+
+The lid, lock and countdown rules read the plan as in force now (`Core::in_force`), not the last plan read, which an
+apply leaves up to 10 s behind: each mirror entry on the active plan sets its key to `written`, and an `Apply` with no
+answer yet on the active plan counts as written for each key not already at its target. Both err toward a lock: an
+entry the user changed in the last 10 s, or an apply in flight that fails, still counts as ours.
 
 ### Clocks
 
@@ -321,7 +334,8 @@ plan, `lid_closed_since`, labels of what held); a mirror of the journal, a copy 
 - Input idle (`GetLastInputInfo`) counts suspended time (research, "Clock"). The core treats a resume as input:
   idle = min(reported idle, `mono_ms` since the last `Resumed`). The two count the same time there, because no
   suspend lies between the last resume and now. So a countdown never hibernates a PC the user just woke.
-- Safety tick every 30 s. It reads input idle, runs due deadlines, issues `ReadPlan`, re-checks liveness that only the
+- Safety tick every 30 s. It reads input idle, runs due deadlines, issues `ReadPlan` (any tick does, once the last
+  read is 10 s old or more, so a burst of short deadlines sends no burst of reads), re-checks liveness that only the
   system process list can see, and retries the settings mutex when this tray does not own it. The loop keeps one
   timer set to the nearer of the next deadline and the next tick.
 
@@ -364,7 +378,7 @@ While holding:
   screen still turns off and Windows locks their session (whether Windows honors a screen request from a session not
   on the console: not verified). Remote Desktop into this session most likely counts as leaving too (Microsoft's text
   names "the console terminal or RemoteFX session"; not tested), so a user working over Remote Desktop gets requests
-  only. A restore that fails here warns in this session, not the user at the screen; it is retried on each tick.
+  only. A restore that fails here warns in this session, not the user at the screen; it is retried at the ticks (below).
   Session notices: not tested (checklist 11). Phase 1 Question 10: the default, Haik 2026-11-03 18:09.
 - On battery under the floor (energy saver threshold DC; 20 when it is 0 "Never" or 100 "On battery"): step back:
   `Requests` off, `Restore`, notice and `Play(BatteryFloor)`; if the lid is closed and the user's own battery lid
@@ -378,20 +392,30 @@ While holding:
 
 Holding ends (last hold gone):
 
-- `Requests` off and `Restore { plan: None }` at once, lid open or closed.
+- `Requests` off and, when anything may be owned, `Restore { plan: None }` at once, lid open or closed. May be
+  owned: the mirror holds an entry, an `Apply` has no answer yet, or a restore failed (the mirror may not know what
+  the journal holds). The console-left and battery-floor restores follow the same rule; the user's Restore, Quit and
+  session end go out whatever the mirror says.
 - If the lid is closed and the user's own lid action is not Do nothing: countdown (reason WorkEnded). Settings come
   back first, so a crash during the countdown leaves nothing overridden.
 
-A failed `Restore` is retried on each tick. While the core applies (holding, on the console, not stepped back, not at
-session end, some key not released, and no `Apply` failed in this episode), the retry takes only the entries on plans
-other than the active one, one `Restore { plan: Some(p) }` per plan, and the hold's `Apply` takes over the entries on
-the active plan and restores those whose key the user released. Otherwise the retry is `Restore { plan: None }`, so after a failed apply (`SafetyNet` or `Write`:
-requests only for the episode) it does not wait for an apply that never comes. So a retry never undoes a running
-hold, and a hold that starts while a restore fails rests on entries the journal still holds.
+A failed `Restore` is retried at a tick, at most once per 10 s, right before that tick's `ReadPlan`, so the read's
+ownership check sees the journal the retry left. While the core applies (holding, on the console, not stepped back,
+not at session end, some key not released, and no `Apply` failed in this episode), the retry takes only the entries
+on plans other than the active one, one `Restore { plan: Some(p) }` per plan, and the hold's `Apply` takes over the
+entries on the active plan and restores those whose key the user released. Otherwise the retry is
+`Restore { plan: None }`, so after a failed apply (`SafetyNet` or `Write`: requests only for the episode) it does not
+wait for an apply that never comes. So a retry never undoes a running hold, and a hold that starts while a restore
+fails rests on entries the journal still holds.
 
 Countdown: due when input idle (clamped at resume as above) reaches 5 minutes (Haik, 2026-11-03). Cancelled by a new
-hold, lid open, or AC back (Floor reason). When due: `Hibernate` (section 5); the hibernate thread plays the "going
-to sleep" sound after its last check, and the core sends no `Play` for it.
+hold, lid open, or AC back (Floor reason). It pauses while another session has the PC's screen: input idle is this
+session's, so the other user's typing would not count. A work-end countdown also pauses while the user's own lid
+action for the current power source is Do nothing; after that pause it starts again only once a source whose own
+action is not Do nothing has lasted 30 s (`policy::lid::SOURCE_SETTLE_MS`), so a dock's short AC drop never
+hibernates a docked laptop left idle. A lid close on our Do nothing while nothing holds (a restore that failed or has
+not landed) starts the countdown as a work end does. When due: `Hibernate` (section 5); the hibernate thread plays
+the "going to sleep" sound after its last check, and the core sends no `Play` for it.
 
 Closed-lid report: after a hold that ran with the lid closed, a notice says how long the PC kept running with the lid
 closed (`mono_ms`) and what held it. It goes out at the first unlock with the lid open, or when the lid opens while
@@ -616,10 +640,13 @@ failure. Entries marked `restored` are skipped: they wait for a restore retry. S
 never sees that apply's entries, and a plan switch never looks like a user change. Accepted: a user who sets exactly
 our value is not seen (since Settings already shows our value, that needs two changes inside one 10 s read); a user
 change between Apply steps 2 and 5, a few calls apart, is overwritten, and the restore puts back the value read in
-step 2. When the check drops the last entry, the clean-up of restore step 6 runs.
+step 2; a user change between restore steps 3 and 4 (the read and the write of `original`, with the mark save
+between them) is overwritten by `original` (research, "The restore routine overwrites a user change between its steps
+3 and 4"). When the check drops the last entry, the clean-up of restore step 6 runs.
 
-- `ReadPlan`: the core issues it every 10 s while anything is owned, and on each safety tick (docked use and the Keep
-  screen on lock need the user's values). No registry watch: its key path is not a documented API.
+- `ReadPlan`: the core issues it every 10 s while anything is owned, and at any tick once the last read is 10 s old or
+  more, so on each safety tick (docked use and the Keep screen on lock need the user's values). No registry watch: its
+  key path is not a documented API.
 - Plan switch (`GUID_ACTIVE_POWERSCHEME`, 4 ms, tested, or a read with a new active id): restore the old plan's keys
   (an inactive plan needs no apply), then apply to the new plan. "No apply" rests on two points not tested: that a
   write to an inactive plan changes only that plan (section 9), and that activating the plan later applies its stored
@@ -660,7 +687,8 @@ guard, restore mode, Velopack hooks and the CLI, always under `Local\Wakeshot.Jo
    this run fails.
 6. Whenever the last entry is dropped, on any path (this routine or the ownership check, each only after a successful
    read): delete the file and the RunOnce value, set the current guard's stop event.
-7. A failed run keeps the journal and reports. The tray retries on each safety tick (episode flow) and warns once.
+7. A failed run keeps the journal and reports. The tray retries at a tick, at most once per 10 s (episode flow), and
+   warns once.
    Restore mode and the guard retry every 10 s for 2 minutes. Each retry reloads the journal and goes on only while
    its owner is still the dead process it started for; another tray took the journal over: exit. In restore mode an
    owner whose liveness is Unknown counts as a failed run, so it is retried. After 2 minutes they start the tray, which
@@ -687,7 +715,9 @@ Guard:
   event left set never stops the next guard.
 - Opens the tray with exactly `SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION` (rights tested, research "Reading
   elevated Claude Code sessions"), checks the start time, waits on the handle and on its stop event. Tray gone with a
-  journal left: run the restore routine (with the retries above), log, exit. Stop event: exit.
+  journal left that names this tray as its owner: run the restore routine (with the retries above), log, exit. A
+  journal that names another tray: exit. A corrupt journal names no one, so the guard leaves it; the RunOnce value is
+  still set, and the next sign-in's restore mode sets it aside (restore step 1). Stop event: exit.
 - No hang check (Phase 0 close; change it when a tray hang shows up in a test or a report).
 - Velopack kills the guard with the tray on update, uninstall and Setup.exe over an install; the hooks restore
   (section 6).
@@ -729,9 +759,11 @@ aside with a warning; the log holds the old values.
   first callback came at once in the spike, research "Lid notification", but Microsoft says it comes only once a lid
   device and its state are known, so the thread waits at most 2 s and an unknown lid never hibernates), input idle
   still at least 5 minutes with no resume since the countdown started, and for the Floor reason still on battery and
-  under the floor. Then the "going to sleep" sound (Phase 5 sets how long the thread waits for it), SeShutdownPrivilege
-  (works from a process started by Explorer, tested), `IsPwrHibernateAllowed`, `SetSuspendState(TRUE, FALSE, FALSE)`
-  (hibernates here, returns only after resume, tested). Not allowed or failed: a notice; settings are already
+  under the floor. Then SeShutdownPrivilege (works from a process started by Explorer, tested) and
+  `IsPwrHibernateAllowed`, then the "going to sleep" sound (Phase 5 sets how long the thread waits for it; a failed
+  sound is logged and the run goes on), then `SetSuspendState(TRUE, FALSE, FALSE)` (hibernates here, returns only
+  after resume, tested). The two checks come before the sound, so a PC with hibernate off never plays "going to
+  sleep" and then stays awake (card `p3-hibernate`). Not allowed or failed: a notice; settings are already
   restored, so Windows' own timers most likely apply (inferred; with the lid closed not tested, checklist 2).
 
 ### OS events
@@ -777,7 +809,8 @@ aside with a warning; the log holds the old values.
 The data folder is `%LocalAppData%\Wakeshot`, never inside Velopack's install folder
 `%LocalAppData%\HaikAsatryan.Wakeshot` (pack id `HaikAsatryan.Wakeshot`; both names Haik, 2026-11-03), which Setup.exe
 over an install deletes with no hook (research, "Distribution"). The pack id cannot change after the first release.
-Whether Velopack accepts a dot in it: not verified; Phase 6 checks before the first release.
+Velopack accepts the dot: pack, install, updates, Setup.exe over an install and uninstall all worked with it (tested,
+research "Velopack checks for Wakeshot", point 1).
 
 Every file is UTF-8 JSON with `"version": 1`. A reader takes its own version and older ones. A file with a newer
 version is ignored and logged; the journal is the one exception (below). The reader reads `VersionProbe` first, so a
@@ -792,7 +825,7 @@ power cut right after the move leaves: not tested.
 | `config.json` | tray (menu), CLI | `{ "version": 1, "automatic": true }` |
 | `holds\keep-awake.json` | tray (menu), CLI | hold format; `pid` and `procStart` are the tray's, so Keep awake ends with the tray (sign-out, restart) |
 | `holds\run-<pid>.json` | `wakeshot run` | hold format; `pid` is the child's, so the hold outlives a wrapper killed by an update |
-| `holds\<any>.json` | any tool or script | hold format (documented for users in Phase 4) |
+| `holds\<any>.json` | any tool or script | hold format (the user doc is `docs/hold-files.md`) |
 | `restore-request.json` | CLI | `{ "version": 1 }`; the tray restores and deletes it |
 | `state.json` | tray, on change (1 s debounce) | tray pid and start, Automatic, what holds, what is overridden, stepped back |
 | `journal.json` | IO thread and every restore, under `Local\Wakeshot.Journal` | owned keys (below) |
@@ -843,8 +876,9 @@ Velopack hooks (Phase 6): install and updated run the restore routine if a journ
 add the CLI folder to the user Path. Uninstall (30 s limit) restores, retrying within the limit, then removes Run,
 RunOnce and the Path entry; it deletes `journal.json` only after a successful restore (a failure: section 5, "Gap
 left"). RunOnce goes even after a failed restore: the exe it names is being removed, so it could not run. Updates
-apply only when nothing holds and nothing is overridden. Not verified: that the `current` folder keeps its path
-across updates (Run, RunOnce and Path point at it). Accepted (ship Question 1, Haik 2026-11-03 18:09; the README
+apply only when nothing holds and nothing is overridden. The `current` folder keeps its path across updates, though
+the folder itself is new each time, so Run, RunOnce and Path can point at it (tested, research "Velopack checks for
+Wakeshot", point 3). Accepted (ship Question 1, Haik 2026-11-03 18:09; the README
 says so): `winget upgrade` runs Setup.exe silent, which does not start the app, and a hook cannot start it
 (`research/distribution.md`), so after such an upgrade Wakeshot is off until the next sign-in or a manual start.
 
@@ -889,7 +923,11 @@ rulings:
   clock set back cannot stretch it; "dialog open" counts as idle.
 - Rule 11 (transcript growth when the status file is missing or unknown) is dropped. It contradicts the
   unknown-format rule above.
-- Rule 5 does not cover `claude --resume` in a new process. Phase 4 runs one live test and fixes the rule.
+- `claude --resume` in a new process reuses the transcript and writes no line for it (live test,
+  `research/claude-code-signals.md`, "Phase 4 live shapes", "Resume findings"). So lines older than the session
+  process's start (`procStart`) are an earlier process's, and the transcript parser applies the resume rule at that
+  time: `CronCreate` jobs come back (a recurring one counts its next fire from the resume and is dropped at 7 days
+  old; a one-shot whose time passed is dropped), while wakeups and background tasks from before it are dropped.
 
 Codex CLI and Copilot CLI (after v1, Haik 2026-11-03; their cards are `later` in Phase 4): the same trait. Liveness comes from `research/other-agent-signals.md` (Codex
 files hold no pid: "a `codex.exe` is alive and the thread lock file exists"). That Codex rule can outlive its session:
@@ -903,7 +941,8 @@ gets one live test (product). `wakeshot run` and hold files are not a source; th
 
 The core never fails. The Windows layer returns `Result<T, WinError>` (`WinError { call: &'static str, code: u32 }`);
 every failure that changes behavior comes back as `Event::Done` or `Event::Plan(Err)`, and the core picks the
-fallback. No `unwrap` on OS results outside tests.
+fallback. The one exception is `watch::read` (the watch thread's file reads, std calls): it returns `io::Result`, so
+`NotFound` maps straight to a file that is gone. No `unwrap` on OS results outside tests.
 
 | Failure | What happens |
 |---|---|
@@ -916,7 +955,7 @@ fallback. No `unwrap` on OS results outside tests.
 | Write, read-back or `PowerSetActiveScheme` fails in an apply | the restore routine on this plan's entries (they stay until it succeeds), requests only for the episode, notice |
 | Active plan read fails at the start of an apply | nothing written; requests only for the episode, notice |
 | Plan read fails | nothing released; log; retried at the next read |
-| Restore fails | journal kept; the tray retries on each tick while the restore is still wanted and warns once; restore mode and the guard retry for 2 minutes while the journal's owner is still the dead process, then start the tray; the uninstall hook retries within 30 s |
+| Restore fails | journal kept; the tray retries at a tick, at most once per 10 s, while the restore is still wanted and warns once; restore mode and the guard retry for 2 minutes while the journal's owner is still the dead process, then start the tray; the uninstall hook retries within 30 s |
 | Journal corrupt | moved aside; warning notice; values left as they are until the user sets them by hand (section 5, "Gap left") |
 | Liveness Unknown | last state kept, retried on the next tick; no file deleted, no restore started |
 | Settings mutex held by another session | requests only; retried on each tick |
@@ -1020,11 +1059,13 @@ and after, and change nothing by hand during the test.
 - Release profile: `lto = true`, `codegen-units = 1`, `panic = "abort"`, `strip = true` (the tray spike's settings).
   The panic hook aborts in every profile (section 4, tray startup).
 - GitHub Actions `ci.yml` on push and pull request. Jobs on `windows-latest` (x64) and `windows-11-arm` (ARM64): fmt
-  check (x64 only), clippy with `-D warnings`, tests, release build, exes as artifacts. Each cargo command passes
-  `--target <triple>`. A step reads the release exes' imports with `dumpbin /dependents` and fails on `VCRUNTIME`,
-  `MSVCP`, `ucrtbase` or `api-ms-win-crt-*`. CI never sets `RUSTFLAGS`. One `ubuntu-latest` job tests
-  `wakeshot-core` alone, which proves it has no OS code. Read-only token. Actions from `actions/` by major tag; any
-  other action pinned by commit SHA.
+  check (x64 only), clippy with `-D warnings` twice (with `--all-targets`, then without it, so the libs are checked
+  as they ship, without `test-support`), tests, release build, exes as artifacts. Each clippy, test and build
+  command passes `--locked` and `--target <triple>`. A step reads the release exes' imports with `dumpbin
+  /dependents` and fails on `VCRUNTIME`, `MSVCP`, `ucrtbase` or `api-ms-win-crt-*`. CI never sets `RUSTFLAGS`. One
+  `ubuntu-latest` job tests `wakeshot-core` alone, which proves it has no OS code, and fails if `cargo tree` for every
+  target lists a `windows` crate under it. Read-only token. Actions from `actions/` by major tag; any other action
+  pinned by commit SHA.
 - Velopack packing and releases: Phase 6.
 
 ## 11. Dependencies

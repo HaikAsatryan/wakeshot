@@ -567,9 +567,10 @@ mod copies {
         }
 
         /// Deletes the copies earlier test runs left: named "Wakeshot test <pid>", that pid not running, and not
-        /// the active plan. Returns the deleted ones. Only `real_` tests call it, which run one at a time across
-        /// all cards (review M7: a sweep must never delete a copy another card is walking). A pid now reused by
-        /// another process keeps its copy until that process ends, which errs on the side of keeping.
+        /// the active plan. Returns the deleted ones. Only `real_` tests and the harness's `power_check cleanup`
+        /// call it, and both run one at a time across all cards (review M7: a sweep must never delete a copy
+        /// another card is walking). A pid now reused by another process keeps its copy until that process ends,
+        /// which errs on the side of keeping.
         pub fn sweep() -> Result<Vec<Guid>, WinError> {
             let active = get_active()?;
             let mut named = Vec::new();

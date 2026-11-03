@@ -74,7 +74,10 @@ sign-off):
   `wakeshot run` wrapper, also with Automatic off) and no key is owned. Then `Command::ApplyUpdate`: the update thread
   calls `wait_exit_then_apply_updates(silent, restart)`, answers `Outcome::Update`, and on success the core issues
   `Quit`. Velopack waits at most 60 s for the exit (research, "Ship track planning checks"), runs the obsolete and
-  updated hooks, and starts the new tray.
+  updated hooks, and starts the new tray. A tray that has not quit 60 s after `wait_exit_then_apply_updates` is not
+  waited for: Update.exe runs the obsolete hook while the old tray still runs, kills it (exit code 1), applies, runs
+  the updated hook and starts the new tray (tested, research "Velopack checks for Wakeshot", point 4). So the quit
+  must finish within 60 s; a tray killed with values still overridden is covered by the updated hook's restore.
 - After an update, one notice (Question 3: yes, Haik 2026-11-03 18:09): the tray posts `Event::Updated { version }` once
   at start, the core answers `Notify(Notice::Updated { version })`, the tray track words it (`p5-text`).
 - Network: the GitHub API without a token (60 requests an hour per IP); two checks a day. No other network call.

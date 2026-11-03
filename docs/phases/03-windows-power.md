@@ -81,9 +81,11 @@ Only what `architecture.md` leaves open. Design changes are proposals in the Res
    - after the stop: every value Wakeshot wrote that is still stored or in force has a journal entry with the user's
      original; while any known entry exists, RunOnce is set and a guard was started and not told to stop;
    - after the next restore succeeds: every key, stored and in force, equals the user's original (or the user's own
-     later change); no known entry is left; for stops before the clean-up's journal delete, RunOnce is gone and the
-     guard is told to stop (a stop between that delete and the RunOnce clear or the guard's stop leaves them, and the
-     next restore finds no journal: walk R6, harmless; `p2-ownership-restore` Found outside scope 2);
+     later change); no known entry is left; whenever the next restore finds a journal, RunOnce is gone and the guard
+     is told to stop. It finds none after a stop between the clean-up's journal delete and its last call (walk R6;
+     `p2-ownership-restore` Found outside scope 2), or after a fresh apply stopped before its first journal save;
+     what the stopped run added or had not cleared then stays, harmless (`p3-stop-points` Found outside scope 1; the
+     walk asserts it this way, `assert_released`);
    - when the next restore fails (scripted), the first point still holds.
    `p3-power-io` and `p3-recovery` run the same checks for startup, the guard and restore mode against `FakePlans`.
 5. **Correction 12, unknown journal keys** (decided in this plan's Result; the logic is the core's): an entry whose
@@ -199,3 +201,4 @@ Critical path: store, journal, (core ownership cards), power-io, harness, real-c
   stay; harmless); proposed text in its card, Found outside scope 1.
 - 2026-11-03 22:57: `p3-harness` done and committed; laptop lane free. The power safety review is done (0, 1, 9;
   `docs/reviews/p2-6-power-safety.md`). Open, docs: `TestPlan::sweep`'s doc in `power/plan.rs` misses that `cleanup` calls it.
+- 2026-11-04 00:04: the docs pass is done and committed (`docs/tasks/p2-6-docs-pass.md`): track note 4 above and the `TestPlan::sweep` doc (log lines 199 to 203) are fixed; section 5 hibernate order, Guard line, 10 s reads in `architecture.md`.

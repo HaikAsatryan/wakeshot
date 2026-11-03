@@ -19,7 +19,8 @@ names (like `X3e`) are from this build only and change every release.
   session file tells you a timer is pending. Session-only jobs (the default) live only in process memory.
 - The only outside traces of pending session-only timers are in the session transcript `.jsonl`: the `CronCreate` and
   `ScheduleWakeup` tool calls with their results (next fire time in epoch ms), `CronDelete` calls, and
-  `scheduled_task_fire` lines. Claude Code itself rebuilds pending jobs from these same lines on `--resume`. So
+  `scheduled_task_fire` lines. On `--resume` Claude Code itself rebuilds its `CronCreate` jobs from these same lines,
+  but not `ScheduleWakeup` wakeups for a terminal or SDK session ("Phase 4 live shapes", "Resume findings"). So
   idle-but-scheduled can be detected, with medium confidence, by replaying the transcript.
 - Durable jobs (`durable: true`, rare) are in `<project>/.claude/scheduled_tasks.json`. Exact and easy to read.
 - On the SDK path (VS Code extension, `claude -p` with stream-json) there is no `shell` value: a background shell
@@ -134,8 +135,11 @@ Scheduler facts (module at 328,582,721, `createCronScheduler`):
   **Verified** in code and live: created at the first `CronCreate` or `ScheduleWakeup`, kept after the last job is
   deleted, removed on clean exit. It means "this session has used the scheduler", not "a job is pending".
 - Jitter (constants `rJ` at 291,060,870): recurring jobs run late by `min(frac(id) * 0.5 * period, 30 min)`, where
-  `frac(id) = parseInt(id[0..8], 16) / 2^32`. Exception: a `*/N` minute job with a 5 minute period runs 15 s early
-  (4 min 45 s gap). One-shot jobs on minute :00 or :30 run up to 90 s early. **Verified** (code and docs).
+  `frac(id) = parseInt(id[0..8], 16) / 2^32`. Exception: a job whose text is exactly `*/N * * * *` with a 5 minute
+  gap fires 285 s after its last fire, or after its creation before the first fire, wherever that falls on the clock;
+  it is "15 s early" only when that start is on a 5 minute mark (Claude Code 2.1.317 code, `docs/research.md` "Cron
+  checks"; live fixtures 09 and 10, card `p4-cron`). One-shot jobs on minute :00 or :30 run up to 90 s early.
+  **Verified** (code and docs; the 285 s rule also live).
 - Recurring jobs expire 7 days after creation (fire once more, then delete). Up to 50 jobs per session. **Verified**
   (code constant 604,800,000 ms; docs).
 - After sleep, an overdue job fires once on wake. No catch-up for each missed run. **Verified** (code: compares `now`
@@ -152,7 +156,7 @@ follows the cwd, so VS Code gives `c--Users-...`):
 |---|---|---|
 | Job created | `type: "assistant"`, content item `{"type":"tool_use","id":..,"name":"CronCreate","input":{"cron","prompt","recurring","durable"}}`, then a `type: "user"` line with `toolUseResult: {"id","humanSchedule","recurring","durable","nextFireAt"}` | verified (output schema at 314,993,464; resume scanner at 316,941,158; tool_use and `toolUseResult` shapes seen in local transcripts) |
 | Job deleted | `tool_use` with `name: "CronDelete"`, `input.id` | verified (resume scanner) |
-| Wakeup armed or loop stopped | `tool_use` with `name: "ScheduleWakeup"`, `input: {delaySeconds, reason, prompt, noop}` or `{stop: true}`; `toolUseResult: {scheduledFor, clampedDelaySeconds, wasClamped, stopped?, cancelledWakeups?}` | verified (schema at 300,122,434; resume re-arms from `scheduledFor`) |
+| Wakeup armed or loop stopped | `tool_use` with `name: "ScheduleWakeup"`, `input: {delaySeconds, reason, prompt, noop}` or `{stop: true}`; `toolUseResult: {scheduledFor, clampedDelaySeconds, wasClamped, stopped?, cancelledWakeups?}` | verified (schema at 300,122,434). A resume re-arms it from `scheduledFor` only for `bg` sessions; terminal and SDK resumes do not (live, "Resume findings"; code, `docs/research.md` "Claude transcript checks") |
 | Job fired | `{"type":"system","subtype":"scheduled_task_fire","timestamp":"<ISO>","taskId","cron","prompt"(cut to 200 chars),"taskKind":"loop"?,"cronKind"?,"noOpStreak"?}` (`KQn` at 296,529,132) | verified (code) |
 | Turn ended | `{"type":"system","subtype":"turn_duration",...}` | verified (this session's transcript) |
 | Background task running | `type: "attachment"`, `attachment.type: "task_status"`, `taskType: "local_bash"` or `"local_agent"`, `status: "running"` | verified (resume scanner) |
@@ -163,7 +167,8 @@ fired prompt and task notification.
 
 Claude Code itself uses two outside methods, which shows there is no better hidden signal:
 
-1. On `--resume` it rebuilds jobs from the transcript lines above (scanner at 316,941,158).
+1. On `--resume` it rebuilds jobs from the transcript lines above (scanner at 316,941,158): its `CronCreate` jobs;
+   wakeups only for `bg` sessions, not for terminal or SDK ones (`docs/research.md`, "Claude transcript checks").
 2. Agent view estimates a loop's next run from the transcript: it counts `"subtype":"scheduled_task_fire"` lines and
    predicts `last fire + median gap of the last 7` (`scanLoopTranscript`, offset 302,832,742). **Verified** (code).
 
@@ -224,7 +229,7 @@ Run every 5 to 10 s, or on a folder change event for `sessions\` plus a slow tim
 |---|---|---|---|
 | 1 | List `%USERPROFILE%\.claude\sessions\*.json` only. Skip `*.key` and `.fleetview-heartbeat` without opening them. Parse the first JSON value; on failure retry once after 200 ms, then treat the file as "no signal" for this round | Live session list | High |
 | 2 | Count a file only if the pid is alive and the process creation FILETIME equals `procStart` (or `procStartFt`). Confirmed from an unelevated (Medium) reader against elevated sessions too. Open with exactly `PROCESS_QUERY_LIMITED_INFORMATION \| SYNCHRONIZE`; one extra right fails the open. `0x80070057` means gone. `0x80070005` means no access, never dead: fall back to the system process list (create time equal to `procStart` means alive). A leftover also vanishes at the next Claude Code start | Drops crash leftovers and reused pids | High (exact match seen; unelevated check in `research.md:82-130`) |
-| 3 | `status` is `busy` or `shell`, or any value Wakeshot does not know: working while the session process lives, no cap. An unknown value also shows "update Wakeshot" (`product.md`, UX). Sessions whose `entrypoint` is not `cli` (`claude-vscode`, `sdk-*`, `claude-desktop`, `claude-desktop-3p`, `local-agent`): a tool result with `backgroundTaskId`, or a Monitor `taskId`, opens a task. A user line that starts with `<task-notification>` for that id with `completed`, `failed` or `killed` closes it. An open task is working while the session process lives. No time cap (Haik, 2026-11-03, `product.md:44-50`) | Working now | High |
+| 3 | `status` is `busy` or `shell`, or any value Wakeshot does not know: working while the session process lives, no cap. An unknown value also shows "update Wakeshot" (`product.md`, UX). Sessions whose `entrypoint` is not `cli` (`claude-vscode`, `sdk-*`, `claude-desktop`, `claude-desktop-3p`, `local-agent`): a tool result with `backgroundTaskId`, or a Monitor `taskId`, opens a task. A `<task-notification>` at the start of a user line's text, or of the `prompt` of an `attachment` of type `queued_command`, closes each task id it lists when it has a `<status>` with any value (seen: `completed`, `failed`, `stopped`; `killed` in the code); one with no `<status>` (a Monitor event) closes nothing (Phase 4 rule change, "Phase 4 live shapes"). An open task is working while the session process lives. No time cap (Haik, 2026-11-03, `product.md:44-50`) | Working now | High |
 | 4 | `status` is `waiting`. `waitingFor: "dialog open"` is a slash command dialog: treat it like `idle`. Otherwise `waiting` holds only while `bridgeSessionId` is set, for at most 1 hour (`product.md:33`) | Blocked on the user. Not working | High for meaning |
 | 5 | `status` is `idle` or missing: find the transcript as `%USERPROFILE%\.claude\projects\*\<sessionId>.jsonl` (glob, do not rebuild the folder name). Read only new bytes since the last scan; keep parser state between reads, and after a Wakeshot restart read each transcript from its start. Remember the `tool_use` ids of `CronCreate`, `CronDelete`, `ScheduleWakeup` and the background task tools. Take each result by `tool_use_id`; skip `is_error` results. Also match `scheduled_task_fire`, `session_cron_carry`, and `<task-notification>` at the start of a user line. A reminder comes as `CronCreate` with `recurring: false` or as `ScheduleWakeup`: handle both. Keep per job: id, cron, recurring, createdAt, last fire, `nextFireAt` / `scheduledFor` (both floats). Key all job state by pid, not by `sessionId`. When `sessionId` changes, read the new transcript from its start and take `session_cron_carry` (`otherArmed`, `tasks`) as the armed jobs. Drop deleted, stopped, fired one-shots, and recurring jobs older than 7 days. Drop a wakeup at its `scheduled_task_fire` (`taskKind: "loop"`), or at `scheduledFor` plus a margin of a few minutes, which also bounds the invisible Esc cancel. Never hold past that. Loop fallback: no hold (`product.md:30-32`) | Pending timer and its next fire time | Medium. Misses: Esc cancel of a dynamic loop (maybe), loop fallback wakeup, tasks restored after resume under a new session id |
 | 6 | If rule 5 finds a recurring job but no exact next time: a cron period of 1 hour or less holds. A longer period uses the next cron time after the last fire. A one-shot uses its exact `nextFireAt` or `scheduledFor` | Next fire estimate | Medium |
@@ -293,7 +298,8 @@ adopted in a stricter form: both readers are dropped for v1 (rules 7 and 10 abov
 1. Rule 3: `shell` exists only for terminal sessions. For SDK-path sessions (`entrypoint` `sdk-*` or `claude-vscode`)
    add a transcript check: a tool result with `backgroundTaskId` (shell) or a Monitor `taskId` opens a task; a user
    line that starts with `<task-notification>` for that task id with status `completed`, `failed` or `killed` closes
-   it. An open task counts as working.
+   it. An open task counts as working. Phase 4 widened the close to any `<status>` value and to `queued_command`
+   prompts (rule 3 above; "Phase 4 live shapes", "Rule changes").
 2. Rule 4: `waitingFor: "dialog open"` is a slash command dialog, not a block. Treat it like `idle`.
 3. Rule 5: read `nextFireAt` and `scheduledFor` as floats. A `ScheduleWakeup` result has no id: drop the pending
    wakeup when a `scheduled_task_fire` with `taskKind: "loop"` arrives at its time, or when `scheduledFor` has passed
@@ -369,7 +375,7 @@ Other facts seen:
 - `/exit` with armed jobs opens a dialog "Background work is running" (Exit and stop tasks, Move to background and
   exit, Stay); the status is `waiting` / `dialog open` while it shows. **Verified**.
 - `*/5` job: `nextFireAt` = creation plus 285 s (created 18:23:26.767, next 18:28:11.763), not the next 5 minute
-  mark. That is the "4 min 45 s gap" in "Timers". **Verified** (two jobs).
+  mark. That is the 285 s rule in "Timers". **Verified** (two jobs).
 - The folder trust dialog now has "No, exit" selected; a driver must press Down first. The PowerShell tool refuses a
   standalone `Start-Sleep 40` ("use Monitor with an until-loop"). **Verified**.
 - Pid 8784 was used by one test session and, two minutes after it ended, by another (different `procStart`).
@@ -416,4 +422,6 @@ a task" guard is an inference (the SDK resume closed the task anyway).
 Parts of this file that the resume test contradicts, left for the parser card or a docs pass: "Short answer" and
 "Claude Code itself uses two outside methods" say Claude Code rebuilds pending jobs on `--resume`: true for
 `CronCreate` jobs, not for `ScheduleWakeup` wakeups. The "Wakeup armed" row says "resume re-arms from
-`scheduledFor`": not seen live for a resume in a new process.
+`scheduledFor`": not seen live for a resume in a new process. All three were corrected in the Phases 2 to 6 docs
+pass (2026-11-04), with rule 3's close on any `<status>`; rule 5's resume and reminder texts above are not yet in
+the rules table.
