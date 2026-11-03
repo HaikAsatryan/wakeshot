@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 41aaab10aed5e353b91922340cfa89ccbac7324cf26c96e936032d3fa87395ae # shrinks to facts = HoldFacts { id: HoldId("agent.json"), kind: Agent, alive: Yes, expires_wall_ms: None, reason: None, screen: false }, last = Yes, automatic = false, pick = 0, far = 0
+cc 1b62a434734d28ae6274f67722fbeb93712aab58217f83e7184123a5c31d6b91 # shrinks to facts = HoldFacts { id: HoldId("agent.json"), kind: Agent, alive: Yes, expires_wall_ms: None, reason: None, screen: false }, last = Yes, pick = 0, far = 0

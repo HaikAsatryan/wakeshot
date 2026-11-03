@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 4e0138298fb8a96438b13b49fee131d95966678f2ce32c1fbb538611d77318ec # shrinks to facts = SessionFacts { key: SessionKey { source: ClaudeCode, id: "4242" }, liveness: Process { pid: 4242, start: FileTime(134381211391959336) }, activity: Working, timers: [], open_tasks: 0, label: "Claude Code", format: Ok }, alive = Yes, memory = SessionMemory { alive: Yes, waiting: None }, pick = 0, far = 0
