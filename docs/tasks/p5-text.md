@@ -97,6 +97,8 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03: card written by `p5-plan-tray-ux`.
+- 2026-11-03 20:12, orchestrator, from `p2-present`'s "Found outside scope": the planned `&&` doubling would show
+  `&&` in the tooltip and the CLI (double only in menu text); `hold_group` must word a fallback for an empty label.
 
 ## Result
 

@@ -105,7 +105,7 @@ Notes 7, 8 and 9 apply after v1: Codex and Copilot moved there (Haik, 2026-11-03
 
 | Card | Needs Haik | Runs after | Status |
 |---|---|---|---|
-| `p4-hold-files` | no | contracts card | running (19:55) |
+| `p4-hold-files` | no | contracts card | done (20:03): 21 tests, `docs/hold-files.md` |
 | `p4-cron` | no | contracts card | ready |
 | `p4-claude-status` | no | contracts card | ready |
 | `p4-claude-live-shapes` | no; runs Claude Code test sessions (Haiku); agent-session lane | contracts card | done (18:47): 27 fixtures; resume and rule 3, 5 changes in the signals doc |
@@ -217,3 +217,6 @@ limit; Copilot waiting does not hold. The cards build these.
 - 2026-11-03 16:51: phase file and cards written by `p4-plan-sources`.
 - 2026-11-03: Haik signed off with every default (18:09); `p1-close-contracts` wrote the answers into this file and
   the cards.
+- 2026-11-03 20:12: `p4-hold-files` done and committed. Open, for whoever next edits these files: two stale lines in
+  `architecture.md` section 6 ("before" should be "at or before"; the old `jiff` option) and an old pointer in the
+  `files.rs` module doc (from its Result).

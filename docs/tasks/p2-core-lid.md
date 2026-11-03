@@ -104,6 +104,10 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03: card written by `p2-plan-core`.
+- 2026-11-03 20:12, orchestrator: read `p2-policy-power`'s "Found outside scope" items 1 to 4 (countdown at a power
+  source change, `lid::ours` after a failed restore, a second `Lock` after the lid-close lock, the first `Power`
+  event has no source before). Item 1 went to Haik as a question; until he answers, keep the architecture's rule (not
+  cancelled). The 5 s settle (`policy::lid::SOURCE_SETTLE_MS`) also waits for Haik (recommended 15 s).
 
 ## Result
 

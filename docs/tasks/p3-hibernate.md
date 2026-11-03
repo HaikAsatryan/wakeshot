@@ -73,6 +73,9 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03 17:00: card written by `p3-plan-windows-power`.
+- 2026-11-03 20:12, orchestrator, from `p2-policy-power`'s "Found outside scope" item 5: the `AboveFloor` check can
+  call `policy::floor::below` (strictly below; an unknown percent is not below), so the core and the hibernate thread
+  cannot drift apart. The idle check must match `policy::ending::clamped_idle_ms` and `IDLE_MS`.
 
 ## Result
 

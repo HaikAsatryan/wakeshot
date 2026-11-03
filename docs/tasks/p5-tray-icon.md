@@ -131,6 +131,8 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03: card written by `p5-plan-tray-ux`.
+- 2026-11-03 20:12, orchestrator, from `p2-present`'s "Found outside scope": the dry-run mark can push a full tooltip
+  past Windows' 128-unit limit (`present.rs` already cuts to fit without it).
 
 ## Result
 
