@@ -3143,3 +3143,87 @@ with Part B.
   `art::ico` (a BITMAPINFOHEADER of twice the height, bottom-up BGRA, then the AND mask) at 48 px, format version
   0x00030000 and `LR_DEFAULTCOLOR`, gives a 48 by 48, 32 bpp colour bitmap; `GetDIBits` returns the disc's centre
   pixel as B, G, R with its alpha, and alpha 0 at the clear corner.
+
+## Release workflow checks
+
+Checked 2026-11-04 between 02:05 and 02:18 for card `docs/tasks/p6-pack-and-release.md`: `vpk` 1.2.161 on this
+laptop, Velopack and winget-create source at their release tags through `gh api`, and `gh api` release data. Nothing
+installed; packs went to the scratch folder only.
+
+- **`vpk download github` with no release yet** (this repo, 2026-11-04 02:09): "No releases found", "No full /
+  applicable release was found to download. Aborting.", exit 0, and the out folder is not created. So the first
+  tagged run packs with no delta. Source (`src/vpk/Velopack.Deployment/_DownloadCommandRunner.cs`, tag `1.2.161`): it
+  downloads only the newest full package of the channel (no index file), and a checksum mismatch logs an error and
+  returns without failing the command, so a bad download only costs the delta. **Verified** (run and source).
+- **vpk finds earlier releases by `*.nupkg` in the out folder** (`ReleaseEntryHelper.GetReleasesFromDirAsync`), each
+  package's channel read from the package, and refuses a version not above one there ("There is a release in channel
+  win-x64 which is equal or greater to the current version", exit -1, seen). A 0.1.1 pack with the 0.1.0 full package
+  copied in made a 8,975 byte delta (one of 5 files patched). **Verified** (source and run).
+- **`vpk upload github` uploads only this pack's files**: the files in `assets.<channel>.json` plus a new
+  `releases.<channel>.json` built from them (`_GitRelease.cs`, `GitReleaseUploadCommandRunner.RunCoreAsync`), so an
+  earlier full package left in the out folder for the delta is not uploaded again. The release body is the newest
+  full package's release notes (none unless `--releaseNotes` was packed). With `--merge` it finds the release by tag
+  or name, drafts included as listed by the token; it refuses a channel whose `releases.<channel>.json` is already
+  there. **Verified** (source); not run (uploads are Haik's).
+- **Every vpk option also reads a `VPK_*` variable** (`src/vpk/Velopack.Vpk/Commands/BaseCommand.cs`): a value not
+  given on the command line comes from `VPK_<NAME>`; "required" is checked after that, so `VPK_TOKEN` satisfies
+  `--token`. A stray `VPK_DELTA` or `VPK_SIGN_PARAMS` would change a pack silently, which is why `pack.ps1` refuses to
+  run while any is set and `release.yml` gives `VPK_TOKEN` only to the download and upload steps. **Verified**
+  (source; `vpk pack -H` lists an `ENV=VPK_...` name for each option).
+- **DisplayVersion is three numbers only.** Velopack writes `get_manifest_version_short_string()`, which is
+  `major.minor.patch` (`src/lib-rust/src/locator.rs`, used by `src/bins/src/windows/registry.rs` for install and each
+  update). Hooks get the whole version, `get_manifest_version_full_string()` (`src/bins/src/windows/util.rs`,
+  `run_hook`). So `0.1.0-rc.1` shows as `0.1.0` in Apps and Features while the install hook logs `0.1.0-rc.1`; the
+  smoke test checks each against its own form. **Verified** (source); not seen in a real install.
+- **SemVer pre-release versions pack.** `pack.ps1 -Version 0.1.2-rc.1` gave
+  `HaikAsatryan.Wakeshot-0.1.2-rc.1-win-x64-full.nupkg`; Setup and portable zip names carry no version. **Verified**
+  (run).
+- **Pack sizes, repo exes without `velopack` yet** (`wakeshot-tray.exe` 426,496 and `wakeshot.exe` 667,648 bytes
+  x64; 406,016 and 615,936 ARM64): x64 Setup.exe 10,539,825, full package 2,982,193, portable zip 2,974,717; ARM64
+  Setup.exe 8,821,095 (PE machine 0xAA64), full package 2,869,607, portable zip 2,862,130. A pack takes about 3 s.
+  The `velopack` crate adds about 1.4 MB per tray exe (trial in `research/distribution.md`, section 1). **Verified**
+  (run).
+- **Action and tool versions** (`gh api .../releases/latest`, 2026-11-04): `actions/download-artifact` v8.0.2; its
+  `v8` tag exists, it runs on `node24`, and v8 fails a download whose digest does not match by default
+  (`digest-mismatch: error`). `actions/checkout` v7.0.1 and `actions/upload-artifact` v7.0.2 as in "CI workflow".
+  `microsoft/winget-create` v1.12.13.0: asset `wingetcreate.exe`, 39,486,456 bytes, SHA-256
+  `24042bd37915805615e6cf969ac57c6439124c3fe85823327f5f3fb24bd9ffea` (the API's asset digest; the exe was not
+  downloaded). **Verified** (API).
+- **`wingetcreate submit`** (source at tag `v1.12.13.0`): takes a manifest file or a folder; for a folder it reads
+  every file in it (`SubmitCommand.cs`, `Directory.GetFiles`), so the folder must hold only the manifests. It validates
+  YAML manifests before submitting (`BaseCommand.ValidateManifest`, `WinGetUtil.ValidateManifest`). The token comes
+  from `--token` or the variable `WINGET_CREATE_GITHUB_TOKEN` (`TokenHelper.cs`), which `doc/token.md` recommends for
+  CI; `--no-open` keeps it from opening a browser. It has telemetry (`Telemetry/` in the source); how to turn it off on
+  a runner: not verified. **Verified** (source and docs).
+- **actionlint was not run on `release.yml`**: downloading the actionlint release exe was refused by this session's
+  auto mode classifier, and no YAML parser is on this laptop (no PyYAML, no js-yaml). The workflow got a careful read,
+  and its version step ran locally (four refs and two versions, all as expected). **Not verified** until actionlint or
+  the first GitHub run.
+
+## winget manifest checks
+
+Checked 2026-11-04 between 02:20 and 02:23 for card `docs/tasks/p6-winget-manifest.md`: `gh api` reads of
+`microsoft/winget-pkgs`, `microsoft/winget-cli` and `microsoft/winget-create`, and `winget` v1.29.380 on this laptop.
+Tool facts used by the release workflow are in "Release workflow checks".
+
+- **Schema 1.28.0 is the newest winget-pkgs accepts.** `doc/manifest/schema/` in winget-pkgs holds 1.0.0 to 1.12.0
+  and 1.28.0. In the 40 newest commits on its master (merged 2026-11-03), the installer manifests listed were 21 at
+  `ManifestVersion: 1.28.0`, 13 at 1.12.0 and 6 older, so the pipeline merges 1.28.0 today. The client repo has JSON
+  schemas for 1.28.0 (`schemas/JSON/manifests/v1.28.0/`). **Verified** (API).
+- **Fields in the 1.28.0 schemas** (winget-cli JSON): installer root has `RequireExplicitUpgrade`, `Commands`,
+  `InstallModes`, `ReleaseDate` (format `date`), `UpgradeBehavior`, `ProductCode`, `AppsAndFeaturesEntries`; it
+  requires only `PackageIdentifier`, `PackageVersion`, `Installers`, `ManifestType`, `ManifestVersion`. Default
+  locale requires `PackageLocale`, `Publisher`, `PackageName`, `License`, `ShortDescription` (3 to 256 characters);
+  `Tags` at most 16, each 1 to 40 characters; `InstallationNotes` (up to 10,000 characters) is "displayed to the user
+  upon completion of a package installation". **Verified** (schema files).
+- **`winget validate --manifest <folder>` passes** on the folder `fill.ps1` wrote from this card's local packs (x64
+  and ARM64 `Setup.exe` 0.1.0), with and without `ReleaseDate`: "Manifest validation succeeded.", exit 0. The same
+  folder with `InstallerType: bogus` fails ("Schema Error ... Failed to match against any enum values", exit
+  -1978335191), so the check is real. It ran in this elevated agent shell; whether it needs an administrator: not
+  checked under a Medium token (it reads files only). **Verified** (run).
+- **`wingetcreate submit` forks for you**: when the token's account has no fork of `microsoft/winget-pkgs`, it creates
+  one (`Repository.Forks.Create`) and syncs it with upstream before each PR (`src/WingetCreateCore/Common/GitHub.cs`,
+  tag `v1.12.13.0`). **Verified** (source).
+- **No release yet**: `fill.ps1 -Version 0.1.0` without `-FromDir` gets 404 from
+  `api.github.com/repos/HaikAsatryan/wakeshot/releases/tags/v0.1.0` and stops. Its download path (hash of the public
+  asset URL, checked against the API's asset `digest`) runs first on a real release. **Not verified** until then.

@@ -1,0 +1,241 @@
+name: Release
+
+# A pushed v* tag builds, tests, packs and smoke-tests both CPUs, then publishes them as one GitHub release. A version
+# with a pre-release part (v0.1.0-rc.1) becomes a GitHub pre-release, which Velopack's GitHub feed skips unless the app
+# asks for pre-releases, and which never goes to winget. A manual run is a dry run: the same build, pack and smoke
+# test, and nothing is uploaded. packaging/README.md says how to cut a release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Two runs for one tag would race to create the same release, so the second waits instead.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+# Never set RUSTFLAGS or CARGO_ENCODED_RUSTFLAGS here or in a step: either one replaces the flags in
+# .cargo/config.toml and drops the static CRT. No VPK_* variable at this level either: vpk reads every one as an
+# option, so the token is given only to the steps that upload or download.
+env:
+  CARGO_INCREMENTAL: 0
+  # The same version as the velopack crate the tray is built with.
+  PINNED_VPK: 1.2.161
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      prerelease: ${{ steps.read.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Read the version; a tag must be v plus it
+        id: read
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          $section = $null
+          $version = $null
+          foreach ($line in Get-Content Cargo.toml) {
+            if ($line -match '^\s*\[([^\]]+)\]') { $section = $Matches[1].Trim(); continue }
+            if ($section -eq 'workspace.package' -and $line -match '^\s*version\s*=\s*"([^"]+)"') { $version = $Matches[1]; break }
+          }
+          if (-not $version) { throw 'no version in [workspace.package] of Cargo.toml' }
+          # pack.ps1 checks the same form; build metadata is refused there too.
+          if ($version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$') {
+            throw "Cargo.toml version '$version' is not SemVer 2 without build metadata"
+          }
+          if ($env:REF_TYPE -eq 'tag' -and $env:REF_NAME -cne "v$version") {
+            throw "tag $env:REF_NAME is not v$version, the [workspace.package] version in Cargo.toml"
+          }
+          $prerelease = if ($version.Contains('-')) { 'true' } else { 'false' }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "prerelease=$prerelease" >> $env:GITHUB_OUTPUT
+          Write-Host "version $version, pre-release $prerelease, ref $env:REF_TYPE $env:REF_NAME"
+
+  build:
+    name: Build, pack, smoke test (${{ matrix.cpu }})
+    needs: version
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      # An ARM64-only failure must not hide the x64 result, and the other way round. The upload waits for both anyway.
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            cpu: x64
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            cpu: arm64
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      PRERELEASE: ${{ needs.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The image's own stable does not satisfy the pin; this reads rust-toolchain.toml.
+      - name: Install the pinned toolchain
+        run: rustup toolchain install --no-self-update
+
+      # No cache in this workflow: a release is built from a clean folder, and a cache written by another run cannot
+      # leak into what users install.
+      - name: Test
+        run: cargo test --workspace --locked --target ${{ matrix.target }}
+
+      # No --all-targets here: the exes must be built without `test-support`, which only dev-dependencies turn on.
+      - name: Release build
+        run: cargo build --release --workspace --locked --target ${{ matrix.target }}
+
+      # The same check as ci.yml: the exes must run on a PC without the Visual C++ runtime. The pwsh wrapper checks
+      # only the last exit code, so each failure throws.
+      - name: Check the exes need no Visual C++ runtime
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $all = @(& $vswhere -latest -products * -find 'VC\Tools\MSVC\**\dumpbin.exe')
+          # The hits are sorted by folder, so the first may be built for another CPU; prefer the runner's own host.
+          $hostDir = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'HostARM64' } else { 'Hostx64' }
+          $dumpbin = $all | Where-Object { $_ -like "*\$hostDir\*" } | Select-Object -First 1
+          if (-not $dumpbin) { $dumpbin = $all | Select-Object -First 1 }
+          if (-not $dumpbin) { throw 'dumpbin.exe not found' }
+          foreach ($exe in 'wakeshot.exe', 'wakeshot-tray.exe') {
+            $out = & $dumpbin /nologo /dependents "target/${{ matrix.target }}/release/$exe"
+            if ($LASTEXITCODE -ne 0) { throw "dumpbin failed on $exe" }
+            $out
+            if (-not ($out -match 'Image has the following dependencies')) { throw "no import list for $exe" }
+            $crt = $out -match '(?i)vcruntime|msvcp|ucrtbase|api-ms-win-crt-'
+            if ($crt) { throw "$exe imports the Visual C++ runtime: $($crt.Trim() -join ', ')" }
+          }
+
+      # SignPath goes here later (decision 44): sign wakeshot-tray.exe and wakeshot.exe before vpk pack, because the
+      # release feed records each package's hash and the package cannot change after packing.
+
+      - name: Install vpk
+        run: |
+          dotnet tool install --global vpk --version $env:PINNED_VPK
+          if ($LASTEXITCODE -ne 0) { throw "dotnet tool install exited with $LASTEXITCODE" }
+          "$env:USERPROFILE\.dotnet\tools" >> $env:GITHUB_PATH
+
+      # vpk builds the delta against the newest full package in the out folder. With no release yet it says so and
+      # writes nothing, and the pack has no delta.
+      - name: Download the last release, for the delta
+        env:
+          VPK_TOKEN: ${{ github.token }}
+        run: |
+          $pre = if ($env:PRERELEASE -eq 'true') { @('--pre') } else { @() }
+          vpk download github --repoUrl "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY" --channel win-${{ matrix.cpu }} --outputDir earlier @pre
+          if ($LASTEXITCODE -ne 0) { throw "vpk download exited with $LASTEXITCODE" }
+
+      - name: Pack
+        run: >-
+          ./packaging/pack.ps1 -Version $env:VERSION -Cpu ${{ matrix.cpu }}
+          -ExeDir target/${{ matrix.target }}/release -OutDir release -Icon assets/wakeshot.ico -PreviousDir earlier
+
+      # SignPath goes here later (decision 44): sign Setup.exe after vpk pack; its hash is not in the release feed.
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-win-${{ matrix.cpu }}
+          path: release/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Smoke test
+        run: ./packaging/smoke-test.ps1 -Setup release/HaikAsatryan.Wakeshot-win-${{ matrix.cpu }}-Setup.exe -Version $env:VERSION
+
+  # The only job that can write to the repository, and only for a pushed tag.
+  upload:
+    name: Publish the GitHub release
+    needs: [version, build]
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      PRERELEASE: ${{ needs.version.outputs.prerelease }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-win-x64
+          path: release-x64
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-win-arm64
+          path: release-arm64
+
+      - name: Install vpk
+        run: |
+          dotnet tool install --global vpk --version $env:PINNED_VPK
+          if ($LASTEXITCODE -ne 0) { throw "dotnet tool install exited with $LASTEXITCODE" }
+          "$env:USERPROFILE\.dotnet\tools" >> $env:GITHUB_PATH
+
+      # The first upload creates a draft, which no installed app and no visitor sees; the second adds the other CPU
+      # and publishes, so the release never shows one CPU only. --pre counts only when the release is created.
+      - name: Upload both CPUs into one release
+        env:
+          VPK_TOKEN: ${{ github.token }}
+        run: |
+          $repo = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY"
+          $tag = "v$env:VERSION"
+          $pre = if ($env:PRERELEASE -eq 'true') { @('--pre') } else { @() }
+          vpk upload github --repoUrl $repo --outputDir release-x64 --channel win-x64 --tag $tag @pre
+          if ($LASTEXITCODE -ne 0) { throw "vpk upload win-x64 exited with $LASTEXITCODE" }
+          vpk upload github --repoUrl $repo --outputDir release-arm64 --channel win-arm64 --tag $tag --merge --publish
+          if ($LASTEXITCODE -ne 0) { throw "vpk upload win-arm64 exited with $LASTEXITCODE" }
+
+  # Opens the winget-pkgs pull request for a stable release. The first version goes in by hand in Phase 8; after it
+  # is merged, Haik sets the repository variable WINGET_SUBMIT to true and adds the WINGET_TOKEN secret (a classic
+  # token with public_repo). Until then this job is skipped. packaging/winget/README.md has the details.
+  winget:
+    name: Open the winget pull request
+    needs: [version, upload]
+    if: needs.version.outputs.prerelease == 'false' && vars.WINGET_SUBMIT == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # From the published release itself, never from a guess: the hashes are of the files winget will download.
+      - name: Fill the manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./packaging/winget/fill.ps1 -Version $env:VERSION -OutDir winget-manifest
+
+      - name: Install wingetcreate
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP 'wingetcreate.exe'
+          Invoke-WebRequest 'https://github.com/microsoft/winget-create/releases/download/v1.12.13.0/wingetcreate.exe' -OutFile $exe
+          $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
+          if ($hash -ne '24042BD37915805615E6CF969AC57C6439124C3FE85823327F5F3FB24BD9FFEA') { throw "wingetcreate.exe SHA-256 $hash is not the pinned one" }
+          "WINGETCREATE=$exe" >> $env:GITHUB_ENV
+
+      - name: Submit
+        env:
+          WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          & $env:WINGETCREATE submit --prtitle "New version: HaikAsatryan.Wakeshot version $env:VERSION" --no-open winget-manifest
+          if ($LASTEXITCODE -ne 0) { throw "wingetcreate submit exited with $LASTEXITCODE" }

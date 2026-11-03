@@ -92,6 +92,11 @@ sign-off):
   checks, silent uninstall, checks); one upload job, the only one with `contents: write`, runs `vpk upload github`.
   Deltas come from the last release (`vpk download github` before the pack). A manual run packs and smoke-tests
   without uploading.
+- A version with a pre-release part (`X.Y.Z-rc.N`) becomes a GitHub pre-release and never goes to winget. So the first
+  public run (Question 5) is version `0.1.0-rc.1`, tag `v0.1.0-rc.1`. Users' update checks skip pre-releases
+  (`velo.rs`, `prerelease: false`; `p6-velopack-dependency`).
+- The winget job runs only when the repository variable `WINGET_SUBMIT` is set and the secret `WINGET_TOKEN` exists
+  (`wingetcreate`, our files unchanged). Both are Haik's to set.
 - Signing: none in v1 (decision 44). The workflow marks the two places SignPath goes later: the exes before
   `vpk pack`, `Setup.exe` after it. Applying to SignPath waits for real users (`research/distribution.md`, section 3).
 - ARM64 builds need clang once `velopack` is in (research, "Ship track planning checks"). Both runner images have
@@ -147,10 +152,10 @@ those one at a time across all tracks.
 | `p6-update-schedule` | no | the contracts card | done (committed 01:42): 17 tests |
 | `p6-hooks` | no (Question 2: the default, Haik 2026-11-03 18:09) | `p6-login-and-path`; `p3-store`, `p3-log`, `p3-process`, `p3-journal`, `p3-power-plan`; core `p2-ownership-restore` (review M1) | done (committed 02:05): 17 tests; real Run, RunOnce and Path unchanged |
 | `p6-velopack-dependency` | yes, once: the elevated clang install of its step 0 (Question 4: yes); runs alone on the whole laptop: no other card and no cargo command (review M5) | `p6-hooks`, `p6-update-schedule`, `p6-velopack-facts` | ready |
-| `p6-pack-and-release` | no (Question 5: yes, the first real run is a public pre-release) | `p6-velopack-facts` | in progress |
+| `p6-pack-and-release` | no (Question 5: yes, the first real run is a public pre-release) | `p6-velopack-facts` | done (committed 02:27): x64 and ARM64 packed for real into the scratch folder; nothing installed |
 | `p6-install-e2e` | no; real laptop: installs, the real Run value and Path, a throwaway plan copy | `p6-velopack-dependency`, `p6-pack-and-release`; `p3-power-plan` (its first test shows a write to an inactive copy leaves the real plan alone) | ready |
 | `p6-launch-research` | yes: reads its Result (rival pick, Store recommendation) before the README, winget and Store cards are rewritten; no installs | none | done: its Result waits for Haik's read |
-| `p6-winget-manifest` | no | `p6-pack-and-release`; `p6-launch-research` (the winget rules for an app that updates itself) | in progress (bundle, after `p6-pack-and-release`) |
+| `p6-winget-manifest` | no | `p6-pack-and-release`; `p6-launch-research` (the winget rules for an app that updates itself) | done (committed 02:27): templates and `fill.ps1`; `winget validate` passed on the local packs |
 | `p6-readme` | yes: a read at the Phase 6 sign-off; the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3, sign-off item 12) are in, all defaults | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-claude`; the tray track's `p5-haik-check` (review m2); `p6-launch-research` (its scope grows from that Result, Haik 2026-11-04); `p6-media` | ready |
 | `p6-media` | yes: watches the video and the loop and says yes or what to change; about 10 min off the PC for the captures | `p6-launch-research` (tool, storyboard, shot list); `p5-haik-check` (final icon); integration's `p6-int-real-e2e` (the real app) | ready |
 | `p6-pages` | yes: one look before it goes live at v1 | `p6-readme`; the tray track's `p5-icon-art` and `p5-haik-check` (Haik's icon pick rewrites `assets/wakeshot.ico`; review m3) | ready |
@@ -264,3 +269,15 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   uninstall keeps journal and logs; the updated hook never writes the Run value. Next for `p6-velopack-dependency`:
   the four `velo.rs` callbacks (exact lines in the `p6-hooks` card). Docs pass round 3 gains: architecture.md
   section 6 (old uninstall order) and section 5 ("the hooks are not built yet").
+- 2026-11-04 02:27 (orchestrator, session `wakeshot-46`): the `p6-pack-and-release` + `p6-winget-manifest` bundle done
+  and committed. Packed for real: x64 `Setup.exe` 10.5 MB (full package 3.0 MB), ARM64 8.8 MB (2.9 MB); a 0.1.1 delta
+  against 0.1.0 is 9 KB. The smoke test ran only against a harmless stand-in: nothing installed. `winget validate`
+  passed on the filled folder and failed on a broken copy. Not run: `actionlint` (auto mode blocked its download;
+  Haik's item: he runs it or allows it). The "Release" notes above gain the pre-release rule and the winget switch.
+  Decided by the worker, for Haik's review: `X.Y.Z-rc.N` is a GitHub pre-release and never goes to winget; no cache in
+  the release workflow; release files upload before the smoke test, so a failed test keeps the packs; `wingetcreate`
+  over Komac; an InstallationNotes line; no MinimumOSVersion; the repo is the homepage until Pages is live; winget
+  description and tags are drafts. Question for Haik, not blocking: whose account holds the winget token (default:
+  his own). Before the first tag: `actionlint` on `release.yml`; push, then the manual dry run from Actions (its smoke
+  test fails until `p6-velopack-dependency` wires `VelopackApp`); then version `0.1.0-rc.1`, `cargo update
+  --workspace`, commit, tag `v0.1.0-rc.1`, push.
