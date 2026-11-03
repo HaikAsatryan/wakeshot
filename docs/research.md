@@ -2972,3 +2972,26 @@ Checked 2026-11-04 between 01:30 and 01:40 for card `docs/tasks/p6-update-schedu
   is `Sync` on this toolchain.
 - **Not verified:** whether `Receiver::recv_timeout` counts time the PC sleeps. The thread does not rely on it: it
   reads both clocks again at least every 60 s of waiting.
+
+## Tray UX: tray icon
+
+Card `p5-tray-icon`, 2026-11-04 (code `crates/wakeshot-windows/src/tray/icon.rs`, harness
+`crates/wakeshot-windows/examples/ux_icon.rs`). Part A only so far: nothing below was run on the real taskbar yet (no
+test calls `Shell_NotifyIconW`; the tests use a fake shell). The screen results come with Part B.
+
+- **Icon GUIDs** (made with PowerShell `[guid]::NewGuid()`, 01:37): Product `7db9403e-d4b9-4165-a99e-a69b8ea56744`,
+  DryRun `c0d07dcd-dfd4-4a9d-b139-ad1e2ce9f987`, Demo `1e8c66d4-0fa3-4a54-95a1-61bb89b171e9` (`IconKind::guid`).
+- **High contrast glyph colour: `COLOR_WINDOWTEXT`.** Microsoft's "Contrast themes" page
+  (learn.microsoft.com/windows/apps/design/accessibility/high-contrast-themes, dated 2026-08-29, read 2026-11-04)
+  says "Pages, panes, popups, and bars should generally use SystemColorWindowColor as the background baseline" and
+  pairs `SystemColorWindowColor` with `SystemColorWindowTextColor`. No Microsoft page names the colour Windows' own
+  taskbar uses in a contrast theme: not verified.
+- **`HICON` from the art reads back** (test `hicon_from_art_reads_back`, 2026-11-04): a 24 px glyph through a 32-bit
+  top-down DIB section (BGRA) and `CreateIconIndirect` gives a 24 by 24, 32 bpp colour bitmap from `GetIconInfo`;
+  `GetDIBits` returns the pixel as B, G, R with alpha 0xff kept, and 0 alpha where the art is clear.
+- **`GetSystemMetricsForDpi(SM_CXSMICON, dpi)`** on this PC gives 16, 20, 24 and 32 at 96, 120, 144 and 192 dpi, and
+  `16 * dpi / 96` at every 25% step from 100% to 400% (test `glyph_size_per_dpi`).
+- **Not verified, for Part B:** the high word of the callback `lParam` for a GUID icon (the code sets `uID` 0, so an
+  echo of `uID` and a 0 both pass); whether a `NIM_ADD` of a GUID left by a run that ended without `NIM_DELETE` fails
+  (the code deletes the GUID and adds once more when an add fails); whether `Shell_TrayWnd`'s DPI is the tray slot's
+  size and the shell shows the drawn icon 1:1.
