@@ -121,7 +121,7 @@ Notes 7, 8 and 9 apply after v1: Codex and Copilot moved there (Haik, 2026-11-03
 | `p4-cli-run` | no | `p4-cli-args`, `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | done (committed 01:14): `child.rs`, `run.rs`, core `holds::file::render`; 75 CLI tests, 3 exe, 5 run, 14 child, 24 holds file |
 | `p4-cli-commands` | no; screen once (opens one file in the default app; global lane, review M6) | `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 30 tests; screen step ran once |
 | `p4-cli-restore` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09; nothing to add) | `p3-journal`, `p3-power-plan`, `p2-ownership-restore`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 10 tests |
-| `p4-live-claude` | optional: 3 minutes for the VS Code check; agent-session lane | `p4-watch-thread`, `p4-claude-transcript`, `p4-cli-run`, `p3-process`, the Claude parsing review (`docs/phases/02-06-lighter.md`) | in progress |
+| `p4-live-claude` | optional: 3 minutes for the VS Code check; agent-session lane | `p4-watch-thread`, `p4-claude-transcript`, `p4-cli-run`, `p3-process`, the Claude parsing review (`docs/phases/02-06-lighter.md`) | done (committed 01:59): every live case passed (Claude Code 2.1.317); m6 fixed; the VS Code check waits for Haik |
 | `p4-live-codex` | yes: about 20 minutes (install or sign in, then type the steps) | `p4-live-claude` | later (after v1, Haik 2026-11-03) |
 | `p4-live-copilot` | yes: about 20 minutes (install or sign in, then type the steps) | `p4-live-codex` | later (after v1, Haik 2026-11-03) |
 
@@ -278,3 +278,16 @@ limit; Copilot waiting does not hold. The cards build these.
   stale `product.md` and `architecture.md` lines already tracked; rule 3 cites `product.md:44-50` for "No time cap",
   which is at 38-40). The Claude parsing review has passed. Pushed main at 01:19 (16 commits, push scan clean), which
   carries the `watch::data` test fix. `p4-live-claude` running (agent-session lane).
+- 2026-11-04 01:59: `p4-live-claude` done and committed. Live run 01:27 to 01:53, Claude Code 2.1.317, Haiku: cases 1
+  to 12 and 14, resume (`procStart` divider), `/clear` during a loop, the SDK path, the run hold, a dead-pid hold
+  (`Gone` in 24 ms), a crash (`Gone` in 36 ms); a status change reached a post in 36 ms (median). Verified live:
+  `TaskStop` writes no notice and closes the task; a Monitor timeout writes only an `<event>` notice; a UI stop (tasks
+  panel or SDK `stop_task`) writes the `killed` enqueue at once (M1 part b confirmed live). `wakeshot run` in a pseudo
+  console: Ctrl+C, Ctrl+Break and closing the console behaved. Fixed m6: with `CLAUDE_CONFIG_DIR` set the status files
+  are under that folder; new `claude_folder` and `ClaudeSource::in_folder`. For `p6-int-tray-mode`: build the source
+  with `ClaudeSource::in_folder(claude_folder(&home, CLAUDE_CONFIG_DIR))`, not `ClaudeSource::new(home)`. Decided by
+  the worker, for Haik's review: an empty `CLAUDE_CONFIG_DIR` counts as unset; the tray reads it from its own
+  environment only (a per-shell value is not followed); a passed Monitor timer stays in the snapshot (the core drops it
+  2 minutes after its time); pseudo console runs stand in for Windows Terminal. Left for Haik (`p5-haik-check`): the VS
+  Code check, a real key press, the classic conhost window. Durable jobs are still off; the Esc cancel is still
+  invisible, as known.
