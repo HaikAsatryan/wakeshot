@@ -2037,3 +2037,155 @@ Windows zone data; no setting, zone or clock changed.
 - **Not verified.** What `GetDynamicTimeZoneInformation` returns with "Adjust for daylight saving time automatically"
   off (expected: `TIME_ZONE_ID_UNKNOWN` and no change dates); whether a running Claude Code follows a PC zone change;
   where Windows zone data and the IANA data Bun uses differ for a zone.
+
+## Velopack checks for Wakeshot
+
+Checked 2026-11-03 between 21:50 and 22:15 for card `docs/tasks/p6-velopack-facts.md`, on this laptop. A throwaway
+crate outside the repo (`velopack = "=1.2.161"`, Rust 1.99.1, x64, static CRT, the repo's release profile with
+`panic = "abort"`) with two exes named like Wakeshot's: GUI `wakeshot-tray.exe` (`VelopackApp::build()`, the four fast
+callbacks, `on_first_run`, `on_restarted`) and console `wakeshot.exe` (no `VelopackApp`). Every start and hook logged
+its args, `VELOPACK_*` variables, working folder, exe path and token elevation to a file outside the install folder,
+and the crate's own `log` lines went to the same file. Packed with `vpk` 1.2.161: `vpk pack -u HaikAsatryan.Wakeshot
+-v <v> -r win-x64 --channel win-x64 -p <dir> -e wakeshot-tray.exe --packTitle Wakeshot --packAuthors "Haik Asatryan"
+--shortcuts StartMenuRoot -o <out>`, versions 0.1.0 to 0.6.0 into one feed folder. No power settings touched.
+Everything uninstalled; the AFTER check is in the card's Log. "Test" means seen in the logs on this laptop; "source"
+means read in velopack 1.2.161 (the crate in the cargo registry, or tag `1.2.161` on GitHub through `gh api`). All
+runs were elevated (High), as agents here are; see "Elevation" at the end.
+
+- **1. The dotted pack id works.** With `HaikAsatryan.Wakeshot`, pack, silent install, four updates, Setup over an
+  install (three times) and silent uninstall all worked, exit 0. Install folder `%LocalAppData%\HaikAsatryan.Wakeshot`.
+  Uninstall key `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\HaikAsatryan.Wakeshot`, so winget's
+  `ProductCode` is `HaikAsatryan.Wakeshot`; `DisplayName` `Wakeshot`, `Publisher` `Haik Asatryan`, `DisplayVersion`
+  follows each update and each Setup run. File names: `HaikAsatryan.Wakeshot-win-x64-Setup.exe` and
+  `-win-x64-Portable.zip` (no version in them), `HaikAsatryan.Wakeshot-<v>-win-x64-full.nupkg` and `-delta.nupkg`,
+  `releases.win-x64.json`, `assets.win-x64.json`, `RELEASES-win-x64`. One quirk of the dot: Setup over an install
+  renames the old folder for rollback to `%LocalAppData%\HaikAsatryan.<16 random letters>` (the part after the dot is
+  replaced, like a file extension) and deletes it at the end, so a Setup killed midway would leave such a folder (not
+  tested). **Verified** (test; key read with `Get-ItemProperty`).
+- **2. Root stub and shortcut.** Layout after install: `Update.exe`, `Wakeshot.exe` (the stub, named after
+  `--packTitle`), `current\wakeshot-tray.exe`, `current\wakeshot.exe`, `current\sq.version`, `packages\*.nupkg`. The
+  stub runs `Update.exe start -- <its own args>`, which starts the main exe `current\wakeshot-tray.exe` with the same
+  args and working folder `current`; the stub exits 0 at once. Root `Wakeshot.exe` and `current\wakeshot.exe` do not
+  clash: different folders, no vpk warning, and every install, update and Setup run kept both. `--shortcuts
+  StartMenuRoot` made only `%AppData%\Microsoft\Windows\Start Menu\Programs\Wakeshot.lnk`, no desktop shortcut. Its
+  target is `current\wakeshot-tray.exe` (not the stub), working folder `current`, AUMID
+  `velopack.HaikAsatryan.Wakeshot`. Updates rewrite it in place; uninstall removes it. **Verified** (test; `.lnk` read
+  with `WScript.Shell`).
+- **3. `current` keeps its path.** Before and after each update (local `FileSource`, delta and full):
+  `C:\Users\haika\AppData\Local\HaikAsatryan.Wakeshot\current`. The folder itself is new each time (Velopack backs up
+  the old one and moves a new one in; its creation time changes). So the Run value and the Path entry can point at
+  `current\wakeshot-tray.exe` and `current`. **Verified** (test; update log "Replacing current dir").
+- **4. `wait_exit_then_apply_updates(asset, true, true, [])`.** It starts `Update.exe apply --package <nupkg> --waitPid
+  <own pid> --silent --root <root> --packageDir <packages>` and returns `Ok(())` in about 0.1 s.
+  - App exits 5 s after the call: Update.exe goes on at once (the obsolete hook started 30 ms after the exit). Order:
+    `--veloapp-obsolete <old>` run by the old exe; kill of any process left in the install folder; swap of `current`;
+    uninstall key rewritten; `--veloapp-updated <new>` run by the new exe; shortcut updated; then the new
+    `wakeshot-tray.exe` starts with no args, working folder `current`, env `VELOPACK_RESTART=true`, and
+    `on_restarted(<new version>)` fires. `on_first_run` fired in no run (all installs were silent). Hooks run with
+    working folder `current` and get no `VELOPACK_*` variable.
+  - App does not exit for 75 s: Update.exe waits 60 s, then does **not** give up. It runs the obsolete hook while the
+    old app still runs, kills the app (`TerminateProcess`, exit code 1), applies, runs the updated hook and starts the
+    new version as above. The doc comment "the updater will only wait for 60 seconds before giving up" means it stops
+    waiting, not that it drops the update.
+  - Each wait logs `WARN Failed to wait for process (<pid>) to exit (Access is denied...). Continuing...`, also on a
+    clean exit. Harmless: `wait_for_pid_to_exit` opens the pid with `PROCESS_SYNCHRONIZE` only, then calls
+    `GetExitCodeProcess`, which needs a query right (source `process_win.rs`). The wait itself works.
+  - Restart args, when given, reach the new app after `--` (seen in the auto apply below).
+  **Verified** (test, 21:57 and 22:01 to 22:02).
+- **5. `UpdateManager::new` when not installed.** From the build folder it returns
+  `Err(Error::NotInstalled("Could not auto-locate app manifest"))`, shown as "This application is not properly
+  installed: Could not auto-locate app manifest". `VelopackApp::run()` logs it as an error and returns normally. The
+  locator also gives `NotInstalled` when `Update.exe` or the manifest is missing (source `locator.rs`), so the tray can
+  treat `Error::NotInstalled(_)` as "no install" and every other error as a real failure. **Verified** (test and
+  source).
+- **6. Hooks that fail.**
+  - A panic (with `panic = "abort"`): the hook exits with 0xC0000409 (3221226505) after about 3 s, because Windows
+    Error Reporting takes the crash: Application log events 1000 and 1001, and a report folder
+    `C:\ProgramData\Microsoft\Windows\WER\ReportArchive\AppCrash_wakeshot-tray...`. Velopack logs `WARN Hook exited with
+    non-zero exit code: 3221226505` and goes on: the update and the install both finished. Seen for obsolete (Update.exe
+    apply) and install (Setup over an install).
+  - Past its limit: Velopack logs `ERROR Process timed out after <n>s and was killed.` and goes on. Measured: install
+    30 s (Setup), updated 15 s (apply), uninstall **60 s** (the docs say 30 s; the source and the test say 60 s).
+    Obsolete waits 15 s (log "Waiting 15000ms"); not run past it.
+  - stdout and stderr go nowhere: hooks start through `CreateProcessW` with no inherited handles, no std handles and
+    `CREATE_NO_WINDOW` (source `process_win.rs` `run_process`; the logs show the same "About to launch ... flags"
+    lines). The lines the hooks printed, and the panic message, appear in no log. A hook must write its own log.
+  - The limit counts from process start. A hook run by a just-extracted exe took 0.9 to 1.7 s in all, one already run
+    17 to 98 ms; the extra second is likely the antivirus scan of a new file (not verified). The updated hook always
+    runs a just-extracted exe, and so does the install hook. A 25 s inner limit in a 30 s hook leaves about 3 s; a
+    12 s inner limit in the 15 s updated hook leaves about 1.3 s.
+  **Verified** (test).
+- **7. `Setup.exe --silent` over a running install** (what `winget upgrade` runs), with the dotted id: the running
+  tray was killed (exit code 1), no obsolete or uninstall hook ran, the old folder was renamed and deleted (marker
+  files in the root and in `current` were gone), only `--veloapp-install 0.6.0` ran, the key was rewritten, and the
+  app was **not** started. Exit 0 in 2.4 s. **Verified** (test).
+- **8. `Update.exe apply` alone.** `Update.exe apply --silent --norestart`, with no `--package` and no `--waitPid`,
+  found the newest full package in `packages\` (staged by the app with `check_for_updates` and `download_updates`
+  only), ran the obsolete and updated hooks, swapped `current`, rewrote the key and started nothing; exit 0. So
+  `p6-install-e2e` can stage with the app and apply with Update.exe, no running tray needed. `Update.exe apply -h`:
+  `--norestart`, `--waitPid <PID>`, `-p, --package <FILE>`, `--verbose`, `-s, --silent`, `--rootDir`,
+  `--packageDir`, `-l, --log`, `[-- EXE_ARGS]`. **Verified** (test).
+- **Auto apply at startup.** With the default `set_auto_apply_on_startup(true)`, when `packages\` holds a full package
+  newer than the running version and the start is not a Velopack restart, `VelopackApp::run()` starts `Update.exe
+  apply` (not silent, `--waitPid` itself, its own args after `--`) and calls `exit(0)`, so `main` never gets past
+  `run()`. Seen: a plain start of 0.4.0 with 0.5.0 staged ran both hooks, applied 0.5.0 and restarted it with
+  `VELOPACK_RESTART=true` and the original arg. That apply kills every process from the install folder, like any
+  apply. **Verified** (test and source `app.rs`).
+- **Package housekeeping.** `download_updates` deletes every other full package in `packages\` ("Deleting up old
+  package"); a delta is turned into a full package by a separate `Update.exe patch` run. **Verified** (test).
+- **9. ARM64 packing on this laptop.** The repo's own release build for `aarch64-pc-windows-msvc` (no `velopack` in it
+  yet) built in 46 s, and `vpk pack -r win-arm64 --channel win-arm64` packed it with no warning. PE machine field (read
+  from the header): `HaikAsatryan.Wakeshot-win-arm64-Setup.exe` 0xAA64 (ARM64); in the nupkg, `lib/app/Squirrel.exe`
+  (the package's Update.exe, 4.7 MB) and `lib/app/Wakeshot_ExecutionStub.exe` 0xAA64; in the portable zip,
+  `Update.exe` and `Wakeshot.exe` 0xAA64. The x64 package's are 0x8664. So vpk ships native ARM64 Setup and Update.
+  ARM64 Setup 8.6 MB, x64 Setup 10.6 MB. Not installed (x64 PC). **Verified** (test).
+- **10. A main exe that never calls `VelopackApp`.** `vpk pack` says nothing: no warning, no error, also with
+  `--verbose` (the repo's skeleton tray for ARM64, and the trial's `wakeshot.exe` as main exe for x64). The check
+  (`CompatUtil.VerifyVelopackApp`, skipped by `--skipVeloAppCheck`) loads the main exe as a .NET assembly and returns at
+  once when it is not one. So vpk never catches a Rust tray that forgot `VelopackApp`; only a smoke test that looks
+  for the install hook's log line does. **Verified** (test, and vpk source
+  `src/vpk/Velopack.Packaging.Windows/CompatUtil.cs` at tag `1.2.161`).
+- **11. vpk upload, download and pack options.**
+  - `vpk upload github -H`: `-o, --outputDir` (default `Releases`), `-c, --channel` (default `win`), `--repoUrl`,
+    `--token` (both required), `--timeout` (minutes, default 30), `--publish` (else the release stays a draft), `--pre`
+    (pre-release), `--merge`, `--releaseName`, `--tag`, `--targetCommitish`. `vpk download github -H`: `-o`, `-c`,
+    `--repoUrl`, `--token` (optional), `--timeout`, `--pre`, each also from an env var (`VPK_REPO_URL`, `VPK_TOKEN`,
+    ...). **Verified** (this laptop).
+  - Upload logic (source `src/vpk/Velopack.Deployment/_GitRelease.cs`, tag `1.2.161`): the tag defaults to the newest
+    full package's version (`0.1.0`, no `v`), so pass `--tag v<version>` to match the `v*` tag; the name defaults to
+    the tag. Without `--merge`, a release with that tag or name already there is an error. With `--merge`, the upload
+    adds its files to that release; the same channel twice still fails (`releases.<channel>.json` is already there).
+    `--pre` counts only when the release is created; `--publish` turns a draft into a published release. It uploads
+    the files the last pack of that channel listed in `assets.<channel>.json` (Setup, portable zip, full and delta
+    nupkg; inferred from `BuildAssets.Read` and the local file) plus a new `releases.<channel>.json`; `RELEASES` only
+    for the default channel `win`. So both channels go into one release with: upload `win-x64 --tag v<version>`
+    (draft), then `win-arm64 --tag v<version> --merge --publish`. **Verified** (source).
+  - Feed side (crate `sources/github.rs`, `sources/mod.rs`): `GithubSource` lists the 10 newest releases in one API
+    call, drops pre-releases unless asked, and joins the `releases.<channel>.json` of each release that has one,
+    skipping the rest; each file download lists the releases again. So a release with only one channel does not break
+    the other channel. Drafts are listed only to users with push access (GitHub REST docs, "List releases"), so an app
+    never sees a draft. **Verified** (source and docs).
+  - `vpk pack`: `--icon` sets the icon of Update.exe and Setup.exe and adds `setup.ico` to the package (source
+    `WindowsPackCommandRunner.cs`). `--releaseNotes <file>` (markdown) goes into the package manifest, comes back as
+    `VelopackAsset.NotesMarkdown` and `NotesHtml` (crate `manager.rs`), and becomes the GitHub release body
+    (`_GitRelease.cs`). `--delta None|BestSpeed|BestSize`, default `BestSpeed` (docs.velopack.io/packaging/deltas),
+    diffs against the newest full package in `-o`, which is why CI runs `vpk download github` into the same `-o`
+    first. `vpk pack` works in `%TEMP%\velopack\` and leaves that folder behind, empty. **Verified** (this laptop,
+    source, docs).
+- **Velopack's own logs.** Setup writes `%LocalAppData%\velopack\velopack.log`; Update.exe and the stub write
+  `%LocalAppData%\velopack\velopack_HaikAsatryan.Wakeshot.log`. Uninstall removes neither. `-l <file>` on Setup.exe or
+  Update.exe moves them. **Verified** (test).
+- **Uninstall.** `Update.exe --uninstall --silent` while the app runs: kill, uninstall hook, shortcut, install folder,
+  `%TEMP%\velopack_HaikAsatryan.Wakeshot`, uninstall key; exit 0. Update.exe cannot delete itself, so the install folder
+  goes 3 s after it exits, through `cmd.exe /C choice /C Y /N /D Y /T 3 & rmdir /s /q "<folder>"`. A check right after
+  the exit still finds the folder and must wait. **Verified** (test).
+- **AUMID.** A normal start (not a hook: fast hooks exit before this) calls
+  `SetCurrentProcessExplicitAppUserModelID("velopack.HaikAsatryan.Wakeshot")` inside `VelopackApp::run()`, the same id
+  as the shortcut. A build run from `target\` is not installed, so `run()` returns before this and the process keeps
+  no explicit AUMID. `vpk pack --aumid` and `VelopackApp::set_app_user_model_id` change it. **Verified** (test log line
+  and source `app.rs`).
+- **Elevation.** Every process here ran elevated: Setup and Update.exe start hooks and restarts with their own token,
+  so all logged `elevated=yes`. A normal user install runs them all at Medium. Not tested unelevated: whether a Medium
+  Update.exe can kill a tray started elevated (a kill across integrity levels is normally denied), and the working
+  folder of a start from the Run value. The Access-denied warning in point 4 comes from the access mask, not from
+  elevation (source).
