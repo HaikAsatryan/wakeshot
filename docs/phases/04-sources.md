@@ -251,3 +251,14 @@ limit; Copilot waiting does not hold. The cards build these.
   `p6-int-tray-mode`: `WatchThread::start(dir, config, sources, liveness, sink, log)` takes `Started`'s config; start
   it after `Started` is posted; call `tick()` from `watch_tick`. For `p4-live-claude`: call `tick()` every 30 s and
   pass `Config::default()`.
+- 2026-11-04 01:08: the fix worker is done and committed: the six `watch::data` tests now use pid 40
+  (`cargo test -p wakeshot-windows --lib`: 387 passed, 0 failed); M1 part b fixed in `transcript.rs`: an `enqueue`
+  line closes the tasks its notice names (all 10 delivered notices in the live fixtures have that line first, 0 to
+  3.4 s earlier; not checked live, `p4-live-claude` checks it). Verify minors N1 and N3 answered; N2 goes to
+  `p4-live-claude`. Decided by the worker, for Haik's review: a UI stop now stops holding as soon as its queued notice
+  is on disk (this replaces the earlier orchestrator decision "a UI stop holds until its killed notice"); it still
+  holds longer if the remote flag `tengu_rosy_donut` is off or a hook holds the enqueue back (both not verified); only
+  `enqueue` lines are read, not `remove`. For the next docs pass: `docs/product.md:41-46` still says a UI stop holds
+  because the output file is "the only other trace" (wrong now; proposed text in the card); `docs/architecture.md`
+  899-900, the `timers` and `open_tasks` comments, do not match the Monitor rules. Harmless: `watch/read.rs:577`
+  writes pid 4 bytes it never parses. The second verify (M1 part b) runs: `docs/reviews/p4-claude-parsing-verify2.md`.
