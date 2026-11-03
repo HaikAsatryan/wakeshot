@@ -286,3 +286,6 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   soon as the running cards end. Its own fallback applies: ARM64 builds of `wakeshot-tray` are checked by CI only (the
   runner image has LLVM) until Haik installs clang; step 0 stays his, and every later card records "ARM64 tray: CI
   only" until then. Why: it unblocks `p6-int-update-wiring` and `p6-install-e2e` overnight.
+- 2026-11-04 02:40 (orchestrator, session `wakeshot-46`): CI green on 8ff7fa5 (Linux core, x64, ARM64). Manual
+  dry run of `release.yml` (run 41731897399): build, pack, silent install and uninstall pass on both CPUs; only the 3
+  hook checks fail, as expected until `p6-velopack-dependency` (details in the `p6-pack-and-release` Log).
