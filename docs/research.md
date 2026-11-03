@@ -2911,6 +2911,42 @@ stdlib Python PNG reader in the card's scratchpad (`p5-icon-art\pngread.py`, `me
   and Rust does not fuse a multiply and an add on its own. So the golden test compares exactly. Tests ran on x64 only;
   ARM64 got clippy and builds, not a test run.
 
+## Path value checks
+
+Checked 2026-11-04 between 01:15 and 01:28 for card `docs/tasks/p6-login-and-path.md` (Windows 11 Pro 10.0.26300,
+`windows` 0.62.2, elevated agent shell). Tests wrote only scratch keys under `HKCU\Software\Wakeshot-test\<pid>`.
+
+- **`RegSetValueExW` stores a NUL it was not given.** For string types, when the data does not end in a NUL and the
+  UTF-16 unit just past the data is a NUL, Windows stores that NUL too. Seen first as a test that failed 3 runs in 5
+  (the unit past a `Vec` is whatever the heap holds there), then pinned by
+  `install::tests::windows_stores_a_nul_just_past_string_data`: a buffer `C:\A` plus NUL, passed without the NUL,
+  was stored with it, 3 runs of 3. Wine's `RegSetValueExW` has the same rule, with the comment "if user forgot to
+  count terminating null, add it (yes NT does this)" (`dlls/kernelbase/registry.c`, GitHub mirror `wine-mirror/wine`,
+  `master`, read 2026-11-04: `if (str[count / sizeof(WCHAR) - 1] && !str[count / sizeof(WCHAR)]) count +=
+  sizeof(WCHAR);`). Microsoft's page for
+  the function does not mention it (not verified). So Windows reads one unit past the buffer it is given; `install`
+  puts a non-zero guard unit there, and a value stored without a terminator then comes back byte for byte.
+- **A value's name keeps its case.** A value `PATH` updated and then restored through the name `Path` was still
+  listed as `PATH` by `RegEnumValueW` (`install::tests::the_value_keeps_its_name_case`).
+- **Raw reads and writes keep type and bytes.** `RegQueryValueExW` gives the bytes as stored (no terminator added, no
+  `%VAR%` expanded); `RegSetValueExW` with the old type stores them back. Round trips on the scratch key gave back the
+  exact old bytes and type for `REG_SZ`, `REG_EXPAND_SZ` with `%USERPROFILE%`, a trailing `;`, an empty value of 0
+  and of 2 bytes, a value with no terminator, and bytes after the first NUL (the `install::tests::round_trip_*`
+  tests).
+- **`SendMessageTimeoutW` with `HWND_BROADCAST`** (Microsoft Learn, read 2026-11-04): the timeout is per window ("each
+  window can use the full time-out period ... up to a 15 second delay" for three windows that do not answer);
+  `SMTO_ABORTIFHUNG` returns at once for a thread that "appears to not respond", which means it has not called
+  `GetMessage` or the like within five seconds; the result gives no per-window outcome for a broadcast; a zero result
+  with no last error is "a generic failure", and the function does not always set the last error, so set it to 0
+  first. `install` uses 1 s per window. Never run here: tests inject the broadcast, so no test sent it.
+- **Environment variable limit** (Microsoft Learn, "Environment Variables", read 2026-11-04): "The maximum size of a
+  user-defined environment variable is 32,767 characters." The same page says to broadcast `WM_SETTINGCHANGE` with
+  `lParam` "Environment" after changing the system variables in the registry; it names no flags or timeout. What
+  Windows does with a longer user Path: not verified, so `install` refuses an add that would pass the limit.
+- **The real keys were not touched.** A read-only script hashed the user `Path` (type and text) and every value under
+  the real `Run` key, and `reg export` of both keys, before and after the test runs: the same hashes each time (card
+  Log).
+
 ## IO thread checks
 
 Checked 2026-11-04 01:26 for card `docs/tasks/p6-int-io-thread.md` (Windows 11 Pro 10.0.26300, Rust 1.99.1, elevated
@@ -2921,3 +2957,18 @@ agent shell). Fakes and temp folders only: no power plan, notice or window was t
   runs of `app::io_thread::tests::finish_gives_up_when_the_executor_blocks`; the other 3 were at or above 200 ms. Why
   (the wait and `Instant` use different clocks, or the timer tick): not verified. So a test that times a Windows wait
   checks a looser lower bound (150 ms for 200); 10 of 10 runs passed with it.
+
+## Update thread checks
+
+Checked 2026-11-04 between 01:30 and 01:40 for card `docs/tasks/p6-update-schedule.md` (Rust 1.99.1).
+
+- **The schedule, on the fake clock** (`update::tests`): the first check after 5 minutes of run time, then every 12
+  hours; a sleep of 20 hours mid-wait, then the check within one 60 s wait of the wake-up; a wall clock set back 2
+  days, the check still 12 hours of run time after the last; a wall clock set forward 1 hour, no check; set forward a
+  day, a check within one wait. The fake wait runs the fake clock, so no test sleeps.
+- **The real thread** (system clock, `std::sync::mpsc`): an apply request reached the thread and its answer came back
+  through the sink; `UpdateHandle::stop` returned in under 1 s while the thread waited; dropping the handle ended the
+  thread (the test's channel closed). `UpdateHandle` is `Send` and `Sync` (a compile-time check), so `mpsc::Sender`
+  is `Sync` on this toolchain.
+- **Not verified:** whether `Receiver::recv_timeout` counts time the PC sleeps. The thread does not rely on it: it
+  reads both clocks again at least every 60 s of waiting.
