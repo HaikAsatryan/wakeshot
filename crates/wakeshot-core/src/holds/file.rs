@@ -69,9 +69,13 @@ pub fn parse(name: &str, bytes: &[u8]) -> Parsed {
         Read::Newer(version) => return Parsed::Newer(version),
         Read::Bad => return Parsed::Bad("not a hold file: JSON with version and pid"),
     };
-    // Pid 0 is the System Idle Process: it never writes a file and never ends, so such a hold could never end.
+    // Pid 0 is the System Idle Process and pid 4 the System process: neither writes a file and neither ends before
+    // Windows does, so such a hold could never end (review m7).
     if file.pid == 0 {
         return Parsed::Bad("pid 0 is not a process");
+    }
+    if file.pid == 4 {
+        return Parsed::Bad("pid 4 is the System process");
     }
     // Track note 10: a hold whose end cannot be read is no hold, rather than a hold with no end.
     let expires_wall_ms = match file.expires.as_deref().map(parse_expires) {
@@ -427,6 +431,11 @@ mod tests {
         assert_eq!(
             parse("job.json", pid_zero.as_bytes()),
             Parsed::Bad("pid 0 is not a process")
+        );
+        let pid_four = r#"{ "version": 1, "pid": 4, "reason": "nightly backup" }"#;
+        assert_eq!(
+            parse("job.json", pid_four.as_bytes()),
+            Parsed::Bad("pid 4 is the System process")
         );
         assert_eq!(
             parse("job.txt", DOCUMENTED.as_bytes()),

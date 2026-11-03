@@ -295,6 +295,9 @@ pub struct ClaudeJob<'a> {
 /// `ylr` in Claude Code: the gap the cache lead rule looks for.
 const CACHE_WINDOW_MS: i64 = 5 * MINUTE_MS;
 
+/// The largest `recurring_cap_ms` the flag's schema allows; the built-in value is the same.
+const SCHEMA_MAX_CAP_MS: i64 = 30 * MINUTE_MS;
+
 impl ClaudeScheduler {
     pub const DEFAULT: Self = Self {
         recurring_frac: 0.5,
@@ -338,6 +341,29 @@ impl ClaudeScheduler {
         let late = (claude_frac(job.id) * self.recurring_frac * gap as f64)
             .min(self.recurring_cap_ms as f64);
         Some(ceil_ms(run as f64 + late))
+    }
+
+    /// The latest time Claude Code can fire a recurring job with any flag value its schema allows (review m2): the
+    /// largest share of the gap with the largest cap, and for a `*/5` job also the `cache_lead_ms` rule, whose time is
+    /// before `from_ms` plus 5 minutes for any lead above 0. Earlier fires need nothing: the shortest is the run
+    /// itself, at most `recurring_cap_ms` before the built-in time, and the core holds from an hour before.
+    pub fn latest_recurring_ms(job: &ClaudeJob, zone: &dyn LocalOffset) -> Option<i64> {
+        let latest = Self {
+            recurring_frac: 1.0,
+            recurring_cap_ms: SCHEMA_MAX_CAP_MS,
+            cache_lead_ms: 0,
+            ..Self::DEFAULT
+        };
+        let share = latest.next_recurring(job, zone)?;
+        let run = job.cron.next_run(job.from_ms, zone, false)?;
+        let lead_rule = job.cron.minute_step
+            && job.cron.next_run(run, zone, false).map(|after| after - run)
+                == Some(CACHE_WINDOW_MS);
+        Some(if lead_rule {
+            share.max(job.from_ms.saturating_add(CACHE_WINDOW_MS))
+        } else {
+            share
+        })
     }
 
     /// `W7o`. A one-shot on a minute divisible by `one_shot_minute_mod` (:00 and :30) runs early by up to

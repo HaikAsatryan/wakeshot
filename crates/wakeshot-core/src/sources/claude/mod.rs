@@ -26,6 +26,9 @@ pub const LABEL: &str = "Claude Code";
 /// listed anyway, so its format problem shows "update Wakeshot".
 const NO_START: FileTime = FileTime(0);
 
+/// What `FormatHealth::UnknownValue` names for a `sessionId` that is not a plain id.
+pub const SESSION_ID: &str = "sessionId";
+
 /// FILETIME of the Unix epoch, in 100 ns steps from 1601.
 const UNIX_EPOCH_FT: i128 = 116_444_736_000_000_000;
 
@@ -212,18 +215,26 @@ impl Slot {
                 // Rule 3: only a terminal session shows a background shell as `shell`.
                 let cli =
                     self.last.as_ref().and_then(|file| file.entrypoint) == Some(Entrypoint::Cli);
-                (
-                    transcript.replay.timers(since, zone),
-                    if cli {
-                        0
-                    } else {
-                        transcript.replay.open_tasks(since)
-                    },
-                    transcript.replay.problem(),
-                )
+                let mut timers = transcript.replay.timers(since, zone);
+                let open_tasks = if cli {
+                    0
+                } else {
+                    timers.extend(transcript.replay.task_timers(since));
+                    timers.sort_unstable();
+                    timers.dedup();
+                    transcript.replay.open_tasks(since)
+                };
+                (timers, open_tasks, transcript.replay.problem())
             }
             None => (Vec::new(), 0, None),
         };
+        // A `sessionId` of another shape hides the transcript, so it is told the same way (review m5).
+        let problem = self
+            .last
+            .as_ref()
+            .and_then(|file| file.session_id_problem.as_deref())
+            .map(|value| (SESSION_ID, value))
+            .or(problem);
         // The core counts any `UnknownValue` as working while the process lives, so a transcript problem may not make
         // a session hold (orchestrator, 2026-11-03): it is told only while the session holds anyway, which still shows
         // "update Wakeshot" at its next turn.

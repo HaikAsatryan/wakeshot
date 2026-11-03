@@ -39,6 +39,13 @@ const MAX_LINE: usize = 32 << 20;
 const WAKEUP_FORGET_MS: i64 = 60 * 60 * 1000;
 /// The most steps when walking a carried job's fires up to the carry line: at most 30 minutes of fires, one a minute.
 const CHAIN_STEPS: usize = 64;
+/// The longest timeout a Monitor that is not persistent has in Claude Code 2.1.317 (`eEn`, its schema's bound). The
+/// core holds a timer from an hour before its due time, so one due time at the timeout covers the whole run.
+const MONITOR_MAX_MS: i64 = 60 * 60 * 1000;
+/// A longer timeout than 2.1.317 allows still ends: due times one [`MONITOR_MAX_MS`] apart cover it, up to this many.
+const MONITOR_STEPS: i64 = 24;
+/// A `CronCreate` result's `nextFireAt` this far from the built-in scheduler's time means its remote flag changed.
+const DRIFT_MS: i64 = 2_000;
 
 /// What `FormatHealth::UnknownValue` names: a transcript line kind, or a cron text track note 5 does not know.
 pub const TRANSCRIPT: &str = "transcript";
@@ -54,6 +61,11 @@ const MARKERS: [&[u8]; 4] = [
 ];
 
 const NOTICE: &str = "<task-notification>";
+const NOTICE_END: &str = "</task-notification>";
+/// The first line of the header Claude Code 2.1.317 puts before task notifications on some paths (`Dwe`, `RJr`); the
+/// header ends with a blank line. Its own reader also takes it inside a `<system-reminder>`.
+const HEADER: &str = "[SYSTEM NOTIFICATION - NOT USER INPUT]";
+const REMINDER: &str = "<system-reminder>\n";
 
 /// One session process's transcript lines, replayed into its armed timers and open background tasks.
 ///
@@ -61,13 +73,17 @@ const NOTICE: &str = "<task-notification>";
 #[derive(Clone, Default)]
 pub struct Replay {
     jobs: BTreeMap<String, Job>,
+    /// Recurring jobs dropped at the built-in 7 day age, kept in case Claude Code's flag lets them live longer.
+    aged: BTreeMap<String, Job>,
     wakeups: Vec<Wakeup>,
-    /// Open background tasks by id, with the time of the result that opened them.
-    tasks: BTreeMap<String, i64>,
+    /// Background tasks by id that no notification or stop has closed.
+    tasks: BTreeMap<String, Task>,
     /// `tool_use` ids waiting for their result, oldest first.
     calls: VecDeque<(String, Call)>,
     /// The first problem seen: a field name and a value, never line content.
     problem: Option<(&'static str, String)>,
+    /// The first gap seen between a `nextFireAt` and the built-in scheduler's time for it.
+    drift: Option<i64>,
     partial: Vec<u8>,
     skipping: bool,
 }
@@ -82,6 +98,16 @@ struct Job {
     created_ms: i64,
     basis: Basis,
     basis_ms: i64,
+    /// Claude Code fired it after the built-in 7 day age, so its flag says otherwise and the age no longer ends it.
+    outlived: bool,
+}
+
+/// One background task. `ends_ms` is set for a Monitor that is not persistent: Claude Code ends it at its timeout and
+/// writes no notification with a `<status>` for that (2.1.317, `We`), so it holds as a timer up to then.
+#[derive(Clone, Copy, Debug)]
+struct Task {
+    opened_ms: i64,
+    ends_ms: Option<i64>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -108,6 +134,11 @@ enum Call {
     CronDelete(String),
     Wakeup,
     Monitor,
+    /// `TaskStop` (`KillShell`, `KillBash`): Claude Code writes no notification for the task it stops, so its result
+    /// is the end (2.1.317, `ILe`; its own resume scanner `hrn` reads it the same way). The input's id, if plain.
+    Stop(Option<String>),
+    /// A shell run with `run_in_background: true`, whose result must name its task.
+    Background,
 }
 
 impl fmt::Debug for Replay {
@@ -115,10 +146,12 @@ impl fmt::Debug for Replay {
         // A partial line can hold any text, so only its length is shown.
         f.debug_struct("Replay")
             .field("jobs", &self.jobs)
+            .field("aged", &self.aged)
             .field("wakeups", &self.wakeups)
             .field("tasks", &self.tasks)
             .field("calls", &self.calls)
             .field("problem", &self.problem)
+            .field("drift", &self.drift)
             .field("partial_bytes", &self.partial.len())
             .field("skipping", &self.skipping)
             .finish()
@@ -167,31 +200,57 @@ impl Replay {
     /// resume (`zi`): a recurring job counts its next fire from the resume and is dropped at 7 days old, a one-shot
     /// whose time has passed is dropped. Its wakeups are not restored for a terminal or SDK session.
     pub fn timers(&self, since_ms: i64, zone: &dyn LocalOffset) -> Vec<i64> {
-        let mut due: Vec<i64> = self
-            .jobs
-            .iter()
-            .filter_map(|(id, job)| job.due(id, since_ms, zone))
-            .chain(
-                self.wakeups
-                    .iter()
-                    .filter(|wakeup| wakeup.armed_ms >= since_ms)
-                    .map(|wakeup| wakeup.due_ms),
-            )
-            .collect();
+        let mut due = Vec::new();
+        for (id, job) in &self.jobs {
+            job.dues(id, since_ms, zone, &mut due);
+        }
+        due.extend(
+            self.wakeups
+                .iter()
+                .filter(|wakeup| wakeup.armed_ms >= since_ms)
+                .map(|wakeup| wakeup.due_ms),
+        );
         due.sort_unstable();
         due.dedup();
         due
     }
 
-    /// Background tasks opened in the process that started at `since_ms` and not closed: a task does not outlive the
-    /// process that ran it.
+    /// Due times, as for [`Replay::timers`], of the open background tasks that end on their own: a Monitor that is
+    /// not persistent, at its timeout. Rule 3 counts them where it counts [`Replay::open_tasks`]; sorted, no repeats.
+    pub fn task_timers(&self, since_ms: i64) -> Vec<i64> {
+        let mut due = Vec::new();
+        for task in self
+            .tasks
+            .values()
+            .filter(|task| task.opened_ms >= since_ms)
+        {
+            if let Some(ends) = task.ends_ms {
+                monitor_dues(task.opened_ms, ends, &mut due);
+            }
+        }
+        due.sort_unstable();
+        due.dedup();
+        due
+    }
+
+    /// Background tasks with no known end, opened in the process that started at `since_ms` and not closed: a task
+    /// does not outlive the process that ran it. A Monitor with a timeout is not counted here but in
+    /// [`Replay::task_timers`], so it stops holding at its timeout even though that writes no `<status>`.
     pub fn open_tasks(&self, since_ms: i64) -> u32 {
         let open = self
             .tasks
             .values()
-            .filter(|&&opened| opened >= since_ms)
+            .filter(|task| task.opened_ms >= since_ms && task.ends_ms.is_none())
             .count();
         u32::try_from(open).unwrap_or(u32::MAX)
+    }
+
+    /// The first gap, in ms, between a recurring `CronCreate` result's `nextFireAt` and the time Claude Code's built-in
+    /// scheduler values give for it; `None` while they agree. A gap means Claude Code's remote flag
+    /// `tengu_kairos_cron_config` changed, so computed due times may be off (they still cover any value its schema
+    /// allows). For a live check or a log; it changes no fact.
+    pub fn scheduler_drift_ms(&self) -> Option<i64> {
+        self.drift
     }
 
     /// The first line problem seen, as a field name ([`TRANSCRIPT`] or [`CRON`]) and a value: a line kind, or a cron
@@ -220,10 +279,14 @@ impl Replay {
         if let Some(time) = line.time {
             self.wakeups
                 .retain(|wakeup| wakeup.due_ms.saturating_add(WAKEUP_FORGET_MS) > time);
+            self.tasks.retain(|_, task| {
+                task.ends_ms
+                    .is_none_or(|ends| ends.saturating_add(WAKEUP_FORGET_MS) > time)
+            });
         }
         match (line.kind, line.subtype) {
             (Some(Word::Assistant), _) => self.calls(line),
-            (Some(Word::User), _) => self.results(line),
+            (Some(Word::User), _) => self.results(line, zone),
             (Some(Word::System), Some(Word::ScheduledTaskFire)) => self.fired(&line),
             (Some(Word::Attachment), _) => self.attachment(line, zone),
             _ => {}
@@ -254,6 +317,19 @@ impl Replay {
                 ),
                 Some(Word::ScheduleWakeup) => ("ScheduleWakeup", Some(Call::Wakeup)),
                 Some(Word::Monitor) => ("Monitor", Some(Call::Monitor)),
+                // Claude Code takes `task_id`, else the older `shell_id`; its result names the task anyway.
+                Some(Word::TaskStop) => (
+                    "TaskStop",
+                    Some(Call::Stop(
+                        input
+                            .task_id
+                            .or(input.shell_id)
+                            .filter(|id| is_plain_id(id)),
+                    )),
+                ),
+                Some(Word::Shell) if input.run_in_background == Some(true) => {
+                    ("Bash", Some(Call::Background))
+                }
                 _ => continue,
             };
             match (item.id.filter(|id| is_plain_id(id)), call) {
@@ -277,7 +353,7 @@ impl Replay {
     }
 
     /// A user line: a tool result, or a task notification as its text.
-    fn results(&mut self, line: Line) {
+    fn results(&mut self, line: Line, zone: &dyn LocalOffset) {
         let Some(content) = line.message.and_then(|message| message.content) else {
             return;
         };
@@ -307,26 +383,64 @@ impl Replay {
         let result = line.result;
         let time = line.time;
         // Rule 3: any tool can start one (a shell with `run_in_background`, or one moved to the background).
-        if let Some(task) = result
+        let background = result
             .as_ref()
-            .and_then(|result| result.background_task_id.as_deref())
-        {
-            self.open(task, time);
+            .and_then(|result| result.background_task_id.clone());
+        if let Some(task) = &background {
+            self.open(task, time, None);
         }
         match call {
             None => {}
             Some(Call::CronCreate { cron, recurring }) => {
-                self.created(&cron, recurring, result, time);
+                self.created(&cron, recurring, result, time, zone);
             }
             Some(Call::CronDelete(id)) => {
                 self.jobs.remove(&id);
+                self.aged.remove(&id);
             }
             Some(Call::Wakeup) => self.wakeup_result(result, time),
-            Some(Call::Monitor) => match result.and_then(|result| result.task_id) {
-                Some(task) => self.open(&task, time),
-                None => self.flag(TRANSCRIPT, "Monitor result"),
-            },
+            Some(Call::Monitor) => self.monitor_result(result, time),
+            Some(Call::Stop(asked)) => {
+                let stopped = result
+                    .and_then(|result| result.stopped_task)
+                    .filter(|id| is_plain_id(id))
+                    .or(asked);
+                match stopped {
+                    Some(id) => self.close(&[id]),
+                    None => self.flag(TRANSCRIPT, "TaskStop result"),
+                }
+            }
+            // Without its id the shell would not hold at all, and nothing else would say so (review m1).
+            Some(Call::Background) if background.is_none() => {
+                self.flag(TRANSCRIPT, "background shell result");
+            }
+            Some(Call::Background) => {}
         }
+    }
+
+    /// A Monitor result `{taskId, timeoutMs, persistent}`: `timeoutMs` is 0 when it is persistent, which only its
+    /// notification or a stop ends.
+    fn monitor_result(&mut self, result: Option<ToolResult>, time: Option<i64>) {
+        let Some(result) = result else {
+            return self.flag(TRANSCRIPT, "Monitor result");
+        };
+        let Some(task) = result.task_id else {
+            return self.flag(TRANSCRIPT, "Monitor result");
+        };
+        let runs = match (result.persistent, result.timeout_ms.and_then(ceil_ms)) {
+            (Some(true), _) => None,
+            (_, Some(ms)) if (1..=MONITOR_MAX_MS).contains(&ms) => Some(ms),
+            (_, Some(ms)) if ms > MONITOR_MAX_MS => {
+                self.flag(TRANSCRIPT, "Monitor result");
+                Some(ms)
+            }
+            // Never held for the life of the process on a shape not known: it ends by the longest 2.1.317 allows.
+            _ => {
+                self.flag(TRANSCRIPT, "Monitor result");
+                Some(MONITOR_MAX_MS)
+            }
+        };
+        self.open(&task, time, runs);
     }
 
     fn created(
@@ -335,6 +449,7 @@ impl Replay {
         recurring: Option<bool>,
         result: Option<ToolResult>,
         time: Option<i64>,
+        zone: &dyn LocalOffset,
     ) {
         let Some(result) = result else {
             return self.flag(TRANSCRIPT, "CronCreate result");
@@ -357,15 +472,21 @@ impl Replay {
             }
         };
         let cron = self.cron(cron);
+        // Claude Code's own readers take `recurring !== false`.
+        let recurring = result.recurring.or(recurring).unwrap_or(true);
+        if let (Some(parsed), Basis::Exact(at), true, None) = (&cron, basis, recurring, self.drift)
+        {
+            self.drift = drift(&id, parsed, at, time, zone);
+        }
         self.add_job(
             id,
             Job {
                 cron,
-                // Claude Code's own readers take `recurring !== false`.
-                recurring: result.recurring.or(recurring).unwrap_or(true),
+                recurring,
                 created_ms: time,
                 basis,
                 basis_ms: time,
+                outlived: false,
             },
         );
     }
@@ -415,7 +536,8 @@ impl Replay {
         }
     }
 
-    fn open(&mut self, task: &str, time: Option<i64>) {
+    /// A task opened at `time`; `runs_ms` is how long it runs at most, when that is known.
+    fn open(&mut self, task: &str, time: Option<i64>, runs_ms: Option<i64>) {
         if !is_plain_id(task) {
             return self.flag(TRANSCRIPT, "task id");
         }
@@ -423,7 +545,10 @@ impl Replay {
             return self.flag(TRANSCRIPT, "timestamp");
         };
         if self.tasks.len() < MAX_TASKS || self.tasks.contains_key(task) {
-            self.tasks.entry(task.to_owned()).or_insert(time);
+            self.tasks.entry(task.to_owned()).or_insert(Task {
+                opened_ms: time,
+                ends_ms: runs_ms.map(|ms| time.saturating_add(ms)),
+            });
         }
     }
 
@@ -446,17 +571,28 @@ impl Replay {
             self.wakeups.retain(|wakeup| wakeup.due_ms > by);
             return;
         }
+        // A fire of a job dropped at the built-in age shows the flag keeps it longer; the fire lines then decide.
+        if let Some(mut job) = self.aged.remove(id) {
+            job.outlived = true;
+            self.add_job(id.to_owned(), job);
+        }
         let Some(job) = self.jobs.get_mut(id) else {
             return;
         };
         // A recurring job 7 days old fires once more, then Claude Code deletes it (`Ze`).
-        let aged = scheduler.recurring_max_age_ms > 0
+        let aged = job.recurring
+            && !job.outlived
+            && scheduler.recurring_max_age_ms > 0
             && time.saturating_sub(job.created_ms) >= scheduler.recurring_max_age_ms;
-        if job.recurring && !aged {
+        if job.recurring {
             job.basis = Basis::From(time);
             job.basis_ms = time;
-        } else {
-            self.jobs.remove(id);
+        }
+        if !job.recurring || aged {
+            let job = self.jobs.remove(id);
+            if let Some(job) = job.filter(|_| aged && self.aged.len() < MAX_JOBS) {
+                self.aged.insert(id.to_owned(), job);
+            }
         }
     }
 
@@ -509,6 +645,11 @@ impl Replay {
                 continue;
             };
             armed.insert(id.clone());
+            // Still armed after the built-in age: Claude Code's flag keeps it longer.
+            if let Some(mut job) = self.aged.remove(&id) {
+                job.outlived = true;
+                self.add_job(id.clone(), job);
+            }
             // A job this replay already knows keeps its own fires; the carry line has none.
             if self.jobs.contains_key(&id) {
                 continue;
@@ -526,10 +667,12 @@ impl Replay {
                     created_ms: created,
                     basis: Basis::From(from),
                     basis_ms: time,
+                    outlived: false,
                 },
             );
         }
         self.jobs.retain(|id, _| armed.contains(id));
+        self.aged.clear();
         if let Some(ended) = attachment.ended.flatten() {
             for id in ended.items {
                 self.jobs.remove(&id.0);
@@ -552,35 +695,85 @@ impl Replay {
 }
 
 impl Job {
-    fn due(&self, id: &str, since_ms: i64, zone: &dyn LocalOffset) -> Option<i64> {
+    /// The job's due times for the process that started at `since_ms`. A time computed for a recurring job comes
+    /// twice: as the built-in scheduler values give it, and as the latest any value of Claude Code's remote flag allows
+    /// (review m2). The real fire then always falls inside the core's window, and its fire line moves the job on, so
+    /// with the built-in values the hold is the same as with one time.
+    fn dues(&self, id: &str, since_ms: i64, zone: &dyn LocalOffset, out: &mut Vec<i64>) {
         let scheduler = ClaudeScheduler::DEFAULT;
         let earlier = self.basis_ms < since_ms;
         let basis = if self.recurring && earlier {
             let max_age = scheduler.recurring_max_age_ms;
-            if max_age > 0 && since_ms.saturating_sub(self.created_ms) >= max_age {
-                return None;
+            if !self.outlived && max_age > 0 && since_ms.saturating_sub(self.created_ms) >= max_age
+            {
+                return;
             }
             Basis::From(since_ms)
         } else {
             self.basis
         };
-        let due = match basis {
-            Basis::Exact(at) => at,
-            Basis::From(from_ms) => scheduler.next_fire_ms(
-                &ClaudeJob {
-                    id,
-                    cron: self.cron.as_ref()?,
-                    recurring: self.recurring,
-                    from_ms,
-                },
-                zone,
-            )?,
+        let job = |from_ms| {
+            Some(ClaudeJob {
+                id,
+                cron: self.cron.as_ref()?,
+                recurring: self.recurring,
+                from_ms,
+            })
         };
+        let due = match basis {
+            Basis::Exact(at) => Some(at),
+            Basis::From(from_ms) => job(from_ms).and_then(|job| scheduler.next_fire_ms(&job, zone)),
+        };
+        let Some(due) = due else {
+            return;
+        };
+        // Lines of an earlier process: Claude Code drops a one-shot whose time passed while none ran.
         if !self.recurring && earlier && due < since_ms {
-            return None;
+            return;
         }
-        Some(due)
+        out.push(due);
+        if let (true, Basis::From(from_ms)) = (self.recurring, basis) {
+            out.extend(
+                job(from_ms).and_then(|job| ClaudeScheduler::latest_recurring_ms(&job, zone)),
+            );
+        }
     }
+}
+
+/// A Monitor's due times: its timeout, and for one longer than 2.1.317 allows, one every [`MONITOR_MAX_MS`] from its
+/// start, so the core's hour before each covers the run up to [`MONITOR_STEPS`] of them.
+fn monitor_dues(opened_ms: i64, ends_ms: i64, out: &mut Vec<i64>) {
+    out.push(ends_ms);
+    let mut at = opened_ms;
+    for _ in 1..MONITOR_STEPS {
+        at = at.saturating_add(MONITOR_MAX_MS);
+        if at >= ends_ms {
+            break;
+        }
+        out.push(at);
+    }
+}
+
+/// How far a recurring job's `nextFireAt` is from the built-in scheduler's time for a job made at `made_ms`, when
+/// more than [`DRIFT_MS`]. The result line comes a few ms after Claude Code's own creation time, so a job made just
+/// before a cron run is also tried from 1 s earlier.
+fn drift(id: &str, cron: &Cron, next_ms: i64, made_ms: i64, zone: &dyn LocalOffset) -> Option<i64> {
+    let gap = |from_ms: i64| {
+        let job = ClaudeJob {
+            id,
+            cron,
+            recurring: true,
+            from_ms,
+        };
+        ClaudeScheduler::DEFAULT
+            .next_fire_ms(&job, zone)
+            .map(|due| next_ms.saturating_sub(due))
+    };
+    let gaps = [gap(made_ms), gap(made_ms.saturating_sub(1_000))];
+    if gaps.iter().flatten().any(|gap| gap.abs() <= DRIFT_MS) {
+        return None;
+    }
+    gaps.into_iter().flatten().next()
 }
 
 /// The time to count a carried recurring job's next fire from, so it is the first fire after the carry line at `at_ms`:
@@ -608,12 +801,44 @@ fn last_fire_by(id: &str, cron: &Cron, created_ms: i64, at_ms: i64, zone: &dyn L
 /// The task ids a task notification closes: every `<task-id>` before its `<summary>`, when it has a `<status>`. Seen:
 /// `completed`, `failed`, `stopped`, and `killed` in the code; a Monitor event has no `<status>` and closes nothing. A
 /// batch notification lists several ids (2.1.317, resume). Only the start of the text counts, since the `/loop`
-/// instructions quote the tag.
+/// instructions quote the tag; Claude Code's own header may come first, and after it several notifications may be
+/// joined, each after a blank line (2.1.317, `qi`; review m4).
 fn notice_ids(text: &str) -> Option<Vec<String>> {
-    let rest = text.strip_prefix(NOTICE)?;
+    let (mut rest, joined) = match after_header(text) {
+        Some(rest) => (rest, true),
+        None => (text, false),
+    };
     let mut ids = Vec::new();
+    while let Some(block) = rest.strip_prefix(NOTICE) {
+        let end = block.find(NOTICE_END);
+        block_ids(&block[..end.unwrap_or(block.len())], &mut ids);
+        match end {
+            Some(end) if joined => {
+                rest = block[end + NOTICE_END.len()..]
+                    .strip_prefix("\n\n")
+                    .unwrap_or_default();
+            }
+            _ => break,
+        }
+    }
+    (!ids.is_empty()).then_some(ids)
+}
+
+/// The text after Claude Code's notification header, which ends with a blank line; `None` without the header.
+fn after_header(text: &str) -> Option<&str> {
+    let text = text.strip_prefix(REMINDER).unwrap_or(text);
+    if !text.starts_with(HEADER) {
+        return None;
+    }
+    text.split_once("\n\n").map(|(_, rest)| rest)
+}
+
+/// The ids one notification closes, added to `ids`: each `<task-id>` before its `<summary>`, when it has a
+/// `<status>`.
+fn block_ids(block: &str, ids: &mut Vec<String>) {
+    let mut found = Vec::new();
     let mut closes = false;
-    for line in rest.lines() {
+    for line in block.lines() {
         if line.is_empty() {
             continue;
         }
@@ -621,15 +846,17 @@ fn notice_ids(text: &str) -> Option<Vec<String>> {
             break;
         };
         match tag {
-            "task-id" if is_plain_id(value) && ids.len() < MAX_NOTICE_IDS => {
-                ids.push(value.to_owned());
+            "task-id" if is_plain_id(value) && ids.len() + found.len() < MAX_NOTICE_IDS => {
+                found.push(value.to_owned());
             }
             "status" => closes = true,
             "summary" | "note" | "result" | "event" | "usage" => break,
             _ => {}
         }
     }
-    (closes && !ids.is_empty()).then_some(ids)
+    if closes {
+        ids.extend(found);
+    }
 }
 
 /// `<name>value</name>` on one line, as Claude Code's `Ai` writes each header field.
@@ -816,6 +1043,11 @@ enum Key {
     Ended,
     Prompt,
     CreatedAt,
+    StopTaskId,
+    ShellId,
+    RunInBackground,
+    TimeoutMs,
+    Persistent,
     Other,
 }
 
@@ -860,6 +1092,11 @@ impl<'de> Deserialize<'de> for Key {
                     "ended" => Key::Ended,
                     "prompt" => Key::Prompt,
                     "createdAt" => Key::CreatedAt,
+                    "task_id" => Key::StopTaskId,
+                    "shell_id" => Key::ShellId,
+                    "run_in_background" => Key::RunInBackground,
+                    "timeoutMs" => Key::TimeoutMs,
+                    "persistent" => Key::Persistent,
                     _ => Key::Other,
                 })
             }
@@ -883,6 +1120,8 @@ enum Word {
     CronDelete,
     ScheduleWakeup,
     Monitor,
+    TaskStop,
+    Shell,
     SessionCronCarry,
     QueuedCommand,
     Loop,
@@ -903,6 +1142,8 @@ impl Shape<'_> for Word {
             "CronDelete" => Word::CronDelete,
             "ScheduleWakeup" => Word::ScheduleWakeup,
             "Monitor" => Word::Monitor,
+            "TaskStop" | "KillShell" | "KillBash" => Word::TaskStop,
+            "Bash" | "PowerShell" => Word::Shell,
             "session_cron_carry" => Word::SessionCronCarry,
             "queued_command" => Word::QueuedCommand,
             "loop" => Word::Loop,
@@ -1062,12 +1303,16 @@ impl<'de> Shape<'de> for Item {
     }
 }
 
-/// A `tool_use` input: `CronCreate` `{cron, recurring}`, `CronDelete` `{id}`. `prompt` is never read.
+/// A `tool_use` input: `CronCreate` `{cron, recurring}`, `CronDelete` `{id}`, `TaskStop` `{task_id}` or `{shell_id}`,
+/// a shell's `run_in_background`. `prompt` and `command` are never read.
 #[derive(Default)]
 struct Input {
     cron: Option<String>,
     recurring: Option<bool>,
     id: Option<String>,
+    task_id: Option<String>,
+    shell_id: Option<String>,
+    run_in_background: Option<bool>,
 }
 
 impl<'de> Shape<'de> for Input {
@@ -1078,6 +1323,9 @@ impl<'de> Shape<'de> for Input {
                 Key::Cron => input.cron = read_text(&mut map)?,
                 Key::Recurring => input.recurring = read_flag(&mut map)?,
                 Key::Id => input.id = read_text(&mut map)?,
+                Key::StopTaskId => input.task_id = read_text(&mut map)?,
+                Key::ShellId => input.shell_id = read_text(&mut map)?,
+                Key::RunInBackground => input.run_in_background = read_flag(&mut map)?,
                 _ => skip(&mut map)?,
             }
         }
@@ -1085,7 +1333,8 @@ impl<'de> Shape<'de> for Input {
     }
 }
 
-/// `toolUseResult`: an object for the tools that matter; a tool's output text is never read.
+/// `toolUseResult`: an object for the tools that matter; a tool's output text, a `TaskStop`'s `message` and `command`
+/// are never read.
 #[derive(Default)]
 struct ToolResult {
     id: Option<String>,
@@ -1096,6 +1345,10 @@ struct ToolResult {
     stopped: Option<bool>,
     task_id: Option<String>,
     background_task_id: Option<String>,
+    timeout_ms: Option<f64>,
+    persistent: Option<bool>,
+    /// `TaskStop`'s `task_id`: the task it stopped.
+    stopped_task: Option<String>,
 }
 
 impl<'de> Shape<'de> for ToolResult {
@@ -1111,6 +1364,9 @@ impl<'de> Shape<'de> for ToolResult {
                 Key::Stopped => result.stopped = read_flag(&mut map)?,
                 Key::TaskId => result.task_id = read_text(&mut map)?,
                 Key::BackgroundTaskId => result.background_task_id = read_text(&mut map)?,
+                Key::TimeoutMs => result.timeout_ms = read_number(&mut map)?,
+                Key::Persistent => result.persistent = read_flag(&mut map)?,
+                Key::StopTaskId => result.stopped_task = read_text(&mut map)?,
                 _ => skip(&mut map)?,
             }
         }
@@ -1227,6 +1483,9 @@ mod tests {
     use crate::sources::cron::FixedOffset;
     use proptest::prelude::*;
     use serde_json::{Value, json};
+
+    // A Monitor's one due time covers its run only while the core holds a timer at least this long before it.
+    const _: () = assert!(crate::policy::sessions::TIMER_LEAD_MS >= MONITOR_MAX_MS);
 
     /// The test laptop's zone at the live tests: UTC+4, no daylight saving.
     const ZONE: FixedOffset = FixedOffset(240);
@@ -1395,6 +1654,10 @@ mod tests {
         replay.open_tasks(i64::MIN)
     }
 
+    fn ends(replay: &Replay) -> Vec<i64> {
+        replay.task_timers(i64::MIN)
+    }
+
     fn next_fire(id: &str, cron: &str, recurring: bool, from_ms: i64) -> i64 {
         let cron = Cron::parse(cron).unwrap();
         ClaudeScheduler::DEFAULT
@@ -1408,6 +1671,21 @@ mod tests {
                 &ZONE,
             )
             .unwrap()
+    }
+
+    /// The latest fire any value of Claude Code's remote flag allows, the second due time of a computed recurring time.
+    fn latest(id: &str, cron: &str, from_ms: i64) -> i64 {
+        let cron = Cron::parse(cron).unwrap();
+        ClaudeScheduler::latest_recurring_ms(
+            &ClaudeJob {
+                id,
+                cron: &cron,
+                recurring: true,
+                from_ms,
+            },
+            &ZONE,
+        )
+        .unwrap()
     }
 
     /// Live fixture 03, lines 5 and 6: the float `nextFireAt` is due at its ceiling.
@@ -1458,7 +1736,10 @@ mod tests {
         let next = next_fire("bd9c33c4", "*/1 * * * *", true, fired_at);
         // Live fixture 03: the next fire came 107 ms after this.
         assert_eq!(next, 1_793_715_682_220);
-        assert_eq!(timers(&r), [next]);
+        assert_eq!(
+            timers(&r),
+            [next, latest("bd9c33c4", "*/1 * * * *", fired_at)]
+        );
 
         let mut lines = vec![
             create("toolu_2", "23 18 3 11 *", false, T),
@@ -1478,8 +1759,8 @@ mod tests {
         let before = T + 7 * DAY - 10 * MIN;
         lines.push(fire("00000000", "0 * * * *", None, before));
         assert_eq!(
-            timers(&replay(&lines)),
-            [next_fire("00000000", "0 * * * *", true, before)]
+            timers(&replay(&lines))[0],
+            next_fire("00000000", "0 * * * *", true, before)
         );
         lines.push(fire("00000000", "0 * * * *", None, T + 7 * DAY + 50 * MIN));
         assert_eq!(timers(&replay(&lines)), Vec::<i64>::new());
@@ -1585,6 +1866,7 @@ mod tests {
         // `aaaa0002` is not listed and `aaaa0003` ended; the wakeup stays, since the line names none.
         let mut want = vec![
             next_fire("f7152559", "*/1 * * * *", true, fired_at),
+            latest("f7152559", "*/1 * * * *", fired_at),
             next_fire("bbbb0001", "30 18 3 11 *", false, T - MIN),
             T + 10 * MIN,
         ];
@@ -1624,7 +1906,7 @@ mod tests {
             ),
             1_793_715_733_332,
         );
-        assert_eq!(timers(&replay(&[carry])), [1_793_715_748_955]);
+        assert_eq!(timers(&replay(&[carry]))[0], 1_793_715_748_955);
 
         // An hourly job made days ago whose run has passed but whose late fire has not: that fire.
         let id = "ffffffff";
@@ -1640,7 +1922,7 @@ mod tests {
             ),
             pending,
         );
-        assert_eq!(timers(&replay(&[carry])), [run]);
+        assert_eq!(timers(&replay(&[carry]))[0], run);
     }
 
     #[test]
@@ -1683,38 +1965,399 @@ mod tests {
         assert_eq!(tasks(&replay(&[failed("toolu_9", T)])), 0);
     }
 
-    /// Live fixture 02: an event notification has no `<status>`.
-    #[test]
-    fn a_monitor_opens_a_task_and_its_events_close_nothing() {
-        let mut lines = vec![
+    fn monitor(tool: &str, task: &str, timeout_ms: u32, persistent: bool, at: i64) -> [String; 2] {
+        [
             call(
-                "toolu_1",
+                tool,
                 "Monitor",
-                json!({"command": "<str 95>", "timeout_ms": 120_000}),
-                T,
+                json!({"command": "<str 95>", "timeout_ms": timeout_ms, "persistent": persistent}),
+                at,
             ),
             result(
-                "toolu_1",
-                json!({"taskId": "bu1gw9xxc", "timeoutMs": 120_000, "persistent": false}),
-                T + 1,
+                tool,
+                json!({"taskId": task, "timeoutMs": if persistent { 0 } else { timeout_ms },
+                    "persistent": persistent}),
+                at + 1,
             ),
+        ]
+    }
+
+    /// Live fixture 02: an event notification has no `<status>`. Review M1: Claude Code ends a Monitor that is not
+    /// persistent at its timeout with one more event and no `<status>`, so it is a timer at its timeout, not an open
+    /// task; a `<status>` before that ends it.
+    #[test]
+    fn a_monitor_holds_until_its_timeout_and_its_events_close_nothing() {
+        let event = |at| {
             user_text(
                 "<task-notification>\n<task-id>bu1gw9xxc</task-id>\n<summary><str 70></summary>\n<event><str 5></event><str 123></task-notification>",
-                T + 2,
-            ),
-        ];
-        assert_eq!(tasks(&replay(&lines)), 1);
-        lines.push(user_text(
+                at,
+            )
+        };
+        let mut lines = monitor("toolu_1", "bu1gw9xxc", 120_000, false, T).to_vec();
+        lines.push(event(T + 2));
+        let r = replay(&lines);
+        assert_eq!((tasks(&r), ends(&r)), (0, vec![T + 1 + 120_000]));
+        assert_eq!(r.problem(), None);
+        // The timeout's own event changes nothing; the time passing ends it.
+        lines.push(event(T + 1 + 120_000));
+        assert_eq!(ends(&replay(&lines)), [T + 1 + 120_000]);
+        let mut done = lines.clone();
+        done.push(user_text(
             &notification(&["bu1gw9xxc"], Some("completed")),
             T + 3,
         ));
+        assert_eq!(ends(&replay(&done)), Vec::<i64>::new());
+        // Forgotten an hour after its time, like a wakeup.
+        lines.push(fire(
+            "aaaa0001",
+            "*/1 * * * *",
+            None,
+            T + 1 + 120_000 + HOUR,
+        ));
+        assert_eq!(ends(&replay(&lines)), Vec::<i64>::new());
+
+        // A persistent Monitor has no end of its own: an open task until its notification or a stop.
+        let mut lines = monitor("toolu_2", "bpersist1", 0, true, T).to_vec();
+        lines.push(event(T + 2));
+        let r = replay(&lines);
+        assert_eq!((tasks(&r), ends(&r)), (1, vec![]));
+        lines.push(user_text(
+            &notification(&["bpersist1"], Some("killed")),
+            T + 3,
+        ));
         assert_eq!(tasks(&replay(&lines)), 0);
+
         // A `taskId` from another tool opens nothing.
         let other = [
             call("toolu_2", "TaskCreate", json!({"subject": "<str 9>"}), T),
             result("toolu_2", json!({"taskId": "7"}), T + 1),
         ];
         assert_eq!(tasks(&replay(&other)), 0);
+        assert_eq!(ends(&replay(&other)), Vec::<i64>::new());
+    }
+
+    /// Review M1: a Monitor result of a shape 2.1.317 does not write never holds for the life of the process.
+    #[test]
+    fn a_monitor_of_another_shape_still_ends() {
+        let r = replay(&[
+            call("toolu_1", "Monitor", json!({}), T),
+            result("toolu_1", json!({"taskId": "bmon00001"}), T + 1),
+        ]);
+        assert_eq!((tasks(&r), ends(&r)), (0, vec![T + 1 + HOUR]));
+        assert_eq!(r.problem(), Some((TRANSCRIPT, "Monitor result")));
+        let r = replay(&[
+            call("toolu_1", "Monitor", json!({}), T),
+            result(
+                "toolu_1",
+                json!({"taskId": "bmon00001", "timeoutMs": 0, "persistent": false}),
+                T + 1,
+            ),
+        ]);
+        assert_eq!((tasks(&r), ends(&r)), (0, vec![T + 1 + HOUR]));
+        // Longer than 2.1.317 allows: a due time every hour from its start, so the core's hour before each covers it.
+        let r = replay(&[
+            call("toolu_1", "Monitor", json!({}), T),
+            result(
+                "toolu_1",
+                json!({"taskId": "bmon00001", "timeoutMs": 150 * MIN, "persistent": false}),
+                T + 1,
+            ),
+        ]);
+        assert_eq!(
+            ends(&r),
+            [T + 1 + HOUR, T + 1 + 2 * HOUR, T + 1 + 150 * MIN]
+        );
+        assert_eq!(r.problem(), Some((TRANSCRIPT, "Monitor result")));
+        // At most a day of them.
+        let r = replay(&[
+            call("toolu_1", "Monitor", json!({}), T),
+            result(
+                "toolu_1",
+                json!({"taskId": "bmon00001", "timeoutMs": 100 * DAY, "persistent": false}),
+                T + 1,
+            ),
+        ]);
+        assert_eq!(ends(&r).len(), MONITOR_STEPS as usize);
+        // A Monitor of an earlier process is gone with it.
+        let r = replay(&monitor("toolu_1", "bu1gw9xxc", 120_000, false, T));
+        assert_eq!(r.task_timers(T + 2), Vec::<i64>::new());
+    }
+
+    fn stop(tool: &str, name: &str, input: Value, stopped: &str, at: i64) -> [String; 2] {
+        [
+            call(tool, name, input, at),
+            result(
+                tool,
+                json!({"message": "<str 57>", "task_id": stopped, "task_type": "local_bash",
+                    "command": "<str 36>"}),
+                at + 1,
+            ),
+        ]
+    }
+
+    /// Review B1: Claude Code writes no notification for a task `TaskStop` stops; its result is the end.
+    #[test]
+    fn task_stop_closes_the_task_it_names() {
+        let mut opened = shell("toolu_1", "b1irxlyqr", T).to_vec();
+        opened.extend(shell("toolu_2", "b0000000b", T));
+        opened.extend(monitor("toolu_3", "bu1gw9xxc", 120_000, false, T));
+        opened.extend(monitor("toolu_4", "bpersist1", 0, true, T));
+        let r = replay(&opened);
+        assert_eq!((tasks(&r), ends(&r).len()), (3, 1));
+        for name in ["TaskStop", "KillShell", "KillBash"] {
+            let mut lines = opened.clone();
+            lines.extend(stop(
+                "toolu_9",
+                name,
+                json!({"task_id": "b1irxlyqr"}),
+                "b1irxlyqr",
+                T + 5,
+            ));
+            assert_eq!(tasks(&replay(&lines)), 2, "{name}");
+        }
+        // The result names the task; the input's `task_id` or older `shell_id` stands in when it does not.
+        let mut lines = opened.clone();
+        lines.extend(stop(
+            "toolu_9",
+            "TaskStop",
+            json!({"task_id": "bu1gw9xxc"}),
+            "bu1gw9xxc",
+            T + 5,
+        ));
+        lines.extend(stop(
+            "toolu_10",
+            "TaskStop",
+            json!({"task_id": "bpersist1"}),
+            "bpersist1",
+            T + 6,
+        ));
+        lines.push(call(
+            "toolu_11",
+            "KillShell",
+            json!({"shell_id": "b0000000b"}),
+            T + 7,
+        ));
+        lines.push(result("toolu_11", json!("Shell stopped"), T + 8));
+        let r = replay(&lines);
+        assert_eq!((tasks(&r), ends(&r).len()), (1, 0));
+        assert_eq!(r.problem(), None);
+        // A failed stop closes nothing; a stop of a task not known changes nothing.
+        let mut lines = opened.clone();
+        lines.push(call(
+            "toolu_9",
+            "TaskStop",
+            json!({"task_id": "b1irxlyqr"}),
+            T + 5,
+        ));
+        lines.push(failed("toolu_9", T + 6));
+        lines.extend(stop(
+            "toolu_10",
+            "TaskStop",
+            json!({"task_id": "a0ther000"}),
+            "a0ther000",
+            T + 7,
+        ));
+        assert_eq!(tasks(&replay(&lines)), 3);
+        // Neither the result nor the input names a task: named, nothing closed.
+        let mut lines = opened;
+        lines.push(call("toolu_9", "TaskStop", json!({}), T + 5));
+        lines.push(result("toolu_9", json!({"message": "<str 9>"}), T + 6));
+        let r = replay(&lines);
+        assert_eq!(tasks(&r), 3);
+        assert_eq!(r.problem(), Some((TRANSCRIPT, "TaskStop result")));
+    }
+
+    /// Review m1: a background shell whose result has no `backgroundTaskId` would stop holding with no sign, so it is
+    /// named. A foreground shell or a background subagent is not.
+    #[test]
+    fn a_background_shell_result_without_its_task_id_is_named() {
+        let named = replay(&[
+            call(
+                "toolu_1",
+                "PowerShell",
+                json!({"command": "<str 33>", "run_in_background": true}),
+                T,
+            ),
+            result(
+                "toolu_1",
+                json!({"stdout": "", "bgTaskId": "b1irxlyqr"}),
+                T + 1,
+            ),
+        ]);
+        assert_eq!(
+            named.problem(),
+            Some((TRANSCRIPT, "background shell result"))
+        );
+        assert_eq!(tasks(&named), 0);
+        let quiet = replay(&[
+            shell("toolu_1", "b1irxlyqr", T)[0].clone(),
+            failed("toolu_1", T + 1),
+            call("toolu_2", "Bash", json!({"command": "<str 9>"}), T + 2),
+            result("toolu_2", json!({"stdout": "<str 3>"}), T + 3),
+            call(
+                "toolu_3",
+                "Agent",
+                json!({"prompt": "<str 9>", "run_in_background": true}),
+                T + 4,
+            ),
+            result(
+                "toolu_3",
+                json!({"isAsync": true, "status": "async_launched", "agentId": "a1b2c3"}),
+                T + 5,
+            ),
+        ]);
+        assert_eq!(quiet.problem(), None);
+        assert_eq!(tasks(&replay(&shell("toolu_1", "b1irxlyqr", T))), 1);
+    }
+
+    /// Review m4: Claude Code's own reader takes a notification after its header, and several joined after it.
+    #[test]
+    fn a_notification_after_the_header_and_joined_ones_close_their_tasks() {
+        const DWE: &str = "[SYSTEM NOTIFICATION - NOT USER INPUT]\nThis is an automated background-task event, NOT a message from the user.\nDo NOT interpret this as user acknowledgement.\nNo human input has been received since the last genuine user message.\n\n";
+        let mut opened = Vec::new();
+        for (n, task) in ["b0000000a", "b0000000b", "b0000000c"].iter().enumerate() {
+            opened.extend(shell(&format!("toolu_{n}"), task, T));
+        }
+        let one = notification(&["b0000000a"], Some("completed"));
+        let two = notification(&["b0000000b"], Some("killed"));
+        let event = "<task-notification>\n<task-id>b0000000c</task-id>\n<summary><str 9></summary>\n<event><str 5></event>\n</task-notification>";
+        for (text, open) in [
+            (format!("{DWE}{one}"), 2),
+            (format!("{DWE}{one}\n\n{two}"), 1),
+            (format!("{DWE}{event}\n\n{one}\n\n{two}"), 1),
+            (
+                format!("<system-reminder>\n{DWE}{one}\n</system-reminder>"),
+                2,
+            ),
+            // Without the header only the first one counts, as Claude Code reads it.
+            (format!("{one}\n\n{two}"), 2),
+            // Text that only quotes the header or a notification closes nothing.
+            (format!("<str 9> {DWE}{one}"), 3),
+            (format!("{DWE}<str 9>\n\n{one}"), 3),
+        ] {
+            let mut lines = opened.clone();
+            lines.push(user_text(&text, T + 5));
+            assert_eq!(tasks(&replay(&lines)), open, "{text}");
+            let mut lines = opened.clone();
+            lines.push(attachment(
+                json!({"type": "queued_command", "prompt": text}),
+                T + 5,
+            ));
+            assert_eq!(tasks(&replay(&lines)), open, "queued: {text}");
+        }
+    }
+
+    /// Review m2: a computed recurring time also comes as the latest any flag value allows, and the real fire, early or
+    /// late, falls inside the core's window of one of them.
+    #[test]
+    fn a_computed_recurring_time_covers_every_flag_value() {
+        let lead = crate::policy::sessions::TIMER_LEAD_MS;
+        let margin = crate::policy::sessions::TIMER_MARGIN_MS;
+        for (id, cron) in [
+            ("bd9c33c4", "*/1 * * * *"),
+            ("ffffffff", "*/5 * * * *"),
+            ("80000000", "0 * * * *"),
+            ("ffffffff", "0 9 * * *"),
+            ("00000001", "*/15 * * * *"),
+        ] {
+            let lines = [
+                create("toolu_1", cron, true, T),
+                created("toolu_1", id, true, (T + MIN) as f64, T + 1),
+                fire(id, cron, None, T + MIN),
+            ];
+            let due = timers(&replay(&lines));
+            let parsed = Cron::parse(cron).unwrap();
+            let job = ClaudeJob {
+                id,
+                cron: &parsed,
+                recurring: true,
+                from_ms: T + MIN,
+            };
+            for frac in [0.0, 0.25, 0.5, 0.75, 1.0] {
+                for cap in [0, MIN, 30 * MIN] {
+                    for cache_lead in [0, 1, 15_000, MIN] {
+                        let flag = ClaudeScheduler {
+                            recurring_frac: frac,
+                            recurring_cap_ms: cap,
+                            cache_lead_ms: cache_lead,
+                            ..ClaudeScheduler::DEFAULT
+                        };
+                        let real = flag.next_fire_ms(&job, &ZONE).unwrap();
+                        assert!(
+                            due.iter().any(|&d| d - lead <= real && real < d + margin),
+                            "{cron} {frac} {cap} {cache_lead}: {real} {due:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Review m2: a `nextFireAt` the built-in values do not give is kept as a drift, for a live check.
+    #[test]
+    fn a_next_fire_the_built_in_scheduler_does_not_give_is_a_drift() {
+        let right = next_fire("bd9c33c4", "*/1 * * * *", true, T + 664);
+        let r = replay(&[
+            create("toolu_1", "*/1 * * * *", true, T),
+            created("toolu_1", "bd9c33c4", true, right as f64, T + 664),
+        ]);
+        assert_eq!(r.scheduler_drift_ms(), None);
+        let r = replay(&[
+            create("toolu_1", "*/1 * * * *", true, T),
+            created(
+                "toolu_1",
+                "bd9c33c4",
+                true,
+                (right + 20_000) as f64,
+                T + 664,
+            ),
+        ]);
+        assert_eq!(r.scheduler_drift_ms(), Some(20_000));
+        assert_eq!(timers(&r), [right + 20_000]);
+        assert_eq!(r.problem(), None);
+    }
+
+    /// Review m2: a job dropped at the built-in 7 day age comes back when Claude Code fires it again, and then only its
+    /// fire lines end it.
+    #[test]
+    fn a_job_fired_after_its_age_comes_back() {
+        let mut lines = vec![
+            create("toolu_1", "0 * * * *", true, T),
+            created("toolu_1", "00000000", true, (T + HOUR) as f64, T),
+            fire("00000000", "0 * * * *", None, T + 7 * DAY + 50 * MIN),
+        ];
+        assert_eq!(timers(&replay(&lines)), Vec::<i64>::new());
+        let again = T + 7 * DAY + 110 * MIN;
+        lines.push(fire("00000000", "0 * * * *", None, again));
+        let r = replay(&lines);
+        assert_eq!(
+            timers(&r)[0],
+            next_fire("00000000", "0 * * * *", true, again)
+        );
+        // It no longer ends at its age, nor at a resume.
+        lines.push(fire("00000000", "0 * * * *", None, again + HOUR));
+        assert_eq!(
+            timers(&replay(&lines)),
+            [next_fire("00000000", "0 * * * *", true, again + HOUR)]
+        );
+        let resumed = again + 2 * HOUR;
+        assert_eq!(
+            replay(&lines).timers(resumed, &ZONE),
+            [next_fire("00000000", "0 * * * *", true, resumed)]
+        );
+        // A delete still ends it.
+        lines.push(call(
+            "toolu_2",
+            "CronDelete",
+            json!({"id": "00000000"}),
+            again + 2 * HOUR,
+        ));
+        lines.push(result(
+            "toolu_2",
+            json!({"id": "00000000"}),
+            again + 2 * HOUR + 1,
+        ));
+        assert_eq!(timers(&replay(&lines)), Vec::<i64>::new());
     }
 
     /// Claude Code 2.1.317 marks the shells a dead process left in one notification with one `<task-id>` each.
@@ -1799,12 +2442,24 @@ mod tests {
         old.sort_unstable();
         assert_eq!(r.timers(T - 8 * DAY, &ZONE), old);
         // At the resume: the `*/5` job counts from it; the 8-day-old job, the missed one-shot and the wakeup are gone.
-        assert_eq!(r.timers(resumed, &ZONE), [resumed + 285_000, T + 80 * MIN]);
+        assert_eq!(
+            r.timers(resumed, &ZONE),
+            [
+                resumed + 285_000,
+                latest("f9471e8f", "*/5 * * * *", resumed),
+                T + 80 * MIN
+            ]
+        );
         // A fire of this process counts from the fire again.
-        lines.push(fire("f9471e8f", "*/5 * * * *", None, resumed + 285_500));
+        let fired = resumed + 285_500;
+        lines.push(fire("f9471e8f", "*/5 * * * *", None, fired));
         assert_eq!(
             replay(&lines).timers(resumed, &ZONE),
-            [resumed + 285_500 + 285_000, T + 80 * MIN]
+            [
+                fired + 285_000,
+                latest("f9471e8f", "*/5 * * * *", fired),
+                T + 80 * MIN
+            ]
         );
     }
 
@@ -1949,7 +2604,10 @@ mod tests {
         assert_eq!(r.problem(), Some((TRANSCRIPT, "CronCreate result")));
         assert_eq!(
             timers(&r),
-            [next_fire("bd9c33c4", "*/1 * * * *", true, T + 1)]
+            [
+                next_fire("bd9c33c4", "*/1 * * * *", true, T + 1),
+                latest("bd9c33c4", "*/1 * * * *", T + 1)
+            ]
         );
     }
 

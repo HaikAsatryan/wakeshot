@@ -54,9 +54,10 @@ the start is fine. Fields not listed here are ignored.
   through Keep screen on.
 - When the process is gone, the hold ends and Wakeshot deletes the file. Deleting it yourself when the work is done
   ends the hold at once.
-- A bad file (not JSON, no `pid`, a bad `expires`) is ignored and logged: it does not hold. Wakeshot reads it once
-  more after a short wait first, in case it was still being written. A file with a newer `version` than this
-  Wakeshot knows is ignored and logged too. `wakeshot log` opens the log.
+- A bad file (not JSON, no `pid`, pid 0 or 4, a bad `expires`) is ignored and logged: it does not hold. Pids 0 and 4
+  are Windows' own (System Idle and System), which end only with Windows. Wakeshot reads a bad file once more after a
+  short wait first, in case it was still being written. A file with a newer `version` than this Wakeshot knows is
+  ignored and logged too. `wakeshot log` opens the log.
 - Write the file under a temp name that does not end in `.json`, then rename it to its final name. Then Wakeshot
   never sees a half-written file.
 - When Automatic is off, hold files do not keep the PC awake. Only Keep awake does.

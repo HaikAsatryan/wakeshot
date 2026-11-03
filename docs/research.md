@@ -2476,3 +2476,33 @@ depends on elevation (the Medium case is in "Reading elevated Claude Code sessio
 - **No handle leak.** 1,000 cycles of add and remove (each with a missing folder too; every 10th with a completed
   read nobody took, every 20th with one taken and queued again), in a child test process of its own: 122 handles
   before and after (`GetProcessHandleCount`).
+
+## Claude parsing review fix checks
+
+Card `docs/tasks/p4-claude-transcript.md`, section "Claude parsing review fixes (2026-11-04)"; review
+`docs/reviews/p4-claude-parsing.md`. Read in Claude Code 2.1.317's bundled code (`C:\Users\haika\.local\bin\claude.exe`,
+read only, a byte search with context; minified names from that build only). None of it was run live; `p4-live-claude`
+runs the stops.
+
+- **`TaskStop`** (aliases `KillShell`, `KillBash`) takes `task_id`, else `shell_id`, and returns `{message, task_id,
+  task_type, command}` (`command` optional); a failed check is a tool error. Its stop path (`ILe`) marks a shell
+  `notified` and sends only an SDK stream event, so no `<task-notification>` reaches the transcript. Claude Code's own
+  resume reader (`hrn`) takes a `TaskStop`/`KillShell`/`KillBash` result with string `task_id` and `task_type` as the
+  stop. Verified in code.
+- **Monitor timeout**: the shell Monitor arms `setTimeout(timeoutMs)` after its task starts and before it returns
+  `{taskId, timeoutMs: persistent ? 0 : timeoutMs, persistent}`. At the timeout it queues one event notification (body
+  `<event>...</event>`, no `<status>`) and kills the task. Verified in code. The timeout fires a few ms before the
+  result line's time plus `timeoutMs`, so that sum is never early.
+- **Stop from the UI** (`tUr`): queues `<status>killed</status>` with `passive: true` and priority `next`. When it is
+  written to the transcript: not verified.
+- **Notification header**: `Dwe` is a first line `[SYSTEM NOTIFICATION - NOT USER INPUT]`, three more lines and a blank
+  line; `RJr` is a variant with the same first line, and one path wraps `Dwe` in `<system-reminder>`. Claude Code's own
+  reader (`qi`, `Xi`) strips `Dwe` and splits joined notices by `joinedNoticeLengths` (UTF-16 lengths), each after a
+  blank line; without the lengths it reads the rest as one notice. Verified in code; never seen in a transcript.
+- **Fire line** (`Dnr`): `{type, subtype, content, isMeta, timestamp, uuid, taskId, cron, prompt}` plus `taskKind`,
+  `cronKind`, `noOpStreak`, `streakStartedAt`, `foldedUuids` when set. Nothing marks a job's last fire at 7 days.
+  Verified in code.
+- **Latest fire under any flag value**: `ClaudeScheduler::latest_recurring_ms` (frac 1, cap 30 minutes, lead 0, and
+  `from + 5 min` for a `*/5` job). The unit test `a_computed_recurring_time_covers_every_flag_value` checks five crons
+  against 60 flag settings (frac 0 to 1, cap 0 to 30 minutes, lead 0 to 60 s): every real fire falls in the core's
+  window of one of the two reported times.

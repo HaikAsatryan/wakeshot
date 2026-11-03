@@ -399,12 +399,16 @@ fn the_live_timers_after_the_lines_that_change_them() {
             35,
             vec![1_793_716_080_000, 1_793_716_091_763],
         ),
-        // The resumed process, before its first fire: the `*/5` job counts from its start, the wakeup is gone.
+        // The resumed process, before its first fire: the `*/5` job counts from its start, the wakeup is gone. Its
+        // second time is the latest any flag value allows: with a lead above 0, before 5 minutes after the start.
         (
             "09-resume-clean",
             0,
             49,
-            vec![d("134381894952491900") + 285_000],
+            vec![
+                d("134381894952491900") + 285_000,
+                d("134381894952491900") + 300_000,
+            ],
         ),
         (
             "10-resume-kill",
@@ -416,7 +420,10 @@ fn the_live_timers_after_the_lines_that_change_them() {
             "10-resume-kill",
             0,
             39,
-            vec![d("134381894969847429") + 285_000],
+            vec![
+                d("134381894969847429") + 285_000,
+                d("134381894969847429") + 300_000,
+            ],
         ),
         (
             "11-resume-one-shot",
@@ -460,17 +467,18 @@ fn the_live_open_tasks() {
     let cases: Vec<Case> = vec![
         ("01-bg-shell", false, vec![(3, 0), (7, 0)]),
         ("02-monitor", false, vec![(5, 0)]),
+        // Its Monitors are not persistent: timers at their timeouts (`the_live_monitors_hold_until_their_timeout`).
         (
             "02-monitor",
             true,
             vec![
-                (5, 1),
+                (5, 0),
                 (9, 0),
-                (11, 1),
+                (11, 0),
                 (15, 0),
-                (19, 1),
-                (23, 1),
-                (27, 1),
+                (19, 0),
+                (23, 0),
+                (27, 0),
                 (31, 0),
             ],
         ),
@@ -497,6 +505,42 @@ fn the_live_open_tasks() {
             }
         });
         assert_eq!(checked, want.len(), "{name}");
+    }
+}
+
+/// Review M1 on live fixture 02: each Monitor (120 s, not persistent) holds as a timer at its result's time plus its
+/// timeout, until a notification with a `<status>` ends it; events change nothing. A terminal session's status says
+/// `shell` for it, so there it adds no timer.
+#[test]
+fn the_live_monitors_hold_until_their_timeout() {
+    let want: [(usize, &[i64]); 8] = [
+        (5, &[1_793_715_683_407]),
+        (9, &[]),
+        (11, &[1_793_715_689_001]),
+        (15, &[]),
+        (19, &[1_793_715_695_984]),
+        (23, &[1_793_715_695_984]),
+        (27, &[1_793_715_695_984]),
+        (31, &[]),
+    ];
+    let live = live("02-monitor");
+    for as_sdk in [true, false] {
+        let mut run = Run::new(&live);
+        run.as_sdk = as_sdk;
+        let mut checked = 0;
+        run.run(&live.steps, |seen| {
+            let Some((_, number, _)) = line_of(&live, seen.step) else {
+                return;
+            };
+            if let Some((_, timers)) = want.iter().find(|(line, _)| *line == number) {
+                let session = seen.after.as_ref().expect("a live session");
+                let timers = if as_sdk { *timers } else { &[] };
+                assert_eq!(session.timers, timers, "line {number}, SDK {as_sdk}");
+                assert_eq!(session.open_tasks, 0, "line {number}, SDK {as_sdk}");
+                checked += 1;
+            }
+        });
+        assert_eq!(checked, want.len());
     }
 }
 
@@ -566,10 +610,21 @@ fn a_resume_while_the_leftover_is_listed_goes_on_from_its_replay() {
     source.feed(&file, Feed::Appended(lines[..11].concat()));
     source.feed(&status_file(2), status_of(2, "134381895000000000"));
     source.feed(&status_file(1), Feed::Gone);
-    assert_eq!(only(&source).timers, [1_793_716_185_000, 1_793_716_440_000]);
+    assert_eq!(
+        only(&source).timers,
+        [1_793_716_185_000, 1_793_716_440_000, LATEST_5]
+    );
     source.feed(&file, Feed::Appended(lines[11..].concat()));
-    assert_eq!(only(&source).timers, [1_793_716_440_000, 1_793_716_471_100]);
+    assert_eq!(
+        only(&source).timers,
+        [1_793_716_440_000, 1_793_716_471_100, LATEST_5]
+    );
 }
+
+/// The latest fire any value of Claude Code's remote flag allows (review m2) for the `*/5` job of `resume.jsonl`
+/// (`f9471e8f`) counted from 14:25:00.000 or from its fire at 14:29:46.100 UTC: both give the 14:30 run plus the
+/// whole share of its 5 minute gap, `0xf9471e8f / 2^32 * 300 s` = 292.123 s.
+const LATEST_5: i64 = 1_793_716_492_123;
 
 /// Wakeshot started after the `/clear` reads only the new transcript: the carry line alone gives the job's next fire.
 #[test]
@@ -605,7 +660,8 @@ fn wakeshot_started_after_a_clear_finds_the_next_fire() {
         };
         let fired = time(value).unwrap();
         let timers = seen.before.expect("a live session").timers;
-        assert_eq!(timers, [1_793_715_748_955]);
+        // The second time is the latest any flag value allows: the whole share of the gap, not half.
+        assert_eq!(timers, [1_793_715_748_955, 1_793_715_777_910]);
         assert!((0..=SECOND).contains(&(fired - timers[0])));
         checked = true;
     });
@@ -651,13 +707,17 @@ fn only(source: &ClaudeSource) -> SessionFacts {
     session
 }
 
-const HAND: [&str; 7] = [
+const HAND: [&str; 11] = [
     "broken-line.jsonl",
     "carry-after-clear.jsonl",
     "deleted.jsonl",
+    "header-notice.jsonl",
+    "joined-notices.jsonl",
     "missing-field.jsonl",
+    "monitor-timeout.jsonl",
     "resume.jsonl",
     "seven-days.jsonl",
+    "task-stop.jsonl",
     "unknown-kind.jsonl",
 ];
 
@@ -679,8 +739,9 @@ fn a_broken_line_is_named_only_while_the_session_holds_anyway() {
     let idle = only(&fed("broken-line.jsonl", EARLY, "idle", "cli"));
     assert_eq!(idle.format, FormatHealth::Ok);
     assert_eq!(idle.activity, Activity::Idle);
-    // The first fire was lost with the broken line; the second one moved the job on.
-    assert_eq!(idle.timers, [1_793_715_742_220]);
+    // The first fire was lost with the broken line; the second one moved the job on. The second time is the latest
+    // any value of Claude Code's remote flag allows (review m2): the whole share of the minute, not half.
+    assert_eq!(idle.timers, [1_793_715_742_220, 1_793_715_764_440]);
     let busy = only(&fed("broken-line.jsonl", EARLY, "busy", "cli"));
     assert_eq!(
         busy.format,
@@ -737,8 +798,8 @@ fn a_recurring_job_ends_after_its_fire_at_7_days() {
         [
             vec![],
             vec![1_793_715_622_220],
-            vec![at("14:19:22.220")],
-            vec![at("14:20:22.220")],
+            vec![at("14:19:22.220"), at("14:19:44.440")],
+            vec![at("14:20:22.220"), at("14:20:44.440")],
             vec![],
         ]
     );
@@ -751,6 +812,65 @@ fn a_recurring_job_ends_after_its_fire_at_7_days() {
     );
     resumed.feed(&file, Feed::Appended(lines_of(&bytes)[..4].concat()));
     assert_eq!(only(&resumed).timers, Vec::<i64>::new());
+}
+
+/// Each fixture line by line, as an SDK session reads it: its timers and open tasks after each line.
+fn sdk_steps(name: &str) -> Vec<(Vec<i64>, u32)> {
+    let (session_id, bytes) = hand(name);
+    let mut source = source();
+    source.feed(
+        &status_file(PID),
+        Feed::Whole(status(PID, EARLY, &session_id, "idle", "sdk-cli")),
+    );
+    let file = transcript_file("C--Users-USER-wakeshot-test-hand", &session_id);
+    lines_of(&bytes)
+        .into_iter()
+        .map(|line| {
+            source.feed(&file, Feed::Appended(line.to_vec()));
+            let session = only(&source);
+            assert_eq!(session.format, FormatHealth::Ok, "{name}");
+            (session.timers, session.open_tasks)
+        })
+        .collect()
+}
+
+/// Review B1: the shell stopped with `TaskStop` is closed by the stop's result; Claude Code writes no notification.
+#[test]
+fn a_task_stop_ends_the_shell_it_names() {
+    assert_eq!(
+        sdk_steps("task-stop.jsonl"),
+        [(vec![], 0), (vec![], 1), (vec![], 1), (vec![], 0)]
+    );
+}
+
+/// Review M1: a 120 s Monitor holds as a timer at 14:21:35.984 UTC; its timeout's event, which has no `<status>`,
+/// changes nothing, and the core's window ends 2 minutes after the time.
+#[test]
+fn a_monitor_that_times_out_holds_only_until_its_timeout() {
+    let due = 1_793_715_695_984;
+    assert_eq!(
+        sdk_steps("monitor-timeout.jsonl"),
+        [(vec![], 0), (vec![due], 0), (vec![due], 0), (vec![due], 0)]
+    );
+}
+
+/// Review m4: a notification after Claude Code's own header closes its shell, and so does each of two joined ones.
+#[test]
+fn notifications_after_the_header_close_their_shells() {
+    assert_eq!(
+        sdk_steps("header-notice.jsonl"),
+        [(vec![], 0), (vec![], 1), (vec![], 0)]
+    );
+    assert_eq!(
+        sdk_steps("joined-notices.jsonl"),
+        [
+            (vec![], 0),
+            (vec![], 1),
+            (vec![], 1),
+            (vec![], 2),
+            (vec![], 0)
+        ]
+    );
 }
 
 fn filetime(wall_ms: i64) -> String {
@@ -792,6 +912,7 @@ fn a_carry_line_after_clear_is_the_armed_set() {
         session.timers,
         [
             1_793_715_808_955,
+            1_793_715_837_910,
             1_793_716_080_000,
             1_793_717_100_000,
             1_793_770_200_000
@@ -814,7 +935,8 @@ fn a_resumed_process_takes_back_only_what_claude_code_restores() {
             1_793_715_780_000,
             1_793_716_080_000,
             1_793_716_440_000,
-            1_793_716_471_100
+            1_793_716_471_100,
+            LATEST_5
         ]
     );
     assert_eq!(one.open_tasks, 0);
@@ -830,10 +952,16 @@ fn a_resumed_process_takes_back_only_what_claude_code_restores() {
     source.feed(&file, Feed::Appended(lines[..11].concat()));
     let resumed = only(&source);
     // The missed one-shot, the wakeup and the dead process's shell are gone; the `*/5` job counts from the start.
-    assert_eq!(resumed.timers, [1_793_716_185_000, 1_793_716_440_000]);
+    assert_eq!(
+        resumed.timers,
+        [1_793_716_185_000, 1_793_716_440_000, LATEST_5]
+    );
     assert_eq!(resumed.open_tasks, 0);
     source.feed(&file, Feed::Appended(lines[11..].concat()));
-    assert_eq!(only(&source).timers, [1_793_716_440_000, 1_793_716_471_100]);
+    assert_eq!(
+        only(&source).timers,
+        [1_793_716_440_000, 1_793_716_471_100, LATEST_5]
+    );
 }
 
 /// Rule 5: one `FindTail` per transcript a live session names, by name only.
@@ -883,6 +1011,25 @@ fn wanted_tails_each_session_transcript_by_name() {
     assert_eq!(find(&source), [format!("{b}.jsonl")]);
 }
 
+/// Review m5: a `sessionId` of another shape hides the transcript, so it is named like a transcript problem: only
+/// while the session holds anyway, by its length, never its text.
+#[test]
+fn a_session_id_of_another_shape_is_named_while_the_session_holds() {
+    let facts = |status_text: &str| {
+        let mut source = source();
+        source.feed(
+            &status_file(PID),
+            Feed::Whole(status(PID, EARLY, "a/b", status_text, "sdk-cli")),
+        );
+        only(&source).format
+    };
+    assert_eq!(
+        facts("busy"),
+        FormatHealth::UnknownValue("sessionId", "<string 3>".into())
+    );
+    assert_eq!(facts("idle"), FormatHealth::Ok);
+}
+
 /// Only the transcript a session names, in a project folder, as appended bytes, reaches its replay.
 #[test]
 fn a_transcript_it_did_not_ask_for_is_ignored() {
@@ -922,7 +1069,7 @@ fn a_transcript_it_did_not_ask_for_is_ignored() {
         Feed::Appended(bytes.clone()),
     );
     let timers = only(&source).timers;
-    assert_eq!(timers.len(), 4);
+    assert_eq!(timers.len(), 5);
     source.feed(
         &FileId(projects().join("second").join(&name)),
         Feed::Appended(hand("resume.jsonl").1),

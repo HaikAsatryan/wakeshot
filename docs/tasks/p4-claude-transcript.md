@@ -240,3 +240,127 @@ checks", addition only), this card.
 
 **Open items.** Not verified (in research): the `bg` resume path, a Monitor timeout writing no line, the `*/5`
 carry guess. The scratch scripts and the build folder are deleted.
+
+## Claude parsing review fixes (2026-11-04)
+
+Status: done. Agent: `wakeshot-worker` (work name `p4-claude-fixes`). Findings from
+`docs/reviews/p4-claude-parsing.md`: B1, M1, m1 to m5, m7, m8 (third bullet); rules 3 and 5 of
+`docs/research/claude-code-signals.md` (rule 5 added by the orchestrator, 2026-11-04). Not this round: m6.
+
+### Log
+
+- 2026-11-04 00:11: started. Read the review, this card, the Results of `p4-claude-status` and `p4-cron`, the
+  signals doc. Read Claude Code 2.1.317 (`claude.exe`, read only): `TaskStop` returns `{message, task_id, task_type,
+  command}` and takes `task_id` or `shell_id`; its own resume scanner (`hrn`) takes the result of a `TaskStop`,
+  `KillShell` or `KillBash` call with string `task_id` and `task_type` as the stop. The shell Monitor arms its
+  timeout before it returns `{taskId, timeoutMs: persistent ? 0 : timeout, persistent}`. A stop from the UI queues a
+  `passive` notification with `<status>killed</status>` (`tUr`). The notification header (`Dwe`) is a fixed text that
+  starts `[SYSTEM NOTIFICATION - NOT USER INPUT]` and ends with a blank line; joined notices follow it, split by a
+  blank line (`qi`, `Xi`). A fire line has no field that marks a job's last fire.
+- 2026-11-04 00:24: B1, M1, m1, m2, m4, m5 built in `transcript.rs`, `status.rs`, `mod.rs`, `cron.rs`, with unit
+  tests and 4 hand fixtures (`task-stop`, `monitor-timeout`, `header-notice`, `joined-notices`). A mutation back to
+  the old behavior (TaskStop ignored, Monitor as an open task, header not read) fails 4 new unit tests. Monitor
+  timers are added only for sessions whose `entrypoint` is not `cli`: a terminal session's status says `shell` for
+  it, so a timer there would hold up to an hour after a UI stop with the status already `idle`.
+- m2 decision (Haik's rule: no work, no hold; never hold forever): a computed recurring time is reported twice, as
+  the built-in values give it and as the latest any flag value in the schema allows. Not "may miss a fire by the
+  jitter": a missed fire is work the PC sleeps through. Not the review's "latest only": that moves the hold's start
+  up to 15 minutes later than the decided 1 hour lead. With two times the window runs from the built-in time less 1
+  hour to the latest plus 2 minutes; the real fire ends it through its fire line, so with the built-in values the
+  hold is exactly as before, and it is longer (at most about 15 minutes) only when a fire never comes. The 7 day end
+  stays at the built-in value (dropping a job after its fire at 7 days costs nothing when the flag is the built-in);
+  a later fire of that job brings it back and only fire lines end it from then on: one missed fire at most if the
+  flag ever raises the age. The drift check is `Replay::scheduler_drift_ms()` for `p4-live-claude`: the core has no
+  log of its own and a source's sessions carry no log line, so a log needs a contract change.
+- 2026-11-04 00:28: m7, docs (rules 3 and 5, `product.md`, `hold-files.md`, research, fixture README), the m5 source
+  test and every check done. m3 left: its fix is in `watch/agents.rs`, not `read.rs` (Result). Status done.
+
+### Result
+
+Status: done. Fixed: B1, M1 (part a; part b as far as the code can), m1, m2, m4, m5, m7, m8's third bullet, and
+rule 5. Left: m3 (not this round's file). Not this round: m6. No contract change.
+
+**What was done.**
+
+- B1: `TaskStop`, `KillShell` and `KillBash` calls are kept; a result that is not an error closes its `task_id`
+  (else the input's `task_id`, then `shell_id`); when none names a task: `transcript`/`TaskStop result`. `message`
+  and `command` are never read.
+- M1: a Monitor result with `persistent: false` is a task with an end (its time plus `timeoutMs`), reported by the new
+  `Replay::task_timers` and added to `timers` only for sessions whose `entrypoint` is not `cli`; `open_tasks` counts
+  only tasks with no end (shells, persistent Monitors). A `<status>` or a stop removes it; it is forgotten an hour
+  after its end. A Monitor result of another shape (no `timeoutMs`, or 0 without `persistent`) is named and ends after
+  1 hour; a timeout over 1 hour is named and gets a due time every hour from its start, at most 24. Part b (UI stop):
+  the `killed` notification already closes in every form the code knows, now also after the header (m4); nothing
+  else is safe without a new file kind (decision 3 below).
+- m1: a Bash or PowerShell call with `run_in_background: true` whose result has no `backgroundTaskId` is named
+  `transcript`/`background shell result`.
+- m2: a computed recurring time also comes as `ClaudeScheduler::latest_recurring_ms` (new, `cron.rs`): the latest any
+  flag value the schema allows. `Replay::scheduler_drift_ms()` keeps the first gap over 2 s between a `nextFireAt` and
+  the built-in time. A job dropped at the built-in 7 days comes back at its next fire line or carry line and is not
+  aged again.
+- m4: `notice_ids` takes Claude Code's header (also inside `<system-reminder>`) and, after it, every notification
+  joined after a blank line that follows a `</task-notification>`.
+- m5: `StatusFile::session_id_problem` (`<string N>` or the JSON type); `mod.rs` names it as
+  `UnknownValue("sessionId", ...)` only while the session holds anyway, like a transcript problem.
+- m7: `holds/file.rs` refuses pid 4 ("pid 4 is the System process"); `docs/hold-files.md` says so.
+- Docs: rules 3 and 5 of `docs/research/claude-code-signals.md` (rule 3: any `<status>`, the header and joined forms,
+  the ends with no notification; rule 5: the resume and reminder texts the code follows, the two times, the 7 day
+  comeback); `docs/product.md`, Claude Code sources: the silent ends. `docs/research.md`: "Claude parsing review fix
+  checks".
+
+**Decided by the worker, for Haik's review.**
+
+1. m2, by Haik's rule: two due times (built-in and latest), not "may miss a fire" and not the review's "latest only"
+   (Log 00:24). Cost: up to about 15 minutes more hold, only when a fire never comes.
+2. m2: the 7 day end stays at the built-in value; a fire after it brings the job back. Cost: one missed fire if the
+   flag ever raises the age.
+3. M1 part b: the task's output file (`[killed]` trailer) is not read: it is a new wanted-file kind that reads tool
+   output. A UI stop may hold until Claude Code writes its `killed` line or the session ends. Said in `product.md`.
+4. A Monitor of an unknown shape ends after 1 hour rather than holding for the life of the process.
+5. m5: a missing `sessionId` is not a problem (early writes may lack it); only a present one of another shape is.
+6. m4: joined notices are split at a blank line after each end tag, not by `joinedNoticeLengths` (that field may
+   come after the text on the line, and the text is never stored).
+
+**Tests** (each fails before its fix: the behavior is new, or a mutation back to the old code failed 4 of them).
+
+- `transcript.rs` (8 new, 1 of them replacing `a_monitor_opens_a_task_and_its_events_close_nothing`):
+  `a_monitor_holds_until_its_timeout_and_its_events_close_nothing`, `a_monitor_of_another_shape_still_ends`,
+  `task_stop_closes_the_task_it_names`, `a_background_shell_result_without_its_task_id_is_named`,
+  `a_notification_after_the_header_and_joined_ones_close_their_tasks`,
+  `a_computed_recurring_time_covers_every_flag_value` (5 crons, 60 flag settings),
+  `a_next_fire_the_built_in_scheduler_does_not_give_is_a_drift`, `a_job_fired_after_its_age_comes_back`; and a
+  compile-time check that the core's lead is at least `MONITOR_MAX_MS`. Six older tests now expect the second time.
+- `status.rs`: `a_session_id_of_another_shape_is_named`. `holds/file.rs`: pid 4 added next to the pid 0 case.
+- `tests/claude_transcript.rs` (5 new): `the_live_monitors_hold_until_their_timeout`,
+  `a_task_stop_ends_the_shell_it_names`, `a_monitor_that_times_out_holds_only_until_its_timeout`,
+  `notifications_after_the_header_close_their_shells`,
+  `a_session_id_of_another_shape_is_named_while_the_session_holds`. Older ones now expect the second time or the
+  Monitor as a timer. New hand fixtures: `task-stop.jsonl`, `monitor-timeout.jsonl`, `header-notice.jsonl`,
+  `joined-notices.jsonl`, built by a scratch script from the redacted live lines (README rows).
+
+**Checks.** `rustfmt --edition 2024 --check` on every changed Rust file: clean. `cargo clippy -p wakeshot-core
+--locked --target <t> -- -D warnings`, with and without `--all-targets`, x86_64 and aarch64: all exit 0. `cargo test
+-p wakeshot-core --locked`: 561 lib tests (2 ignored, not mine), `claude_status` 10, `claude_transcript` 24, all
+pass. No failure in another card's file. Secret scan of the new fixtures and changed files (`haika`, the host name,
+UUIDs that are not `5e55` fakes): 0 hits. `read.rs` was not changed, so no `wakeshot-windows` check was run.
+
+**Files changed.** `crates/wakeshot-core/src/sources/claude/transcript.rs`, `status.rs`, `mod.rs`;
+`crates/wakeshot-core/src/sources/cron.rs`; `crates/wakeshot-core/src/holds/file.rs`;
+`crates/wakeshot-core/tests/claude_transcript.rs`; `crates/wakeshot-core/tests/fixtures/claude/transcript/` (4 new
+files, README rows); `docs/research/claude-code-signals.md` (rules 3 and 5 only); `docs/product.md` (Claude Code
+sources); `docs/hold-files.md`; `docs/research.md` (new section at the end); this card.
+
+**Left, and found outside scope.**
+
+1. m3 is not done: the early `return` is in `crates/wakeshot-windows/src/watch/agents.rs` (`fill_folder`, the `Err`
+   arm of `names`), not in `read.rs`, which only lists. Fix: on that error take `state.known`'s names as the
+   targets. Its test needs a folder whose listing is denied while its files stay readable (a deny ACE for listing on
+   the folder only); the current test `a_folder_that_cannot_be_listed_keeps_its_last_files` replaces the folder by a
+   file, where the fix would rightly feed `Gone`.
+2. The README should say that a task stopped from Claude Code's UI may hold until the next prompt (review M1 b). Not
+   this round's file.
+3. For `p4-live-claude`: an SDK background shell stopped with `TaskStop` (expect no notification and `open_tasks` 0
+   after the result), a Monitor timeout (expect one event line, no `<status>`), a stop from the VS Code panel (when
+   the `killed` line lands), whether a header form ever shows in a transcript, and `Replay::scheduler_drift_ms()` on
+   live jobs.
+4. Logging the drift needs a log path from a source (a contract change): `sessions()` carries no log line.

@@ -65,6 +65,9 @@ pub struct StatusFile {
     /// `sessionId`, the transcript's file name, kept only when it is a plain id (ASCII letters, digits, `-`, `_`; at
     /// most 64), so it can never turn a transcript search into a path elsewhere.
     pub session_id: Option<String>,
+    /// A `sessionId` that is there but not a plain id, as `<string N>` (N bytes) or its JSON type in angle brackets:
+    /// its transcript cannot be found, so its timers and tasks are not known (review m5).
+    pub session_id_problem: Option<String>,
     /// `procStartFt`, else `procStart`, as Claude's own readers take it.
     pub proc_start: FileTime,
     pub activity: Activity,
@@ -137,9 +140,15 @@ pub fn parse(name_pid: u32, bytes: &[u8]) -> Result<StatusFile, Problem> {
         raw.status_updated_at.as_ref(),
         raw.bridge_session_id.as_ref(),
     );
+    let (session_id, session_id_problem) = match raw.session_id.map(session_id) {
+        None => (None, None),
+        Some(Ok(id)) => (Some(id), None),
+        Some(Err(problem)) => (None, Some(problem)),
+    };
     Ok(StatusFile {
         pid: name_pid,
-        session_id: raw.session_id.and_then(session_id),
+        session_id,
+        session_id_problem,
         proc_start,
         activity,
         unknown_status,
@@ -247,7 +256,8 @@ fn type_name(value: &Value) -> &'static str {
     }
 }
 
-fn session_id(value: Value) -> Option<String> {
+/// The id, or how it is shown when it is not a plain one: never its text, which could be anything.
+fn session_id(value: Value) -> Result<String, String> {
     match value {
         Value::String(id)
             if (1..=SESSION_ID_MAX).contains(&id.len())
@@ -255,9 +265,10 @@ fn session_id(value: Value) -> Option<String> {
                     .bytes()
                     .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') =>
         {
-            Some(id)
+            Ok(id)
         }
-        _ => None,
+        Value::String(id) => Err(format!("<string {}>", id.len())),
+        other => Err(type_name(&other).to_owned()),
     }
 }
 
@@ -557,6 +568,25 @@ mod tests {
         );
     }
 
+    /// Review m5: a `sessionId` of a new shape is named by its length or type, never its text; a missing one is not.
+    #[test]
+    fn a_session_id_of_another_shape_is_named() {
+        let problem_of = |value: &str| read(&format!(r#""sessionId":{value}"#)).session_id_problem;
+        assert_eq!(problem_of(r#""a/b""#).as_deref(), Some("<string 3>"));
+        assert_eq!(problem_of(r#""""#).as_deref(), Some("<string 0>"));
+        assert_eq!(problem_of("42").as_deref(), Some("<number>"));
+        assert_eq!(problem_of(r#"{"id":"x"}"#).as_deref(), Some("<object>"));
+        let long = "a".repeat(SESSION_ID_MAX + 1);
+        assert_eq!(
+            problem_of(&format!(r#""{long}""#)),
+            Some(format!("<string {}>", SESSION_ID_MAX + 1))
+        );
+        for plain_or_missing in [r#""5e550002-0000-4000-8000-000000000002""#, "null"] {
+            assert_eq!(problem_of(plain_or_missing), None, "{plain_or_missing}");
+        }
+        assert_eq!(read("").session_id_problem, None);
+    }
+
     #[test]
     fn entrypoint_and_kind() {
         let entry = |fields: &str| read(fields).entrypoint;
@@ -601,6 +631,7 @@ mod tests {
         let StatusFile {
             pid,
             session_id,
+            session_id_problem,
             proc_start,
             activity,
             unknown_status,
@@ -624,6 +655,7 @@ mod tests {
             session_id.as_deref(),
             Some("5e550002-0000-4000-8000-000000000002")
         );
+        assert_eq!(session_id_problem, None);
     }
 
     #[test]
