@@ -160,10 +160,19 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   bundles, two separate reviews instead of one loop per phase, Codex and Copilot after v1, lid-closed mode stays.
   Next (orchestrator): start cards at once from the phase tables, bundles as one worker, the old wave 2 cards first
   (`p2-policy-holds`, `p2-policy-power`, `p2-present`, `p4-hold-files`). The line below is older.
-- Next (orchestrator), before the re-plan: the card tables in the phase files 02 to 06 and `06-integration.md` hold
-  the build state from now on. (1) `p6-int-skeleton` ends: commit; (2) wave 2, the core chain first (the integration critical path):
-  `p2-policy-holds`, `p2-policy-power`, `p2-present`, `p4-hold-files`; then fill free slots from `p2-core-holds`,
-  `p2-ownership-apply`, `p3-journal`, `p4-watch-reads`, and the rest in each track's order (laptop cards one at a
-  time, at most four building cards at once); (3) push after each track phase passes review. Power: a SYSTEM request
-  from this session (pwsh PID 12276, scratchpad `away-system-holder.ps1`) runs until about 00:15 (the old one ends
-  about 20:20); Haik's power values are untouched.
+- 2026-11-03 21:24: non-stop build since 19:55 (session `wakeshot-91`), at most four building cards. Done and
+  committed: 16 cards (core: policy holds and power, present, apply, core holds and settings; power: journal, power
+  plan, system events, requests, session, power IO, hibernate, recovery; sources: hold files, watch reads and data)
+  plus a docs pass on `architecture.md`. Haik's answers 21:21: unplug settle 30 s; a work-end countdown follows the
+  user's own lid action for the new power source. Haik's battery sleep is now 4 h (set 20:41). Running at 21:24:
+  `p2-core-lid`, `p4-claude-status`, `p4-cron`, `p3-stop-points` (laptop lane). Not pushed: 391 commits since
+  `0f9960a`; push after a track passes its review.
+- Next (orchestrator): fill each free slot from every track. Ready now: `p2-ownership-props`, `p3-harness`,
+  `p4-watch-agents`, `p4-watch-folders`, the `p4-cli-args` + `p4-cli-run` and `p4-cli-commands` + `p4-cli-restore`
+  bundles, `p5-theme` + `p5-menu-paint`, `p5-icon-art`, `p5-text`, `p6-login-and-path` + `p6-update-schedule`; laptop
+  lane after `p3-stop-points`: `p6-velopack-facts`; then `p4-claude-transcript` (after status and cron), `p2-core-props`
+  (after lid). The power safety review starts when `p2-core-lid`, `p2-ownership-props` and `p3-stop-points` are done;
+  give it the open items logged in `02-core.md` and `03-windows-power.md` (the `Leftover` restore answer goes to its
+  fix round). The open doc items go to one docs pass. Power: the SYSTEM request (pwsh PID 12276, old scratchpad
+  `away-system-holder.ps1`, copied to this session's scratchpad) runs until about 00:15; start a new one before then
+  if work goes on.
