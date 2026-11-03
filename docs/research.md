@@ -2322,3 +2322,28 @@ AC 1 and DC 1, sleep AC 10800 and DC 14400, energy saver DC 30; no `WakeshotRest
   integrity. At Medium: not tested here (`p3-real-checks`).
 - **pwsh and exit codes.** `& exe bad-args 2>&1 | Select-Object -First 2` then `$LASTEXITCODE` read 0 though the
   exe exits 2; without the pipe it read 2. Read exit codes without a pipe.
+
+## Core property test checks
+
+Card `p2-core-props`, 2026-11-03, on this laptop, each with how it was checked.
+
+- **proptest prints the shrunk input with `{:#?}`.** proptest 1.12.0, `src/test_runner/errors.rs` line 119:
+  `write!(f, "minimal failing input: {:#?}", what)`. So a case type with its own `Debug` (one line per world step)
+  prints as written, each line indented by the pretty printer.
+- **Cost of one core step in the world.** The coverage tally (256 cases of the general mix, debug build): 15,759
+  core steps and 25,670 log entries in 0.58 s, about 37 us per core step, IO runs included.
+- **How often the general mix builds a property's chain** (tally, 256 cases, after the first rebalance): 11 changes
+  that leave a closed laptop on battery, unlocked, on our Do nothing (the AC to battery lock); 70 user changes inside
+  an episode; 2 restore retries while the core applies. With the first weights, sticky states (another session on
+  the console, a session end, a step back) covered most steps. The AC to battery lock mutant survived the general mix
+  at 256 cases and was killed in 3 of 3 runs once the lid properties also drew from a lid-weighted mix.
+- **Finding 1, shown with the world.** A hold on Balanced; the user sets Balanced's battery sleep, then switches
+  plan before the next read. The read posts `Plan(other)` before `UserChanged(Balanced, SleepDc)`; the core's switch
+  apply carries all three keys, the release comes after, and our battery sleep Never stays in force on the other plan
+  for the rest of the episode. Shrunk case in `p2-core-props`, "Found outside scope" 1.
+- **Finding 2, shown with the world.** With a crashed tray's journal in `Started` (the start-up restore failed), a
+  lid close before the first `Plan(Ok)` gets no lock: `Core::in_force` gives `None` with no plan read. Shrunk case in
+  `p2-core-props`, "Found outside scope" 2.
+- **pwsh splat of a one-flag array.** `$a = if ($all) { @("--all-targets") } else { @() }` then `& cargo clippy @a`
+  failed with "unexpected argument '-' found"; written out literally, the flag worked. Why the splat broke it: not
+  verified (most likely the `if` unrolled the array to a string). Pass such flags literally.
