@@ -350,10 +350,10 @@ While holding:
   sound. A user whose own lid action is Do nothing (docked use) gets no lock and no sound.
 - Power source changes while the lid is closed: if the lid action in force for the new source is our Do nothing, and
   either it was the user's own before (their AC action is Do nothing, ours is the DC one) or the change is AC to
-  battery, then once the new source has lasted 5 s: `Lock` and `Play(LidClosedHolding)`. AC to battery covers a user
+  battery, then once the new source has lasted 30 s: `Lock` and `Play(LidClosedHolding)`. AC to battery covers a user
   who signed in on an external screen after the lid-close lock and then unplugs the dock: without it the laptop goes
-  into a bag running and unlocked. The 5 s keep a dock's short AC drop (research, "AC can drop for a few seconds while
-  docked") from locking someone who types on an external screen; someone who unplugs only the charger while doing so
+  into a bag running and unlocked. The 30 s (Haik, 2026-11-03) keep a dock's short AC drop (5.3 s and 6.3 s on the
+  test laptop; research, "AC can drop for a few seconds while docked", "Power rules checks") from locking someone who types on an external screen; someone who unplugs only the charger while doing so
   is locked, the safe side (decision 18). What Windows itself would do with the user's values at that moment: not
   tested (checklist 8).
 - Another user's session takes the PC's own screen and keyboard (fast user switching, `Session(ConsoleLeft)`):
@@ -993,7 +993,7 @@ and after, and change nothing by hand during the test.
 | 5 | Tray and guard killed, start at login off, sign out and in: RunOnce restores | 3 |
 | 6 | Sign out during a hold: restored before the session ends | 3 |
 | 7 | Work ends with the lid closed: hibernates after 5 minutes; not while typing on an external screen | 6 (integration) |
-| 8 | Battery floor with a short AC drop on the dock; the lid closed on the dock with the user's own AC lid action Do nothing, then unplugged: lock and sound, and what Windows does with the user's own values; the lid closed on the dock while holding, signed in on the external screen, then unplugged: lock and sound after 5 s on battery, none for a short AC drop | 6 (integration) |
+| 8 | Battery floor with a short AC drop on the dock; the lid closed on the dock with the user's own AC lid action Do nothing, then unplugged: lock and sound, and what Windows does with the user's own values; the lid closed on the dock while holding, signed in on the external screen, then unplugged: lock and sound after 30 s on battery, none for a short AC drop | 6 (integration) |
 | 9 | Plan switch during a hold | 6 (integration) |
 | 10 | Unlock after a closed-lid hold: the report notice | 6 (integration) |
 | 11 | `Global\` mutex as a normal user; a second session (optional): fast user switching during a hold gives `WTS_CONSOLE_DISCONNECT` and the restore, coming back gives `WTS_CONSOLE_CONNECT` and the apply; the same for Remote Desktop into the session | 3; console part 6 |

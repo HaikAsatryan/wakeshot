@@ -129,7 +129,7 @@ laptop" cards run one at a time across all tracks.
 | `p3-system-events` | no | no (notifications only) | contracts card | done (20:46): 26 tests, both real tests pass |
 | `p3-session` | no | no (the lock test is ignored here) | contracts card | done (20:47): 4 tests, 3 ignored for `p3-real-checks` and `p3-haik-checks` |
 | `p3-journal` | no | no | `p3-store`, `p3-log` | done (20:26): 16 tests |
-| `p3-hibernate` | no | no (never calls `SetSuspendState`) | `p3-system-events` | running (21:05) |
+| `p3-hibernate` | no | no (never calls `SetSuspendState`) | `p3-system-events` | done (21:19): 21 tests; hibernate checks now run before the sound |
 | `p3-power-io` | no | no | `p3-journal`, `p3-power-plan`, core `p2-ownership-apply` | done (21:04): 24 tests, 22 of 22 mutants caught |
 | `p3-recovery` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09) | no | `p3-journal`, `p3-process`, `p3-log`, `p3-power-plan` (verify review Minor 3), core `p2-ownership-restore` | running (20:49) |
 | `p3-stop-points` | no | yes: a plan copy, never active | `p3-power-plan`, `p3-journal`, core `p2-ownership-apply` | ready |
@@ -188,3 +188,7 @@ Critical path: store, journal, (core ownership cards), power-io, harness, real-c
 - 2026-11-03 20:50: `p3-system-events` and the `p3-requests` + `p3-session` bundle done and committed. Running:
   `p3-power-io` (20:37), `p3-recovery` (20:49). Open, cleanup for later: the Win32 error mapping has four private
   copies; one helper in `error.rs` would do (`p3-session`).
+- 2026-11-03 21:21: `p3-hibernate` done and committed. Open, for the docs pass: `architecture.md` section 5 still lists
+  the old hibernate order (privilege and `IsPwrHibernateAllowed` now run before the sound). For `p5-sounds`: keep the
+  "going to sleep" sound short, since a lid opened while it plays still hibernates. `testing.rs` does not re-export
+  `FakeHibernate`.

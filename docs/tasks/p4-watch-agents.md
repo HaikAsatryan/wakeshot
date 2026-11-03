@@ -71,6 +71,8 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03 16:53: card written by `p4-plan-sources`.
+- 2026-11-03 21:15, orchestrator, from `p4-watch-reads`' Result: when a `TailRead` says `restarted`, feed `Gone` and
+  then `Appended`. `names` returns `io::Result`, so a listing error does not read as every name gone.
 
 ## Result
 

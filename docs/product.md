@@ -78,7 +78,8 @@ Wakeshot writes and puts back each time, show in the icon and tooltip only (Haik
   (Windows Hello greys the choice out on the test laptop), so until a test shows it, Wakeshot locks. There is no test
   account for it, so v1 always locks at lid close while holding (Haik, 2026-11-03). No lock on lid close in docked
   use (the user's own lid action is Do nothing). Unplugging a closed laptop that then keeps running only because of
-  Wakeshot locks it too, once it has been on battery for 5 seconds (a dock can drop AC for a few seconds).
+  Wakeshot locks it too, once it has been on battery for 30 seconds (Haik, 2026-11-03: the test laptop's dock dropped
+  AC for 5.3 s and 6.3 s, so 5 s locked him while he worked on the external screen).
 - Sounds wherever they give a useful hint (Haik, 2026-11-03):
   - Lid closed while Wakeshot holds: a short chime says the laptop keeps running.
   - Work ended with the lid closed: a short "going to sleep" sound right before Wakeshot hibernates the laptop.

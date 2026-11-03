@@ -205,3 +205,7 @@ Where each item this track owns is built. "Integration" is planned after the tra
   (`p2-core-settings` Found outside scope 2). For `p3-power-io`'s worker (next free slot): a `Leftover` restore not
   run because the owner is Unknown must answer `Err`, not `Ok` (item 3). Later, contract: a `RestoreWhy` for the
   restore after a failed apply (item 1; today `WorkEnded`).
+- 2026-11-03 21:21: Haik answered the two `p2-policy-power` questions. (1) Settle time after a power source change
+  with the lid closed: 30 s (Haik: 15 s or more, even a minute; the orchestrator picked 30 s). `product.md` and
+  `architecture.md` updated; `p2-core-lid` changes `SOURCE_SETTLE_MS`. (2) A source change during a work-end countdown:
+  if the user's own lid action for the new source is Do nothing, cancel and only release; otherwise hibernate on time.
