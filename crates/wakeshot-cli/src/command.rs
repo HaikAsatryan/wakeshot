@@ -11,10 +11,6 @@ pub struct Global {
 }
 
 /// One command. `Bad` carries the reason, worded for the user.
-#[expect(
-    dead_code,
-    reason = "args::parse builds only Help and Bad until p4-cli-args; that card removes this attribute"
-)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Command {
     Run,

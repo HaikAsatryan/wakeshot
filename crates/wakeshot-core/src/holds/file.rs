@@ -184,6 +184,13 @@ pub fn hold_alive(file: &HoldFile, running: Lookup, written: FileTime) -> Alive 
     }
 }
 
+/// A hold file's JSON text, in the form [`parse`] reads back. For Wakeshot's own writers (`wakeshot run`), so the
+/// format and the escaping of a free-text `reason` stay beside the parser. Added by `p4-cli-run`.
+pub fn render(file: &HoldFile) -> String {
+    // serde_json fails only for a map with non-string keys or a `Serialize` impl that errors; `HoldFile` has neither.
+    serde_json::to_string(file).expect("a HoldFile always serializes")
+}
+
 /// The snapshot entry for `Event::Holds`.
 pub fn facts(id: HoldId, hold: &Hold, alive: Alive) -> HoldFacts {
     HoldFacts {
@@ -676,5 +683,75 @@ mod tests {
                 screen: true,
             }
         );
+    }
+}
+
+/// The writer's own tests, apart from the parser's.
+#[cfg(test)]
+mod render_tests {
+    use super::*;
+    use crate::process::FileTime;
+    use proptest::prelude::*;
+
+    #[test]
+    fn renders_the_documented_form() {
+        let file = HoldFile {
+            reason: Some("nightly backup".into()),
+            expires: Some("2026-11-03T18:00:00Z".into()),
+            ..HoldFile::new(4242, Some(FileTime(134_381_211_391_959_336)))
+        };
+        assert_eq!(
+            render(&file),
+            r#"{"version":1,"pid":4242,"procStart":"134381211391959336","reason":"nightly backup","expires":"2026-11-03T18:00:00Z","screen":false}"#
+        );
+        assert_eq!(
+            render(&HoldFile::new(7, None)),
+            r#"{"version":1,"pid":7,"screen":false}"#
+        );
+    }
+
+    #[test]
+    fn a_reason_with_quotes_and_line_breaks_is_escaped() {
+        let file = HoldFile {
+            reason: Some("say \"hi\" \\ then\r\nbye\u{0}".into()),
+            ..HoldFile::new(4242, None)
+        };
+        let text = render(&file);
+        assert!(!text.contains('\n') && !text.contains('\0'), "{text}");
+        match parse("run-4242.json", text.as_bytes()) {
+            Parsed::Ok(hold) => {
+                assert_eq!(hold.file, file);
+                assert_eq!(hold.reason.as_deref(), Some("say \"hi\" \\ then  bye"));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn rendered_files_parse_back_as_written(
+            pid in 1..=u32::MAX,
+            proc_start in proptest::option::of(any::<u64>()),
+            reason in proptest::option::of(any::<String>()),
+            expires_secs in proptest::option::of(0..=MAX_SECS),
+            screen in any::<bool>(),
+            keep_awake in any::<bool>(),
+        ) {
+            prop_assume!(pid != 4);
+            let file = HoldFile {
+                reason,
+                expires: expires_secs.map(|secs| format_expires(secs * 1000)),
+                screen,
+                ..HoldFile::new(pid, proc_start.map(FileTime))
+            };
+            let name = if keep_awake { "keep-awake.json".to_owned() } else { format!("run-{pid}.json") };
+            match parse(&name, render(&file).as_bytes()) {
+                Parsed::Ok(hold) => {
+                    prop_assert_eq!(&hold.file, &file);
+                    prop_assert_eq!(hold.expires_wall_ms, expires_secs.map(|secs| secs * 1000));
+                }
+                other => prop_assert!(false, "{:?}", other),
+            }
+        }
     }
 }

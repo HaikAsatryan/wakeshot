@@ -2713,6 +2713,33 @@ scripts: the card's Log.
   Touchpad"), and 566 the session reason ("InputPoUserPresent"); 506 "entering Modern Standby" said "Idle Timeout"
   for the screen-off timer. Useful for the battery runs of `p3-haik-checks`.
 
+## CLI argument checks
+
+Checked 2026-11-04 for card `docs/tasks/p4-cli-args.md` (Windows 11 Pro 10.0.26300, Rust 1.99.1).
+
+- **How `std::env::args_os` splits the command line on Windows.** Read in the toolchain's own source
+  (`library/std/src/sys/args/windows.rs`, `parse_lp_cmd_line`, Rust 1.99.1). The program name: a quote only toggles
+  quoting (no escapes), and a space or tab outside quotes ends it. The arguments: space and tab separate, any run of
+  them counts as one; backslashes are literal unless a quote follows; 2n backslashes before a quote give n and the
+  quote toggles quoting, 2n+1 give n and a literal quote; inside quotes `""` is one literal quote and quoting goes
+  on. The last argument is kept even when empty if a quote opened it. Microsoft's "Parsing C command-line
+  arguments" (Learn, updated 2021-12-09) gives the same rules for the C runtime; its six example rows split the same
+  way in `args::next_arg` (test `microsofts_examples_split_the_documented_way`). `args::run_tail` and
+  `args::split_program` are a port of that loop, one argument at a time; a property test checks them against
+  arguments quoted the MSVC way (std's `\"` form and the `""` form).
+- **The built `wakeshot.exe`** (debug build of this card): `wakeshot --help` printed the help to stdout, exit 0;
+  `wakeshot nonsense` printed `wakeshot: unknown command 'nonsense'. Run 'wakeshot --help'.` to stderr, exit 2;
+  `wakeshot run` and `wakeshot keep-awake off --screen` printed their one-line errors, exit 2. The same checks are in
+  `crates/wakeshot-cli/tests/exe.rs`.
+- **The `--dry-run` checks of `p4-cli-commands` and `p4-cli-restore`, now through the exe** (2026-11-04 00:54;
+  `%LocalAppData%\Wakeshot` did not exist before, `WAKESHOT_DATA_DIR` unset): `--dry-run log` "No log yet. Wakeshot
+  writes one once it runs." exit 0 (run first, so no window opened); `--dry-run status` "Wakeshot is not running."
+  exit 0; `--dry-run keep-awake 1h` "Wakeshot is not running. Start it, then try again." exit 1, no hold file;
+  `--dry-run automatic off` "Automatic is off." exit 0, `dry-run\config.json` `{"version":1,"automatic":false}`;
+  `--dry-run restore` "Nothing to restore." exit 0. The log got one `cli` line each (status, keep-awake, automatic,
+  restore). Only `dry-run\config.json` and `dry-run\logs\wakeshot.log` were made; both and the empty folders were
+  removed after.
+
 ## Claude UI stop notice checks
 
 Card `docs/tasks/p4-claude-transcript.md`, section "Claude parsing review fixes, round 2 (2026-11-04)"; verify
@@ -2779,3 +2806,44 @@ Checked 2026-11-04 for card `docs/tasks/p6-launch-research.md`; details, quotes 
   `gh issue comment <n> --attach` uploads by script (gh 2.103.3 here). `<picture>` with `prefers-color-scheme` works.
 - **Video tool**: Remotion 4.0.540; its license is free for "an individual" and companies "with up to 3 employees"
   (`LICENSE.md`). Node v26.13.0 is on this laptop; `ffmpeg` is not on the PATH (Remotion bundles its own).
+
+## CLI run checks
+
+Checked 2026-11-04 between 01:00 and 01:11 for card `docs/tasks/p4-cli-run.md` (Windows 11 Pro 10.0.26300, Rust
+1.99.1, elevated agent shell).
+
+- **How std's `Command` finds and quotes a program** (toolchain source, `library/std/src/sys/process/windows.rs`):
+  `resolve_exe` passes a path that has a folder part and ends in `.exe` to `CreateProcessW` as it is; another path is
+  tried as `<path>.exe`, then as given; only a bare file name (no `\` or `/`, `path::is_file_name`) is searched, with
+  `.exe` added when the name has no dot. `program_exists` reads `GetFileAttributesW`, which does not follow links.
+  `make_command_line` always quotes the program and adds each argument after one space; `raw_arg` text is added
+  unchanged (`Arg::Raw`), and `get_args` lists it. std starts a batch file through `GetSystemDirectoryW` plus
+  `\cmd.exe`, not `%ComSpec%`. So `child::command` passes the resolved full path, and a batch file goes to
+  `%ComSpec%` (a full path; else the system folder's `cmd.exe`) with `raw_arg("/d /s /c \"\"<path>\" <rest>\"")`.
+- **The text reaches the child exactly** (`child::tests::an_exe_child_gets_the_text_exactly`): `cmd /u /d /c echo`
+  given through `raw_arg` printed back, byte for byte, a text with doubled spaces, `\"`, `""`, trailing backslashes
+  before a quote, a tab, Armenian and an emoji. A `.cmd` file in a folder with a space, named with a space, got `%*`
+  exactly as typed and `%1` as its first quoted argument, and its `exit /b 3` came back as 3
+  (`a_batch_child_sees_its_arguments_as_typed`, and `run::tests::a_cmd_file_sees_its_arguments_as_typed`).
+- **Exit codes pass through whole**: `cmd /d /c exit -1073741510` gave 0xC000013A through `run` and through the
+  built exe (`std::process::exit`); 300 gave 300 (`tests/run.rs`, `the_exe_exits_with_the_childs_whole_code`).
+- **Ctrl+C, tested in a console with no window** (`tests/run.rs`, `ctrl_c_ends_the_child_and_wakeshot_exits_with_its_code`).
+  The test starts a helper (the test exe itself) with `CREATE_NO_WINDOW`; it got a console of its own:
+  `GetConsoleProcessList` there listed only the helper, `wakeshot.exe` and its child (pids 21476, 35068, 37348 in
+  one run), never the test runner. The helper resets the inherited Ctrl+C flag (`SetConsoleCtrlHandler(NULL,
+  FALSE)`), starts `wakeshot run -- <test exe> sleeper` (a child with Rust's default handling), waits for the hold
+  file, ignores Ctrl+C itself (NULL form, set after the start so nothing inherits it) and calls
+  `GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0)`. The child ended, `wakeshot` exited with 0xC000013A, deleted the hold
+  file and logged `exited with -1073741510 (0xC000013A)`; the last two show that it outlived the Ctrl+C (the default
+  handler would have ended it at once). The helper refuses to send when its console holds any other process. Not
+  tested: a real key press in Windows Terminal or conhost, Ctrl+Break, closing the console window.
+- **App execution aliases are found.** `%LocalAppData%\Microsoft\WindowsApps\winget.exe` is a 0-byte file with the
+  `ReparsePoint` attribute here; `wakeshot run -- winget --version` (debug exe, temp `WAKESHOT_DATA_DIR`) resolved it
+  through `PATH` and printed `v1.29.380`, exit 0. Here `Path::is_file`, `fs::metadata` (length 0) and
+  `fs::symlink_metadata` all succeed on it too (a throwaway probe test, removed); `child` reads the attributes
+  without following, as std does.
+- **The card's built-exe check** (2026-11-04 01:10, debug exe, `WAKESHOT_DATA_DIR` unset, `%LocalAppData%\Wakeshot`
+  missing before): `wakeshot --dry-run run -- cmd /c echo hi` printed `hi`, exit 0, and on stderr `wakeshot: Wakeshot
+  is not running, so nothing keeps the PC awake for this command until it starts.` It made `dry-run\holds` (empty
+  after: the hold file was deleted) and `dry-run\logs\wakeshot.log` with `cli: run: cmd started, pid 32640` and `cli:
+  run: cmd exited with 0`. Both and the empty folders were removed after.
