@@ -2189,3 +2189,29 @@ runs were elevated (High), as agents here are; see "Elevation" at the end.
   Update.exe can kill a tray started elevated (a kill across integrity levels is normally denied), and the working
   folder of a start from the Run value. The Access-denied warning in point 4 comes from the access mask, not from
   elevation (source).
+
+## Dispatcher checks
+
+Checked by `p6-int-dispatch`, 2026-11-03.
+
+- **A call that re-enters through `&mut self` is undefined behavior in Rust.** The Rust Reference, "Behavior
+  considered undefined" (doc.rust-lang.org/reference, read 2026-11-03): a live `&mut T` "must point to memory that is
+  not read or written by any pointer not derived from the reference", and "When a reference (but not a `Box`!) is
+  passed to a function, it is live at least as long as that function call, again except if the `&T` contains an
+  `UnsafeCell<U>`." So a window that calls `LoopHandler::event(&mut self)` again from a nested pump breaks the rule
+  whatever the inner call does, while `&self` methods over `Cell` and `RefCell` (both hold an `UnsafeCell`) do not.
+  **Verified** (the Reference); not checked with Miri.
+- **The end-of-session `Ack` comes for every session end restore.** `p6-int-io-thread` deliverable 3 sets it after
+  any `Restore { why: SessionEnd }`, and the core sends one at `Session(Ending)` (`core/settings.rs`). So at
+  `WM_ENDSESSION` the `Ack` is often set already; the dispatcher resets it before `session_ending()`, so its wait
+  covers the end's own restore. Read from the card and the code; the IO thread is not built yet (not verified).
+- **The core gives one next deadline.** Right after a Keep awake pick it is the 1 s `state.json` wait (`Mono`); the
+  Keep awake end (`Wall`) shows only after the next `Tick`. Seen in `the_timer_never_asks_for_more_than_30_s`: the
+  timer asked 1,000 ms. Fine, since the loop reads `next_deadline` after every call. **Verified** (test).
+- **The end-of-session wait, measured** (tests on this laptop, three runs, beside the other tests): an `Ack` set by
+  another thread after 200 ms ended the wait after at least 200 ms and under 2 s (the test's bounds; exact times not
+  printed); with no `Ack` the call took at least 4.00 s and at most 4.02 s (the whole test run's time). **Verified**
+  (test).
+- **Mutants**: 22 hand-planted mutants of `app/dispatch.rs`, run in a scratch copy of the workspace, all killed after
+  one test gained an assertion (the safety tick must win over a farther deadline; the 30 s clamp alone had hidden a
+  timer set from the deadline only). **Verified** (test).

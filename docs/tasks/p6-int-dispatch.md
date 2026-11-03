@@ -1,6 +1,6 @@
 # Integration: the dispatcher (the core in the loop)
 
-Phase: 6. Status: ready. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 140K tokens (split trigger: past 100K
+Phase: 6. Status: done. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 140K tokens (split trigger: past 100K
 with the end-of-session part not started, stop at a clean point and ask the orchestrator for a second card).
 Real laptop: no (the real `Core`, a fake clock, fake runners and the real `IoQueue`; no window).
 Build folder: `CARGO_TARGET_DIR=<scratchpad>\p6-int-dispatch\target`.
@@ -90,6 +90,22 @@ None.
 
 Problems seen but not fixed.
 
+1. **The seam `LoopHandler` (`app.rs`) takes `&mut self`, so a re-entered call is undefined behavior.** A window that
+   calls the handler again from a nested pump makes a second `&mut` to the dispatcher while the outer call's `&mut`
+   is live. The Rust Reference ("Behavior considered undefined", checked 2026-11-03): a reference passed to a function
+   "is live at least as long as that function call", and a live `&mut T` must point to memory "not read or written by
+   any pointer not derived from the reference". This holds even when the inner call only queues. The dispatcher here is
+   built for the fix (contract proposal 1 in Result). Urgent: `p6-int-window` is ready and builds against
+   `&mut dyn LoopHandler`.
+2. `Command::Log`'s doc says the runner writes the line "at info level, area `core`" and that it is "a decision only
+   the core knows". The dispatcher's own two lines (a hibernate refused while one runs, the end-of-session wait) go the
+   same way, as the card asks, so they show under area `core`. Harmless; a later contract change could add a `loop`
+   area.
+3. For the power safety review, not a bug: at an `Ended` with no `Ending` before it, the queue holds the front restore
+   from `session_ending()` and then the core's own `Restore { why: SessionEnd }` (the core pushes it after the queue's
+   one-restore rule ran), so the IO thread runs two; the second finds nothing to do (read from `core/settings.rs`, the
+   `Ended` arm; not asserted by a test).
+
 ## Log
 
 - 2026-11-03: card written by `p6-plan-integration`.
@@ -100,7 +116,156 @@ Problems seen but not fixed.
   change the orchestrator runs alone, if you need them.
 - 2026-11-03 21:06, orchestrator, from `p3-power-io`'s Result: `session_ending()` queues the restore itself, so
   dispatch needs no `push_front` first (one is not doubled).
+- 2026-11-03 21:49: worker started; reading the seams (`app.rs`, `io_queue.rs`, core) and the Results named above.
+- 2026-11-03 22:02: sources read. Design: every entry point takes `&self` over cells (a sound re-entered call; the
+  seam's `&mut self` makes two live `&mut`, a contract proposal); a loop runner's answer is fed at once and its
+  commands run after the rest of the batch (keeps each runner's order); the `Ack` is reset at `Ended` too, since the
+  IO thread also sets it after the `Ending` restore; the safety tick also asks the runners for lost events
+  (`p3-system-events` finding 1). Next: the code, then the tests.
+- 2026-11-03 22:07: tests first: 18 tests in `app::dispatch::tests` over the API with empty bodies: 18 of 18 fail.
+  Next: the bodies.
+- 2026-11-03 22:12: bodies written; 17 of 18 passed at once, the wall jump test had my own mistake (the 1 s
+  `state.json` wait is the nearer deadline right after a pick; the test now waits it out). Added a 19th test: a failed
+  request's idle icon comes after the batch's holding icon. 19 pass; rustfmt and the four clippy runs clean. Next:
+  mutants in a scratch copy of the workspace.
+- 2026-11-03 22:14: two more tests from listing mutants (an owner from the start never tries the mutex; an `Ended`
+  after `Quit` still restores first and waits): 21 pass. Mutant run started: 22 mutants by
+  `<scratchpad>\p6-int-dispatch\mutants.py` in a copy of the workspace, results in `mutants-results.txt` beside it.
+- 2026-11-03 22:18: mutants 21 of 22 killed; M10 (timer from the deadline alone) survived behind the 30 s clamp. The
+  timer test now checks the safety tick wins over a farther deadline; M10 rerun killed (22 of 22). `docs/research.md`
+  "Dispatcher checks" added (the Reference's aliasing rule read at doc.rust-lang.org). Final checks pass (Result).
+- 2026-11-03 22:19: build folder and scratch files deleted. Status done.
 
 ## Result
 
-What was done, files changed, checks and outcomes, open items. Include `LoopRunners` and `Dispatcher::new` as built.
+Status: done 2026-11-03. `crates/wakeshot-windows/src/app/dispatch.rs` is filled: trait `LoopRunners`, `Dispatcher`,
+`impl LoopHandler for Dispatcher<R>`, and 21 tests in `app::dispatch::tests` over the real `Core`, `FakeClock`, a
+recording `LoopRunners` and the real `IoQueue` (popped by the test). Tests first: 18 written over empty bodies, all 18
+failed; 3 more came from the review and the mutant list. Real laptop: never touched. No other file changed except this
+card and `docs/research.md` (addition only).
+
+### API as built (for `p6-int-tray-mode`)
+
+```rust
+pub trait LoopRunners {
+    fn requests(&mut self, system: bool, display: bool) -> Result<(), WinError>;
+    fn retake(&mut self) -> Result<(), WinError>;
+    fn lock(&mut self) -> Result<(), WinError>;
+    fn show_tray(&mut self, view: &TrayView);
+    fn play(&mut self, cue: Cue);
+    fn start_hibernate(&mut self, reason: CountdownReason, floor_pct: u8, last_resume_mono_ms: Option<u64>);
+    fn apply_update(&mut self);
+    fn input_idle_ms(&mut self) -> u64;
+    fn try_settings_owner(&mut self) -> bool;
+    fn lost_events(&mut self) -> Vec<Event>; // added, design choice 8
+    fn watch_tick(&mut self);
+}
+
+impl<R: LoopRunners> Dispatcher<R> {
+    pub fn new(core: Core, clock: Box<dyn Clock>, io: Arc<IoQueue>, runners: R, ack: Ack, first: Vec<Event>) -> Self;
+    pub fn on_event(&self, event: Event) -> Flow;
+    pub fn on_session(&self, change: SessionChange) -> Flow;
+    pub fn on_timer(&self) -> Flow;
+    pub fn timer_ms(&self) -> u32;
+    pub fn into_runners(self) -> R; // for the shutdown order after the pump (note 6, step 9)
+}
+// `LoopHandler::{event, session, timer, next_timer_ms}` forward to the four `&self` methods above.
+```
+
+What `RealRunners` must do: `requests`, `retake`, `lock` return the `WinError`; the dispatcher maps it to `Failure`
+and feeds `Done(Requests)` or `Done(Locked)` at once. `show_tray` and `play` answer nothing (the sound thread posts
+`Done(Sound)`). `start_hibernate` spawns the thread that runs `run_hibernate` and posts `Done(Hibernate)` exactly once;
+the dispatcher never calls it again before that event is fed, and a second `Hibernate` meanwhile becomes one log line.
+`apply_update` hands over to the update thread (`Done(Update)`). `input_idle_ms`: `clock::input_idle_ms()`, on `Err`
+log it and return 0. `try_settings_owner`: try `Global\Wakeshot.Settings`, `true` when held; it is called only while
+the dispatcher thinks this tray is not the owner (from `Started.owner`, then the `SettingsOwner` it fed).
+`lost_events`: compare `Subscriptions::lost_posts()` with the last value; when it grew, log it and return a fresh
+`Lid { closed }` from `lid_once(..)` (when `Some`) and `Power` from `power_status()`; otherwise nothing (whether to add
+`Resumed` is that card's call: a spare one retakes the requests and restarts the idle count). `watch_tick`:
+`WatchHandle::tick`. `first`: `Started`, plus `Session(Locked)`, `JournalCorrupt`, `Updated` when they apply, in any
+order (`new` sorts them into the `event.rs` order). `Dispatcher` is not `Send`: build it on the loop thread.
+
+### How it works
+
+- **Batch.** Each input gets a fresh `Now`. Commands run in the core's order: loop commands on `LoopRunners`, the rest
+  pushed on the `IoQueue`, by an exhaustive `match` with no wildcard. A loop runner's answer is fed at once (before the
+  next command runs); the commands that answer gives go to the end of the batch, so each runner keeps the core's order
+  across calls. Shown by a test: a failed request's idle icon comes after the batch's holding icon, not before it.
+- **Timer.** `timer_ms` is the nearer of the core's `next_deadline` (`Wall` against `wall_ms`, `Mono` against
+  `mono_ms`) and the next safety tick, clamped to 10..=30,000. The safety tick is kept in run time, due 30 s after the
+  last one. At each fire: on a safety tick first `try_settings_owner` (while not owner; `true` feeds `SettingsOwner`)
+  and `lost_events`; then `InputIdle { ms }` and `Tick`; on a safety tick then `watch_tick`.
+- **Re-entry.** Every entry point takes `&self`; the state sits in `Cell` and `RefCell`. A call while another runs
+  (a `busy` flag stands for the depth count, since a re-entered call runs no runner and so never goes deeper) queues
+  its input and returns `Flow::Go`; the outer call drains the queue in order before it returns. The core is in a
+  `RefCell`, so a second call into it would panic rather than run.
+- **End of session.** `Ended` (`WM_ENDSESSION` TRUE): `Ack::reset`, `IoQueue::session_ending()`, feed it, run the
+  batch, `Ack::wait(4_000)`, then a log line ("the restore ran in N ms" or "did not finish within 4000 ms").
+  Re-entered, or after `Quit`: the same restore and wait at once, and the core gets the change after the outer batch
+  (not at all after `Quit`). `EndCancelled`: `session_resumed()`, `Ack::reset()`, then feed it. Other changes are plain
+  events.
+- **Quit.** `Command::Quit` marks the end; the rest of the batch still runs, answers are no longer fed, queued inputs
+  are dropped, every later call returns `Flow::Quit` without feeding, and `timer_ms` gives 10.
+
+### Design choices (mine), each with when to change it
+
+| # | Choice | Why | Change it when |
+|---|---|---|---|
+| 1 | All entry points `&self` over cells; the trait forwards | A re-entered call through `&mut self` is undefined behavior (Found outside scope 1) | Never; the seam should follow (proposal 1) |
+| 2 | An answer is fed at once, its commands run after the rest of the batch | Fed at once as the card says, while every runner keeps the core's order (the icon tells the truth) | A runner needs an answer's command before the batch's next one |
+| 3 | `first` sorted into the `event.rs` order | The core drops everything before `Started` | Never |
+| 4 | The `Ack` is reset at `Ended` too, before `session_ending()` | The IO thread sets it after every session end restore, also the one `Ending` gave, so the wait would end at once before the end's own restore (a second try) ran | The IO thread can tell the two restores apart |
+| 5 | An `Ended` after `Quit` still restores first and waits | The pump may answer `WM_ENDSESSION` while the IO thread still runs the queue | Never |
+| 6 | Safety tick due 30 s of run time after the last one; a fire is a safety tick once run time reached it | A clock change never moves it; a timer that fires a little early costs one more 10 ms fire | A log shows early fires often |
+| 7 | The owner flag starts from `Started.owner`; no try while owner | A runner answers `true` for a mutex it holds, so each try would feed `SettingsOwner` and an apply (test added) | Never |
+| 8 | `lost_events` on each safety tick, fed after the settings try and before `InputIdle` (the orchestrator's question from `p3-system-events`) | A lost `Lid { closed: true }` while holding means no lock and no countdown; asking only after a loss costs nothing, while reading the lid each tick would register a notification and leak 16 bytes each time (`p3-system-events` decision 2) | Windows offers a cheap lid read, or logs show lost posts often |
+| 9 | The dispatcher's own lines go out as `Command::Log` on the IO queue | The card asks for it; one log path | The dispatcher gets its own `Log` (then area `loop`) |
+| 10 | An `Event::Session(..)` given to `on_event` is a plain event | Only the window sends session changes, through `on_session` | Another sender appears |
+
+### Contract proposals (the orchestrator runs them alone)
+
+1. `app.rs`: `LoopHandler`'s `event`, `session` and `timer` take `&self` (as `next_timer_ms` already does), and
+   `p6-int-window` builds `LoopWindow::run(self, handler: &dyn LoopHandler)`. Why: Found outside scope 1. Cost here:
+   the impl's three forwards lose `mut`; nothing else changes. Do it before `p6-int-window` starts.
+2. None for `testing.rs`: the recorder fakes the runners, so `FakeRequests` and `FakeLocker` were not needed.
+
+### Checks (2026-11-03, own `CARGO_TARGET_DIR`, no `RUSTFLAGS`, every cargo command `--locked`)
+
+- `cargo test --locked -p wakeshot-windows -- app::dispatch::`: 21 passed, 0 failed, in three runs at 22:18 (each
+  about 4.0 s, the no-`Ack` wait). Tests:
+  `every_command_reaches_the_runner_of_the_table` (one scenario yields all 19 variants: 7 at runners, 11 on the queue,
+  `Quit` as `Flow::Quit`), `keep_awake_from_the_menu_takes_the_requests_and_shows_holding`,
+  `a_failed_request_shows_idle_after_the_batchs_holding_icon`, `lid_closed_while_holding_locks_and_chimes`,
+  `countdown_hibernates_at_the_idle_mark_with_input_idle_before_each_tick`,
+  `safety_tick_takes_the_settings_mutex_and_ticks_the_watch_once`,
+  `an_owner_from_the_start_never_tries_the_settings_mutex`, `lost_events_are_fed_on_the_safety_tick_before_input_idle`,
+  `the_timer_never_asks_for_more_than_30_s` (2 h forward, 2 h back, a 3 h suspend; the safety tick wins over a farther
+  deadline), `reentered_events_are_fed_after_the_outer_batch_in_order`,
+  `started_is_always_the_cores_first_event` (shuffled `first`), `started_locked_updated_gives_no_notice_until_unlocked`,
+  `quit_from_the_menu_releases_restores_deletes_and_ends`, `a_session_end_after_quit_still_restores_first_and_waits`,
+  `a_second_hibernate_while_one_runs_logs_and_starts_nothing`,
+  `session_end_puts_the_restore_first_before_the_core_sees_it` (a clock probe reads the queue at the core's clock
+  read), `session_end_wait_ends_when_the_ack_comes` (200 ms),
+  `session_end_without_an_ack_returns_after_about_4_s`, `session_end_waits_for_its_own_restore_not_the_one_at_ending`,
+  `no_apply_after_the_end_until_end_cancelled`, `a_reentered_session_end_restores_and_waits_at_once`.
+- `rustfmt --edition 2024 --check crates/wakeshot-windows/src/app/dispatch.rs`: exit 0.
+- `cargo clippy --locked -p wakeshot-windows --all-targets --target <t> -- -D warnings` and the same without
+  `--all-targets`, for `x86_64-pc-windows-msvc` and `aarch64-pc-windows-msvc`: all four exit 0 (22:18). The first
+  run had flagged three lints in my test code (two complex types, a slice clone); fixed.
+- Mutants, in a scratch copy of the workspace (the repo never mutated), each reverted: 22 of 22 killed. M10 (the
+  deadline alone sets the timer) survived the first round, since the 30 s clamp hid it; the timer test now checks that
+  the safety tick wins over a farther deadline, and the rerun killed it. The others: an answer's commands before the
+  rest of the batch; answers fed after the batch; `first` not sorted; `session_ending` after the core saw `Ended`; no
+  `Ack` reset at the end; `session_resumed` after the core saw `EndCancelled`; a re-entered call run at once; the watch
+  tick at every fire; `Tick` before `InputIdle`; events fed after `Quit`; no hibernate guard; a re-entered `Ended`
+  waiting for the outer call; lost events at every fire; the settings try while owner; the owner from `Started`
+  ignored; no 10 ms minimum; re-entered inputs drained last first; an `Ended` after `Quit` not waiting;
+  `SettingsOwner` not marking the owner; a `Done(Hibernate)` not ending the guard; the safety tick on the wall clock.
+- No line over 120 characters and no em or en dash in the owned file or my lines here. Build folder, mutant copy,
+  script and results file deleted (22:19).
+
+### Open items
+
+- Contract proposal 1, before `p6-int-window` starts.
+- `p6-int-tray-mode`: the runner notes above, `lost_events` among them.
+- Found outside scope 2 and 3 (minor).
