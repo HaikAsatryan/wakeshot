@@ -111,11 +111,11 @@ Notes 7, 8 and 9 apply after v1: Codex and Copilot moved there (Haik, 2026-11-03
 | `p4-claude-live-shapes` | no; runs Claude Code test sessions (Haiku); agent-session lane | contracts card | done (18:47): 27 fixtures; resume and rule 3, 5 changes in the signals doc |
 | `p4-codex-source` | no | contracts card | later (after v1, Haik 2026-11-03) |
 | `p4-watch-folders` | no | contracts card | ready |
-| `p4-watch-reads` | no | contracts card | ready |
+| `p4-watch-reads` | no | contracts card | running (20:49, bundle with `p4-watch-data`) |
 | `p4-cli-args` | no | contracts card | ready |
 | `p4-claude-transcript` | no | `p4-claude-status`, `p4-cron`, `p4-claude-live-shapes` | ready |
 | `p4-copilot-source` | no | `p4-cron` | later (after v1, Haik 2026-11-03) |
-| `p4-watch-data` | no | `p4-hold-files`, `p4-watch-reads` | ready |
+| `p4-watch-data` | no | `p4-hold-files`, `p4-watch-reads` | running (20:49, bundle with `p4-watch-reads`) |
 | `p4-watch-agents` | no | `p4-watch-reads` | ready |
 | `p4-watch-thread` | no | `p4-watch-folders`, `p4-watch-data`, `p4-watch-agents`, `p3-process` | ready |
 | `p4-cli-run` | no | `p4-cli-args`, `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | ready |

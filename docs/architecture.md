@@ -315,8 +315,9 @@ plan, `lid_closed_since`, labels of what held); a mirror of the journal, a copy 
 
 - `wall_ms` (UTC) for times a person reads as clock time: Keep awake end, Claude timer due times, the 1 hour waiting
   limit (from `statusUpdatedAt`), hold `expires`. After a manual sleep past such a time, the hold ends at resume.
-- `mono_ms` (unbiased interrupt time) for how long the PC ran: the closed-lid report. It skips suspended time and
-  counts screen-off standby, where apps still run (research, "Clock").
+- `mono_ms` (unbiased interrupt time) for how long the PC ran: the closed-lid report, and the run-time cap on the
+  waiting limit (section 7). It skips suspended time and counts screen-off standby, where apps still run (research,
+  "Clock").
 - Input idle (`GetLastInputInfo`) counts suspended time (research, "Clock"). The core treats a resume as input:
   idle = min(reported idle, `mono_ms` since the last `Resumed`). The two count the same time there, because no
   suspend lies between the last resume and now. So a countdown never hibernates a PC the user just woke.
@@ -577,10 +578,12 @@ Apply, on the IO thread, under `Local\Wakeshot.Journal`:
    and has no journal entry holds the user's own value: skip it.
 3. The safety net, journal last: the RunOnce value; a new guard if none runs or the current one's stop event is set
    (it is on its way out); then the journal file (atomic, write-through), with this tray as its owner. A key that
-   already has an entry for this plan (a restore failed) keeps its `original` and its `restored` mark: the hold takes
-   the entry over, and step 6 clears the mark only once our value is in force again.
-4. Any failure in steps 2 or 3: write nothing (decision 24); if the journal file is known to be absent (a read error
-   does not count), take back the RunOnce value and the guard this apply added; report `SafetyNet`. The core holds
+   already has an entry for this plan that is still ours (live equals `written`, or marked `restored` with live equal
+   to `original`; a restore failed) keeps its `original` and its `restored` mark: the hold takes the entry over, and
+   step 6 clears the mark only once our value is in force again. Any other entry for the key is the user's or never
+   written: a new entry with the live value as `original` replaces it.
+4. Any failure in steps 2 or 3: write nothing (decision 24); if the journal held no known entry (a read error does
+   not count), take back the RunOnce value and the guard this apply added; report `SafetyNet`. The core holds
    requests only for the episode and shows one notice. The journal comes last, so a failure never leaves entries for
    keys that were never written, which the next read would take for the user's changes.
 5. `PowerWrite*ValueIndex` for each key whose live value is not the target; read back.
@@ -606,9 +609,10 @@ live value equals what we wrote. The IO thread decides it, because it owns the j
 each `ReadPlan` it reads the active plan id first, then each journal entry's value from that entry's own plan. A value
 that differs from `written`: drop the entry, post `UserChanged { plan, key }`. A read error: keep the entry, post the
 failure. Entries marked `restored` are skipped: they wait for a restore retry. So a read taken before an `Apply`
-never sees that apply's entries, and a plan switch never looks like a user change. A user who sets exactly our value
-is not seen; since Settings already shows our value, that needs two changes inside one 10 s read. Accepted. When the
-check drops the last entry, the clean-up of restore step 6 runs.
+never sees that apply's entries, and a plan switch never looks like a user change. Accepted: a user who sets exactly
+our value is not seen (since Settings already shows our value, that needs two changes inside one 10 s read); a user
+change between Apply steps 2 and 5, a few calls apart, is overwritten, and the restore puts back the value read in
+step 2. When the check drops the last entry, the clean-up of restore step 6 runs.
 
 - `ReadPlan`: the core issues it every 10 s while anything is owned, and on each safety tick (docked use and the Keep
   screen on lock need the user's values). No registry watch: its key path is not a documented API.
@@ -628,7 +632,9 @@ guard, restore mode, Velopack hooks and the CLI, always under `Local\Wakeshot.Jo
    `journal.json.corrupt`, warn; values stay as they are. That override then stays until the user sets the values by
    hand: the next `Apply` sees Do nothing with no entry and takes it for the user's own value, so a lid close gets no
    lock either. The warning says so; the log holds the old values (every settings write is logged with old and new
-   values). Listed in "Gap left".
+   values). Listed in "Gap left". An apply that finds the file corrupt writes nothing and fails with
+   `SafetyNet(JOURNAL_CORRUPT)`; the core then sends one `Restore { plan: None }`, once per corrupt file and not per
+   apply, so this step sets the file aside and `JournalCorrupt` reaches the user (orchestrator, 2026-11-03).
 2. Read the active plan id and the whole plan list: `PowerEnumerate` until it returns 259 (`ERROR_NO_MORE_ITEMS`, the
    end code on the test laptop). If the id read fails, or the list stops on any other code, this run fails before any
    entry is dropped or written: "plan deleted" is judged only from a complete list. A `Restore { plan: Some(p) }`
@@ -796,15 +802,15 @@ Hold format:
 ```
 
 - `pid` is required. `procStart` is optional: the process creation time as a FILETIME decimal string, the same form as
-  Claude's status files. If it is missing, the process counts only if it started before the file's last write time: a
-  process that started later cannot be the writer, so a reused pid never counts. The check keeps no state, so it holds
-  across a tray restart.
+  Claude's status files. If it is missing, the process counts only if it started at or before the file's last write
+  time: a process that started later cannot be the writer, so a reused pid never counts. The check keeps no state, so
+  it holds across a tray restart.
 - `reason` (optional) shows in the tooltip and the log, cut to 60 characters. `wakeshot run` writes only the program
   name, never the full command line, which may hold secrets.
 - `expires` (optional, UTC). `screen` (optional) counts only in `keep-awake.json`: `product.md` holds the display
   only when the user asks through Keep screen on.
-- `HoldFile.expires` stays text; Phase 4 parses it (and formats it for Keep awake). No date crate is declared: Phase
-  4 writes the RFC 3339 parse and format or picks `jiff`, its cron candidate.
+- `HoldFile.expires` stays text. `holds::file` parses it (RFC 3339, `Z` or an offset) and formats it for Keep awake
+  (UTC, whole seconds) in its own code: no date crate.
 - A hold counts while its process is alive and before `expires`. A file whose process is Gone is deleted; Unknown
   keeps the file and the last state (section 5, "Liveness").
 
@@ -875,7 +881,8 @@ rulings:
 - Timer margin: due time plus 2 minutes. Fires come 0.1 to 1 s late and the turn then shows `busy`
   (`research/claude-code-signals.md`, "Live test results", test 3).
 - Waiting limit: `statusUpdatedAt` plus 1 hour, wall time (the time Wakeshot first saw `waiting` if the field is
-  missing); "dialog open" counts as idle.
+  missing), and at most what was left of that hour when Wakeshot first saw the wait, in run time (`mono_ms`), so a
+  clock set back cannot stretch it; "dialog open" counts as idle.
 - Rule 11 (transcript growth when the status file is missing or unknown) is dropped. It contradicts the
   unknown-format rule above.
 - Rule 5 does not cover `claude --resume` in a new process. Phase 4 runs one live test and fixes the rule.
