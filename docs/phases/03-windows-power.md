@@ -136,8 +136,8 @@ laptop" cards run one at a time across all tracks.
 | `p3-recovery` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09) | no | `p3-journal`, `p3-process`, `p3-log`, `p3-power-plan` (verify review Minor 3), core `p2-ownership-restore` | done (21:22): 23 unit and 5 exe tests; real guard parent test passed |
 | `p3-stop-points` | no | yes: a plan copy, never active | `p3-power-plan`, `p3-journal`, core `p2-ownership-apply` | done (21:48): 3142 real cases passed, Haik's values same; no routine bug |
 | `p3-harness` | no | yes for the `cleanup` smoke run only (global lane, review M7); other smoke runs touch no setting | `p3-power-io`, `p3-recovery`, `p3-requests`, `p3-session`, `p3-system-events` | done (22:56): 22 tests, smoke runs done; Haik's values same |
-| `p3-real-checks` | no | yes: an active plan copy, 50 cycles | `p3-harness`, `p3-stop-points` | in progress |
-| `p3-haik-checks` | yes: about 60 min elapsed, about 15 min of hands | yes, whole laptop: battery, lid, sign-out, sleep, lock; no other agent or cargo command runs (review B2) | `p3-real-checks` | ready |
+| `p3-real-checks` | no | yes: an active plan copy, 50 cycles | `p3-harness`, `p3-stop-points` | done (00:54): every step passed; 16 real tests in `wakeshot-windows`, 2 in the tray; 50 cycles, `PowerSetActiveScheme` median 51.5 ms, max 121.8 ms |
+| `p3-haik-checks` | yes: about 60 min elapsed, about 15 min of hands | yes, whole laptop: battery, lid, sign-out, sleep, lock; no other agent or cargo command runs (review B2) | `p3-real-checks` | blocked: waiting for Haik (01:08); step files ready in its card |
 
 Size estimates (one worker's context): store 90K, log 80K, process 110K, power-plan 110K, requests 60K,
 system-events 100K, session 80K, journal 90K, hibernate 90K, power-io 110K, recovery 140K, stop-points 110K, harness
@@ -203,3 +203,17 @@ Critical path: store, journal, (core ownership cards), power-io, harness, real-c
   `docs/reviews/p2-6-power-safety.md`). Open, docs: `TestPlan::sweep`'s doc in `power/plan.rs` misses that `cleanup` calls it.
 - 2026-11-04 00:04: the docs pass is done and committed (`docs/tasks/p2-6-docs-pass.md`): track note 4 above and the `TestPlan::sweep` doc (log lines 199 to 203) are fixed; section 5 hibernate order, Guard line, 10 s reads in `architecture.md`.
 - 2026-11-04 00:30: the `p3-real-checks` + `p3-haik-checks` bundle started (laptop lane; the power safety review and its verify passed). Part 2 waits for Haik and runs alone on the whole laptop: the orchestrator records its state and stops spawning before its steps B and D.
+- 2026-11-04 01:11: `p3-real-checks` done and committed: a Medium process started through Explorer made and took the
+  `Global\` mutex; the journal lock opens both ways between High and Medium (checked with pwsh on probe names, not the
+  Rust exes); after a crash of a Medium fake tray the guard restored the copy and removed the journal and RunOnce
+  within 300 ms; a plan's stored values took effect when it was made active; 50 cycles with brightness at 100 and no
+  System or Application log errors. Haik's values were equal before (00:32:57) and after (00:52:26): Balanced active and
+  the only plan, lid 1/1, sleep AC and DC 18000, energy saver DC 30. Sleep was 10800/14400 at 22:55; Settings changed it
+  to 18000/18000 at 00:31:08, before the card started, by no agent as far as the worker could tell (Haik asked in
+  session `wakeshot-91`'s chat). The laptop has been on battery and undocked since about 00:30. `p3-haik-checks` is
+  blocked, waiting for Haik: about 60 min, 15 of hands (A End task, C lock and sign in, D Start > Sleep on battery,
+  E lid closed 20 min on battery, B1 and B2 two sign-outs; 50% battery or more). Before he starts: stop every agent and
+  the keep-awake helper, then a new worker does a 5 minute prep that reads both cards' Logs. Decided by the worker,
+  for Haik's review: the 00:32 values are the baseline; skip F; B is two sign-outs; Haik double-clicks step files; the
+  cycles ran on battery while other cards built. Stale: the Test laptop lines in `CLAUDE.md` and `architecture.md`
+  652, 656 and 1017 (sleep values, dock), once Haik confirms the new values are his.
