@@ -9,9 +9,12 @@ use std::fmt;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use crate::command::Failure;
-use crate::files::JournalFile;
+use crate::files::{JournalFile, JournalKey};
 use crate::ownership::io::{JournalRead, PlanIo, SafetyNet};
-use crate::settings::{Guid, PlanValues, SettingKey};
+use crate::ownership::journal::JournalParts;
+use crate::settings::{Guid, JournalEntry, OwnedKey, PlanValues, SettingKey};
+
+const KEYS: [SettingKey; 3] = [SettingKey::LidAc, SettingKey::LidDc, SettingKey::SleepDc];
 
 /// The code the fake returns for a plan it does not hold. The fake's own choice: what Windows returns for a deleted
 /// plan is not verified.
@@ -78,13 +81,76 @@ pub enum FakeGuard {
     Stopping,
 }
 
+/// Who set a stored or in-force value, so a property or stop-point test can tell a value Wakeshot still holds from
+/// the user's own without knowing the routine's steps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SetBy {
+    /// The plan's values at the start, and every `FakeState::user_write`.
+    User,
+    /// A `write` of anything but the `original` of the fake's journal entry for that plan and key: a value Wakeshot
+    /// holds. A write with no such entry is one too, so a routine that writes before it journals shows up.
+    Override,
+    /// A `write` of that entry's `original` (and not its `written`): Wakeshot putting the user's value back.
+    Restore,
+}
+
+/// [`SetBy`] for each key Wakeshot writes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SetByKeys {
+    pub lid_ac: SetBy,
+    pub lid_dc: SetBy,
+    pub sleep_dc: SetBy,
+}
+
+impl SetByKeys {
+    pub const USER: Self = Self {
+        lid_ac: SetBy::User,
+        lid_dc: SetBy::User,
+        sleep_dc: SetBy::User,
+    };
+
+    pub fn get(&self, key: SettingKey) -> SetBy {
+        match key {
+            SettingKey::LidAc => self.lid_ac,
+            SettingKey::LidDc => self.lid_dc,
+            SettingKey::SleepDc => self.sleep_dc,
+        }
+    }
+
+    fn get_mut(&mut self, key: SettingKey) -> &mut SetBy {
+        match key {
+            SettingKey::LidAc => &mut self.lid_ac,
+            SettingKey::LidDc => &mut self.lid_dc,
+            SettingKey::SleepDc => &mut self.sleep_dc,
+        }
+    }
+}
+
 /// One plan. `stored` is what a read returns; `in_force` is what Windows runs with, copied from `stored` at each
 /// `set_active` of the plan, so a test sees a value we wrote that is stored back but still in force. Both carry the
-/// plan's own id in `active`.
+/// plan's own id in `active`. `stored_by` and `in_force_by` say who set each value, and move with them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FakePlan {
     pub stored: PlanValues,
     pub in_force: PlanValues,
+    pub stored_by: SetByKeys,
+    pub in_force_by: SetByKeys,
+}
+
+impl FakePlan {
+    fn new(values: PlanValues) -> Self {
+        Self {
+            stored: values,
+            in_force: values,
+            stored_by: SetByKeys::USER,
+            in_force_by: SetByKeys::USER,
+        }
+    }
+
+    fn come_into_force(&mut self) {
+        self.in_force = self.stored;
+        self.in_force_by = self.stored_by;
+    }
 }
 
 /// Everything the fake holds. Tests read and change it through `FakePlans::state` or an `Action::Run` closure.
@@ -110,8 +176,10 @@ impl FakeState {
         let active = self.active;
         if let Some(p) = self.plans.get_mut(&plan) {
             *value_mut(&mut p.stored, key) = value;
+            *p.stored_by.get_mut(key) = SetBy::User;
             if plan == active {
                 *value_mut(&mut p.in_force, key) = value;
+                *p.in_force_by.get_mut(key) = SetBy::User;
             }
         }
     }
@@ -119,7 +187,7 @@ impl FakeState {
     /// The user or another app switches the active plan; its stored values come into force.
     pub fn switch_plan(&mut self, plan: Guid) {
         if let Some(p) = self.plans.get_mut(&plan) {
-            p.in_force = p.stored;
+            p.come_into_force();
             self.active = plan;
         }
     }
@@ -135,6 +203,77 @@ impl FakeState {
     pub fn in_force(&self, plan: Guid, key: SettingKey) -> Option<u32> {
         self.plans.get(&plan).map(|p| value(&p.in_force, key))
     }
+
+    pub fn stored_by(&self, plan: Guid, key: SettingKey) -> Option<SetBy> {
+        self.plans.get(&plan).map(|p| p.stored_by.get(key))
+    }
+
+    pub fn in_force_by(&self, plan: Guid, key: SettingKey) -> Option<SetBy> {
+        self.plans.get(&plan).map(|p| p.in_force_by.get(key))
+    }
+
+    /// Sets a stored value as a crash or an earlier run left it, with no call logged. A starting state only: a test
+    /// step goes through the seams or `user_write`.
+    pub fn set_stored(&mut self, plan: Guid, key: SettingKey, value: u32, by: SetBy) {
+        if let Some(p) = self.plans.get_mut(&plan) {
+            *value_mut(&mut p.stored, key) = value;
+            *p.stored_by.get_mut(key) = by;
+        }
+    }
+
+    /// Sets an in-force value as a crash or an earlier run left it, with no call logged (see `set_stored`).
+    pub fn set_in_force(&mut self, plan: Guid, key: SettingKey, value: u32, by: SetBy) {
+        if let Some(p) = self.plans.get_mut(&plan) {
+            *value_mut(&mut p.in_force, key) = value;
+            *p.in_force_by.get_mut(key) = by;
+        }
+    }
+
+    /// The known entries of the journal file; none when it is missing, corrupt or unreadable.
+    pub fn known_entries(&self) -> Vec<JournalEntry> {
+        match &self.journal {
+            FakeJournal::File(file) => JournalParts::split(file.clone()).known.entries,
+            _ => Vec::new(),
+        }
+    }
+
+    /// Every key whose value Wakeshot still holds: stored on any plan, or in force on the active plan, as an override.
+    /// An inactive plan's in-force values do not count: activating it brings its stored values into force.
+    pub fn held(&self) -> Vec<OwnedKey> {
+        let mut held = Vec::new();
+        for (&plan, p) in &self.plans {
+            for key in KEYS {
+                let in_force = plan == self.active && p.in_force_by.get(key) == SetBy::Override;
+                if p.stored_by.get(key) == SetBy::Override || in_force {
+                    held.push(OwnedKey { plan, key });
+                }
+            }
+        }
+        held
+    }
+
+    /// The held keys with no known entry in the journal file: the values no restore can bring back. The stop-point
+    /// and property tests of every track assert this is empty.
+    pub fn held_without_entry(&self) -> Vec<OwnedKey> {
+        let entries = self.known_entries();
+        let mut held = self.held();
+        held.retain(|k| !entries.iter().any(|e| e.plan == k.plan && e.key == k.key));
+        held
+    }
+
+    fn write_label(&self, plan: Guid, key: SettingKey, value: u32) -> SetBy {
+        let FakeJournal::File(file) = &self.journal else {
+            return SetBy::Override;
+        };
+        let entry = file
+            .entries
+            .iter()
+            .find(|e| e.plan == plan && e.key == JournalKey::Known(key));
+        match entry {
+            Some(e) if value == e.original && value != e.written => SetBy::Restore,
+            _ => SetBy::Override,
+        }
+    }
 }
 
 /// A handle to one shared `FakeState`. The routines take the two seams as two `&mut` arguments, so a test passes two
@@ -147,13 +286,7 @@ impl FakePlans {
     pub fn new(values: PlanValues) -> Self {
         let state = FakeState {
             active: values.active,
-            plans: BTreeMap::from([(
-                values.active,
-                FakePlan {
-                    stored: values,
-                    in_force: values,
-                },
-            )]),
+            plans: BTreeMap::from([(values.active, FakePlan::new(values))]),
             blocked: Vec::new(),
             journal: FakeJournal::Missing,
             set_aside: 0,
@@ -168,11 +301,9 @@ impl FakePlans {
 
     /// Adds an inactive plan, `values.active`.
     pub fn add_plan(&self, values: PlanValues) {
-        let plan = FakePlan {
-            stored: values,
-            in_force: values,
-        };
-        self.state().plans.insert(values.active, plan);
+        self.state()
+            .plans
+            .insert(values.active, FakePlan::new(values));
     }
 
     pub fn script(&self, index: usize, action: Action) {
@@ -260,8 +391,10 @@ impl PlanIo for FakePlans {
     fn write(&mut self, plan: Guid, key: SettingKey, value: u32) -> Result<(), Failure> {
         const NAME: &str = "FakePlans::write";
         let mut state = self.begin(Call::Write(plan, key, value), NAME)?;
+        let by = state.write_label(plan, key, value);
         let p = state.plans.get_mut(&plan).ok_or(missing(NAME))?;
         *value_mut(&mut p.stored, key) = value;
+        *p.stored_by.get_mut(key) = by;
         Ok(())
     }
 
@@ -269,7 +402,7 @@ impl PlanIo for FakePlans {
         const NAME: &str = "FakePlans::set_active";
         let mut state = self.begin(Call::SetActive(plan), NAME)?;
         let p = state.plans.get_mut(&plan).ok_or(missing(NAME))?;
-        p.in_force = p.stored;
+        p.come_into_force();
         state.active = plan;
         Ok(())
     }
@@ -533,5 +666,104 @@ mod tests {
         assert_eq!(fake.state().guards_started, 2);
         net.delete_journal().unwrap();
         assert_eq!(net.load_journal(), JournalRead::Missing);
+    }
+
+    #[test]
+    fn writes_take_their_label_from_the_journal_entry() {
+        let fake = FakePlans::new(haiks(BALANCED));
+        let mut plans = fake.clone();
+        plans.write(BALANCED, SettingKey::LidAc, 0).unwrap();
+        assert_eq!(
+            fake.state().stored_by(BALANCED, SettingKey::LidAc),
+            Some(SetBy::Override),
+            "no journal: a write is an override"
+        );
+
+        fake.state().journal = FakeJournal::File(journal());
+        plans.write(BALANCED, SettingKey::LidDc, 0).unwrap();
+        assert_eq!(
+            fake.state().stored_by(BALANCED, SettingKey::LidDc),
+            Some(SetBy::Override)
+        );
+        plans.write(BALANCED, SettingKey::LidDc, 1).unwrap();
+        let state = fake.state();
+        assert_eq!(
+            state.stored_by(BALANCED, SettingKey::LidDc),
+            Some(SetBy::Restore)
+        );
+        assert_eq!(
+            state.in_force_by(BALANCED, SettingKey::LidDc),
+            Some(SetBy::User)
+        );
+        assert_eq!(
+            state.stored_by(BALANCED, SettingKey::SleepDc),
+            Some(SetBy::User)
+        );
+    }
+
+    #[test]
+    fn labels_move_with_the_values() {
+        let fake = FakePlans::new(haiks(BALANCED));
+        fake.add_plan(haiks(OTHER));
+        fake.state().journal = FakeJournal::File(journal());
+        let mut plans = fake.clone();
+        plans.write(BALANCED, SettingKey::LidDc, 0).unwrap();
+        plans.set_active(BALANCED).unwrap();
+        assert_eq!(
+            fake.state().in_force_by(BALANCED, SettingKey::LidDc),
+            Some(SetBy::Override)
+        );
+
+        let mut state = fake.state();
+        state.user_write(BALANCED, SettingKey::LidDc, 3);
+        assert_eq!(
+            state.in_force_by(BALANCED, SettingKey::LidDc),
+            Some(SetBy::User)
+        );
+        state.set_stored(OTHER, SettingKey::LidAc, 0, SetBy::Override);
+        state.switch_plan(OTHER);
+        assert_eq!(
+            (
+                state.in_force(OTHER, SettingKey::LidAc),
+                state.in_force_by(OTHER, SettingKey::LidAc)
+            ),
+            (Some(0), Some(SetBy::Override))
+        );
+        state.set_in_force(OTHER, SettingKey::SleepDc, 0, SetBy::Override);
+        assert_eq!(
+            state.in_force_by(OTHER, SettingKey::SleepDc),
+            Some(SetBy::Override)
+        );
+        drop(state);
+        assert!(fake.state().calls[2..].is_empty(), "setters log no call");
+    }
+
+    #[test]
+    fn held_counts_stored_values_and_the_active_plans_in_force_values() {
+        let fake = FakePlans::new(haiks(BALANCED));
+        fake.add_plan(haiks(OTHER));
+        let mut state = fake.state();
+        assert!(state.held().is_empty());
+        state.set_stored(OTHER, SettingKey::SleepDc, 0, SetBy::Override);
+        state.set_in_force(OTHER, SettingKey::LidAc, 0, SetBy::Override);
+        state.set_in_force(BALANCED, SettingKey::LidDc, 0, SetBy::Override);
+        state.set_stored(BALANCED, SettingKey::LidAc, 1, SetBy::Restore);
+        let lid_dc = OwnedKey {
+            plan: BALANCED,
+            key: SettingKey::LidDc,
+        };
+        let sleep_dc = OwnedKey {
+            plan: OTHER,
+            key: SettingKey::SleepDc,
+        };
+        assert_eq!(state.held(), [lid_dc, sleep_dc]);
+        assert_eq!(state.held_without_entry(), [lid_dc, sleep_dc]);
+        assert!(state.known_entries().is_empty());
+
+        state.journal = FakeJournal::File(journal());
+        assert_eq!(state.known_entries().len(), 1);
+        assert_eq!(state.held_without_entry(), [sleep_dc]);
+        state.journal = FakeJournal::Corrupt;
+        assert_eq!(state.held_without_entry(), [lid_dc, sleep_dc]);
     }
 }
