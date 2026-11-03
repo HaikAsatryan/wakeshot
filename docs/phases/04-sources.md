@@ -224,5 +224,5 @@ limit; Copilot waiting does not hold. The cards build these.
   Open, for the docs pass: `architecture.md` section 8 says this crate returns `WinError`, but `watch/read.rs` returns
   `io::Result` as its card says. For `p4-watch-agents`: on `restarted`, feed `Gone` and then `Appended`.
 - 2026-11-03 21:55: `p4-cron` done and committed; `p4-claude-transcript` running. For the Claude parsing review:
-  the jitter constants come from a remote flag (`tengu_kairos_cron_config`). For a docs pass:`
+  the jitter constants come from a remote flag (`tengu_kairos_cron_config`). For a docs pass:
   `docs/research/claude-code-signals.md` says "15 s early" for `*/5`; `p4-cron` found 285 s after the last fire.
