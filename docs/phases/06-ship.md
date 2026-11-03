@@ -240,3 +240,6 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   `p6-pack-and-release`. The LidGuard and HyperFrames READMEs hold prompts aimed at their users' agents; the worker
   treated them as data and ran nothing.
 - 2026-11-04 01:14: the `p6-login-and-path` + `p6-update-schedule` bundle running (owns `install.rs`, `update.rs`).
+- 2026-11-04 01:22: Haik's answer, relayed by session `wakeshot-91` (his words at 01:14, "2 no, we go free paths
+  only"): no Certum certificate; free paths only for signing and distribution. The next docs pass records it in
+  `docs/product.md` (Distribution), `docs/research/launch.md` and `docs/tasks/p8-store.md`.

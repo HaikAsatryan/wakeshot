@@ -217,3 +217,9 @@ Critical path: store, journal, (core ownership cards), power-io, harness, real-c
   for Haik's review: the 00:32 values are the baseline; skip F; B is two sign-outs; Haik double-clicks step files; the
   cycles ran on battery while other cards built. Stale: the Test laptop lines in `CLAUDE.md` and `architecture.md`
   652, 656 and 1017 (sleep values, dock), once Haik confirms the new values are his.
+- 2026-11-04 01:22: Haik's answer, relayed by session `wakeshot-91` (his words at 01:14, "1 yes"): the 00:31 sleep
+  change and the undocking were his. His baseline from now: sleep AC 18000 and DC 18000, lid AC 1 DC 1, energy saver
+  DC 30, Balanced the only plan; the dock is no longer always plugged in. `p3-haik-checks` uses these values (the
+  real-checks worker already took the 00:32 values, which are the same). The Test laptop lines in `CLAUDE.md` and
+  `architecture.md` (652, 656, 1017) go to the next docs pass; the `CLAUDE.md` edit waits for Haik's yes in the
+  orchestrator's own chat, since the answer came through a peer session.
