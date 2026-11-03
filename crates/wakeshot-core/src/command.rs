@@ -10,8 +10,10 @@ use crate::view::{Cue, Notice, TrayView};
 
 /// A failed Windows call, as the core sees it: which call and its code, enough to log and to pick a fallback.
 ///
-/// Owner: power track (Phase 3), from `wakeshot_windows::WinError`. The core never branches on `call`; it may branch
-/// on `code` only where the design names one (access denied 5 and 1260, section 8).
+/// Owner: power track (Phase 3), from `wakeshot_windows::WinError`. The core may branch on `code` only where the
+/// design names one, and on `call` only with it: access denied, 5 or 1260, from `PowerSettingAccessCheckEx`,
+/// `PowerWriteACValueIndex` or `PowerWriteDCValueIndex` blocks settings for the run (section 8; power safety review
+/// finding 8), so the power track names those calls exactly so.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Failure {
     pub call: &'static str,

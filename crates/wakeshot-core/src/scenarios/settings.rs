@@ -58,6 +58,12 @@ const POLICY_DENIED: Failure = Failure {
     call: "PowerWriteACValueIndex",
     code: 1260,
 };
+/// The journal mutex, created by an elevated `wakeshot restore`, refused to a Medium tray (power safety review
+/// finding 8; whether Windows does so is not verified).
+const MUTEX_DENIED: Failure = Failure {
+    call: "CreateMutexExW",
+    code: 5,
+};
 const RESTORE_FAILED: Failure = Failure {
     call: "PowerReadDCValueIndex",
     code: 2,
@@ -622,6 +628,42 @@ fn access_denied_holds_with_requests_only_for_the_run() {
         let trace = sim.trace();
         assert!(settings(&out).is_empty(), "{denied:?}\n{trace}");
         assert_eq!(count(&out, &SYSTEM), 1, "{trace}");
+    }
+}
+
+/// Power safety review finding 8: only access denied from a settings call is a policy block. A 5 or 1260 from any
+/// other call (the journal mutex an elevated `wakeshot restore` holds, a journal, RunOnce or guard write), or another
+/// code from a settings call, holds requests only for the episode, and the next episode applies again.
+#[test]
+fn only_access_denied_from_a_settings_call_is_requests_only_for_the_run() {
+    for denied in [
+        ApplyError::SafetyNet(MUTEX_DENIED),
+        ApplyError::SafetyNet(Failure {
+            call: "RegSetValueExW",
+            code: 5,
+        }),
+        ApplyError::Write(Failure {
+            call: "PowerSetActiveScheme",
+            code: 1260,
+        }),
+        ApplyError::SafetyNet(Failure {
+            call: "PowerSettingAccessCheckEx",
+            code: 2,
+        }),
+        ApplyError::Write(WRITE_FAILED),
+    ] {
+        let mut sim = known_plan();
+        sim.send(working(1));
+        let out = sim.send(applied(BALANCED, Err(denied), vec![]));
+        assert_eq!(notified(&out, &Notice::RequestsOnly), 1, "{}", sim.trace());
+        sim.send(idle(1));
+        let out = sim.send(working(1));
+        let trace = sim.trace();
+        assert_eq!(
+            settings(&out),
+            [&apply(BALANCED, &KEYS)],
+            "{denied:?}\n{trace}"
+        );
     }
 }
 

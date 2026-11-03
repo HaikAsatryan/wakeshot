@@ -303,3 +303,153 @@ for every notice. `Session(Locked | Unlocked)` is left empty in `take_session` f
 - Found outside scope 1 and 2 (architecture lines for the docs pass), 3 and 4 (power track).
 - For the power safety review: design choices 1, 3, 6, 7 and 8, and the `JOURNAL_CORRUPT` restore.
 - Next: `p2-core-lid` builds on the seams above.
+
+## Core round B (2026-11-04)
+
+Status: done. Agent: `wakeshot-worker`. Brief from the orchestrator: power safety review
+(`docs/reviews/p2-6-power-safety.md`) findings 8, 9 and 10; the Automatic toggle that writes version 1 over a newer
+`config.json` (`core.rs`); `p2-core-lid` "Core round A", Needs another card items 1 (props half of verify minor 4), 2
+(the props model's "restore failed" flag), 3 (`LockWatch` into `State`) and 5 (the `docs/architecture.md` rows); not
+item 4 (the sleep fallback). Owns `core.rs`, `core/settings.rs`, `ownership/`, `scenarios/settings.rs`,
+`scenarios/props.rs`, `state.rs`, `core/lid.rs` (the `LockWatch` move only), the named `docs/architecture.md` lines and
+any line the fixes make wrong, this card, and a new `docs/research.md` section.
+
+### Log
+
+- 2026-11-04 02:02: started. Read the card, `p2-core-props`, round A of `p2-core-lid`, the review, the code.
+- 2026-11-04 02:08: design. Finding 8: 5 or 1260 is "for the run" only from `PowerSettingAccessCheckEx` or a
+  `PowerWrite*` call (the names `power::plan` gives); any other call is for the episode. Finding 9: an apply saves new
+  entries marked and clears the marks after its call; the check now reads marked entries too and reports a value that
+  is neither `written` nor `original`. Finding 10: an apply skips a key whose entry shows such a value and keeps the
+  entry as it is, so the next check reports it (no contract change: `Applied` is built in `crates/wakeshot-windows`).
+  The Automatic toggle: the core cannot tell a newer `config.json` (the IO side gives it the default and no event), so
+  the write check belongs to the `WriteConfig` runner, as the CLI does it: Needs another card. Tests first: 9 new or
+  changed unit and scenario tests fail on the old code (`scenarios::settings` 1, `ownership::apply` 6,
+  `ownership::check` 1, `ownership::props` 1, the strict test no longer ignored). Props: the two minimal cases of round
+  A item 2 are named tests; both fail on the old model rule and pass on the new one.
+- 2026-11-04 02:14: code done. `core/settings.rs` (finding 8), `ownership/apply.rs` and `check.rs` (findings 9 and
+  10), `LockWatch` and `PendingLock` moved into `state.rs` (`State::lock`; `core/lid.rs` only renamed `self.lock` to
+  `self.state.lock`), the props half of verify minor 4 and the model's "restore failed" flag in `scenarios/props.rs`,
+  the `Failure` doc in `command.rs` (doc only; the core now reads `call` for the settings calls). Three apply tests
+  changed for the new save (marked first, then cleared). `cargo test -p wakeshot-core`: 586 passed, 1 ignored
+  (`coverage_tally`). Clippy four ways: exit 0. `cargo fmt --all --check`: clean. Architecture lines updated. Next:
+  long property runs in release, then mutants in a scratch copy.
+- 2026-11-04 02:23: long runs (`PROPTEST_CASES=10000`, release): `scenarios::props` 10 of 10 passed, `ownership::props`
+  3 of 3, `scenarios::settings` with the lid proptest 1 of 1. Slip: one `git --version` call (prints the version only,
+  no repo operation) went out with a grep; no other git call.
+- 2026-11-04 02:25: mutants in a scratch copy: 10 of 11 killed at once; "any code from a settings call is for the run"
+  survived, so the finding 8 scenario now also feeds `PowerSettingAccessCheckEx` code 2 and `PowerWriteDCValueIndex`
+  31; then 11 of 11. Final checks green (Result). `docs/research.md` "Core settings round B checks" added. Status: done.
+
+### Result
+
+Status: done 2026-11-04. Findings 8, 9 and 10 fixed, each with tests that fail on the old code; round A items 1, 2, 3
+and 5 done. The config version item is not fixable in the core (the core never learns that `config.json` is newer):
+its fix is under Needs another card, with the exact change.
+
+#### Per item
+
+1. **Finding 8, any code 5 turned off overrides for the run: fixed.** `core/settings.rs` `apply_failed`: requests only
+   for the run only for 5 or 1260 from `PowerSettingAccessCheckEx`, `PowerWriteACValueIndex` or
+   `PowerWriteDCValueIndex` (`SETTINGS_CALLS`, the names `power::plan` gives); any other failure, also a 5 from the
+   journal mutex or a file or registry write, is for the episode. `command.rs` `Failure` doc now says the core reads
+   `call` for these (doc only). Test `only_access_denied_from_a_settings_call_is_requests_only_for_the_run`.
+2. **Finding 9, a failed apply whose restore fails reported a false user change: fixed.** `ownership/apply.rs`: new
+   entries are saved marked `restored` and the marks cleared in one save after `set_active` (one more journal write
+   per apply that adds an entry). `ownership/check.rs`: marked entries are read too; a marked entry at `written` or
+   `original` is ours, any other value is the user's (restore step 3's rule), so a mark hides only a change back to
+   exactly `original`. Tests: `a_new_entry_never_written_is_never_a_user_change`, the strict
+   `ownership::props::a_failed_apply_whose_restore_fails_reports_no_false_user_change` (no longer ignored; its excuse
+   in `Run::apply` removed), `a_marked_entry_the_user_changed_is_reported`, and three apply tests updated for the
+   marked first save.
+3. **Finding 10, an apply overrode a change the check had not seen: fixed.** `own()` in `ownership/apply.rs`: an entry
+   on this plan whose live value is neither `written` nor `original` is the user's: the key is skipped and the entry
+   kept as it is (`Role::Keep`, was `Other`), so the next ownership check (at most 10 s while anything is owned)
+   reports it and the core releases the key. No contract change. Tests
+   `a_user_change_no_check_saw_yet_is_never_written_over` and
+   `an_entry_never_written_is_replaced_and_a_users_change_is_kept`.
+4. **The Automatic toggle over a newer `config.json` (`core.rs` line 159): not fixed here.** The core cannot know: on a
+   newer file `read_config` gives `Started` the default with `first_run: false`, and the watch thread posts no
+   `ConfigChanged` (research). Rule used: `docs/architecture.md` section 6 ("a file with a newer version is ignored and
+   logged") with the write rule the CLI already follows (`wakeshot-cli/src/automatic.rs`: a newer file is never
+   written over, a bad one is replaced). Needs another card 1.
+5. **Round A item 1, verify minor 4's props half: done.** `no_request_without_a_hold` also fails on a system request
+   while the core surely stepped back after a failed lid lock (the model's step back, with our Do nothing in force for
+   the source and `core_can_know` at that step). `closed_laptop_is_locked_in_time` lost its blanket "a lock failed"
+   excuse: a stretch is excused only when the step that ends the retry's wait has the requests off and a `Restore`.
+   Named World cases `a_lock_step_back_takes_the_requests_off` and `a_lock_step_back_restores_within_one_tick`.
+6. **Round A item 2, the model's "restore failed" flag: done.** Cleared only at `Restored { plan: None, Ok }`. The two
+   minimal cases are named tests (`a_released_key_waits_for_the_retry_after_a_failed_restore` and
+   `a_released_key_waits_for_the_retry_after_a_failed_plan_switch_restore`): both fail on the old rule, pass on the
+   new. Then 10 of 10 release runs at 10,000 cases passed.
+7. **Round A item 3, `LockWatch` into `State`: done.** `LockWatch` and `PendingLock` now live in `state.rs` as
+   `State::lock`; `Core` holds only `state`; `core/lid.rs` changed only `self.lock.` to `self.state.lock.` (and rustfmt
+   of those lines). `State::plan` doc updated as asked.
+8. **Round A item 5, `docs/architecture.md`: done.** Section 8: the "Hibernate not allowed..." row gets the relock and
+   the repeated notice; "Lock fails" gets `LockFailed` shown again; the access denied row names the settings calls and
+   the journal row covers a 5 there. Section 5 "Lock and hibernate": the relock sentence. Lines the fixes made wrong:
+   section 3 state paragraph (`lock: LockWatch` in `State`), section 5 Apply steps 3, 4 and 6, the stop points
+   paragraph and the Ownership paragraph (marks, the kept user change).
+
+#### Files changed
+
+`crates/wakeshot-core/src/core.rs` (the `lock` field gone), `core/settings.rs`, `core/lid.rs` (the move only),
+`state.rs`, `command.rs` (`Failure` doc only), `ownership/apply.rs`, `ownership/check.rs`, `ownership/props.rs`,
+`scenarios/settings.rs`, `scenarios/props.rs`; `docs/architecture.md`, `docs/research.md` (new section), this card.
+
+#### Checks (final run 2026-11-04 02:25, own build folder, every cargo command `--locked`)
+
+- `cargo fmt --all --check`: exit 0, no diff anywhere.
+- `cargo test -p wakeshot-core`: 587 passed, 1 ignored (`coverage_tally`), plus 11 and 25 in `tests/`.
+- `cargo clippy -p wakeshot-core --target <t> -- -D warnings`, with and without `--all-targets`, x64 and ARM64: all
+  four exit 0.
+- `cargo check -p wakeshot-windows --all-targets`: exit 0, no edit there. Also `cargo test -p wakeshot-windows --lib
+  -- power:: app::`: 182 passed, 10 ignored (real-laptop tests), since the apply and check routines changed.
+- Release, `PROPTEST_CASES=10000`: `scenarios::props` 10 of 10 runs passed (16 to 20 s each), `ownership::props` 3
+  of 3, `scenarios::settings` and `scenarios::lid::lid_events_in_any_order` 1 of 1.
+- Mutants by hand in a scratch copy (with `docs/`), each reverted: 11 of 11 killed. Finding 8: any call's 5 for the
+  run; any code from a settings call for the run (survived once, killed after the test grew). Finding 9: new entries
+  unmarked (7 tests fail); marks never cleared (10). Finding 10: a user change written over (2); a never-written entry
+  kept too (1). Check: `original` ours unmarked too (`a_value_set_back_to_original_is_the_users_change`, added for
+  it); a marked entry at `original` the user's (9); marked entries skipped again (4). Props half of minor 4: the lock
+  step back keeps the requests (2 named cases); sends no restore (1).
+- No clock read, no I/O, no new dependency in the core. Only the owned files changed (from my own edit record).
+  Build folder, mutant copy and scratch scripts deleted.
+
+#### Decided by the worker, for Haik's review
+
+1. Finding 8: "for the run" only for the access check and the two writes. A 5 or 1260 from `PowerSetActiveScheme` is
+   for the episode: not shown to mean policy, and the episode rule is the side that tries again. Change it when a log
+   shows a policy that denies only the call.
+2. Finding 9: one more journal save per apply that adds an entry (each hold start), as the review proposed. Change it
+   when that save shows up as slow.
+3. Finding 10: the user's change is left for the next check, not reported in `Applied` (that needs a Windows edit).
+   Until that check, at most about 10 s, the core's in-force view still counts the key as ours, which errs toward a
+   lock, and the notice comes then. Change it when a contract card adds `Applied.user_changed`.
+4. The check now reads marked entries: a mark hides only a change back to exactly `original` (an apply would then take
+   it over), where before it hid every change until a restore dropped it with no notice.
+5. Config: the check belongs in the `WriteConfig` runner, at write time, with the CLI's rule; the toggle then holds
+   for this run only and the newer file stays. Haik's rule: nothing of the user's is overwritten.
+6. Props: the lock step back is judged only where the core surely steps back (truth shows our Do nothing and the core
+   can know), since the model's step back over-approximates the core's own view.
+
+#### Needs another card
+
+1. `crates/wakeshot-windows/src/app/io_thread.rs`, the `Command::WriteConfig(config)` arm (the IO thread's owner):
+   before `write_json`, `store::read_whole` the config path. `Ok(Some(bytes))` with `files::read::<Config>(&bytes)`
+   giving `Read::Newer(v)`: do not write; log a warning `config.json not written: version {v} is newer than
+   {Config::VERSION}; Automatic {on|off} for this run only`; answer `Outcome::Written { file: FileKind::Config,
+   result: Err(Failure { call: "config.json (newer version kept)", code: 13 }) }` (13, `ERROR_INVALID_DATA`, as
+   `READ_BACK_DIFFERS` uses where Windows gives no code; the core ignores a `Config` answer). A read error other than
+   not found: do not write either, as the CLI. A bad file or none: write as now. Test: a version 2 file with an extra
+   field is byte for byte the same after `WriteConfig(Config::new(false))`. Then `docs/architecture.md` section 6,
+   after "A file with a newer version is ignored and logged": "and never written over: the tray's menu then changes
+   Automatic for this run only, and `wakeshot automatic` refuses with a message"; and `command.rs`, on `WriteConfig`:
+   "The runner never writes over a newer `config.json` (section 6)."
+2. Round A item 4 (a sleep fallback) stays with the orchestrator, as briefed.
+
+#### Found outside scope
+
+1. The World's IO faults name the fake's calls (`FakePlans::can_write`, `FakePlans::write`), so since finding 8 no
+   random case reaches "requests only for the run"; the scenario tests cover it with the real names. Not a bug.
+2. No other card's file failed fmt, a build, clippy or a test during this round.

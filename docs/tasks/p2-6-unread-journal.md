@@ -1,4 +1,4 @@
-# Retry an unread startup journal; check the lid again after the going to sleep sound
+# Retry an unread startup journal; check the lid again after the going to sleep sound; keep a newer config
 
 Phase: 2 to 6 (core and Windows power). Status: ready. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 60K
 tokens. Written by the orchestrator (session `wakeshot-46`, 2026-11-04) from power safety review findings 3 and 6.
@@ -40,6 +40,10 @@ Build folder: `CARGO_TARGET_DIR=<scratchpad>\p2-6-unread-journal\target`.
    No cancel flag: the review's lean option needs no contract change. An agent turn that starts in those seconds is
    not covered; say so in the Result.
 6. `docs/architecture.md`: only the lines on `Started`'s fields and the hibernate steps, changed in place.
+7. Added by the orchestrator after core round B: the `WriteConfig` runner never writes over a newer `config.json`.
+   The exact change, its test and the two doc lines are in `docs/tasks/p2-core-settings.md`, "Core round B", "Needs
+   another card" item 1 (`crates/wakeshot-windows/src/app/io_thread.rs`, the `Command::WriteConfig` arm; one sentence
+   in `docs/architecture.md` section 6; one doc line on `WriteConfig` in `crates/wakeshot-core/src/command.rs`).
 
 ## Acceptance checks
 

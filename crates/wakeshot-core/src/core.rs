@@ -43,14 +43,12 @@ const MINUTE_MS: i64 = 60_000;
 #[derive(Debug)]
 pub struct Core {
     state: State,
-    lock: lid::LockWatch,
 }
 
 impl Core {
     pub fn new(config: Config) -> Self {
         Self {
             state: State::new(&config),
-            lock: lid::LockWatch::default(),
         }
     }
 

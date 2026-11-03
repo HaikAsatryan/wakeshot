@@ -43,8 +43,14 @@ const SECOND: u64 = 1_000;
 const MINUTE: u64 = 60 * SECOND;
 const HOUR: u64 = 60 * MINUTE;
 
-/// The access denied codes the design names (section 8): requests only for the whole run.
+/// The access denied codes the design names (section 8): requests only for the whole run, from a settings access
+/// check or write; from any other call, for the episode (power safety review finding 8).
 const ACCESS_DENIED: [u32; 2] = [5, 1260];
+const SETTINGS_CALLS: [&str; 3] = [
+    "PowerSettingAccessCheckEx",
+    "PowerWriteACValueIndex",
+    "PowerWriteDCValueIndex",
+];
 
 // The case.
 
@@ -92,7 +98,7 @@ struct Model {
     on_console: bool,
     locked: bool,
     session_ending: bool,
-    /// Access denied at an apply: requests only for the run.
+    /// Access denied at an apply's settings call: requests only for the run.
     requests_only_run: bool,
     agents: Vec<(Activity, Alive)>,
     files: Vec<HoldFacts>,
@@ -286,7 +292,7 @@ impl Model {
                 result: Err(ApplyError::SafetyNet(failure) | ApplyError::Write(failure)),
                 ..
             }) => {
-                if ACCESS_DENIED.contains(&failure.code) {
+                if ACCESS_DENIED.contains(&failure.code) && SETTINGS_CALLS.contains(&failure.call) {
                     self.requests_only_run = true;
                 } else if let Some(episode) = self.episode.as_mut() {
                     episode.requests_only = true;
@@ -453,14 +459,19 @@ fn released_keys_stay_released(world: &World) -> Result<(), String> {
 
 /// Windows' side of minor 9 and product rule 3: once the core knows of a release and the IO side caught up, the
 /// key is not ours in force on the active plan for the rest of the episode, unless a restore failed and waits for
-/// its retry.
+/// its retry. Only a restore of every plan that works ends that wait: a scoped one that works (a plan switch's, or
+/// the retry's while holding) leaves the other plans' entries to the retry (section 3, "A failed `Restore`").
 fn released_keys_are_not_ours_in_force(world: &World) -> Result<(), String> {
     let mut restore_failed = false;
     for seen in replay(world) {
         if let Some(step) = seen.step {
             match step.event {
                 Event::Done(Outcome::Restored { result: Err(_), .. }) => restore_failed = true,
-                Event::Done(Outcome::Restored { result: Ok(()), .. }) => restore_failed = false,
+                Event::Done(Outcome::Restored {
+                    plan: None,
+                    result: Ok(()),
+                    ..
+                }) => restore_failed = false,
                 _ => {}
             }
         }
@@ -556,9 +567,23 @@ fn nothing_for_another_sessions_console(world: &World) -> Result<(), String> {
     Ok(())
 }
 
-/// No request is on with no hold, and none while stepped back; an apply only while a hold counts.
+/// The model steps back after a failed lid lock in this step, and the core surely does too: the lid is closed with
+/// our Do nothing in force for the current power source where [`core_can_know`] (the model's step back also stands
+/// where the core's own view finds no Do nothing of ours, and then the core holds on).
+fn surely_steps_back_for_the_lock(seen: &Seen<'_>) -> bool {
+    let truth = seen.truth();
+    !seen.before.lock_stepped_back
+        && seen.after.lock_stepped_back
+        && truth.lid_closed
+        && truth.lid() == (DO_NOTHING, SetBy::Override)
+        && core_can_know(seen)
+}
+
+/// No request is on with no hold, and none while stepped back, at the battery floor or after a failed lid lock
+/// (section 8, "Lock fails"); an apply only while a hold counts.
 fn no_request_without_a_hold(world: &World) -> Result<(), String> {
     let mut last = (false, false);
+    let mut lock_back = false;
     for seen in replay(world) {
         let (system, display) = requests_now(&mut last, &seen);
         let Some(step) = seen.step else {
@@ -567,6 +592,8 @@ fn no_request_without_a_hold(world: &World) -> Result<(), String> {
         if seen.after.quit {
             continue;
         }
+        lock_back =
+            seen.after.lock_stepped_back && (lock_back || surely_steps_back_for_the_lock(&seen));
         let holding = seen.after.holding(step.at);
         if system && !holding {
             return Err(format!(
@@ -577,6 +604,12 @@ fn no_request_without_a_hold(world: &World) -> Result<(), String> {
         if system && seen.after.stepped_back {
             return Err(format!(
                 "the system request is on while stepped back, {}",
+                seen.where_()
+            ));
+        }
+        if system && lock_back {
+            return Err(format!(
+                "the system request is on while stepped back after a failed lid lock, {}",
                 seen.where_()
             ));
         }
@@ -820,33 +853,42 @@ fn runs_closed_unlocked_on_ours(truth: &Truth) -> bool {
 
 /// A closed laptop never runs on battery on our Do nothing unlocked for more than 30 s (power verify minor 11; the
 /// settle, Haik 2026-11-03), from a lid close or an AC to battery change that leaves it so. Judged from a change the
-/// core heard where [`core_can_know`], and excused when the lock itself failed (section 8: then the retry and the step
-/// back). `strict` also judges a change before the core's first plan read (finding 2: a crashed tray's values in the first
-/// moments after the start).
+/// core heard where [`core_can_know`]. When the lock and its retry fail, the laptop runs on until the step back's
+/// restore lands, so a stretch is excused only by that step back done in time: the requests off and a `Restore` in the
+/// step that ends the retry's wait, one tick after its failure (section 8, "Lock fails"; verify minor 4). `strict`
+/// also judges a change before the core's first plan read (finding 2: a crashed tray's values in the first moments
+/// after the start).
 fn closed_laptop_is_locked_in_time(world: &World, strict: bool) -> Result<(), String> {
     let seen = replay(world);
     let mut stretch: Option<u64> = None;
-    let mut lock_failed = false;
+    let mut stepped_back = false;
+    let mut last = (false, false);
     let mut before: Option<&Truth> = None;
     for s in &seen {
         let truth = s.truth();
+        let (system, _) = requests_now(&mut last, s);
         let runs = runs_closed_unlocked_on_ours(truth);
         if let Some(since) = stretch
             && !runs
         {
             let lasted = truth.at.mono_ms.saturating_sub(since);
-            if lasted > SOURCE_SETTLE_MS && !lock_failed {
+            if lasted > SOURCE_SETTLE_MS && !stepped_back {
                 return Err(format!(
                     "the closed laptop ran unlocked on battery on our Do nothing for {lasted} ms, until {}",
                     s.where_()
                 ));
             }
             stretch = None;
-            lock_failed = false;
+            stepped_back = false;
         }
         if let Some(step) = s.step {
-            if matches!(step.event, Event::Done(Outcome::Locked(Err(_)))) {
-                lock_failed = true;
+            let restores = step
+                .commands
+                .iter()
+                .any(|c| matches!(c, Command::Restore { .. }));
+            let steps_back = !s.before.lock_stepped_back && s.after.lock_stepped_back;
+            if stretch.is_some() && steps_back && restores && !system {
+                stepped_back = true;
             }
             let change = match step.event {
                 Event::Lid { closed: true } => before.is_some_and(|b| !b.lid_closed),
@@ -862,7 +904,7 @@ fn closed_laptop_is_locked_in_time(world: &World, strict: bool) -> Result<(), St
     }
     if let Some(since) = stretch {
         let lasted = world.now().mono_ms.saturating_sub(since);
-        if lasted > SOURCE_SETTLE_MS && !lock_failed {
+        if lasted > SOURCE_SETTLE_MS && !stepped_back {
             return Err(format!(
                 "the closed laptop ran unlocked on battery on our Do nothing for {lasted} ms, to the end"
             ));
@@ -971,8 +1013,9 @@ fn run() -> impl Strategy<Value = WorldStep> {
     .prop_map(WorldStep::Run)
 }
 
-/// A failed call: code 2 (a plan call or a file that fails), or 5 (access denied: requests only for the run when an
-/// apply meets it). Restores and reads make up to about 15 calls, an apply that restores about 30.
+/// A failed call: code 2 (a plan call or a file that fails), or 5 (access denied; the fake's calls are no settings
+/// calls by name, so an apply that meets it holds requests only for the episode). Restores and reads make up to about
+/// 15 calls, an apply that restores about 30.
 fn fault() -> impl Strategy<Value = WorldStep> {
     let on = prop_oneof![
         1 => Just(FaultOn::AnyCommand),
@@ -1276,6 +1319,132 @@ fn coverage_tally() {
         }
     }
     println!("{counts:#?}");
+}
+
+// Shrunk cases kept as named tests.
+
+/// A case from its start, steps and end, checked by `property`, with the trace on failure.
+fn check_case(
+    start: WorldStart,
+    steps: Vec<WorldStep>,
+    end: End,
+    property: fn(&World) -> Result<(), String>,
+) {
+    let case = Case { start, steps, end };
+    let world = play(&case);
+    if let Err(why) = property(&world) {
+        panic!("{why}\n\ncase:\n{case:?}\n\ntrace:\n{}", world.trace());
+    }
+}
+
+fn restore_fails() -> WorldStep {
+    WorldStep::Fault {
+        on: FaultOn::Restore,
+        at: 0,
+        code: 2,
+    }
+}
+
+fn on_battery_at_25() -> WorldStart {
+    WorldStart {
+        ac: false,
+        battery_pct: 25,
+        ..WorldStart::default()
+    }
+}
+
+/// `p2-core-lid` round A, Needs another card 2: a restore of one plan that works while a failed restore still waits
+/// for its retry is no release breach; the retry, which takes every plan, settles it. This case and the next broke the
+/// model's "restore failed" flag, which a good restore of another plan cleared.
+#[test]
+fn a_released_key_waits_for_the_retry_after_a_failed_restore() {
+    check_case(
+        on_battery_at_25(),
+        vec![
+            WorldStep::Switch(1),
+            WorldStep::Ac(true),
+            restore_fails(),
+            WorldStep::RunFile {
+                n: 0,
+                now: FileNow::Alive,
+            },
+            WorldStep::Switch(2),
+            restore_fails(),
+            WorldStep::Menu(MenuCommand::Restore),
+            WorldStep::Switch(1),
+        ],
+        End::LastHold,
+        released_keys_are_not_ours_in_force,
+    );
+}
+
+#[test]
+fn a_released_key_waits_for_the_retry_after_a_failed_plan_switch_restore() {
+    check_case(
+        WorldStart {
+            automatic: false,
+            keep_up: false,
+            ..on_battery_at_25()
+        },
+        vec![
+            WorldStep::Menu(MenuCommand::KeepAwake(KeepAwake::Minutes(30))),
+            WorldStep::Agent {
+                pid: 1,
+                now: AgentNow::Working,
+            },
+            WorldStep::Flush,
+            WorldStep::Switch(1),
+            restore_fails(),
+            WorldStep::Run(10 * SECOND),
+            WorldStep::Io,
+            WorldStep::Menu(MenuCommand::Restore),
+            WorldStep::Fault {
+                on: FaultOn::Apply,
+                at: 2,
+                code: 2,
+            },
+            WorldStep::Switch(0),
+            WorldStep::Flush,
+        ],
+        End::LastHold,
+        released_keys_are_not_ours_in_force,
+    );
+}
+
+/// The lid lock and its retry both fail with the lid closed on our Do nothing, on battery, while the IO thread lags:
+/// the step back takes the requests off and sends the restore at once, and the laptop runs on until the restore lands
+/// (verify minor 4, the props half).
+fn lock_step_back_case(property: fn(&World) -> Result<(), String>) {
+    check_case(
+        WorldStart {
+            ac: false,
+            keep_up: false,
+            ..WorldStart::default()
+        },
+        vec![
+            WorldStep::Agent {
+                pid: 1,
+                now: AgentNow::Working,
+            },
+            WorldStep::Flush,
+            WorldStep::LockFails,
+            WorldStep::Lid { closed: true },
+            WorldStep::LockFails,
+            WorldStep::Run(45 * SECOND),
+        ],
+        End::LastHold,
+        property,
+    );
+}
+
+#[test]
+fn a_lock_step_back_takes_the_requests_off() {
+    lock_step_back_case(no_request_without_a_hold);
+}
+
+#[test]
+fn a_lock_step_back_restores_within_one_tick() {
+    lock_step_back_case(|world| closed_laptop_is_locked_in_time(world, false));
 }
 
 proptest! {

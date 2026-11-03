@@ -12,10 +12,10 @@ use crate::settings::{Journal, JournalEntry, OwnedKey};
 
 /// How one check went. The caller posts one `UserChanged` per key in `user_changed` and logs `failures`.
 ///
-/// - `user_changed`: each entry whose live value, read from its own plan, was not `written`. It is reported even when
-///   the save after the drop failed (then in `failures` too): its live value is the user's, so every later routine
-///   drops the entry left in the file again, and the cost is at most a repeated notice, while not reporting it would
-///   let the next apply override the user's change.
+/// - `user_changed`: each entry whose live value, read from its own plan, was not `written` (nor, for a marked entry,
+///   `original`). It is reported even when the save after the drop failed (then in `failures` too): its live value is
+///   the user's, so every later routine drops the entry left in the file again, and the cost is at most a repeated
+///   notice, while not reporting it would let the next apply override the user's change.
 /// - `journal`: the known entries the check kept, in every plan; empty when the file is missing, corrupt or
 ///   unreadable.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -27,9 +27,9 @@ pub struct Checked {
 
 /// One ownership check: a value we wrote that changed is the user's, and its entry is dropped.
 ///
-/// Call order: `load_journal`; with an unmarked known entry, `active_plan`, then `read` per unmarked entry from its
-/// own plan; after a drop, one save, or the clean-up of restore step 6 when no known entry is left. A corrupt file
-/// is reported as `JOURNAL_CORRUPT` and left for the restore routine to set aside.
+/// Call order: `load_journal`; with a known entry, `active_plan`, then `read` per known entry from its own plan; after
+/// a drop, one save, or the clean-up of restore step 6 when no known entry is left. A corrupt file is reported as
+/// `JOURNAL_CORRUPT` and left for the restore routine to set aside.
 pub fn check(plans: &mut impl PlanIo, net: &mut impl SafetyNet) -> Checked {
     let mut checked = Checked {
         user_changed: Vec::new(),
@@ -51,9 +51,7 @@ pub fn check(plans: &mut impl PlanIo, net: &mut impl SafetyNet) -> Checked {
         }
         JournalRead::Read(file) => JournalParts::split(file),
     };
-    // Marked entries wait for a restore retry: `original` may be stored while ours is still in force.
-    if entries.iter().all(|e| e.restored) {
-        checked.journal = entries;
+    if entries.is_empty() {
         return checked;
     }
     // The design reads the active plan id first; when even that fails, nothing is read or dropped.
@@ -63,15 +61,17 @@ pub fn check(plans: &mut impl PlanIo, net: &mut impl SafetyNet) -> Checked {
         return checked;
     }
     for e in entries {
-        let ours = e.restored
-            || match plans.read(e.plan, e.key) {
-                Ok(live) => live == e.written,
-                // Not the user's change (power review 2): kept, and read again at the next check.
-                Err(failure) => {
-                    checked.failures.push(failure);
-                    true
-                }
-            };
+        // A marked entry with `original` stored waits for a restore's call, ours maybe still in force, or for an
+        // apply's write (power safety review finding 9): ours too. Any other value is the user's, as restore step 3
+        // reads it, so a mark no longer hides it until a restore drops it with no notice (finding 10).
+        let ours = match plans.read(e.plan, e.key) {
+            Ok(live) => live == e.written || (e.restored && live == e.original),
+            // Not the user's change (power review 2): kept, and read again at the next check.
+            Err(failure) => {
+                checked.failures.push(failure);
+                true
+            }
+        };
         match ours {
             true => checked.journal.push(e),
             false => checked.user_changed.push(OwnedKey {
@@ -278,17 +278,52 @@ mod tests {
         assert_eq!(fake.state().journal, file(vec![e], vec![]));
     }
 
-    /// Marked entries wait for a restore retry: their stored value is `original` while ours may be in force.
+    /// A marked entry waits for a restore retry (its stored value is `original` while ours may be in force) or for an
+    /// apply's write (a new entry, power safety review finding 9): `original` and `written` are both ours.
     #[test]
-    fn marked_entries_are_skipped() {
+    fn a_marked_entry_at_original_or_written_is_kept() {
         let (lid_ac, lid_dc) = (entry(P1, LidAc, true), entry(P1, LidDc, false));
         let fake = world(&[lid_ac, lid_dc], vec![]);
         assert_eq!(run(&fake), quiet(vec![lid_ac, lid_dc]));
-        assert!(!calls(&fake).contains(&Call::Read(P1, LidAc)));
 
         let fake = world(&[lid_ac], vec![]);
+        fake.state().set_stored(P1, LidAc, 0, SetBy::Override);
         assert_eq!(run(&fake), quiet(vec![lid_ac]));
-        assert_eq!(calls(&fake), [Call::LoadJournal], "nothing to read");
+        assert!(
+            !calls(&fake)
+                .iter()
+                .any(|c| matches!(c, Call::SaveJournal(_)))
+        );
+    }
+
+    /// Power safety review finding 10: a marked entry whose live value is neither `written` nor `original` is the
+    /// user's change, as restore step 3 reads it, so the check reports it and the core releases the key; before, the
+    /// mark hid it until a restore dropped it with no notice, and an apply in between took the user's value for a new
+    /// `original` and wrote over it.
+    #[test]
+    fn a_marked_entry_the_user_changed_is_reported() {
+        let (lid_ac, lid_dc) = (entry(P1, LidAc, true), entry(P1, LidDc, true));
+        let fake = world(&[lid_ac, lid_dc], vec![]);
+        fake.state().user_write(P1, LidAc, 3);
+        let changed = Checked {
+            user_changed: vec![owned(P1, LidAc)],
+            failures: vec![],
+            journal: vec![lid_dc],
+        };
+        assert_eq!(run(&fake), changed);
+        assert_eq!(fake.state().journal, file(vec![lid_dc], vec![]));
+    }
+
+    /// The mark is what makes `original` ours: an entry not marked whose value the user set back to exactly its
+    /// `original` (Sleep again, say) is the user's change.
+    #[test]
+    fn a_value_set_back_to_original_is_the_users_change() {
+        let (lid_ac, lid_dc) = (entry(P1, LidAc, false), entry(P1, LidDc, false));
+        let fake = world(&[lid_ac, lid_dc], vec![]);
+        fake.state().user_write(P1, LidAc, 1);
+        let r = run(&fake);
+        assert_eq!(r.user_changed, [owned(P1, LidAc)]);
+        assert_eq!(r.journal, [lid_dc]);
     }
 
     #[test]

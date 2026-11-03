@@ -3227,3 +3227,37 @@ Tool facts used by the release workflow are in "Release workflow checks".
 - **No release yet**: `fill.ps1 -Version 0.1.0` without `-FromDir` gets 404 from
   `api.github.com/repos/HaikAsatryan/wakeshot/releases/tags/v0.1.0` and stops. Its download path (hash of the public
   asset URL, checked against the API's asset `digest`) runs first on a real release. **Not verified** until then.
+
+## Core settings round B checks
+
+Card `p2-core-settings`, section "Core round B (2026-11-04)": power safety review findings 8, 9 and 10, the config
+version rule, and `p2-core-lid` round A's Needs another card items 1, 2, 3 and 5. Pure core code; nothing here touched
+the laptop or its power settings.
+
+- **The power track names the settings calls exactly.** `crates/wakeshot-windows/src/power/plan.rs` (read 2026-11-04)
+  builds each failure with `win("PowerSettingAccessCheckEx", ..)`, `win("PowerWriteACValueIndex", ..)` and
+  `win("PowerWriteDCValueIndex", ..)`, so the core can tell a policy block from a 5 elsewhere by `Failure::call`. A
+  journal mutex open error is passed on as is (`power/journal.rs`, `store.rs`, per the review; not re-read here).
+  Whether an elevated `wakeshot restore`'s mutex refuses a Medium open: **not verified**.
+- **The core cannot see a newer `config.json`.** `app/startup.rs::read_config` gives `Config::default()` for
+  `Read::Newer` with `first_run: false`, and `watch/data.rs::config` posts no event for it (read 2026-11-04), so
+  `Event::Started` and `ConfigChanged` look the same as for a version 1 file with Automatic on. The CLI's
+  `wakeshot automatic` already refuses to write over a newer file (`wakeshot-cli/src/automatic.rs`). So the write
+  check belongs to the tray's `WriteConfig` runner (`app/io_thread.rs`), which writes with no check today.
+- **`Applied` is built outside the core.** `power/journal.rs` builds `Applied { .. }` with a struct literal and
+  matches `ApplyError` with no wildcard (`log_applied`), so a new field or variant would break `crates/wakeshot-windows`.
+  Finding 10 therefore keeps the user-changed entry for the next ownership check rather than adding
+  `Applied.user_changed`.
+- **Tests written first fail first.** On the old code 9 new or changed tests failed (finding 8: 1 scenario; findings 9
+  and 10: 6 apply tests, 1 check test, and the strict `ownership::props` test no longer ignored). The two minimal cases
+  of round A item 2, kept as named tests, failed on the old model rule and pass on the new one.
+- **Long property runs** (`PROPTEST_CASES=10000`, release, 2026-11-04 02:15 to 02:23): `scenarios::props` passed in
+  10 of 10 runs (19 tests each, 16 to 20 s); `ownership::props` in 3 of 3; `scenarios::settings` with the lid
+  proptest in 1 of 1.
+- **Mutants by hand, 11 of 11 killed** (scratch copy of the workspace with `docs/`, own build folder, each reverted).
+  One survived the first round (any code from a settings call counted for the run); the finding 8 scenario now also
+  feeds a settings call's non-denied code and a `PowerWriteDCValueIndex` 31, and kills it. The two lock step back
+  mutants (requests kept; no restore) are killed by the named World cases, not by the random mix at 256 cases: two lock
+  failures around a lid close are rare in it.
+- **Windows callers unchanged.** `cargo check -p wakeshot-windows --all-targets` exit 0, and its `power::` and `app::`
+  tests (182 passed, 10 ignored real-laptop tests) pass with the changed apply and check routines.

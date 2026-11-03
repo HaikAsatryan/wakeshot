@@ -27,7 +27,8 @@ pub const READ_BACK_DIFFERS: Failure = Failure {
 /// How one apply went, for `Outcome::Applied`. `journal`: the known entries left after it.
 ///
 /// - `written`: the keys whose target this run wrote (the write call returned `Ok`), in call order, whatever `result`
-///   says. A key skipped as the user's own value, or already at its target, is not in it.
+///   says. A key skipped as the user's own value or as the user's change since our write, or already at its target,
+///   is not in it.
 /// - `journal`: the known entries the file holds after the run, in every plan; empty when the file was missing,
 ///   corrupt or unreadable. After a failed save that this run tolerates or reports, it is the most the file can hold.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -100,7 +101,7 @@ pub fn apply(
         Err(failure) => return refused(ApplyError::SafetyNet(failure), loaded),
     };
     let saved = entries(&slots);
-    if slots.iter().all(|s| s.role == Role::Other) {
+    if slots.iter().all(|s| s.role == Role::Keep) {
         if saved == loaded {
             return Applied {
                 written: Vec::new(),
@@ -179,8 +180,9 @@ pub fn apply(
     parts.known.entries = slots
         .iter()
         .filter_map(|s| match s.role {
-            Role::Other => Some(s.entry),
-            // Our value is in force again, so the mark has done its job (final check major 1).
+            Role::Keep => Some(s.entry),
+            // Our value is in force again, so the mark has done its job: a taken-over entry's (final check major 1)
+            // and a new entry's (power safety review finding 9).
             Role::Own { .. } => Some(JournalEntry {
                 restored: false,
                 ..s.entry
@@ -197,8 +199,8 @@ pub fn apply(
     }
     let journal = match save_or_clean_up(net, &parts) {
         Ok(()) => parts.known.entries,
-        // Tolerated (Apply step 6): a mark left only hides a user change from the check until the next restore, which
-        // handles a marked entry right; a released entry left is dropped by that restore.
+        // Tolerated (Apply step 6): a mark left only hides from the check a user change back to exactly `original`,
+        // until the next restore, which handles a marked entry right; a released entry left is dropped by that restore.
         Err(_) => on_disk,
     };
     Applied {
@@ -211,8 +213,9 @@ pub fn apply(
 /// What this run does with one known entry of the journal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Role {
-    /// On another plan: saved back as it was.
-    Other,
+    /// Saved back as it was: an entry on another plan, or one on this plan for a key in `writes` that the user changed
+    /// since our write (left for the ownership check to report).
+    Keep,
     /// A key in `writes`, ours from step 3 on. `write`: its live value is not the target yet.
     Own { write: bool },
     /// This plan's entry for a key not in `writes`, marked for its restore (track note 3). `write`: its `original` is
@@ -252,7 +255,7 @@ fn step_2(
         if e.plan != plan {
             slots.push(Slot {
                 entry: e,
-                role: Role::Other,
+                role: Role::Keep,
             });
             continue;
         }
@@ -295,16 +298,25 @@ fn own(
                 ..e
             }))
         }
-        // No entry, or one no longer ours: the live value is the user's own. At the target it is skipped.
+        // Neither ours nor `original`: the user changed it since our write, and no ownership check has seen it yet
+        // (one runs every 10 s). Writing over it would break "the latest change wins at once" (decision 26), so the
+        // key is skipped and the entry kept as it is: the next check reports it and the core releases the key (power
+        // safety review finding 10).
+        Some(e) if live != e.original => Some(Slot {
+            entry: e,
+            role: Role::Keep,
+        }),
+        // No entry: the live value is the user's own. At the target it is skipped.
         _ if live == target => None,
-        // An entry no longer ours is the user's or never written, and every routine drops it; keeping its
-        // `original` would put back a value older than the user's latest.
+        // No entry, or one never written (not marked, live equals `original`): a new entry, marked until our value is
+        // in force, so a run that never writes it leaves nothing the check reads as the user's change (power safety
+        // review finding 9). Keeping an older `original` could put back a value older than the user's latest.
         _ => Some(slot(JournalEntry {
             plan,
             key,
             original: live,
             written: target,
-            restored: false,
+            restored: true,
         })),
     }
 }
@@ -919,6 +931,7 @@ mod tests {
         assert!(!s.run_once);
     }
 
+    /// New entries are saved marked and the marks cleared once our value is in force (power safety review finding 9).
     #[test]
     fn a_fresh_apply_journals_last_then_writes_and_activates() {
         let fake = fresh();
@@ -943,7 +956,7 @@ mod tests {
                 Call::Read(P1, SleepDc),
                 Call::SetRunOnce,
                 Call::EnsureGuard,
-                Call::SaveJournal(file(TRAY, entries.clone(), vec![])),
+                Call::SaveJournal(file(TRAY, KEYS.map(|k| marked(new(k))).to_vec(), vec![])),
                 Call::Write(P1, LidAc, 0),
                 Call::Read(P1, LidAc),
                 Call::Write(P1, LidDc, 0),
@@ -952,6 +965,7 @@ mod tests {
                 Call::Read(P1, SleepDc),
                 Call::ActivePlan,
                 Call::SetActive(P1),
+                Call::SaveJournal(file(TRAY, entries.clone(), vec![])),
             ]
         );
         assert_overridden(&fake, &KEYS);
@@ -959,6 +973,71 @@ mod tests {
         assert_eq!(s.known_entries(), entries);
         assert!(s.run_once);
         assert_eq!((s.guard, s.guards_started), (FakeGuard::Running, 1));
+    }
+
+    /// Power safety review finding 9: an apply that saved its new entries and never wrote them (a stop, or a failed
+    /// write whose own restore failed too) leaves nothing the next check reads as the user's change, and the next
+    /// restore puts every value back.
+    #[test]
+    fn a_new_entry_never_written_is_never_a_user_change() {
+        let first_write = index_in(fresh, &ALL, 0, is_write);
+        let fake = fresh();
+        run_stopped(&fake, &ALL, first_write);
+        let checked = check(&mut fake.clone(), &mut fake.clone());
+        assert_eq!(checked.user_changed, [], "{checked:?}");
+        assert_eq!(checked.journal, KEYS.map(|k| marked(new(k))));
+
+        assert_eq!(restore_all(&fake).result, Ok(()));
+        assert_values_back(&fake, "the restore after the stop");
+    }
+
+    /// Power safety review finding 10: the user changed a key since our write, and no ownership check saw it yet (one
+    /// runs every 10 s). The apply never writes over it: it skips the key and keeps the entry as it is, so the next
+    /// check reports the change and the core releases the key (decision 26, the latest change wins at once).
+    #[test]
+    fn a_user_change_no_check_saw_yet_is_never_written_over() {
+        let changed = entry(P1, LidAc, false);
+        let marked_changed = entry(P1, LidDc, true);
+        let rows = [
+            (changed, Live::User(2)),
+            (marked_changed, Live::User(3)),
+            (entry(P1, SleepDc, false), Live::Ours),
+        ];
+        let fake = left(TRAY, &rows, vec![]);
+        let r = run(&fake, &ALL);
+        let applied = Applied {
+            written: vec![],
+            result: Ok(()),
+            journal: rows.map(|r| r.0).to_vec(),
+        };
+        assert_eq!(r, applied);
+        let c = calls(&fake);
+        assert!(!c.iter().any(is_write), "{c:?}");
+        {
+            let s = fake.state();
+            assert_eq!(s.stored(P1, LidAc), Some(2));
+            assert_eq!(s.in_force(P1, LidAc), Some(2));
+            assert_eq!(s.in_force(P1, LidDc), Some(3));
+        }
+        assert_overridden(&fake, &[SleepDc]);
+
+        let checked = check(&mut fake.clone(), &mut fake.clone());
+        assert_eq!(
+            checked.user_changed,
+            [
+                OwnedKey {
+                    plan: P1,
+                    key: LidAc
+                },
+                OwnedKey {
+                    plan: P1,
+                    key: LidDc
+                }
+            ]
+        );
+        assert_eq!(restore_all(&fake).result, Ok(()));
+        let s = fake.state();
+        assert_eq!(KEYS.map(|k| s.in_force(P1, k).unwrap()), [2, 3, 600]);
     }
 
     #[test]
@@ -1023,16 +1102,23 @@ mod tests {
         let c = calls(&fake);
         let saved = file(TRAY, entries, vec![sleep_ac()]);
         assert_eq!(fake.state().journal, FakeJournal::File(saved.clone()));
-        assert_eq!(saves(&c), [saved], "this tray owns the journal now");
+        let first = vec![theirs, mine, marked(new(LidAc)), marked(new(SleepDc))];
+        assert_eq!(
+            saves(&c),
+            [file(TRAY, first, vec![sleep_ac()]), saved],
+            "this tray owns the journal now"
+        );
         assert!(!c.contains(&Call::Read(P2, SleepDc)), "{c:?}");
         assert!(!c.contains(&Call::SetActive(P2)), "{c:?}");
     }
 
     /// An entry is ours while its live value is `written`, or it is marked with `original` stored (restore step 3).
-    /// Any other entry every routine drops as the user's or as never written; the apply replaces it with a new one
-    /// whose `original` is the live value, so a later restore puts back the user's latest value, not an older one.
+    /// One not marked whose live value is `original` was never written (an older version's apply stopped before its
+    /// write, or the user set exactly that value back): the apply replaces it with a new one whose `original` is the
+    /// live value. Any other value is the user's change, which the apply leaves for the check (finding 10). So a later
+    /// restore puts back the user's latest value, never an older one.
     #[test]
-    fn an_entry_no_longer_ours_gets_the_live_value_as_original() {
+    fn an_entry_never_written_is_replaced_and_a_users_change_is_kept() {
         let rows = [
             // An earlier apply stopped before its write.
             (entry(P1, LidAc, false), Live::User(1)),
@@ -1042,26 +1128,22 @@ mod tests {
         ];
         let fake = left(TRAY, &rows, vec![]);
         let r = run(&fake, &ALL);
-        let fresh_entry = |key, original| JournalEntry {
-            plan: P1,
-            key,
-            original,
-            written: 0,
-            restored: false,
-        };
-        let entries = vec![
-            fresh_entry(LidAc, 1),
-            fresh_entry(LidDc, 3),
-            fresh_entry(SleepDc, 300),
-        ];
+        let kept = [rows[1].0, rows[2].0];
+        let entries = vec![new(LidAc), kept[0], kept[1]];
         let applied = Applied {
-            written: KEYS.to_vec(),
+            written: vec![LidAc],
             result: Ok(()),
             journal: entries.clone(),
         };
         assert_eq!(r, applied);
-        assert_eq!(saves(&calls(&fake)), [file(TRAY, entries, vec![])]);
-        assert_overridden(&fake, &KEYS);
+        assert_eq!(
+            saves(&calls(&fake)),
+            [
+                file(TRAY, vec![marked(new(LidAc)), kept[0], kept[1]], vec![]),
+                file(TRAY, entries, vec![])
+            ]
+        );
+        assert_overridden(&fake, &[LidAc]);
 
         assert_eq!(restore_all(&fake).result, Ok(()));
         let s = fake.state();
@@ -1274,7 +1356,7 @@ mod tests {
         assert_eq!(run(&fake, &ALL).result, Ok(()));
         let c = calls(&fake);
         let call = nth(&c, 0, is_set_active);
-        assert_eq!(c[call - 1..], [Call::ActivePlan, Call::SetActive(P1)]);
+        assert_eq!(c[call - 1..=call], [Call::ActivePlan, Call::SetActive(P1)]);
         assert_overridden(&fake, &KEYS);
 
         // Switched away and not back: no call at all, so the user's switch stands.
@@ -1309,7 +1391,11 @@ mod tests {
             assert_eq!(
                 saves(&c),
                 [
-                    file(TRAY, vec![marked(e), new(LidAc), new(LidDc)], vec![]),
+                    file(
+                        TRAY,
+                        vec![marked(e), marked(new(LidAc)), marked(new(LidDc))],
+                        vec![]
+                    ),
                     file(TRAY, vec![new(LidAc), new(LidDc)], vec![])
                 ],
                 "{name}"
@@ -1339,7 +1425,10 @@ mod tests {
         let c = calls(&fake);
         assert_eq!(
             saves(&c),
-            [file(TRAY, vec![new(LidAc), new(LidDc)], vec![])]
+            [
+                file(TRAY, vec![marked(new(LidAc)), marked(new(LidDc))], vec![]),
+                file(TRAY, vec![new(LidAc), new(LidDc)], vec![])
+            ]
         );
         assert!(
             !c.iter().any(|c| matches!(c, Call::Write(_, SleepDc, _))),
@@ -1414,8 +1503,8 @@ mod tests {
         assert_eq!(fake.state().in_force(P1, LidDc), Some(1));
     }
 
-    /// Apply step 6: a failed clearing save is tolerated. The marks hide a user change from the check until the next
-    /// restore, and that restore handles each marked entry right.
+    /// Apply step 6: a failed clearing save is tolerated. A mark left hides from the check only a user change back to
+    /// exactly `original`, and the next restore handles each marked entry right.
     #[test]
     fn a_failed_mark_clearing_save_keeps_the_marks_for_the_next_restore() {
         let start = || left(TRAY, &takeover(), vec![]);
@@ -1433,9 +1522,15 @@ mod tests {
         assert_eq!(fake.state().known_entries(), taken);
         assert_overridden(&fake, &KEYS);
 
+        // E1 and E2 are marked: LidAc set back to exactly its `original` is not seen; LidDc set to another value is.
+        fake.state().user_write(P1, LidAc, 1);
         fake.state().user_write(P1, LidDc, 3);
         let checked = check(&mut fake.clone(), &mut fake.clone());
-        assert!(checked.user_changed.is_empty(), "{checked:?}");
+        let lid_dc = OwnedKey {
+            plan: P1,
+            key: LidDc,
+        };
+        assert_eq!(checked.user_changed, [lid_dc], "{checked:?}");
 
         assert_eq!(restore_all(&fake).result, Ok(()));
         let s = fake.state();

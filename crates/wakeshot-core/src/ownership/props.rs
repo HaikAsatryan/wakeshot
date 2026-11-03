@@ -491,9 +491,9 @@ struct Seen {
     last: BTreeMap<(Guid, SettingKey), Option<u32>>,
     /// Keys the user changed inside the routine that runs now.
     inside: BTreeSet<(Guid, SettingKey)>,
-    /// Keys whose entry was saved but never written, left by the start's crash or by finding 1 (card Result): the
-    /// check reads them as the user's, as section 5 accepts for an entry a stop leaves (F). Until Wakeshot writes
-    /// the key.
+    /// Keys whose entry an older version saved unmarked and never wrote, left by the start's crash: the check reads
+    /// them as the user's. Until Wakeshot writes the key. Since power safety review finding 9 an apply saves new
+    /// entries marked, so no run of this version leaves one.
     unwritten: BTreeSet<(Guid, SettingKey)>,
     step: String,
 }
@@ -1100,37 +1100,8 @@ impl Run {
                 });
             }
         }
-        let mut note = "";
-        let second_load = ran
-            .calls
-            .iter()
-            .enumerate()
-            .filter(|(_, c)| matches!(c, Call::LoadJournal))
-            .nth(1)
-            .map(|(i, _)| i);
-        if let Err(ApplyError::Write(_)) = applied.result
-            && let Fault::Fail { at, .. } = fault
-            && at < ran.calls.len()
-            && second_load.is_some_and(|load| at >= load)
-        {
-            // Finding 1: the restore routine of this failed apply failed too, so an entry the apply saved but never
-            // wrote may stay. Change it when the routines no longer leave one.
-            let state = self.fake.state();
-            let left: Vec<_> = state
-                .known_entries()
-                .into_iter()
-                .filter(|e| e.plan == plan && !e.restored)
-                .filter(|e| state.stored(e.plan, e.key) == Some(e.original))
-                .map(|e| (e.plan, e.key))
-                .collect();
-            drop(state);
-            if !left.is_empty() {
-                note = " (finding 1: an entry never written is left)";
-                lock(&self.seen).unwritten.extend(left);
-            }
-        }
         self.reported(&ran, fault, &applied.journal);
-        format!(" -> {}{note}", applied_text(applied))
+        format!(" -> {}", applied_text(applied))
     }
 
     fn check(&mut self, fault: Fault, stir: Stir) -> String {
@@ -1451,11 +1422,10 @@ proptest! {
     }
 }
 
-/// Finding 1 of `p2-ownership-props`, the strict form of the user-change property: a failed apply whose restore
-/// routine fails too must not leave an entry it never wrote for the check to report as the user's. Run with
-/// `--ignored` once the routines handle it, then drop the excuse in `Run::apply`.
+/// Finding 1 of `p2-ownership-props` (power safety review finding 9), the strict form of the user-change property: a
+/// failed apply whose restore routine fails too must not leave an entry it never wrote for the check to report as the
+/// user's. The apply saves new entries marked until its call, so the check reads lidDc as "marked, `original` stored".
 #[test]
-#[ignore = "finding 1 of p2-ownership-props: open, routed by the orchestrator"]
 fn a_failed_apply_whose_restore_fails_reports_no_false_user_change() {
     let fake = FakePlans::new(PlanValues {
         active: PLANS[0],
@@ -1466,8 +1436,8 @@ fn a_failed_apply_whose_restore_fails_reports_no_false_user_change() {
         saver_threshold_dc: 20,
     });
     // The read-back of lidAc finds another value (the user, or a policy), so the apply runs the restore routine,
-    // and that routine's journal delete fails.
-    let (read_back, delete) = (10, 16);
+    // and that routine's journal delete fails, after the call for lidDc's mark.
+    let (read_back, delete) = (10, 18);
     let user = |s: &mut FakeState| s.user_write(PLANS[0], SettingKey::LidAc, 2);
     fake.script(read_back, Action::Run(Box::new(user)));
     fake.script(delete, Action::Fail(5));

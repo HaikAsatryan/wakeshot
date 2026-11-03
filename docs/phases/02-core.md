@@ -251,3 +251,15 @@ Where each item this track owns is built. "Integration" is planned after the tra
   hibernate thread (optional, his call). Core round B running (findings 8, 9, 10; the `config.json` version
   overwrite; round A's props, `state.rs` and architecture items). A property in `scenarios/props.rs` failed in 3 of 7
   runs at 10,000 cases (a model flag, predates round A): round B fixes it; it may flake CI until then.
+- 2026-11-04 02:29 (orchestrator, session `wakeshot-46`): core round B done and committed (Log and Result in
+  `p2-core-settings`, "Core round B"). Fixed: power finding 8 (a code 5 or 1260 turns off overrides for the run only
+  from the access check or the value writes), 9 (an apply saves new entries marked and clears the marks after its
+  `PowerSetActiveScheme`), 10 (an apply skips a key the user changed since our write and keeps the entry); round A's
+  props item, the flaky property's model flag, `LockWatch` moved into `State`, the architecture items. 587 core tests
+  (1 ignored), 182 Windows power and app tests, 10 of 10 props and 3 of 3 ownership properties at 10,000 cases, 11 of
+  11 mutants caught. Not fixed in the core: `core.rs:159` (an Automatic toggle over a newer `config.json`): the core
+  never learns the file is newer, so the check goes in the IO thread's `WriteConfig` runner; added to
+  `p2-6-unread-journal` as deliverable 7. Decided by the worker, for Haik's review: a 5 from `PowerSetActiveScheme`
+  counts for the episode, not the run; each apply that adds an entry saves the journal once more; a user change waits up
+  to about 10 s for the next check before the core lets the key go; a mark hides only a change back to exactly the
+  original value. The sleep fallback after a failed hibernate stays open for Haik.

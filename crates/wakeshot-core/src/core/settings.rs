@@ -31,8 +31,19 @@ pub(super) const TARGET: u32 = 0;
 /// burst of short deadlines (the 1 s `state.json` wait) sends no burst of reads.
 pub(super) const PLAN_READ_EVERY_MS: u64 = 10_000;
 
-/// The access denied codes the design names (section 8): settings are blocked for the whole run.
+/// The access denied codes the design names (section 8): settings are blocked for the whole run, when a settings call
+/// gives one.
 const ACCESS_DENIED: [u32; 2] = [5, 1260];
+
+/// The calls whose access denied means policy blocks the settings, as `power::plan` names them: the access check and
+/// the two writes. The same code from any other call (the journal mutex an elevated `wakeshot restore` holds, a file
+/// or registry write) says nothing about policy, so it holds requests only for the episode (power safety review
+/// finding 8). A name the power track changes falls to the episode rule, the side that tries again.
+const SETTINGS_CALLS: [&str; 3] = [
+    "PowerSettingAccessCheckEx",
+    "PowerWriteACValueIndex",
+    "PowerWriteDCValueIndex",
+];
 
 impl Core {
     /// The core writes settings now: a hold counts, this tray owns the settings mutex, its session is on the PC's
@@ -367,15 +378,15 @@ impl Core {
         }
     }
 
-    /// Requests only (decision 29): for the run on access denied, else for the episode, with one notice per
-    /// failure streak. What this episode owns goes back at once, since no apply will take it over. A failed write
+    /// Requests only (decision 29): for the run on access denied from a settings call, else for the episode, with one
+    /// notice per failure streak. What this episode owns goes back at once, since no apply will take it over. A failed write
     /// restores whatever the copy holds: the apply saved and maybe wrote entries, and its own restore may have failed
     /// to load the journal, which reports none (power safety review finding 2); a restore of a missing journal costs
     /// nothing. A safety net failure writes nothing.
     fn apply_failed(&mut self, failure: Failure, wrote: bool, out: &mut Vec<Command>) {
         let Failure { call, code } = failure;
         let holding = self.state.episode.is_some();
-        let line = if ACCESS_DENIED.contains(&code) {
+        let line = if ACCESS_DENIED.contains(&code) && SETTINGS_CALLS.contains(&call) {
             self.state.requests_only_run = true;
             format!("Settings access denied ({call}, code {code}): requests only for this run")
         } else if let Some(episode) = self.state.episode.as_mut() {

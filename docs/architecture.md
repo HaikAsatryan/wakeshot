@@ -317,10 +317,10 @@ State is one struct owned by the loop thread: `automatic`; holds by source; live
 `floor_pct`, `lid`; `episode: Option<Episode>` (from the first hold to the last: `released: Set<SettingKey>`, on every
 plan, `lid_closed_since`, labels of what held); a mirror of the journal, a copy of the entries that `Done(Applied)` and
 `Done(Restored)` carry, less the keys `UserChanged` names; `requests`; `stepped_back` (battery floor); `on_console`;
-`session_ending`; `ending: Option<Countdown>`; `last_resume_mono`; notices already shown. Beside it, for now, the lid
-side's own memory (`core::lid::LockWatch`): the lock watch (a closed-lid `Lock` until `Session(Locked)` confirms it),
-the lock step back, the lock after a hibernate that did not happen, notices kept for the user's return, countdown rules
-waiting for the first plan read, and the journal mirror as the last settle pass saw it.
+`session_ending`; `ending: Option<Countdown>`; `last_resume_mono`; notices already shown; and the lid side's own
+memory (`lock: LockWatch`): the lock watch (a closed-lid `Lock` until `Session(Locked)` confirms it), the lock step
+back, the lock after a hibernate that did not happen, notices kept for the user's return, countdown rules waiting for
+the first plan read, and the journal mirror as the last settle pass saw it.
 
 The lid, lock and countdown rules read the plan as in force now (`Core::in_force`), not the last plan read, which an
 apply leaves up to 10 s behind: each mirror entry on the active plan sets its key to `written`, and an `Apply` with no
@@ -633,36 +633,45 @@ Apply, on the IO thread, under `Local\Wakeshot.Journal`:
    (it is on its way out); then the journal file (atomic, write-through), with this tray as its owner. A key that
    already has an entry for this plan that is still ours (live equals `written`, or marked `restored` with live equal
    to `original`; a restore failed) keeps its `original` and its `restored` mark: the hold takes the entry over, and
-   step 6 clears the mark only once our value is in force again. Any other entry for the key is the user's or never
-   written: a new entry with the live value as `original` replaces it.
+   step 6 clears the mark only once our value is in force again. An entry not marked whose live value is its
+   `original` was never written: a new entry replaces it. Any other live value is the user's change since our write,
+   which no ownership check has seen yet (one runs every 10 s): the key is skipped and its entry kept as it is, so the
+   next check reports it and the core releases the key; writing over it would break "the latest change wins at once"
+   (power safety review finding 10). A new entry has the live value as `original` and is saved marked `restored`, so
+   a run that never writes it (a stop, or a failed write whose own restore fails too) leaves nothing the next check
+   reads as the user's change (power safety review finding 9).
 4. Any failure in steps 2 or 3: write nothing (decision 24); if the journal held no known entry (a read error does
    not count), take back the RunOnce value and the guard this apply added; report `SafetyNet`. The core holds
-   requests only for the episode and shows one notice. The journal comes last, so a failure never leaves entries for
-   keys that were never written, which the next read would take for the user's changes.
+   requests only for the episode (for the run when the access check is denied, section 8) and shows one notice. The
+   journal comes last, so a failure never leaves entries for keys that were never written.
 5. `PowerWrite*ValueIndex` for each key whose live value is not the target; read back.
 6. Read the active plan again, right before the call. The same as in step 1: one `PowerSetActiveScheme` with that
    GUID, never a stored one (a write is stored at once but applied only by it, research "Stored at once, applied only
-   on `PowerSetActiveScheme`"). Success: clear the `restored` marks of this plan's entries (one journal write; if it
-   fails the marks stay, which only hides a user change from the ownership check until the next restore, and that
-   restore handles a marked entry right). Changed: skip the call and report `PlanChanged`; the writes went to a plan
-   that is now inactive, the journal holds them, and the plan switch path restores them. A write, the read-back, this
-   second plan read or the call fails: run the restore routine on this plan's entries (`plan: Some`) and report
-   `Write`. So an entry leaves the journal only after a successful `PowerSetActiveScheme`, from a complete plan list,
-   or on a successful read that shows a value we never wrote or the user's own.
+   on `PowerSetActiveScheme`"). Success: clear the `restored` marks of this plan's entries it took over or added (one
+   journal write; if it fails the marks stay, which only hides from the ownership check a user change back to exactly
+   `original`, until the next restore, and that restore handles a marked entry right). Changed: skip the call and
+   report `PlanChanged`; the writes went to a plan that is now inactive, the journal holds them, and the plan switch
+   path restores them. A write, the read-back, this second plan read or the call fails: run the restore routine on
+   this plan's entries (`plan: Some`) and report `Write`. So an entry leaves the journal only after a successful
+   `PowerSetActiveScheme`, from a complete plan list, or on a successful read that shows a value we never wrote or the
+   user's own.
 
 Every stop point keeps the user's values reachable (an entry taken over in step 3 is E; one new in this apply is F):
-before step 3's journal write, nothing changed. After it: F reads "not marked, live equals `original`", dropped as
-never written, which is right because nothing was applied; E keeps its state, so a restore still finishes it. After a
-write in step 5: F reads "live equals `written`" and E "marked, live equals `written`": both restored. After the call,
-before the marks are cleared: E reads "marked, live equals `written`", restored again; harmless. The restore routine's
-own stop points are covered by its write-ahead (step 4 below). The full walk is in card `p1-design-verify-fixes`, Log.
+before step 3's journal write, nothing changed. After it: F reads "marked, live equals `original`": the restore drops
+it after its call (harmless: nothing of ours was written) and the ownership check keeps it, so it is never taken for a
+user change; E keeps its state, so a restore still finishes it. After a write in step 5: F and E read "marked, live
+equals `written`": both restored. After the call, before the marks are cleared: the same, restored again; harmless.
+The restore routine's own stop points are covered by its write-ahead (step 4 below). The full walk is in card
+`p1-design-verify-fixes`, Log.
 
 Ownership. Our writes and the user's look the same to every detector (research), so a key is ours exactly while its
 live value equals what we wrote. The IO thread decides it, because it owns the journal and runs commands in order. On
 each `ReadPlan` it reads the active plan id first, then each journal entry's value from that entry's own plan. A value
 that differs from `written`: drop the entry, post `UserChanged { plan, key }`. A read error: keep the entry, post the
-failure. Entries marked `restored` are skipped: they wait for a restore retry. So a read taken before an `Apply`
-never sees that apply's entries, and a plan switch never looks like a user change. Accepted: a user who sets exactly
+failure. An entry marked `restored` is also ours at its `original` (a restore waits for its call, or an apply for its
+write); any other value is the user's, as restore step 3 reads it, so a mark never hides a change to a third value
+(power safety review findings 9 and 10). So a read taken before an `Apply` never sees that apply's entries, and a
+plan switch never looks like a user change. Accepted: a user who sets exactly
 our value is not seen (since Settings already shows our value, that needs two changes inside one 10 s read); a user
 change between Apply steps 2 and 5, a few calls apart, is overwritten, and the restore puts back the value read in
 step 2; a user change between restore steps 3 and 4 (the read and the write of `original`, with the mark save
@@ -792,7 +801,8 @@ aside with a warning; the log holds the old values.
   sound is logged and the run goes on), then `SetSuspendState(TRUE, FALSE, FALSE)` (hibernates here, returns only
   after resume, tested). The two checks come before the sound, so a PC with hibernate off never plays "going to
   sleep" and then stays awake (card `p3-hibernate`). Not allowed or failed: a notice; settings are already
-  restored, so Windows' own timers most likely apply (inferred; with the lid closed not tested, checklist 2).
+  restored, so Windows' own timers most likely apply (inferred; with the lid closed not tested, checklist 2); with
+  the lid still closed the core then locks it whenever it is left idle (section 3, "Countdown").
 
 ### OS events
 
@@ -975,8 +985,8 @@ fallback. The one exception is `watch::read` (the watch thread's file reads, std
 | Failure | What happens |
 |---|---|
 | Power request fails | log, notice "cannot keep the PC awake" |
-| Settings access denied (5 or 1260) | requests only for this run, one notice |
-| Journal write, RunOnce value or guard start fails | nothing written; requests only for the episode; one notice |
+| Settings access denied (5 or 1260 from `PowerSettingAccessCheckEx` or a `PowerWrite*` call) | requests only for this run, one notice |
+| Journal load, lock or write, RunOnce value or guard start fails, with any code (also 5: an elevated `wakeshot restore` may hold the journal mutex) | nothing written; requests only for the episode; one notice (power safety review finding 8) |
 | Active plan changed before a write | nothing written; the next plan read handles the switch |
 | Active plan changed between the writes and `PowerSetActiveScheme` | no call; the writes are journaled; the plan switch restores them |
 | Plan list or active plan read fails in a restore | the run fails before any entry is dropped or written; retried |
@@ -987,8 +997,8 @@ fallback. The one exception is `watch::read` (the watch thread's file reads, std
 | Journal corrupt | moved aside; warning notice; values left as they are until the user sets them by hand (section 5, "Gap left") |
 | Liveness Unknown | last state kept, retried on the next tick; no file deleted, no restore started |
 | Settings mutex held by another session | requests only; retried on each tick |
-| Hibernate not allowed, fails, or lid state unknown | notice; settings were already restored |
-| Lock fails | log, notice; a closed-lid lock also counts as failed when no `Session(Locked)` comes within 5 s (`LockWorkStation` only starts the lock); with the lid closed on our Do nothing: `Lock` once more at the next tick; if that fails too, step back as at the floor (`Requests` off, `restore_all`) and start the work-end countdown, until the session locks or the lid opens (Haik, 2026-11-03; power safety review finding 1) |
+| Hibernate not allowed, fails, or lid state unknown | notice; settings were already restored; while the lid stays closed, `Lock` with the chime at each input reading 5 minutes idle with the session unlocked and on the PC's screen, at most every 5 minutes, until the lid opens, unless the user's own lid action for the power source is Do nothing (power safety verify minor 1); a notice raised with the lid closed and the session unlocked is shown again with the closed-lid report (verify minor 2) |
+| Lock fails | log, notice; a closed-lid lock also counts as failed when no `Session(Locked)` comes within 5 s (`LockWorkStation` only starts the lock); with the lid closed on our Do nothing: `Lock` once more at the next tick; if that fails too, step back as at the floor (`Requests` off, `restore_all`) and start the work-end countdown, until the session locks or the lid opens (Haik, 2026-11-03; power safety review finding 1); `LockFailed` is shown again with the closed-lid report, when the user is back at the open laptop (power safety verify minor 2) |
 | Sound fails | log only |
 | Agent file format unknown | "update Wakeshot" notice |
 | Tray icon add fails at sign-in | retry with backoff; re-add on `TaskbarCreated` |

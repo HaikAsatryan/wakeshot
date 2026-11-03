@@ -57,7 +57,8 @@ pub(crate) struct State {
     pub requests_failed: bool,
     /// From the first counted hold to the last.
     pub episode: Option<Episode>,
-    /// The last plan read that worked.
+    /// The last plan read that worked, with the values restores put back since (`core::lid`, power safety review
+    /// finding 5).
     pub plan: Option<PlanValues>,
     /// When the last `ReadPlan` went out (run time).
     pub plan_read_mono: Option<u64>,
@@ -79,7 +80,8 @@ pub(crate) struct State {
     pub restore_request: bool,
     /// The next `state.json` goes out as `FinishRestoreRequest`, at once.
     pub finish_restore_request: bool,
-    /// Settings are blocked for this run (access denied, 5 or 1260): requests only.
+    /// Settings are blocked for this run (access denied, 5 or 1260, from a settings access check or write): requests
+    /// only.
     pub requests_only_run: bool,
     /// `Session(Ending)` or `Ended` came and no `EndCancelled` yet: no `Apply`.
     pub session_ending: bool,
@@ -124,6 +126,8 @@ pub(crate) struct State {
     pub held_notices: Vec<Notice>,
     /// The PC ran with the lid closed on our Do nothing while holding, not reported yet.
     pub closed_lid: Option<ClosedLid>,
+    /// The lid side's own memory (`core::lid`).
+    pub lock: LockWatch,
     /// `UpdateReady`'s version, until `ApplyUpdate` goes out for it.
     pub update_ready: Option<String>,
     /// `ApplyUpdate` went out and its `Done` has not come back.
@@ -193,6 +197,7 @@ impl State {
             idle_lock_check: None,
             held_notices: Vec::new(),
             closed_lid: None,
+            lock: LockWatch::default(),
             update_ready: None,
             updating: false,
             updated_shown: false,
@@ -284,6 +289,41 @@ pub(crate) struct WorkEnd {
     /// A power source change onto the user's own Do nothing stopped the countdown; it starts again only once a source
     /// whose own action is not Do nothing has lasted `policy::lid::SOURCE_SETTLE_MS`.
     pub paused: bool,
+}
+
+/// The lid side's memory (`core::lid`): a closed-lid lock until the session reports it, the step back when it never
+/// does, the lock after a hibernate that did not happen, the notices kept for the user's return, the countdown rules
+/// that wait for the first plan read, and the journal copy the last settle pass saw.
+#[derive(Debug, Default)]
+pub(crate) struct LockWatch {
+    /// A closed-lid `Lock` the session has not confirmed with `Session(Locked)` yet.
+    pub pending: Option<PendingLock>,
+    /// Both tries failed with the lid closed on our Do nothing: no hold holds until the session locks or the lid opens.
+    pub stepped_back: bool,
+    /// That step back's restore and countdown went out.
+    pub step_back_sent: bool,
+    /// A hibernate did not happen with the lid closed: from this run time on, lock again at an idle reading
+    /// (`Core::relock`). Ends when the lid opens.
+    pub relock: Option<u64>,
+    /// Notices a closed laptop showed on a screen nobody may look at: they go out again with the closed-lid report.
+    pub kept: Vec<Notice>,
+    /// Work ended with the lid closed before the first plan read, on these power sources: the read decides.
+    pub work_end_waits: Option<&'static [bool]>,
+    /// A step back met the lid closed before the first plan read: the read decides the `Floor` countdown.
+    pub floor_waits: bool,
+    /// The journal copy as the last settle pass ended, so the next one sees which entries a restore took away.
+    pub journal_seen: Vec<JournalEntry>,
+}
+
+/// A closed-lid `Lock` waiting for `Session(Locked)`.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct PendingLock {
+    /// This lock is the one retry.
+    pub retry: bool,
+    /// `LockFailed` went out for this lock or the one it retries.
+    pub shown: bool,
+    /// When a tick decides: `core::lid::LOCK_CHECK_MS` after the lock, or at once after it failed.
+    pub check_mono: u64,
 }
 
 /// One input idle reading: `ms` at run time `at_mono`.
