@@ -235,3 +235,18 @@ Where each item this track owns is built. "Integration" is planned after the tra
   minors of `docs/reviews/p2-6-power-safety-verify.md`. It owns `core/lid.rs`, `policy/lid.rs`, `scenarios/lid.rs`,
   `text.rs`, the lid lines of `architecture.md` section 3. Core round B (findings 8, 9, 10 and the Automatic toggle
   that writes version 1 over a newer `config.json`) runs after it.
+- 2026-11-04 01:53: core round A, lid, done and committed (Log in `p2-core-lid`): power finding 5 fixed (the lid side
+  compares journal copies between settle passes; a later read always wins); verify minors 1 to 5 fixed (relock, repeat
+  unseen notices, wait for the first plan read, two scenarios, docs). 15 new scenarios; `wakeshot-core` 577 passed;
+  27 of 27 mutants caught. Decided by the worker, for Haik's review: (1) a relock, not a sleep fallback: after a
+  hibernate that is not allowed or fails while the lid stays closed, Wakeshot locks with the lid-close chime once input
+  is idle 5 minutes, then at most every 5 minutes, until the lid opens (only when unlocked on the console and the
+  user's own lid action is not Do nothing; a sleep fallback needs a product change, and on Modern Standby
+  `SetSuspendState(FALSE)` also hibernates, tested here); (2) the relock also covers a plain work end where the user
+  signed in on an external screen with the lid closed; (3) `HibernateFailed` is shown again too, not only
+  `LockFailed` (a user at an external screen sees each twice); (4) the work-end and floor rules wait for the first plan
+  read instead of guessing (if every read fails, no countdown starts); (5) a user who sets Do nothing by hand right
+  after a restore may get one relock before the next read (up to 30 s). Open for Haik: a sleep fallback in the
+  hibernate thread (optional, his call). Core round B running (findings 8, 9, 10; the `config.json` version
+  overwrite; round A's props, `state.rs` and architecture items). A property in `scenarios/props.rs` failed in 3 of 7
+  runs at 10,000 cases (a model flag, predates round A): round B fixes it; it may flake CI until then.
