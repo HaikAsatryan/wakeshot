@@ -1825,3 +1825,66 @@ Checked 2026-11-03 for card `docs/tasks/p4-watch-data.md`, by the tests in `watc
   its edge (`missing_proc_start_counts_a_process_started_by_the_write_time`).
 - **A hold file held with no sharing reads as error 32**, not as missing, so it is retried and then logged, never
   read as a deleted hold (`an_unreadable_file_is_retried_then_logged`).
+
+## Hibernate thread checks
+
+Checked 2026-11-03 for card `docs/tasks/p3-hibernate.md`: Microsoft's pages read that day, and the real tests in
+`power::hibernate::tests` (Windows 11 Pro 10.0.26300, this laptop, lid open, AC; test runner elevated, High). Nothing
+called `SetSuspendState`.
+
+- **`SetSuspendState` page** (updated 2024-02-22): nonzero on success, zero on failure with `GetLastError`; "The
+  calling process must have the SE_SHUTDOWN_NAME privilege"; `bForce` "has no effect"; `bWakeupEventsDisabled` TRUE
+  "disables all wake events". The page does not say the call returns only after resume; that comes from the morning
+  runs ("Lid and sleep spike"). Whether it can return TRUE without a hibernate (a driver veto, say): not verified.
+- **`IsPwrHibernateAllowed` page** (updated 2024-02-22): TRUE "if the computer supports hibernation (power state S4)
+  and the file Hiberfil.sys is present". The page also says the function "may be altered or unavailable in subsequent
+  versions" and that apps for Vista and later "should use GetPwrCapabilities instead"; its Remarks say the value is
+  in `SystemS4`.
+- **Read here:** `IsPwrHibernateAllowed` true; `GetPwrCapabilities` `SystemS4` true, `HiberFilePresent` true
+  (`hibernate_allowed_reads`, printed with `--nocapture`). Same values as the lid spike.
+- **`AdjustTokenPrivileges` page** (updated 2025-07-01): a success can still carry `ERROR_NOT_ALL_ASSIGNED` (1300),
+  "the token does not have one or more of the privileges"; `TOKEN_QUERY` is needed only with a previous state, so
+  the enable opens the token with `TOKEN_ADJUST_PRIVILEGES` alone.
+- **SeShutdownPrivilege off and on in the test process** (`privilege_enables`): turned off, read back off with
+  `GetTokenInformation(TokenPrivileges)`; then the enable returned `Ok` and the read showed it enabled. Elevated
+  token only; the Medium token case is the lid spike's (`AdjustTokenPrivileges` ok, last error 0), not re-run here.
+
+## Recovery checks
+
+Checked 2026-11-03 for card `docs/tasks/p3-recovery.md` on this laptop (Windows 11 Pro 10.0.26300, test runner
+elevated, High), by the tests in `crates/wakeshot-windows/src/recovery.rs` and `crates/wakeshot-tray/tests/recovery.rs`
+(`cargo test --locked -p wakeshot-windows recovery::`, `cargo test --locked -p wakeshot-tray`, with `--nocapture`),
+unless a line names another source.
+
+- **A guard under Explorer opens a stop event an elevated process made with default security.** A one-off test
+  (removed after the run) made a named manual-reset event with `CreateEventW(NULL, ...)` in the High test process,
+  then started this test exe through `process::spawn_outside_tree` (`outside_tree: true`, so Explorer's token, Medium
+  per "Process module checks"; the child's own level was not read in this run). The child opened the event with
+  `SYNCHRONIZE` only, was still waiting 2 s later, and left when the test set it (exit 10). So `StopEvent` uses the
+  default security. Why the default DACL of an elevated token admits the Medium child: not verified.
+  `tray_guard_stop_sets_event` repeats the same path on every run with the shipped `StopEvent` and `TrayGuard`.
+- **A `SYNCHRONIZE`-only event handle cannot set the event, and the event goes with its last handle.** `SetEvent`
+  on the guard's handle failed with 5; after the last handle closed, `OpenEventW` failed with 2; a second
+  `CreateEventExW` of a live name returned a handle and `GetLastError` 183 (`ERROR_ALREADY_EXISTS`), which `create`
+  reports as `None` (`stop_event_create_open_set`).
+- **libtest takes `--` as the end of its options.** A child started as `<test exe> --exact --ignored
+  --test-threads=1 --quiet -- <role test> --guard <pid> <start> <event>` ran only the role test and got the guard
+  arguments through untouched (the `TrayGuard` tests: the role child exited with the codes it computes from them).
+- **The real guard's parent is Explorer.** `TrayGuard` started `wakeshot-tray.exe --guard ...` (debug build) from the
+  elevated test process; `Get-CimInstance Win32_Process` gave its `ParentProcessId`, and `Get-Process` named it
+  `explorer`, pid 12528 (`real_guard_parent_is_explorer`, run once with `--ignored`). How Task Manager groups it:
+  not verified (checklist 4).
+- **A guard under Explorer writes its log into a data folder an elevated process made.** In
+  `tray_guard_runs_the_real_guard_until_stopped` the High test made the temp data folder; the guard `TrayGuard`
+  started (`outside_tree: true`) created `logs\wakeshot.log` in it and wrote its start and "stopped" lines, which the
+  test read back. The folder was under `%TEMP%`; the real `%LocalAppData%\Wakeshot`: not tested.
+- **How fast the exe modes end.** The guard exe left 10 to 13 ms after its tray was ended through its handle or its
+  stop event was set (two runs, debug build). `--restore` with no journal took 26 ms from spawn to exit; the first
+  run of a freshly built exe took 0.95 s (why: not verified).
+- **`std::env::set_var` is sound on Windows in a threaded program.** Its doc in the pinned toolchain's
+  `library/std/src/env.rs` (1.99.1) says it "is also always sound to call on Windows, in single-threaded and
+  multi-threaded programs". The tray's exe tests set `WAKESHOT_DATA_DIR` that way, under a lock, for the guards
+  `TrayGuard` starts with the test's own environment.
+- **Not tested here:** the guard's fallback wait when its tray cannot be opened (a denied open needs a token without
+  SeDebugPrivilege, "Process module checks"); that `WaitForMultipleObjects` returns the lowest index when the tray
+  and the event are both signaled (Microsoft's documented rule, which the guard relies on to check the journal first).
