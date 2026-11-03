@@ -189,16 +189,25 @@ lid action stays Do nothing and battery sleep Never. The README says so.
 
 - Public repo `HaikAsatryan/wakeshot` from Phase 1, MIT. Fully public from the first push: docs, planning, reviews
   and spikes go public as they are; secrets never (a secret scan before each push) (Haik, 2026-11-03). Before the
-  public launch (winget), a cleanup phase leaves a short, clean README and `CLAUDE.md`, removes internal planning and
+  public launch (winget), a cleanup phase leaves a clean README and a short `CLAUDE.md`, removes internal planning and
   junk, and squashes the history to one initial commit. A GitHub Pages page at v1.
+- README (Haik, 2026-11-04): long and detailed is fine, but never boring. The top says what we solve (the PC stays
+  awake while an AI agent works, then sleeps as usual with the user's settings back; keep awake on demand comes with
+  it, so nobody needs a second tool), shows a short animation of the icon and the measured speed numbers, then a side
+  by side table against the 2 or 3 most-starred rivals. Details sit below in folded sections. It says macOS is
+  planned for later. Pictures of the menu and tooltip, light and dark.
+- A 30 second promo video with sound and effects, animated in code from the real icon art and screenshots, showing
+  only what Wakeshot really does (Haik, 2026-11-04). For the README, the Pages page and the Store listing.
 - Velopack pack id `HaikAsatryan.Wakeshot` (install folder `%LocalAppData%\HaikAsatryan.Wakeshot`); data folder
   `%LocalAppData%\Wakeshot`, outside the install folder (Haik, 2026-11-03). Whether Velopack accepts a dot in the pack
   id: not verified; Phase 6 checks it before the first release.
 - Velopack: per-user install without admin, auto-update from GitHub Releases, applied only when nothing holds and no
   setting is overridden. The install, update and uninstall hooks restore power settings from the journal. A
   `winget upgrade` during `wakeshot run` still kills the wrapper; the README says so.
-- winget first. scoop later if cheap. Microsoft Store only if uninstall can be made safe (MSIX has no uninstall hook,
-  so a hold active during uninstall would leave the lid set to Do nothing).
+- winget first. scoop later if cheap. Microsoft Store as well, if adding it and signing are free and the submission
+  runs in our release flow without hands (Haik's rule, recorded 2026-11-04); uninstall must still restore (MSIX has
+  no uninstall hook, so a hold active during uninstall would leave the lid set to Do nothing). winget, the Store and
+  the app's own updates must never fight over one install (`p6-launch-research`).
 - Signing: v1 ships unsigned. Apply to SignPath Foundation once the project has users; signed builds then show
   "SignPath Foundation" as publisher.
 

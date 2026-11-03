@@ -3,7 +3,8 @@
 Phase: 6. Status: ready. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 60K tokens.
 Real laptop: no. It validates manifests only; installing from a local manifest needs an administrator to enable
 local manifests, so Phase 8 does that once before the submission.
-Runs after: `p6-pack-and-release` (the release file names and URLs). Parallel with: any card that does not own
+Runs after: `p6-pack-and-release` (the release file names and URLs); `p6-launch-research` (its winget rules for an
+app that updates itself; this card takes them in before it starts). Parallel with: any card that does not own
 `packaging/winget/`.
 Build folder: none (no Rust). Filled samples go to `<scratchpad>\p6-winget-manifest\`.
 

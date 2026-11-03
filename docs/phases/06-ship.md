@@ -129,8 +129,8 @@ its own package and files:
 ### Not in this track
 
 - The winget submission, the first public release and the repo cleanup: Phase 8. scoop: later (an own bucket; its
-  uninstall runs no Velopack hook, so it needs a `pre_uninstall` restore). Microsoft Store: not planned (MSIX has no
-  uninstall hook).
+  uninstall runs no Velopack hook, so it needs a `pre_uninstall` restore). Microsoft Store: Phase 8, if adding it and
+  signing are free and the submission is automated (`product.md`; facts from `p6-launch-research`, card `p8-store`).
 - Integration: start the update thread in tray mode and run `ApplyUpdate` and `Quit` in the loop; the update path end
   to end (a GitHub pre-release, Question 5: yes, or a local feed); checklist 14 in `architecture.md` section 9 (`winget
   upgrade` and uninstall during a real hold), which needs Haik.
@@ -149,8 +149,10 @@ those one at a time across all tracks.
 | `p6-velopack-dependency` | yes, once: the elevated clang install of its step 0 (Question 4: yes); runs alone on the whole laptop: no other card and no cargo command (review M5) | `p6-hooks`, `p6-update-schedule`, `p6-velopack-facts` | ready |
 | `p6-pack-and-release` | no (Question 5: yes, the first real run is a public pre-release) | `p6-velopack-facts` | ready |
 | `p6-install-e2e` | no; real laptop: installs, the real Run value and Path, a throwaway plan copy | `p6-velopack-dependency`, `p6-pack-and-release`; `p3-power-plan` (its first test shows a write to an inactive copy leaves the real plan alone) | ready |
-| `p6-winget-manifest` | no | `p6-pack-and-release` | ready |
-| `p6-readme` | yes: a read at the Phase 6 sign-off; the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3, sign-off item 12) are in, all defaults | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-claude`; the tray track's `p5-haik-check` (review m2) | ready |
+| `p6-launch-research` | yes: reads its Result (rival pick, Store recommendation) before the README, winget and Store cards are rewritten; no installs | none | ready |
+| `p6-winget-manifest` | no | `p6-pack-and-release`; `p6-launch-research` (the winget rules for an app that updates itself) | ready |
+| `p6-readme` | yes: a read at the Phase 6 sign-off; the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3, sign-off item 12) are in, all defaults | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-claude`; the tray track's `p5-haik-check` (review m2); `p6-launch-research` (its scope grows from that Result, Haik 2026-11-04); `p6-media` | ready |
+| `p6-media` | yes: watches the video and the loop and says yes or what to change; about 10 min off the PC for the captures | `p6-launch-research` (tool, storyboard, shot list); `p5-haik-check` (final icon); integration's `p6-int-real-e2e` (the real app) | ready |
 | `p6-pages` | yes: one look before it goes live at v1 | `p6-readme`; the tray track's `p5-icon-art` and `p5-haik-check` (Haik's icon pick rewrites `assets/wakeshot.ico`; review m3) | ready |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
@@ -176,8 +178,10 @@ Every code file below exists after the contracts card (module lines, the `velo::
 | `p6-velopack-dependency` | root `Cargo.toml`, `Cargo.lock`, `crates/wakeshot-tray/Cargo.toml` (run alone); `crates/wakeshot-tray/src/velo.rs`; `.github/workflows/ci.yml` only if the ARM64 job needs a clang step |
 | `p6-pack-and-release` | `packaging/pack.ps1`, `packaging/smoke-test.ps1`, `packaging/README.md`, `.github/workflows/release.yml` |
 | `p6-install-e2e` | `packaging/e2e.ps1`; fixes in `packaging/smoke-test.ps1` (after `p6-pack-and-release`) |
+| `p6-launch-research` | `docs/research/launch.md`; additions to `docs/research.md` |
 | `p6-winget-manifest` | `packaging/winget/` |
 | `p6-readme` | `README.md` |
+| `p6-media` | `media/` (outside the Cargo workspace); additions to `docs/research.md` |
 | `p6-pages` | `site/`, `.github/workflows/pages.yml` |
 
 ### Order inside the track
@@ -195,7 +199,8 @@ Every code file below exists after the contracts card (module lines, the `velo::
    clang.
 6. `p6-install-e2e` (real laptop; never beside a card that uses the dry-run data folder), then `p6-winget-manifest`
    (it can also run right after step 2).
-7. Last: `p6-readme`, then `p6-pages`.
+7. Last: `p6-media` (once the real app works end to end), then `p6-readme`, then `p6-pages`.
+   `p6-launch-research` runs any time before them (no build, no installs) and its Result goes to Haik first.
 
 ## Questions for Haik
 
