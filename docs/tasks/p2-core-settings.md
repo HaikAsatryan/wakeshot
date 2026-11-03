@@ -72,6 +72,10 @@ submodules. Nothing else.
     restore fails (the retry skips the active plan's held entries); session end during a hold, then cancelled; console
     left and back during a hold; Restore my power settings, then a plan switch: nothing written until work ends; Quit
     with Keep awake on.
+    Added by the orchestrator (`p2-ownership-restore` Found outside scope 3): a restore whose journal load fails
+    reports `Outcome::Restored` with `result: Err` and `journal: []`, since nothing is known. Never read that empty
+    list as "nothing owned": on `Restored` with `Err`, keep retrying while a restore is wanted, whatever `journal`
+    holds. One scenario test for it.
 
 ## Acceptance checks
 

@@ -75,7 +75,7 @@ Facts with how they were checked: `docs/research.md`. Longer research: `docs/res
 | # | Phase | Output | Status |
 |---|---|---|---|
 | 0 | Facts | Spikes on the test laptop, rival and agent research, final decisions | Done (signed off 2026-11-03) |
-| 1 | Detailed design and skeleton | Detailed `architecture.md`, public GitHub repo, Cargo workspace, the contracts between the parts (`p1-contracts`), CI (fmt, clippy, tests, x64 and ARM64 builds), tray menu look that matches Windows 11 (`p1-tray-menu-look`), audible lid-close sound (`p1-lid-sound`) | In progress (`docs/phases/01-design-skeleton.md`) |
+| 1 | Detailed design and skeleton | Detailed `architecture.md`, public GitHub repo, Cargo workspace, the contracts between the parts (`p1-contracts`), CI (fmt, clippy, tests, x64 and ARM64 builds), tray menu look that matches Windows 11 (`p1-tray-menu-look`), audible lid-close sound (`p1-lid-sound`) | Done (signed off 2026-11-03 19:13; `docs/phases/01-design-skeleton.md`) |
 | 2 | Core (track) | State machine, policies, settings ownership rules, file formats, full tests | |
 | 3 | Windows power layer (track) | Power requests and settings, journal and restore, guard process, OS events | |
 | 4 | Sources (track) | Claude Code (with timers), Codex and Copilot CLI, `wakeshot run` and hold files, Keep awake | |

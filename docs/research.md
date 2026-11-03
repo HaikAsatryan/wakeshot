@@ -1331,3 +1331,148 @@ session scratchpad and no `RUSTFLAGS`.
 - **Whole-workspace checks after the changes** (x64 and ARM64): `cargo fmt --all --check`, both clippy runs per
   target, `cargo test --workspace --locked` (36 tests: core 24, windows 10, cli 1, tray 1) and both release builds:
   all exit 0.
+
+## Log writer checks
+
+Checked 2026-11-03 by `p3-log` on this laptop (local NTFS SSD), with the tests in `wakeshot-windows/src/log.rs` and
+Microsoft's pages read the same day.
+
+- **Appends from several processes never mix.** This answers architecture section 8's "not verified (Phase 3)".
+  `log::tests::appends_from_many_processes_never_mix` starts its own test exe as 4 children with one start time. Each
+  opens `wakeshot.log` with `FILE_APPEND_DATA` only (share read, write and delete) and appends 2000 lines, one
+  `WriteFile` each: payloads of 0 to 179 bytes, every 50th one 3000 to 5199 bytes, so some lines cross a 4 KiB page.
+  Six runs: 2,083,667 bytes each, every line whole, each child's lines all there and in order, 7826 to 7936 switches
+  between children (of 8000 lines), so the writes really overlapped. Network shares, FAT, exFAT or ReFS: not verified.
+- **`FILE_APPEND_DATA` without `FILE_WRITE_DATA`** (Microsoft, "File Access Rights Constants"): "For local files,
+  write operations will not overwrite existing data if this flag is specified without FILE_WRITE_DATA." The page says
+  nothing about one process's write against another's; the test above is the evidence.
+- **Roll with the file open elsewhere** (`log::tests::roll_with_file_open_elsewhere`). `MoveFileExW` with
+  `MOVEFILE_REPLACE_EXISTING` on `wakeshot.log` while another writer (delete sharing) has it open: works, and that
+  writer's next lines land in the moved file. A reader without delete sharing on `wakeshot.log`: fails with 32
+  (`ERROR_SHARING_VIOLATION`). A reader that shares delete (std `File::open`) on the target `wakeshot.2.log`: fails
+  with 5 (`ERROR_ACCESS_DENIED`), so no roll happens while an app holds the oldest file open. No line was lost in any
+  case.
+- **The log's UTC offset matches Windows.** `FileTimeToLocalFileTime` on the current time gives local minus UTC of
+  +240 minutes; `GetDynamicTimeZoneInformation` (`Bias` plus the standard or daylight bias its return value names)
+  gives the same (`log::tests::local_offset_matches_windows`); `Get-Date -Format zzz` printed `+04:00`. Yerevan has no
+  daylight saving time, so a switch was not tested.
+- **`FileTimeToLocalFileTime` page** (Microsoft Learn, updated 2025-07-01). Remarks, in full: to account for daylight
+  saving time when converting a file time to a local time, use `FileTimeToSystemTime`,
+  `SystemTimeToTzSpecificLocalTime` and `SystemTimeToFileTime` instead. The page no longer says which time zone
+  settings the call uses. So "it applies the bias in force now" (asked in "Power track plan checks") is inferred from
+  that remark, not verified. The log writes the offset it applied next to each time, so local time minus the offset is
+  the exact UTC instant either way.
+- **A directory listing showed the true size of a file still open for append.** A scratch PowerShell check appended
+  2 MiB through an open .NET `FileStream` (append, share read, write and delete): `FileInfo.Length`, `dir` and
+  `DirectoryInfo.EnumerateFiles` all showed 2,097,157 bytes before the close. Same process only; another process's
+  open handle: not verified. The roll reads the size from its own handle anyway (`GetFileSizeEx`).
+- **`Win32_System_Time` is declared now.** `crates/wakeshot-windows/Cargo.toml` lists it, and the log test's call to
+  `GetDynamicTimeZoneInformation` compiles. So the line "which is not declared" in "Power track plan checks" is out of
+  date.
+
+## Restore routine checks
+
+Checked 2026-11-03 by `p2-ownership-restore`, with the core's tests against `ownership::fake::FakePlans` (a model of
+Windows, not Windows itself).
+
+- **Restore step 5 as written can drop a value still in force.** Step 5 says entries on an inactive plan need no
+  apply. If "inactive" is judged by step 2's plan read, a switch to that plan after step 2 and before step 4 writes its
+  `original` brings our stored value into force; the write then changes only the stored value, the entry is dropped,
+  and our value stays in force with no entry. Shown by
+  `restore::tests::plan_switch_before_the_write_applies_the_plan_now_active`: the routine judges "inactive" by step 5's
+  second read instead and calls `set_active` on the plan now active. It rests on two points the design already marks
+  as not tested: a switch applies the new plan's stored values, and a write is applied only by `PowerSetActiveScheme`.
+- **The stop-point walk holds on the fake.** `restore::tests::a_stop_at_any_call_keeps_every_held_value_journaled`
+  stops at each call of a run over two plans and three keys, from two starting states (all ours, 19 calls; mixed
+  marks plus an entry with an unknown key, 17 calls). After each stop, every value still ours (stored, or in force on the active
+  plan) has a known entry, and RunOnce is set while one exists; the next run puts every value back. A stop between
+  the file delete and the RunOnce clear leaves the RunOnce value (and a stop before the guard's stop event, the guard)
+  with no journal, as walk R6 in `p1-design-verify-fixes` says. So the power track's note 4 check "RunOnce is gone
+  after the next restore" holds only for stops before the delete.
+- **Mutants.** In a scratch copy of the workspace, each failed at least one test: a failed plan list read as an empty
+  list; `original` written before the mark; marked entries dropped when `set_active` fails; an entry dropped after a
+  failed read (the clean-up then runs); RunOnce and the guard released after any failure.
+- **`cargo` on this shell.** In this session's PowerShell and Git Bash, `cargo` was not on `PATH`;
+  `%USERPROFILE%\.cargo\bin\cargo.exe` exists and works when called by path.
+
+## Process module checks
+
+Checked 2026-11-03 for card `docs/tasks/p3-process.md` on this laptop (Windows 11 Pro 10.0.26300), with the tests in
+`crates/wakeshot-windows/src/process.rs`: `cargo test --locked -p wakeshot-windows process:: -- --nocapture` and
+`cargo test --locked -p wakeshot-windows -- --ignored process:: --nocapture`. The tests print what each call returned.
+
+- **The test runner here is elevated, with SeDebugPrivilege on.** `whoami /groups` in the agent's shell: High
+  Mandatory Level; `whoami /priv`: SeDebugPrivilege Enabled. The test's own token read: High (S-1-16-12288),
+  elevation type Full. So Haik's agent sessions on this laptop run elevated, and their children inherit an enabled
+  SeDebugPrivilege.
+- **SeDebugPrivilege passes the DACL, so a denied open needs a token without it.** With the runner's token, an open
+  with exactly `SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION` worked on both `csrss.exe` processes and on a child
+  made with an empty DACL (`D:`). With the same token minus every privilege but SeChangeNotify
+  (`CreateRestrictedToken(DISABLE_MAX_PRIVILEGE)`, impersonated on the test thread), all three opens failed with
+  `0x80070005`, and the system process list still had each pid with the same creation time, so `liveness` said Yes.
+  Not checked: a real Medium caller without the impersonation (the restricted token keeps the High label).
+- **An ended process leaves the system list at once, even while a handle to it is open.** A child was killed and
+  waited on, with its handle still open: `NtQuerySystemInformation(SystemProcessInformation)` had no record with its
+  pid, while `OpenProcess` by pid still worked and a 0 ms wait on that handle was signaled. One check per test run, in
+  three runs. So the list needs no thread count check.
+- **The list's parent pid and image name.** `Reserved2` in the `windows` crate's `SYSTEM_PROCESS_INFORMATION` (in the
+  NT layout `InheritedFromUniqueProcessId`; winternl.h does not name it) held the real parent pid: this test process
+  for a child from `std::process::Command` and for one from `CreateProcessW`, Explorer for the outside-tree child.
+  `ImageName` for this process was the exe file name only, `wakeshot_windows-a7dbc494c7637936.exe` (37 characters,
+  not cut to 15), no path. The creation time at `Reserved1` plus 24 bytes equalled `GetProcessTimes` for this process
+  and for each child.
+- **Explorer as the parent works, from High and from Medium.** `spawn_outside_tree` opened Explorer (the process of
+  `GetShellWindow`, pid 12528) with only `PROCESS_CREATE_PROCESS` and passed it as
+  `PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`. From the elevated runner: the child's parent pid in the list was Explorer's,
+  and its token was Medium (S-1-16-8192), elevation type Limited: Explorer's token, not the caller's. Then the test exe
+  was started that way (so with Medium, Limited) and ran the same test, writing a report file: it passed, so a Medium
+  process may use Explorer as the parent. Not tested: how Task Manager groups such a child (checklist 4), and that it
+  also takes Explorer's job (Microsoft's UpdateProcThreadAttribute page says it does; not re-read this session).
+- **Exit waits.** `RegisterWaitForSingleObject` with `WT_EXECUTEONLYONCE`, on a duplicate of the process handle:
+  fired once after the child was killed, though the caller had closed its own handle first; no second call within
+  300 ms. `UnregisterWaitEx(wait, INVALID_HANDLE_VALUE)` before the exit: the callback never ran (checked 300 ms
+  after the exit). The same call while a callback ran (it slept 300 ms) returned only after the callback finished.
+- **Command line quoting.** `CommandLineToArgvW` split the line `command_line` builds back into the exact arguments,
+  among them an empty one, one with spaces, one with quotes, `C:\dir\`, `C:\my dir\` and `back\\"quote`.
+
+## Store checks
+
+Checked 2026-11-03 for card `docs/tasks/p3-store.md`, by the tests in `store::tests` (Windows 11 Pro 10.0.26300,
+NTFS, files in `%TEMP%`, test keys under `HKCU\Software\Wakeshot-test`), unless a line names another source.
+
+- **`MoveFileExW` cannot replace a file a reader has open.** `MoveFileExW(REPLACE_EXISTING | WRITE_THROUGH)` over a
+  target that another handle had open returned 5 (`ERROR_ACCESS_DENIED`), even when that handle was opened with
+  read, write and delete sharing (first run of `atomic_write_replaces_a_file_a_reader_has_open`). The same 5 came
+  back when the holder had no delete sharing.
+- **A rename by handle with POSIX semantics can.** `SetFileInformationByHandle(FileRenameInfoEx)` with
+  `FILE_RENAME_FLAG_REPLACE_IF_EXISTS | FILE_RENAME_FLAG_POSIX_SEMANTICS`, on a `DELETE` handle of the temp file,
+  replaced the target while a reader with delete sharing held it; the reader then still read the old bytes, whole,
+  and a new open read the new bytes. When the holder had no delete sharing it failed too, and the old file stayed
+  whole with no temp file left (`atomic_write_keeps_old_file_on_failure`). So `store::write_atomic` tries
+  `MoveFileExW` first and this rename on 5. Rust's `std::fs::rename` does the same: `MoveFileExW`, then on
+  `ERROR_ACCESS_DENIED` the same `FileRenameInfoEx` call with the same two flags, returning the first error if it
+  fails (source read 2026-11-03, `library/std/src/sys/fs/windows.rs`, `rename_inner`, rust-lang/rust master).
+- **Delete with a reader.** `DeleteFileW` of a file a reader held with delete sharing succeeded, the name was free at
+  once (a read of it said missing, a new write of the same name worked), and the reader still read the old bytes
+  (`remove_and_rewrite_while_a_reader_has_the_file_open`).
+- **Write-through.** Microsoft, `MoveFileExW` (updated 2025-07-01): `MOVEFILE_WRITE_THROUGH` "The function does not
+  return until the file is actually moved on the disk. Setting this value guarantees that a move performed as a copy
+  and delete operation is flushed to disk before the function returns." The temp file sits beside the target, so the
+  move is never a copy and delete. What a power cut right after the move leaves: not tested by us. Nightcrew writes
+  the same way (temp file, flush, `MoveFileEx(REPLACE | WRITE_THROUGH)`; `docs/research/rivals-nightcrew-lidguard.md`).
+- **Missing versus error on read.** `CreateFileW(OPEN_EXISTING)` gave "missing" (2 or 3) for a missing file and for a
+  file in a missing folder; a folder path (no `FILE_FLAG_BACKUP_SEMANTICS`) failed with another error
+  (`read_whole_tells_missing_from_error`; the code was not printed).
+- **Abandoned mutex.** A thread that took a named mutex and ended without a release: the next wait returned
+  `WAIT_ABANDONED` with ownership, and a wait after the release returned `WAIT_OBJECT_0`
+  (`abandoned_mutex_counts_as_taken`). A `Global\` mutex was created and taken by the test runner, whose integrity
+  level was High (0x3000): this shell runs elevated, so worker test runs here do not cover Medium (that check is
+  `p3-real-checks`). Microsoft, `CreateMutexExW` (updated 2024-11-20): for a named mutex that existed, "the return value
+  is a handle to the existing object, and the GetLastError function returns ERROR_ALREADY_EXISTS".
+- **Registry.** `RegGetValueW` with `RRF_RT_REG_SZ` on a `REG_DWORD` value returned 1630 (`ERROR_UNSUPPORTED_TYPE`)
+  (`auto_start_refuses_other_types`). A get or a delete of a value under a `Run` key that did not exist yet came back
+  as missing (2 or 3), and a `REG_SZ` with Armenian letters came back unchanged (`auto_start_round_trip`).
+- **Pid check for the key sweep.** `OpenProcess(SYNCHRONIZE)` by pid of an ended child whose handle the test still
+  held worked, and a 0 ms wait was signaled, so the sweep deleted that pid's key; the live test process's key stayed
+  (`sweep_skips_live_pids`). Not tested: an open denied for a pid of another user's process (the sweep keeps such a
+  key).

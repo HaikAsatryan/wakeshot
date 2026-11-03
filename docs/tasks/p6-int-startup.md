@@ -48,6 +48,10 @@ journal left by another process, and the `Started` event with every field right.
 10. Added by the orchestrator (`docs/reviews/p1-close-verify.md` Major 1): `locked_at_start() -> bool` from
     `session::locked_now()` (`Some(true)` only; `None` counts as unlocked, with one log line), so `p6-int-tray-mode`
     passes `Session(SessionChange::Locked)` right after `Started`, before `JournalCorrupt` and `Updated`.
+11. Added by the orchestrator (`p3-store` Found outside scope): a temp file left by a stop between the temp write and
+    the move is never cleaned up. At start, delete the data folder's `*.tmp` files whose pid is not alive (read
+    `p3-store`'s Result for the temp name form), one log line each, with a test. `store::HeldMutex` is not `Send`
+    (Windows lets only the owning thread release a mutex): take and hold the tray's mutexes on the loop thread.
 
 ## Acceptance checks
 

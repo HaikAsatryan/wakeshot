@@ -37,6 +37,10 @@ Start here: `docs/plan.md` (how we work, phases, status, next step). Then:
   Battery sleep Never stopped it (tested 2026-11-03), so a hold must raise the battery timer.
 - A user's own sleep (Start > Sleep) ends every request; after resume it is not honored until it is taken again.
 
+- Agents here run elevated (High, `SeDebugPrivilege` enabled; checked 2026-11-03). A test that expects an open or a
+  write to be denied must run under an unelevated (Medium) token, or it passes for the wrong reason.
+- In agent shells `cargo` may not be on `PATH`; call `%USERPROFILE%\.cargo\bin\cargo.exe` (checked 2026-11-03).
+
 ## Test laptop
 
 - Modern Standby, Balanced plan `381b4222-f694-41f0-9685-ff5bb260df2e`. Haik's own values: lid action Sleep on AC

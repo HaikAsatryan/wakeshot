@@ -41,6 +41,10 @@ The core track runs the same walk against its fake; this card proves the real pa
 - Routines and starting states: Apply (fresh; E1, E2 and E3 left by a failed restore; a released key's entry on the
   plan, track note 6); restore with no plan and with one plan; the ownership check after a user change; an unknown-key
   entry present in every case (correction 12: never touched, never blocks the clean-up).
+- Added by the orchestrator (`p2-ownership-restore` Found outside scope 2): "RunOnce is gone; the guard is told to
+  stop" holds only for stops before the clean-up's journal delete. A stop between that delete and the RunOnce clear
+  (or the guard's stop) leaves them, and the next restore finds no journal and does nothing (walk R6, accepted as
+  harmless). Assert it that way, as the core's `a_stop_at_any_call_keeps_every_held_value_journaled` does.
 
 ## Acceptance checks
 

@@ -55,6 +55,15 @@ Create every integration file with its owner line, the seams the integration car
    `run.rs`, `keep_awake.rs`, `automatic.rs`, `status.rs`, `restore.rs`, `open_log.rs`), "fixes by the e2e cards" in
    the `app/*` owner lines you write. (c) Minor 2: `crates/wakeshot-cli/src/main.rs` gets "Owner: contracts card."
    in its module doc; the tray `main.rs` gets its `Owner:` line through deliverable 4. Doc lines only.
+10. Added by the orchestrator: stale `architecture.md` lines that wave 1 cards found (each card's "Found outside
+    scope"; change only those lines, from what the card's Result shows): `p3-log` (section 8 still calls the no-mix
+    result of several writers "not verified"; `docs/research.md` "Log writer checks" has it); `p3-process` (section
+    5 still lists "Medium may use Explorer as parent" as not verified; `docs/research.md` "Power track plan checks"
+    has an out-of-date line on `Wdk_*` features; the card's Result has both facts); `p2-ownership-restore` (section
+    5 restore step 5: replace it with the proposed text in that card's "Found outside scope" 1, which the code
+    follows; `docs/phases/03-windows-power.md` note 4: "RunOnce is gone; the guard is told to stop" only for stops
+    before the journal delete, as its item 2 says); `p3-store` (section 6: `write_atomic` falls back to a rename by
+    handle with POSIX semantics when `MoveFileExW` gives error 5 because a reader has the target open; its Result).
 
 ## Acceptance checks
 

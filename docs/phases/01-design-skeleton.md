@@ -341,7 +341,7 @@ scratchpad):
 - [x] All cards done; reviews (general and domain) done and fixed (2026-11-03 19:08; `p6-int-skeleton` is an
   integration card and runs after wave 1).
 - [x] Repo public, CI green on x64 and ARM64 (2026-11-03 18:15, run 41651223828).
-- [ ] Haik signs off Phase 1.
+- [x] Haik signs off Phase 1 (2026-11-03 19:13, "ok signing off").
 
 ## Work log
 
@@ -682,4 +682,20 @@ scratchpad):
   the orchestrator (`product.md` answers block and the Claude-only approval limit; Questions 10 to 12 marked
   answered here; menu look answer in `p5-menu-paint`, `p5-menu-view` and `05-tray-ux.md`; `04-sources.md` status).
   Phase 1 review passes with these routed; push next.
+- 2026-11-03 19:09: Pushed 4 commits (`bd655de..0f9960a`) after the push scan (one fine hit: a card naming the
+  placeholder); CI run 41660862166. Asked Haik to sign off Phase 1.
+- 2026-11-03 19:10: Card `p3-log` done (8 tests; 4 writers, 2000 lines each, 7 runs, no mixed line; offset `+04:00`;
+  roll fails only while another app holds a log file, no line lost). Committed by path. Its stale `architecture.md`
+  section 8 line goes to `p6-int-skeleton` deliverable 10. No new build card starts until wave 1 ends.
+- 2026-11-03 19:13: Card `p3-process` done (22 tests, 19 pass, 3 ignored and run once; the guard's parent is
+  Explorer, an elevated runner gets a Medium child, a Medium process may also use Explorer as parent). Committed by
+  path. Its stale `architecture.md` section 5 line and a `research.md` line go to `p6-int-skeleton` deliverable 10.
+  Its note that agents run High with `SeDebugPrivilege` (checked by the orchestrator: true) went into `CLAUDE.md`.
+  Its proposal (`Spawned` says why it fell back): left, as its default says.
+- 2026-11-03 19:13: CI run 41660862166 green (all three jobs). Haik: "ok signing off": Phase 1 signed off. Card
+  `p2-ownership-restore` done (45 ownership tests, 63 in the crate; the four mutants each fail a test). Its notes:
+  restore step 5 text and the 03 note 4 line go to `p6-int-skeleton` deliverable 10; the empty journal on a failed
+  load goes to `p2-core-settings`; the stop after the journal delete goes to `p3-stop-points`. `cargo` is not on
+  `PATH` in agent shells (checked): `CLAUDE.md` names its full path. Wave 1 waits only for `p3-store`.
+  Later work is tracked in the phase files 02 to 06 and `06-integration.md`.
 
