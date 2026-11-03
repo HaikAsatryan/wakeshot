@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use wakeshot_core::process::FileTime;
 use wakeshot_core::sources::claude::ClaudeSource;
+use wakeshot_core::sources::cron::FixedOffset;
 use wakeshot_core::sources::{
     Activity, AgentSource, Fed, Feed, FileId, FormatHealth, Liveness, SessionFacts, SessionKey,
     SourceId, WantedFile,
@@ -33,7 +34,7 @@ fn status_file(pid: u32) -> FileId {
 }
 
 fn source() -> ClaudeSource {
-    ClaudeSource::new(PathBuf::from(HOME))
+    ClaudeSource::new(PathBuf::from(HOME), Box::new(FixedOffset(240)))
 }
 
 fn read_fixture(name: &str) -> Vec<u8> {
