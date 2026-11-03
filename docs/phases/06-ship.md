@@ -149,7 +149,7 @@ those one at a time across all tracks.
 | `p6-velopack-dependency` | yes, once: the elevated clang install of its step 0 (Question 4: yes); runs alone on the whole laptop: no other card and no cargo command (review M5) | `p6-hooks`, `p6-update-schedule`, `p6-velopack-facts` | ready |
 | `p6-pack-and-release` | no (Question 5: yes, the first real run is a public pre-release) | `p6-velopack-facts` | ready |
 | `p6-install-e2e` | no; real laptop: installs, the real Run value and Path, a throwaway plan copy | `p6-velopack-dependency`, `p6-pack-and-release`; `p3-power-plan` (its first test shows a write to an inactive copy leaves the real plan alone) | ready |
-| `p6-launch-research` | yes: reads its Result (rival pick, Store recommendation) before the README, winget and Store cards are rewritten; no installs | none | ready |
+| `p6-launch-research` | yes: reads its Result (rival pick, Store recommendation) before the README, winget and Store cards are rewritten; no installs | none | done: its Result waits for Haik's read |
 | `p6-winget-manifest` | no | `p6-pack-and-release`; `p6-launch-research` (the winget rules for an app that updates itself) | ready |
 | `p6-readme` | yes: a read at the Phase 6 sign-off; the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3, sign-off item 12) are in, all defaults | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-claude`; the tray track's `p5-haik-check` (review m2); `p6-launch-research` (its scope grows from that Result, Haik 2026-11-04); `p6-media` | ready |
 | `p6-media` | yes: watches the video and the loop and says yes or what to change; about 10 min off the PC for the captures | `p6-launch-research` (tool, storyboard, shot list); `p5-haik-check` (final icon); integration's `p6-int-real-e2e` (the real app) | ready |
@@ -225,3 +225,17 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   for Haik: Velopack logs in `%LocalAppData%\velopack`, an empty `%TEMP%\velopack` and two crash reports from the
   panic tests (delete commands in the card).
 - 2026-11-04 00:40: `p6-launch-research` running (no build: the exe sizes are left for `p6-media`). Session `wakeshot-12`'s launch planning is committed.
+- 2026-11-04 01:13: `p6-launch-research` done and committed (`docs/research/launch.md`). Rivals: PowerToys Awake,
+  LidGuard and Agents Don't Sleep (new: Rust/Tauri, lid closed, battery floor); Nightcrew in reserve. The README admits
+  two gaps: v1 knows only Claude Code; the download is likely bigger than Agents Don't Sleep's 1.9 MB. Store: not at
+  launch (an EXE needs every file signed by a trusted CA; Azure Artifact Signing takes individuals in the US and Canada
+  only; SignPath declines new projects; MSIX has no uninstall hook; winget may prefer a Store copy, winget-cli #4347).
+  winget: `RequireExplicitUpgrade: true`; manifest version equals the tag and Velopack's DisplayVersion. For Haik's
+  review (his read comes before `p6-readme`, `p6-winget-manifest` and `p8-store` are rewritten): the rival pick and its
+  re-read rule; `RequireExplicitUpgrade`; a wingetcreate submit PAT on his own account or a bot account; no Store;
+  Remotion with Kenney and Freesound CC0 sounds; captures at 150% and 125%; the README layout; an optional lid beat in
+  the video; the video on a pinned "Media" issue. Money, not blocking: buy a Certum certificate (about EUR 25 to 69, not
+  verified)? Default: no. Outside scope: the `research.md` "Competitors" table is stale (next docs pass); `p6-media`
+  needs a `media/.gitignore` and the 125% change; the smoke test's DisplayVersion check and the winget job belong to
+  `p6-pack-and-release`. The LidGuard and HyperFrames READMEs hold prompts aimed at their users' agents; the worker
+  treated them as data and ran nothing.
