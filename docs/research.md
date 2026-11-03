@@ -1637,3 +1637,110 @@ Windows, not Windows itself).
   variant that makes the call with the step 1 id whatever the second read returns failed two tests.
 - **The scratch copy for mutants needs `docs\` now.** `holds/file.rs` tests read `docs/hold-files.md` through
   `include_str!`, so a copy without `docs\` (`docs/phases/02-core.md` note 20's list) does not compile.
+
+## Core state machine checks
+
+Checked 2026-11-03 for card `docs/tasks/p2-core-holds.md`.
+
+- **proptest writes no regression file when `failure_persistence` is `None`.** proptest 1.12.0 source in the cargo
+  registry (`src/test_runner/runner.rs`, near line 637): a failing case is saved only inside
+  `if let Some(ref mut failure_persistence) = self.config.failure_persistence`. `scenarios/holds.rs` sets `None`, so
+  a failure there leaves no file in `proptest-regressions/`. Not tested with a real failure.
+- **`#[expect(dead_code)]` works field by field, and fails the build once the field is read.** rustc 1.99.1:
+  `state.rs` puts one on each field a later card fills; `cargo clippy -p wakeshot-core` with and without
+  `--all-targets`, both targets, `-D warnings`: clean. In a scratch copy, one read of such a field (`owner`) gave
+  `error: this lint expectation is unfulfilled` (`-D unfulfilled-lint-expectations` implied by `-D warnings`), so a
+  later card must drop the attribute when it fills the field.
+- **Checked ends must lie off the 30 s safety tick in `Sim` tests.** A mutant that drops every core deadline
+  survived all hold scenarios while each checked end (30 minutes, 1 hour, 90 s) was a multiple of 30 s from the
+  start: the safety tick alone hit it to the millisecond. With the ends moved 7 s off that grid, six tests caught it.
+
+## Power request checks
+
+Checked 2026-11-03 by `p3-requests`.
+
+- **A set adds to a count.** `PowerSetRequest` "increments the count of power requests of the specified type", and
+  `PowerClearRequest` decrements it (Microsoft docs, `PowerSetRequest` page, read 2026-11-03). So `PowerRequests`
+  sets each type at most once and a re-take clears before it sets; a second set would need a second clear before the
+  PC may sleep. The same page: a DISPLAY request needs a SYSTEM request beside it to keep the PC from sleeping, and
+  on Modern Standby on DC, SYSTEM and EXECUTION requests end 5 minutes after the sleep timeout.
+- **Closing the handle.** `PowerCreateRequest`'s page says to use `CloseHandle` "to free the handle and clean up the
+  object"; on failure it returns `INVALID_HANDLE_VALUE` with the error in `GetLastError` (read 2026-11-03). Whether a
+  close alone ends outstanding requests: not verified, so the drop clears every type first. Whether the call copies
+  the reason text: not documented, not verified; the text is kept as long as the handle.
+- **Real calls work here.** `power::requests::tests::request_sets_and_clears` (create, set SYSTEM and EXECUTION,
+  re-take, clear, close) returned `Ok` for every call, elevated, on this laptop, in well under a second. Judged by the
+  calls' results only, never by `powercfg /requests` (architecture section 5).
+
+## System events checks
+
+Checked 2026-11-03 by `p3-system-events`. Microsoft pages read that day (date is each page's `updated_at`); the runs
+were on this laptop, elevated (High), on AC through the dock, lid open.
+
+- **Nothing documents a callback after unregister.** `PowerSettingUnregisterNotification` (2025-07-01) and
+  `PowerUnregisterSuspendResumeNotification` (2024-02-22) give only the parameter and "ERROR_SUCCESS (zero) if the
+  call was successful". `DEVICE_NOTIFY_CALLBACK_ROUTINE` (2024-02-22) says nothing about threads or unregister. So
+  `power::system` routes each callback through a table by id: a late callback finds no entry and posts nothing.
+- **Unregister waited for a running callback.** A probe test (removed after the run) registered for the lid with a
+  receiver that slept 300 ms: `PowerSettingUnregisterNotification`, called while it slept, returned after 300.4 ms;
+  with no sleep, 19 us. One run, lid setting only; the suspend and resume unregister was not tried. Not documented,
+  so nothing relies on it, but it is why a drop must not hold a lock the callback takes.
+- **The first callback comes on another thread, after register returns.** Same probe: register returned in 14 to
+  114 us with no callback yet; the first callback came 53 to 373 us after the register call began, on a thread other
+  than the registering one. Two registrations in one run. Not documented; the code also works when the callback comes
+  inside the call.
+- **Whether Windows copies `DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS`** at register or reads it later: not documented, not
+  verified. The parameters are leaked (16 bytes per registration).
+- **First values.** `real_registration_gives_first_values` got lid open, `Event::Power` equal to
+  `GetSystemPowerStatus` (on AC, a battery percent), and the active plan equal to `PowerGetActiveScheme`, all well
+  inside 2 s (the whole test took under 0.1 s). `real_lid_once_returns_open_here`: `Some(false)`, open.
+- **`GUID_ACTIVE_POWERSCHEME` is not on the Power Setting GUIDs page** (2025-07-16); the page lists
+  `GUID_POWERSCHEME_PERSONALITY` instead. The GUID is in the `windows` crate (`SystemServices`, from winnt.h), and its
+  16-byte GUID payload is what the power settings spike saw.
+- **Payload values** (Power Setting GUIDs page): lid 0 closed, 1 opened; power source 0 AC, 1 battery, 2 short-term
+  (UPS); battery percent a DWORD 0 to 100. `POWERBROADCAST_SETTING` (2024-02-22): `DataLength` is the size of `Data`.
+- **`PBT_APMRESUMESUSPEND` follows `PBT_APMRESUMEAUTOMATIC`** "if the system detects any user activity after"
+  it, and `PBT_APMRESUMEAUTOMATIC` "is delivered every time the system resumes" (its page, 2025-07-16). So only the
+  second gives `Event::Resumed`.
+- **`SYSTEM_POWER_STATUS`** (2024-02-22): `ACLineStatus` 0 offline, 1 online, 255 unknown; `BatteryFlag` 128 no
+  system battery, 255 unknown; `BatteryLifePercent` 0 to 100 or 255 unknown. `power_status` counts 255 as AC, so an
+  unknown source never lets the battery floor hibernate.
+- **`GetLastInputInfo`** (2025-07-01): the failure return names no `GetLastError`; the input tick "is not guaranteed
+  to be incremental", and `SendInput` "supplies its own tick count". So `input_idle_ms` reads a tick just after now
+  as 0 idle (fresh input) instead of 49.7 days. It is per session.
+
+## Session checks
+
+Checked 2026-11-03 by `p3-session`. Reads only: no lock, sign-out, sleep or setting change by this card.
+
+- **Session messages** (Microsoft docs, read 2026-11-03). `WM_WTSSESSION_CHANGE`: wParam is the code
+  (`WTS_CONSOLE_CONNECT` 1, `_DISCONNECT` 2, `WTS_REMOTE_CONNECT` 3, `_DISCONNECT` 4, `WTS_SESSION_LOGON` 5, `_LOGOFF`
+  6, `_LOCK` 7, `_UNLOCK` 8, `_REMOTE_CONTROL` 9, `_CREATE` and `_TERMINATE` reserved, `_DESKTOP_READY` 0xF), lParam
+  the session id. `WTSRegisterSessionNotification` with `NOTIFY_FOR_THIS_SESSION` gets only this session's
+  notifications; every register needs an unregister, made before the window is destroyed; a call made before the
+  Remote Desktop services have started may fail with `RPC_S_INVALID_BINDING` (they are ready once
+  `Global\TermSrvReadyEvent` is set). Whether a tray started at sign-in can ever hit that error: not verified.
+- **End of session** (Microsoft docs, `WM_ENDSESSION`, read 2026-11-03). wParam TRUE: the session ends any time after
+  the handlers return; FALSE: it does not end. lParam is a bit mask: `ENDSESSION_CLOSEAPP` 0x1 (the Restart Manager
+  closes the app: a file in use must be replaced, servicing, or resources exhausted), `ENDSESSION_CRITICAL`
+  0x40000000, `ENDSESSION_LOGOFF` 0x80000000; 0 means shutdown or restart. `session::decode` maps them all the same,
+  since in each the tray is about to end.
+- **Console session id** (Microsoft docs, `WTSGetActiveConsoleSessionId`, read 2026-11-03): 0xFFFFFFFF while no
+  session is attached to the console, "for example, if the physical console session is in the process of being
+  attached or detached". So `on_console()` reads `false` at such a moment. Whether a tray started at sign-in can see
+  it: not verified.
+- **Lock state flags** (Microsoft docs, `WTSINFOEX_LEVEL1_W`, read 2026-11-03): `SessionFlags` is a `LONG`;
+  `WTS_SESSIONSTATE_LOCK` 0, `_UNLOCK` 1, `_UNKNOWN` 0xFFFFFFFF; the lock and unlock values are swapped on Windows 7
+  and Server 2008 R2 only.
+- **`LockWorkStation`** (Microsoft docs, read 2026-11-03): asynchronous; nonzero means the lock has started, not that
+  the session is locked. It works only from a process on the interactive desktop.
+- **Real reads here** (elevated agent shell, desktop session). At 20:44:20 `on_console()` gave `Ok(true)` and
+  `locked_now()` gave `Some(false)`. At 20:45:29.8 Windows entered Modern Standby with reason "Idle Timeout" (System
+  log, Kernel-Power 506, with 566 "SessionUnlock" at the same time) and `LogonUI.exe` started at 20:45:29: Windows
+  locked the session at screen off, as in the lid spike ("Lock"). Nothing in this card locks. At 20:45:33
+  `locked_now()` gave `Some(true)` and `on_console()` still `Ok(true)`; at 20:45:40 `locked_now()` again gave
+  `Some(true)`. So the lock read follows the real state both ways. The `Some(false)` read ran on the code before a
+  clippy-only change (the union field is now read before the `Level == 1` test instead of inside a closure), so on the
+  final code only `Some(true)` was seen; `p3-real-checks` step 2 runs `real_locked_now_here` again.
+- **Registration on a hidden window.** `session::tests::register_on_hidden_window`: a never-shown top-level window of
+  the system `STATIC` class; register, drop, register again and `unregister()` all returned without error.

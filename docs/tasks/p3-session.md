@@ -1,6 +1,6 @@
 # Session: lock, unlock, console, end of session, and the lock call
 
-Phase: 3. Status: ready. Needs Haik: no. Real laptop: no (the real lock test is `#[ignore]`; `p3-haik-checks` runs
+Phase: 3. Status: done. Needs Haik: no. Real laptop: no (the real lock test is `#[ignore]`; `p3-haik-checks` runs
 it). Agent: `wakeshot-worker`. Size: about 80K tokens.
 Runs after: Haik's sign-off of the track plans; the contracts card. Parallel with: every other wave 1 card of this
 track and any card of tracks 2, 4, 5, 6.
@@ -68,16 +68,80 @@ Commands: `rustfmt --edition 2024 --check <owned files>`; `cargo clippy --locked
 
 ## Questions for Haik
 
-Each with the worker's default.
+None.
 
 ## Found outside scope
 
-Problems seen but not fixed.
+- This card's own command `cargo test --locked -p wakeshot-windows -- --ignored session::real_on_console_here` matches
+  no test: the path is `session::tests::real_on_console_here`. The run here used the full path with `--exact`.
+  `p3-real-checks` step 2 filters by `session::`, which does match.
+- `testing.rs` (contracts card) does not re-export `FakeLocker` (nor `p3-requests`' `FakeRequests`); both are
+  reachable at their module path with `test-support`.
+- The Win32 error to `WinError` mapping now has four private copies (`log.rs`, `store.rs`, `power/requests.rs`,
+  `session.rs`). One helper in `error.rs` (contracts card) would serve all.
 
 ## Log
 
 - 2026-11-03 17:00: card written by `p3-plan-windows-power`.
+- 2026-11-03 20:40: started by `wakeshot-worker` (bundle with `p3-requests`, done first). Never locks, signs out
+  or sleeps; `real_lock_locks` stays `#[ignore]` and is never run here.
+- 2026-11-03 20:44: `session.rs` written; `session::` tests: 4 passed, 3 ignored. Read-only real tests run once with
+  `--ignored --exact --skip real_lock_locks session::tests::real_on_console_here session::tests::real_locked_now_here`:
+  both passed at 20:44:20 (`on_console()` gave `Ok(true)`, `locked_now()` gave `Some(false)`). The card's filter
+  `session::real_on_console_here` matches no test (the path is `session::tests::...`), so the full path was used.
+- 2026-11-03 20:45: clippy flagged `bool::then` with a closure in `locked_now`; changed to read the union field first
+  and `then_some` (same result). Then clippy clean on both targets, with and without `--all-targets`.
+- 2026-11-03 20:45: a rerun of the two read-only real tests at 20:45:33: `real_on_console_here` passed,
+  `real_locked_now_here` read `Some(true)`. The System log shows why: Kernel-Power 506 "entering Modern Standby,
+  Reason: Idle Timeout" at 20:45:29.8 and `LogonUI.exe` started at 20:45:29, so Windows locked the session at screen
+  off (Haik away). No test of this card locks: `real_lock_locks` was skipped by name and by `--exact` in every run.
+- 2026-11-03 20:48: research note "Session checks" added. Card done; build folder deleted.
 
 ## Result
 
-What was done, files changed, checks and outcomes, open items.
+Done 2026-11-03. No lock, sign-out, sleep or power setting change by this card; `real_lock_locks` never ran.
+
+What was built, in `crates/wakeshot-windows/src/session.rs` (the only code file changed):
+
+- `register(hwnd: HWND) -> Result<SessionNotifications, WinError>`: `WTSRegisterSessionNotification(hwnd,
+  NOTIFY_FOR_THIS_SESSION)`. Drop unregisters (error dropped); `SessionNotifications::unregister(self) -> Result<(),
+  WinError>` does it with the result. Drop it before the window is destroyed (Microsoft docs).
+- `decode(msg: u32, wparam: WPARAM, lparam: LPARAM) -> Option<SessionChange>`: the card's table. `lparam` is not
+  read: it is always this session's id, and every end-session flag (log off, Restart Manager close, forced,
+  shutdown) means the tray is about to end. A wparam past `u32` and any other code or message: `None`.
+- `on_console() -> Result<bool, WinError>`: `WTSGetActiveConsoleSessionId()` equals `ProcessIdToSessionId` of this
+  process. `Result` rather than a bare `bool`, so the one failing call is logged. The doc says integration counts
+  `Err` as `false` (the safe side: requests only, the user's settings untouched).
+- `locked_now() -> Option<bool>`: port of the spike's `session_locked`, with a size check on the returned buffer and
+  an unaligned read. `None` when the query fails or the state is unknown.
+- `trait Locker { fn lock(&self) -> Result<(), WinError>; }` (`&self`: no state), `Win32Locker` (`LockWorkStation`),
+  `DryRunLocker::new(log: Arc<dyn Log>)` (logs `session` Info "dry run: LockWorkStation"), `FakeLocker { pub locks:
+  Cell<u32>, pub fail_with: Option<WinError> }` behind `test-support` (counts every call, failed ones too). Runners
+  answer `Outcome::Locked(result.map_err(Failure::from))`.
+
+Checks, all run 2026-11-03 with the shared build folder:
+
+- `rustfmt --edition 2024 --check crates/wakeshot-windows/src/session.rs`: clean.
+- `cargo clippy --locked -p wakeshot-windows --all-targets --target <t> -- -D warnings` and the same without
+  `--all-targets`, for `x86_64-pc-windows-msvc` and `aarch64-pc-windows-msvc`: all four clean.
+- `cargo test --locked -p wakeshot-windows session::`: 4 passed (`decode_session_messages`,
+  `session_flags_read_as_lock_state`, `register_on_hidden_window`, `fake_and_dry_run_lock_never_lock`), 3 ignored
+  (`real_on_console_here`, `real_locked_now_here`, `real_lock_locks`).
+- `real_on_console_here`: passed at 20:44:20 and 20:45:33 (`Ok(true)`, from Haik's desktop session).
+- `real_locked_now_here`: passed at 20:44:20 (`Some(false)`, unlocked). After Windows locked the session itself at
+  screen off (20:45:29, see Log) it read `Some(true)` at 20:45:33 and 20:45:40, as it should. The 20:44:20 pass ran
+  before the clippy-only change in `locked_now`; `p3-real-checks` step 2 runs it again on the final code.
+- `real_lock_locks`: written (`LockWorkStation`, then polls `locked_now()` up to 5 s), never run.
+
+Docs: `docs/research.md` "Session checks" (the message codes, `WM_ENDSESSION` flags, the 0xFFFFFFFF console id, the
+lock flags, `LockWorkStation` being asynchronous, the real reads).
+
+Notes for integration (`p6-int-startup`, `p6-int-tray-mode`), not verified here:
+
+- `register` may fail with `RPC_S_INVALID_BINDING` (1702) when called before the Remote Desktop services are ready
+  (Microsoft docs). Whether a tray started at sign-in can hit it is unknown; if it does, the tray gets no lock,
+  unlock or console changes for that run. A retry on the tick would cover it.
+- `on_console()` reads `false` while the console session is being attached or detached (the docs' 0xFFFFFFFF). If a
+  tray at sign-in ever sees that, it runs as off the console until a `ConsoleBack` that may never come.
+
+Open items: the three under "Found outside scope". Build folder deleted.
