@@ -3055,3 +3055,23 @@ table: `docs/research/claude-code-signals.md`, "Phase 4 end to end".
   no exit line for that run, so `wakeshot` likely ended right after it removed the file (inferred, not verified); had
   it ended first, the hold would show `Gone`. Not run: a key press by a person, a classic conhost window.
 - **Harness Ctrl+C**: stopped the thread cleanly (`stop` returned `true`, exit 0).
+
+## Tray UX: chimes
+
+Card `docs/tasks/p5-sounds.md`, 2026-11-04. Part A: code and reads only, no sound played. Part B adds the loopback
+results to this section.
+
+- **The "No Sounds" scheme's key name is `.None`** (read on this PC, 2026-11-04 before 01:54, registry reads only):
+  `HKCU\AppEvents\Schemes` default value `.Default`; `Schemes\Names` holds `.Default` = `@mmres.dll,-800` and
+  `.None` = `@mmres.dll,-801`; `SHLoadIndirectString` loads them as "Windows Default" and "No Sounds".
+- **What Windows writes when the user picks "No Sounds"**: no Microsoft Learn page found (web search 2026-11-04).
+  Third-party pages (ITPro Today "JSI Tip 6827", Petri) select the scheme by setting the `Schemes` default value to
+  `.None` (one writes `.NONE`). That the Sound dialog writes `.None` there: not verified, since no card may switch
+  Haik's scheme. A forum post says a scheme changed after picking shows as "(modified)"; that this is stored as
+  `.Current`: not verified.
+- **Rule built** (`sound::player`): the chimes are skipped only when the value is `.None`, case ignored. `.Default`,
+  `.Current`, a saved scheme's name and a value that cannot be read all play, so only a clear "No Sounds" keeps
+  Wakeshot quiet.
+- **windows-rs 0.62.2** (read in the crate source): `PROPVARIANT` has no `Drop`, so each `IPropertyStore::GetValue`
+  result needs `PropVariantClear` (the lid spike's name read never cleared it; spike only); `WAVEFORMATEX` is
+  `repr(C, packed(1))`, so the mix format is read with `read_unaligned`.

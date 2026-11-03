@@ -1,10 +1,17 @@
 //! The sound seam (architecture section 2, `SoundPlayer`): Wakeshot's chimes, the device rule, the WASAPI player.
 //!
 //! Owner: tray track (`p5-sounds`). The trait and `FakeSoundPlayer` are contract; `p5-sounds` may add submodules
-//! under `sound/`.
+//! under `sound/`: `chime` (the PCM), `device` (the device rule), `player` (`WasapiPlayer`).
+
+mod chime;
+mod device;
+mod player;
 
 #[cfg(any(test, feature = "test-support"))]
 use std::sync::{Arc, Mutex};
+
+pub use device::{Endpoint, PickWhy, form_factor_name, pick, picked_endpoint};
+pub use player::{WasapiPlayer, current_scheme};
 
 use wakeshot_core::command::SoundEnd;
 use wakeshot_core::view::Cue;
