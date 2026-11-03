@@ -1,0 +1,38 @@
+[
+  {
+    "pid": 20636,
+    "cwd": "C:\\Users\\USER\\code\\wakeshot",
+    "kind": "interactive",
+    "startedAt": 1793647542905,
+    "sessionId": "5e550001-0000-4000-8000-000000000001",
+    "name": "wakeshot-91",
+    "status": "busy"
+  },
+  {
+    "pid": 21600,
+    "cwd": "C:\\Users\\USER\\AppData\\Local\\Temp\\claude\\C--Users-USER-code-wakeshot\\5e550001-0000-4000-8000-000000000001\\scratchpad\\cctest2",
+    "kind": "interactive",
+    "startedAt": 1793655325642,
+    "sessionId": "5e550006-0000-4000-8000-000000000006",
+    "name": "cctest2-88",
+    "status": "idle"
+  },
+  {
+    "pid": 33008,
+    "cwd": "C:\\Users\\USER\\AppData\\Local\\Temp\\claude\\C--Users-USER-code-wakeshot\\5e550001-0000-4000-8000-000000000001\\scratchpad\\cctest",
+    "kind": "interactive",
+    "startedAt": 1793655627968,
+    "sessionId": "5e550007-0000-4000-8000-000000000007",
+    "name": "cctest-21",
+    "status": "busy"
+  },
+  {
+    "pid": 8516,
+    "cwd": "C:\\Users\\USER\\AppData\\Local\\Temp\\claude\\C--Users-USER-code-wakeshot\\5e550001-0000-4000-8000-000000000001\\scratchpad\\cctest3",
+    "kind": "interactive",
+    "startedAt": 1793655684432,
+    "sessionId": "5e550008-0000-4000-8000-000000000008",
+    "name": "cctest3-61",
+    "status": "idle"
+  }
+]

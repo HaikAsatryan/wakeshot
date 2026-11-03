@@ -1,0 +1,4 @@
+2026-11-03 03:53:44.436 +      0ms [start] mode restore, pid 31608, elevated false, integrity Medium (0x2000), on AC true, battery 100%, energy saver on false, idle 7041 s
+2026-11-03 03:53:44.436 +      3ms [restore] PowerDeleteScheme(936a5b53-199c-4985-852d-e163f7031240) rc 0 ERROR_SUCCESS
+2026-11-03 03:53:44.436 +      4ms [restore] done, journal removed
+2026-11-03 03:53:44.436 +      4ms [end] exit code 0

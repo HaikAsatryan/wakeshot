@@ -1,0 +1,2 @@
+2026-11-03 03:41:59.814 +      0ms [start] mode read, args [], pid 32828, elevated false, integrity Medium (0x2000), on AC true, battery 100%, energy saver on false, idle 6336 s
+2026-11-03 03:41:59.814 +      0ms [caps] LidPresent true, S3 false, S4 true, HiberFilePresent true, AoAc true, AoAcConnectivity true, FastSystemS4 false, Hiberboot true, WakeAlarmPresent false, RtcWake S4, AcOnLineWake S-1, SoftLidWake S-1, ThermalControl true

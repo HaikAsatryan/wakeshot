@@ -1,0 +1,136 @@
+2026-11-03 15:19:07.044 +      0ms [start] mode lid, args ["--sound", "chime", "--alias-after", "3", "--listen"], pid 29144, elevated false, integrity Medium (0x2000), on AC true, battery 93%, energy saver on false, idle 0 s
+2026-11-03 15:19:07.044 +      0ms [setup] SetConsoleCtrlHandler Ok(())
+2026-11-03 15:19:07.044 +      7ms [audio] default console: Some("{0.0.0.00000000}.{ca5b6419-0bd3-4065-b7b7-0b7fc5450811}")
+2026-11-03 15:19:07.044 +      8ms [audio] default multimedia: Some("{0.0.0.00000000}.{ca5b6419-0bd3-4065-b7b7-0b7fc5450811}")
+2026-11-03 15:19:07.057 +     10ms [audio] default communications: Some("{0.0.0.00000000}.{ca5b6419-0bd3-4065-b7b7-0b7fc5450811}")
+2026-11-03 15:19:07.060 +     12ms [audio] endpoint {0.0.0.00000000}.{ca5b6419-0bd3-4065-b7b7-0b7fc5450811} '4 - DELL U2723QE (AMD High Definition Audio Device)' form factor 9 (display audio (HDMI or DisplayPort)), volume 26.0%, muted false
+2026-11-03 15:19:07.060 +     14ms [audio]   session: system sounds true, pid 0, state 0 (0 inactive, 1 active, 2 expired), session volume 100.0%, muted false, name '@%SystemRoot%\System32\AudioSrv.Dll,-202'
+2026-11-03 15:19:07.060 +     14ms [audio]   session: system sounds false, pid 11312, state 0 (0 inactive, 1 active, 2 expired), session volume 100.0%, muted false, name ''
+2026-11-03 15:19:07.060 +     14ms [audio]   session: system sounds false, pid 5508, state 0 (0 inactive, 1 active, 2 expired), session volume 100.0%, muted false, name ''
+2026-11-03 15:19:07.060 +     14ms [audio]   session: system sounds false, pid 29144, state 0 (0 inactive, 1 active, 2 expired), session volume 100.0%, muted false, name ''
+2026-11-03 15:19:07.060 +     15ms [audio] endpoint {0.0.0.00000000}.{fb152119-7d6e-4352-a9bf-882ae54afa03} 'Speakers (Realtek(R) Audio)' form factor 1 (speakers), volume 67.3%, muted false
+2026-11-03 15:19:07.060 +     16ms [audio]   session: system sounds true, pid 0, state 0 (0 inactive, 1 active, 2 expired), session volume 100.0%, muted false, name '@%SystemRoot%\System32\AudioSrv.Dll,-202'
+2026-11-03 15:19:07.060 +     16ms [audio]   session: system sounds false, pid 5508, state 0 (0 inactive, 1 active, 2 expired), session volume 100.0%, muted false, name ''
+2026-11-03 15:19:07.060 +     16ms [audio]   session: system sounds false, pid 29144, state 0 (0 inactive, 1 active, 2 expired), session volume 100.0%, muted false, name ''
+2026-11-03 15:19:07.060 +     18ms [audio] audio warm-up Ok(()) in 1 ms
+2026-11-03 15:19:07.060 +     19ms [before] active plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 15:19:07.060 +     20ms [before] plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 15:19:07.060 +     20ms [before] lid: ac 1, dc 1 (Sleep, Sleep)
+2026-11-03 15:19:07.060 +     21ms [before] sleep: ac 10800, dc 600
+2026-11-03 15:19:07.060 +     21ms [before] display-off: ac 300, dc 180
+2026-11-03 15:19:07.070 +     22ms [before] hibernate-after: ac 0, dc 2147483647
+2026-11-03 15:19:07.070 +     22ms [before] wake-timers: ac 0, dc 0
+2026-11-03 15:19:07.070 +     22ms [before] consolelock: ac 1, dc 1
+2026-11-03 15:19:07.070 +     23ms [before] energy-saver-threshold: ac 0, dc 30
+2026-11-03 15:19:07.107 +     66ms [before] powercfg /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 15:19:07.120 +     74ms [listen] '4 - DELL U2723QE (AMD High Definition Audio Device)' (display audio (HDMI or DisplayPort)): loopback on, mix F32, 2 ch, 48000 Hz
+2026-11-03 15:19:07.143 +     95ms [before] powercfg /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 15:19:07.169 +    123ms [before] powercfg /q SCHEME_CURRENT SUB_VIDEO VIDEOIDLE rc 0: Current AC Power Setting Index: 0x0000012c | Current DC Power Setting Index: 0x000000b4
+2026-11-03 15:19:07.195 +    149ms [before] powercfg /qh SCHEME_CURRENT SUB_SLEEP RTCWAKE rc 0: Current AC Power Setting Index: 0x00000000 | Current DC Power Setting Index: 0x00000000
+2026-11-03 15:19:07.201 +    154ms [plan] copy f1bab876-3b44-44d0-a827-1b0f1fdd5c52 of 381b4222-f694-41f0-9685-ff5bb260df2e made, named (rc 0)
+2026-11-03 15:19:07.201 +    154ms [plan] copy lid.ac = 0: rc 0
+2026-11-03 15:19:07.201 +    155ms [plan] copy lid.dc = 0: rc 0
+2026-11-03 15:19:07.249 +    205ms [plan] PowerSetActiveScheme(copy) rc 0
+2026-11-03 15:19:07.249 +    205ms [setup] PowerSettingRegisterNotification(lid) rc 0 in 27 us
+2026-11-03 15:19:07.249 +    205ms [setup] PowerSettingRegisterNotification(display) rc 0 in 9 us
+2026-11-03 15:19:07.249 +    205ms [notify] lid = 1 (open)
+2026-11-03 15:19:07.249 +    205ms [setup] PowerSettingRegisterNotification(session-display) rc 0 in 10 us
+2026-11-03 15:19:07.249 +    206ms [notify] display = 1 (on)
+2026-11-03 15:19:07.249 +    206ms [setup] PowerSettingRegisterNotification(power-source) rc 0 in 9 us
+2026-11-03 15:19:07.249 +    206ms [notify] session-display = 1 (on)
+2026-11-03 15:19:07.249 +    206ms [setup] PowerSettingRegisterNotification(battery) rc 0 in 10 us
+2026-11-03 15:19:07.249 +    206ms [notify] power-source = 0 (AC)
+2026-11-03 15:19:07.249 +    206ms [setup] PowerSettingRegisterNotification(active-scheme) rc 0 in 12 us
+2026-11-03 15:19:07.249 +    206ms [notify] battery = 93
+2026-11-03 15:19:07.249 +    206ms [setup] PowerRegisterSuspendResumeNotification rc 0
+2026-11-03 15:19:07.249 +    206ms [notify] active-scheme = f1bab876-3b44-44d0-a827-1b0f1fdd5c52
+2026-11-03 15:19:07.249 +    207ms [hold] PowerSetRequest SystemRequired Ok(()), ExecutionRequired Ok(())
+2026-11-03 15:19:07.472 +    427ms [listen] 'Speakers (Realtek(R) Audio)' (speakers): loopback on, mix F32, 2 ch, 48000 Hz
+2026-11-03 15:19:07.991 +    943ms [lid] initial lid closed Some(false). Work lasts 60 s after the lid closes, then end method 'release'. lock true, sound true (chime), alias control after Some(3) s, chime after None s, listen true, heat limit 85 C, max 12 min
+2026-11-03 15:19:07.991 +    943ms [lid] >>> READY: close the lid now <<<
+2026-11-03 15:19:07.991 +    950ms [tick] [wait-close] t 0 s, step wall 604 unbiased 610 interrupt 610 ms, idle 1 s, AC true, bat 93%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1, heat \_TZ.THM0 52.1 C limit 100%
+2026-11-03 15:19:09.003 +   1956ms [tick] [wait-close] t 1 s, step wall 1011 unbiased 1012 interrupt 1012 ms, idle 2 s, AC true, bat 93%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 15:19:10.009 +   2962ms [tick] [wait-close] t 2 s, step wall 1006 unbiased 1006 interrupt 1006 ms, idle 3 s, AC true, bat 93%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 15:19:11.017 +   3970ms [tick] [wait-close] t 3 s, step wall 1007 unbiased 1008 interrupt 1008 ms, idle 4 s, AC true, bat 93%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 15:19:12.027 +   4980ms [tick] [wait-close] t 4 s, step wall 1009 unbiased 1009 interrupt 1009 ms, idle 5 s, AC true, bat 93%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 15:19:13.036 +   5988ms [tick] [wait-close] t 5 s, step wall 1007 unbiased 1008 interrupt 1008 ms, idle 6 s, AC true, bat 93%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1, heat \_TZ.THM0 47.1 C limit 100%
+2026-11-03 15:19:13.962 +   6923ms [notify] lid = 0 (closed)
+2026-11-03 15:19:14.043 +   6995ms [lid] state WaitClose -> Working { until_ms: 1793704814043 } on Closed
+2026-11-03 15:19:14.043 +   6997ms [lid] LID CLOSED: reacting now
+2026-11-03 15:19:14.472 +   7425ms [lid] chime running 427 ms after the call
+2026-11-03 15:19:14.472 +   7427ms [lid] chime started in 427 ms (device picked at 2, stream ready at 375) on 'Speakers (Realtek(R) Audio)' (speakers), pick SpeakersInsteadOfDisplay, default Some("{0.0.0.00000000}.{ca5b6419-0bd3-4065-b7b7-0b7fc5450811}"), volume 67.3%, muted false, 36000 of 36000 frames, sound 750 ms
+2026-11-03 15:19:14.472 +   7427ms [lid] LockWorkStation Ok(()) in 1095 us, session locked now Some(false)
+2026-11-03 15:19:14.477 +   7429ms [tick] [work] t 7 s, step wall 1441 unbiased 1438 interrupt 1438 ms, idle 7 s, AC true, bat 93%, unlocked, displays int 0 ext 1 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 15:19:14.633 +   7585ms [listen] 'Speakers (Realtek(R) Audio)': SOUND starts, first packet peak -1.6 dBFS
+2026-11-03 15:19:15.272 +   8224ms [lid] chime: the engine took the whole sound in 696 ms
+2026-11-03 15:19:15.431 +   8383ms [listen] 'Speakers (Realtek(R) Audio)': sound ended: 498 ms long, peak -0.4 dBFS
+2026-11-03 15:19:15.482 +   8434ms [tick] [work] t 8 s, step wall 1006 unbiased 1010 interrupt 1010 ms, idle 8 s, AC true, bat 93%, locked, displays int 0 ext 1 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 15:19:16.486 +   9439ms [tick] [work] t 9 s, step wall 1004 unbiased 1004 interrupt 1004 ms, idle 9 s, AC true, bat 93%, locked, displays int 0 ext 1 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 15:19:17.491 +  10442ms [lid] control: the Phase 0 alias sound, 3445 ms after the close
+2026-11-03 15:19:17.491 +  10446ms [lid] PlaySound(SystemNotification, SND_SYSTEM) true in 3253 us
+2026-11-03 15:19:17.491 +  10447ms [tick] [work] t 10 s, step wall 1008 unbiased 1005 interrupt 1004 ms, idle 10 s, AC true, bat 93%, locked, displays int 0 ext 1 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 15:19:17.579 +  10531ms [listen] '4 - DELL U2723QE (AMD High Definition Audio Device)': SOUND starts, first packet peak -31.7 dBFS
+2026-11-03 15:19:18.499 +  11452ms [tick] [work] t 11 s, step wall 1004 unbiased 1008 interrupt 1008 ms, idle 11 s, AC true, bat 93%, locked, displays int 0 ext 1 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x1, heat \_TZ.THM0 67.1 C limit 100%
+2026-11-03 15:19:18.826 +  11778ms [listen] '4 - DELL U2723QE (AMD High Definition Audio Device)': sound ended: 944 ms long, peak -31.7 dBFS
+2026-11-03 15:19:19.507 +  12460ms [tick] [work] t 12 s, step wall 1008 unbiased 1008 interrupt 1009 ms, idle 12 s, AC true, bat 93%, locked, displays int 0 ext 1 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 15:19:20.515 +  13468ms [tick] [work] t 13 s, step wall 1007 unbiased 1008 interrupt 1008 ms, idle 13 s, AC true, bat 93%, locked, displays int 0 ext 1 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 15:19:20.880 +  13833ms [notify] lid = 1 (open)
+2026-11-03 15:19:21.520 +  14472ms [lid] state Working { until_ms: 1793704814043 } -> Opened { at_ms: 1793704761520 } on Opened
+2026-11-03 15:19:21.520 +  14472ms [end] WORK END, lid open true
+2026-11-03 15:19:21.520 +  14472ms [hold] released: clear Ok(()) Ok(()), handle closed
+2026-11-03 15:19:21.525 +  14477ms [notify] active-scheme = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 15:19:21.567 +  14519ms [restore] PowerSetActiveScheme(381b4222-f694-41f0-9685-ff5bb260df2e) rc 0
+2026-11-03 15:19:21.568 +  14520ms [restore] PowerDeleteScheme(f1bab876-3b44-44d0-a827-1b0f1fdd5c52) rc 0
+2026-11-03 15:19:21.569 +  14521ms [restore] check: active 381b4222-f694-41f0-9685-ff5bb260df2e, copy left false
+2026-11-03 15:19:21.569 +  14521ms [plan] restored: user's plan active, copy deleted, journal removed
+2026-11-03 15:19:21.569 +  14521ms [end] lid is open: no end method (re-check before acting)
+2026-11-03 15:19:21.570 +  14522ms [tick] [opened] t 14 s, step wall 1054 unbiased 1054 interrupt 1054 ms, idle 14 s, AC true, bat 93%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 15:19:22.127 +  15079ms [listen] '4 - DELL U2723QE (AMD High Definition Audio Device)': alive, 171 packets, 1.7 s of audio, 39 silent packets
+2026-11-03 15:19:22.480 +  15432ms [listen] 'Speakers (Realtek(R) Audio)': alive, 85 packets, 0.8 s of audio, 0 silent packets
+2026-11-03 15:19:22.575 +  15528ms [tick] [opened] t 15 s, step wall 1005 unbiased 1006 interrupt 1006 ms, idle 15 s, AC true, bat 93%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 15:19:23.586 +  16538ms [tick] [opened] t 16 s, step wall 1007 unbiased 1008 interrupt 1008 ms, idle 16 s, AC true, bat 93%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 57.1 C limit 100%
+2026-11-03 15:19:24.594 +  17546ms [tick] [opened] t 17 s, step wall 1010 unbiased 1011 interrupt 1011 ms, idle 0 s, AC true, bat 93%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 15:19:25.598 +  18551ms [tick] [opened] t 18 s, step wall 1004 unbiased 1004 interrupt 1004 ms, idle 0 s, AC true, bat 93%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 15:19:26.603 +  19555ms [tick] [opened] t 19 s, step wall 1004 unbiased 1005 interrupt 1004 ms, idle 0 s, AC true, bat 93%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 15:19:27.607 +  20560ms [tick] [opened] t 20 s, step wall 1004 unbiased 1004 interrupt 1005 ms, idle 1 s, AC true, bat 93%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 15:19:28.612 +  21566ms [tick] [opened] t 21 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 0 s, AC true, bat 93%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1, heat \_TZ.THM0 56.1 C limit 100%
+2026-11-03 15:19:29.617 +  22570ms [tick] [opened] t 22 s, step wall 1005 unbiased 1005 interrupt 1005 ms, idle 0 s, AC true, bat 93%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 15:19:30.622 +  23574ms [tick] [opened] t 23 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 0 s, AC true, bat 93%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 15:19:31.626 +  24578ms [tick] [opened] t 24 s, step wall 1003 unbiased 1004 interrupt 1003 ms, idle 0 s, AC true, bat 93%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 15:19:32.630 +  25582ms [tick] [opened] t 25 s, step wall 1003 unbiased 1003 interrupt 1004 ms, idle 1 s, AC true, bat 93%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 15:19:33.637 +  26589ms [tick] [opened] t 26 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 2 s, AC true, bat 93%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 60.1 C limit 100%
+2026-11-03 15:19:34.643 +  27595ms [tick] [opened] t 27 s, step wall 1008 unbiased 1009 interrupt 1009 ms, idle 3 s, AC true, bat 93%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 15:19:35.647 +  28600ms [tick] [opened] t 28 s, step wall 1004 unbiased 1004 interrupt 1004 ms, idle 4 s, AC true, bat 93%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 15:19:36.652 +  29604ms [tick] [opened] t 29 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 5 s, AC true, bat 93%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 15:19:37.125 +  30077ms [listen] '4 - DELL U2723QE (AMD High Definition Audio Device)': alive, 171 packets, 1.7 s of audio, 39 silent packets
+2026-11-03 15:19:37.480 +  30432ms [listen] 'Speakers (Realtek(R) Audio)': alive, 85 packets, 0.8 s of audio, 0 silent packets
+2026-11-03 15:19:37.698 +  30657ms [tick] [opened] t 30 s, step wall 1005 unbiased 1006 interrupt 1005 ms, idle 6 s, AC true, bat 93%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 15:19:37.884 +  30839ms [notify] power-source = 1 (DC)
+2026-11-03 15:19:38.710 +  31664ms [tick] [opened] t 31 s, step wall 1052 unbiased 1052 interrupt 1053 ms, idle 7 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 57.1 C limit 100%
+2026-11-03 15:19:39.716 +  32669ms [tick] [opened] t 32 s, step wall 1006 unbiased 1006 interrupt 1006 ms, idle 8 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 15:19:39.721 +  32674ms [listen] '4 - DELL U2723QE (AMD High Definition Audio Device)': stopped on error: 0x88890004
+2026-11-03 15:19:40.357 +  33309ms [listen] 'Speakers (Realtek(R) Audio)': SOUND starts, first packet peak -29.6 dBFS
+2026-11-03 15:19:40.721 +  33673ms [tick] [opened] t 33 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 9 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 15:19:41.017 +  33969ms [listen] 'Speakers (Realtek(R) Audio)': sound ended: 351 ms long, peak -9.9 dBFS
+2026-11-03 15:19:41.725 +  34677ms [lid] lid open for 20 s: finishing
+2026-11-03 15:19:41.725 +  34678ms [tick] [opened] t 34 s, step wall 1004 unbiased 1004 interrupt 1004 ms, idle 10 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 15:19:42.739 +  35692ms [listen] 'Speakers (Realtek(R) Audio)': off. 2 sound(s) heard, 126 packets, 1.3 s of audio
+2026-11-03 15:19:42.749 +  35712ms [result] RESULT: with the request held, the PC kept running with the lid closed
+2026-11-03 15:19:42.749 +  35712ms [result] RESULT: the lid was open when work ended, so no end method ran
+2026-11-03 15:19:42.749 +  35713ms [after] active plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 15:19:42.749 +  35714ms [after] plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 15:19:42.749 +  35715ms [after] lid: ac 1, dc 1 (Sleep, Sleep)
+2026-11-03 15:19:42.749 +  35716ms [after] sleep: ac 10800, dc 600
+2026-11-03 15:19:42.749 +  35717ms [after] display-off: ac 300, dc 180
+2026-11-03 15:19:42.765 +  35718ms [after] hibernate-after: ac 0, dc 2147483647
+2026-11-03 15:19:42.765 +  35719ms [after] wake-timers: ac 0, dc 0
+2026-11-03 15:19:42.765 +  35720ms [after] consolelock: ac 1, dc 1
+2026-11-03 15:19:42.765 +  35721ms [after] energy-saver-threshold: ac 0, dc 30
+2026-11-03 15:19:42.813 +  35777ms [after] powercfg /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 15:19:42.869 +  35822ms [after] powercfg /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 15:19:42.910 +  35866ms [after] powercfg /q SCHEME_CURRENT SUB_VIDEO VIDEOIDLE rc 0: Current AC Power Setting Index: 0x0000012c | Current DC Power Setting Index: 0x000000b4
+2026-11-03 15:19:42.952 +  35905ms [after] powercfg /qh SCHEME_CURRENT SUB_SLEEP RTCWAKE rc 0: Current AC Power Setting Index: 0x00000000 | Current DC Power Setting Index: 0x00000000
+2026-11-03 15:19:44.659 +  37610ms [events] 15:19:37.827 Kernel-Power 105: Power source change.
+2026-11-03 15:19:44.659 +  37611ms [result] gaps: none
+2026-11-03 15:19:44.659 +  37611ms [result] DONE: plan restored. You can close this window.
+2026-11-03 15:19:44.659 +  37611ms [end] exit code 0, log C:\Users\haika\code\wakeshot\spikes\lid-sleep\out\lid-20261103-151907.log

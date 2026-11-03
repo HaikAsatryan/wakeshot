@@ -1,0 +1,2 @@
+2026-11-03 04:00:07.251 +      0ms [start] mode hold, pid 29988, elevated false, integrity Medium (0x2000), on AC true, battery 100%, energy saver on false, idle 7424 s
+2026-11-03 04:00:07.251 +      0ms [start] refusing: the active plan d1c39546-d26f-4ac3-a0a0-b98585980d63 (Wakeshot spike leftover test) is a spike copy. Run both restores first.

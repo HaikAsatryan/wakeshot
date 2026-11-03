@@ -1,0 +1,157 @@
+2026-11-03 14:57:49.839 +      0ms [start] mode lid, args ["--simulate-close-after", "3", "--no-lock", "--work", "5", "--max-minutes", "1", "--listen", "--sound", "chime", "--alias-after", "2", "--log", "C:\\Users\\haika\\code\\wakeshot\\spikes\\lid-sleep\\out\\lid-limited-20261103-145749.log"], pid 8972, elevated false, integrity Medium (0x2000), on AC false, battery 93%, energy saver on false, idle 129 s
+2026-11-03 14:57:49.839 +      0ms [setup] SetConsoleCtrlHandler Ok(())
+2026-11-03 14:57:49.868 +     22ms [audio] default console: Some("{0.0.0.00000000}.{fb152119-7d6e-4352-a9bf-882ae54afa03}")
+2026-11-03 14:57:49.878 +     31ms [audio] default multimedia: Some("{0.0.0.00000000}.{fb152119-7d6e-4352-a9bf-882ae54afa03}")
+2026-11-03 14:57:49.880 +     34ms [audio] default communications: Some("{0.0.0.00000000}.{fb152119-7d6e-4352-a9bf-882ae54afa03}")
+2026-11-03 14:57:49.882 +     38ms [audio] endpoint {0.0.0.00000000}.{fb152119-7d6e-4352-a9bf-882ae54afa03} 'Speakers (Realtek(R) Audio)' form factor 1 (speakers), volume 67.3%, muted false
+2026-11-03 14:57:49.882 +     43ms [audio]   session: system sounds true, pid 0, state 0 (0 inactive, 1 active, 2 expired), session volume 100.0%, muted false, name '@%SystemRoot%\System32\AudioSrv.Dll,-202'
+2026-11-03 14:57:49.890 +     43ms [audio]   session: system sounds false, pid 5508, state 0 (0 inactive, 1 active, 2 expired), session volume 100.0%, muted false, name ''
+2026-11-03 14:57:49.890 +     43ms [audio]   session: system sounds false, pid 8972, state 0 (0 inactive, 1 active, 2 expired), session volume 100.0%, muted false, name ''
+2026-11-03 14:57:49.893 +     47ms [before] active plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 14:57:49.893 +     49ms [before] plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 14:57:49.893 +     51ms [before] lid: ac 1, dc 1 (Sleep, Sleep)
+2026-11-03 14:57:49.898 +     53ms [before] sleep: ac 10800, dc 600
+2026-11-03 14:57:49.898 +     54ms [before] display-off: ac 300, dc 180
+2026-11-03 14:57:49.902 +     56ms [before] hibernate-after: ac 0, dc 2147483647
+2026-11-03 14:57:49.902 +     57ms [before] wake-timers: ac 0, dc 0
+2026-11-03 14:57:49.902 +     58ms [before] consolelock: ac 1, dc 1
+2026-11-03 14:57:49.902 +     59ms [before] energy-saver-threshold: ac 0, dc 30
+2026-11-03 14:57:50.003 +    158ms [before] powercfg /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 14:57:50.087 +    240ms [before] powercfg /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 14:57:50.169 +    322ms [before] powercfg /q SCHEME_CURRENT SUB_VIDEO VIDEOIDLE rc 0: Current AC Power Setting Index: 0x0000012c | Current DC Power Setting Index: 0x000000b4
+2026-11-03 14:57:50.249 +    403ms [before] powercfg /qh SCHEME_CURRENT SUB_SLEEP RTCWAKE rc 0: Current AC Power Setting Index: 0x00000000 | Current DC Power Setting Index: 0x00000000
+2026-11-03 14:57:50.263 +    417ms [plan] copy dbb17c43-be13-4cfc-80d4-5afc36c3ef95 of 381b4222-f694-41f0-9685-ff5bb260df2e made, named (rc 0)
+2026-11-03 14:57:50.265 +    418ms [plan] copy lid.ac = 0: rc 0
+2026-11-03 14:57:50.266 +    419ms [plan] copy lid.dc = 0: rc 0
+2026-11-03 14:57:50.305 +    459ms [listen] 'Speakers (Realtek(R) Audio)' (speakers): loopback on, mix F32, 2 ch, 48000 Hz
+2026-11-03 14:57:50.405 +    560ms [plan] PowerSetActiveScheme(copy) rc 0
+2026-11-03 14:57:50.407 +    560ms [setup] PowerSettingRegisterNotification(lid) rc 0 in 83 us
+2026-11-03 14:57:50.407 +    561ms [notify] lid = 1 (open)
+2026-11-03 14:57:50.407 +    561ms [setup] PowerSettingRegisterNotification(display) rc 0 in 33 us
+2026-11-03 14:57:50.407 +    561ms [notify] display = 1 (on)
+2026-11-03 14:57:50.409 +    562ms [setup] PowerSettingRegisterNotification(session-display) rc 0 in 42 us
+2026-11-03 14:57:50.409 +    563ms [notify] session-display = 1 (on)
+2026-11-03 14:57:50.409 +    563ms [setup] PowerSettingRegisterNotification(power-source) rc 0 in 34 us
+2026-11-03 14:57:50.409 +    563ms [notify] power-source = 1 (DC)
+2026-11-03 14:57:50.409 +    564ms [setup] PowerSettingRegisterNotification(battery) rc 0 in 41 us
+2026-11-03 14:57:50.411 +    564ms [notify] battery = 93
+2026-11-03 14:57:50.411 +    564ms [setup] PowerSettingRegisterNotification(active-scheme) rc 0 in 47 us
+2026-11-03 14:57:50.411 +    565ms [notify] active-scheme = dbb17c43-be13-4cfc-80d4-5afc36c3ef95
+2026-11-03 14:57:50.411 +    565ms [setup] PowerRegisterSuspendResumeNotification rc 0
+2026-11-03 14:57:50.411 +    565ms [hold] PowerSetRequest SystemRequired Ok(()), ExecutionRequired Ok(())
+2026-11-03 14:57:51.403 +   1556ms [lid] initial lid closed Some(false). Work lasts 5 s after the lid closes, then end method 'release'. lock false, sound true (chime), alias control after Some(2) s, chime after None s, listen true, heat limit 85 C, max 1 min
+2026-11-03 14:57:51.403 +   1557ms [lid] >>> READY: close the lid now <<<
+2026-11-03 14:57:51.411 +   1566ms [tick] [wait-close] t 0 s, step wall 603 unbiased 603 interrupt 603 ms, idle 131 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x1, heat \_TZ.THM0 43.1 C limit 100%
+2026-11-03 14:57:52.420 +   2574ms [tick] [wait-close] t 1 s, step wall 1015 unbiased 1017 interrupt 1017 ms, idle 132 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 14:57:53.430 +   3584ms [tick] [wait-close] t 2 s, step wall 1009 unbiased 1009 interrupt 1009 ms, idle 133 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 14:57:54.440 +   4593ms [lid] SIMULATED lid close (dry run)
+2026-11-03 14:57:54.440 +   4593ms [lid] state WaitClose -> Working { until_ms: 1793703479441 } on Closed
+2026-11-03 14:57:54.440 +   4594ms [lid] LID CLOSED: reacting now
+2026-11-03 14:57:54.943 +   5096ms [lid] chime not started within 500 ms: going on
+2026-11-03 14:57:54.944 +   5098ms [tick] [work] t 4 s, step wall 1514 unbiased 1514 interrupt 1514 ms, idle 134 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 14:57:55.015 +   5169ms [lid] chime started in 572 ms on 'Speakers (Realtek(R) Audio)' (speakers), pick Default, default Some("{0.0.0.00000000}.{fb152119-7d6e-4352-a9bf-882ae54afa03}"), volume 67.3%, muted false, 36000 of 36000 frames, sound 750 ms
+2026-11-03 14:57:55.218 +   5371ms [listen] 'Speakers (Realtek(R) Audio)': SOUND starts, first packet peak -1.6 dBFS
+2026-11-03 14:57:55.858 +   6013ms [lid] chime: the engine took the whole sound in 739 ms
+2026-11-03 14:57:55.949 +   6103ms [tick] [work] t 5 s, step wall 1004 unbiased 1006 interrupt 1006 ms, idle 135 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 14:57:56.028 +   6181ms [listen] 'Speakers (Realtek(R) Audio)': sound ended: 502 ms long, peak -0.4 dBFS
+2026-11-03 14:57:56.957 +   7111ms [lid] control: the Phase 0 alias sound, 2517 ms after the close
+2026-11-03 14:57:56.962 +   7117ms [lid] PlaySound(SystemNotification, SND_SYSTEM) true in 5191 us
+2026-11-03 14:57:56.965 +   7120ms [tick] [work] t 6 s, step wall 1015 unbiased 1013 interrupt 1013 ms, idle 136 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x1, heat \_TZ.THM0 43.1 C limit 100%
+2026-11-03 14:57:57.352 +   7505ms [listen] 'Speakers (Realtek(R) Audio)': SOUND starts, first packet peak -35.8 dBFS
+2026-11-03 14:57:57.975 +   8129ms [tick] [work] t 7 s, step wall 1010 unbiased 1013 interrupt 1012 ms, idle 137 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 14:57:58.871 +   9025ms [listen] 'Speakers (Realtek(R) Audio)': sound ended: 1210 ms long, peak -1.2 dBFS
+2026-11-03 14:57:58.983 +   9137ms [tick] [work] t 8 s, step wall 1007 unbiased 1007 interrupt 1008 ms, idle 138 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 14:57:59.990 +  10143ms [lid] state Working { until_ms: 1793703479441 } -> AfterWork on Tick
+2026-11-03 14:57:59.991 +  10144ms [end] WORK END, lid open true
+2026-11-03 14:57:59.991 +  10145ms [hold] released: clear Ok(()) Ok(()), handle closed
+2026-11-03 14:58:00.005 +  10160ms [notify] active-scheme = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 14:58:00.098 +  10257ms [restore] PowerSetActiveScheme(381b4222-f694-41f0-9685-ff5bb260df2e) rc 0
+2026-11-03 14:58:00.107 +  10260ms [restore] PowerDeleteScheme(dbb17c43-be13-4cfc-80d4-5afc36c3ef95) rc 0
+2026-11-03 14:58:00.107 +  10262ms [restore] check: active 381b4222-f694-41f0-9685-ff5bb260df2e, copy left false
+2026-11-03 14:58:00.109 +  10263ms [plan] restored: user's plan active, copy deleted, journal removed
+2026-11-03 14:58:00.109 +  10263ms [end] lid is open: no end method (re-check before acting)
+2026-11-03 14:58:00.109 +  10265ms [tick] [after-work] t 9 s, step wall 1128 unbiased 1127 interrupt 1127 ms, idle 140 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:01.118 +  11271ms [tick] [after-work] t 10 s, step wall 1006 unbiased 1008 interrupt 1008 ms, idle 141 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:02.133 +  12287ms [tick] [after-work] t 11 s, step wall 1014 unbiased 1014 interrupt 1014 ms, idle 142 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 43.1 C limit 100%
+2026-11-03 14:58:03.138 +  13292ms [tick] [after-work] t 12 s, step wall 1006 unbiased 1007 interrupt 1007 ms, idle 143 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:04.147 +  14300ms [tick] [after-work] t 13 s, step wall 1008 unbiased 1008 interrupt 1008 ms, idle 144 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:05.151 +  15305ms [tick] [after-work] t 14 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 145 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:05.313 +  15467ms [listen] 'Speakers (Realtek(R) Audio)': alive, 216 packets, 2.2 s of audio, 0 silent packets
+2026-11-03 14:58:06.165 +  16319ms [tick] [after-work] t 15 s, step wall 1014 unbiased 1014 interrupt 1014 ms, idle 146 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:07.172 +  17328ms [tick] [after-work] t 16 s, step wall 1007 unbiased 1007 interrupt 1007 ms, idle 147 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 42.1 C limit 100%
+2026-11-03 14:58:08.183 +  18336ms [tick] [after-work] t 17 s, step wall 1009 unbiased 1010 interrupt 1010 ms, idle 148 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:09.193 +  19348ms [tick] [after-work] t 18 s, step wall 1010 unbiased 1011 interrupt 1010 ms, idle 149 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:10.200 +  20354ms [tick] [after-work] t 19 s, step wall 1007 unbiased 1007 interrupt 1008 ms, idle 150 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:11.211 +  21365ms [tick] [after-work] t 20 s, step wall 1010 unbiased 1011 interrupt 1011 ms, idle 151 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:12.228 +  22381ms [tick] [after-work] t 21 s, step wall 1014 unbiased 1013 interrupt 1013 ms, idle 152 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 42.1 C limit 100%
+2026-11-03 14:58:13.236 +  23390ms [tick] [after-work] t 22 s, step wall 1010 unbiased 1012 interrupt 1011 ms, idle 153 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:14.249 +  24403ms [tick] [after-work] t 23 s, step wall 1013 unbiased 1013 interrupt 1014 ms, idle 154 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:15.266 +  25420ms [tick] [after-work] t 24 s, step wall 1016 unbiased 1016 interrupt 1016 ms, idle 155 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:16.272 +  26426ms [tick] [after-work] t 25 s, step wall 1006 unbiased 1007 interrupt 1007 ms, idle 156 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:17.283 +  27437ms [tick] [after-work] t 26 s, step wall 1008 unbiased 1009 interrupt 1009 ms, idle 157 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 42.1 C limit 100%
+2026-11-03 14:58:18.288 +  28442ms [tick] [after-work] t 27 s, step wall 1006 unbiased 1007 interrupt 1007 ms, idle 158 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:19.300 +  29454ms [tick] [after-work] t 28 s, step wall 1011 unbiased 1012 interrupt 1012 ms, idle 159 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:20.316 +  30469ms [listen] 'Speakers (Realtek(R) Audio)': alive, 216 packets, 2.2 s of audio, 0 silent packets
+2026-11-03 14:58:20.316 +  30470ms [tick] [after-work] t 29 s, step wall 1015 unbiased 1015 interrupt 1015 ms, idle 160 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:21.322 +  31476ms [tick] [after-work] t 30 s, step wall 1006 unbiased 1007 interrupt 1006 ms, idle 161 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:22.335 +  32490ms [tick] [after-work] t 31 s, step wall 1012 unbiased 1012 interrupt 1013 ms, idle 162 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 42.1 C limit 100%
+2026-11-03 14:58:23.352 +  33507ms [tick] [after-work] t 32 s, step wall 1018 unbiased 1018 interrupt 1018 ms, idle 163 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:24.368 +  34522ms [tick] [after-work] t 33 s, step wall 1015 unbiased 1016 interrupt 1015 ms, idle 164 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:25.376 +  35529ms [tick] [after-work] t 34 s, step wall 1007 unbiased 1007 interrupt 1008 ms, idle 165 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:25.779 +  35933ms [notify] display = 2 (dimmed)
+2026-11-03 14:58:25.779 +  35934ms [notify] session-display = 2 (dimmed)
+2026-11-03 14:58:26.382 +  36535ms [lid] display 2 (dimmed) at 31.340 s after the lid close callback
+2026-11-03 14:58:26.383 +  36536ms [lid] display 2 (dimmed) at 31.340 s after the lid close callback
+2026-11-03 14:58:26.383 +  36537ms [tick] [after-work] t 35 s, step wall 1008 unbiased 1008 interrupt 1008 ms, idle 166 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:27.392 +  37546ms [tick] [after-work] t 36 s, step wall 1006 unbiased 1007 interrupt 1007 ms, idle 167 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 42.1 C limit 100%
+2026-11-03 14:58:28.398 +  38552ms [tick] [after-work] t 37 s, step wall 1007 unbiased 1008 interrupt 1007 ms, idle 168 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:29.403 +  39557ms [tick] [after-work] t 38 s, step wall 1005 unbiased 1005 interrupt 1006 ms, idle 169 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:30.417 +  40571ms [tick] [after-work] t 39 s, step wall 1013 unbiased 1013 interrupt 1013 ms, idle 170 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:31.435 +  41589ms [tick] [after-work] t 40 s, step wall 1018 unbiased 1019 interrupt 1019 ms, idle 171 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:32.450 +  42605ms [tick] [after-work] t 41 s, step wall 1013 unbiased 1014 interrupt 1013 ms, idle 172 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 42.1 C limit 100%
+2026-11-03 14:58:33.464 +  43618ms [tick] [after-work] t 42 s, step wall 1014 unbiased 1014 interrupt 1015 ms, idle 173 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:34.396 +  44550ms [notify] display = 1 (on)
+2026-11-03 14:58:34.396 +  44551ms [notify] session-display = 1 (on)
+2026-11-03 14:58:34.472 +  44625ms [lid] display 1 (on) at 39.957 s after the lid close callback
+2026-11-03 14:58:34.472 +  44625ms [lid] display 1 (on) at 39.958 s after the lid close callback
+2026-11-03 14:58:34.472 +  44626ms [tick] [after-work] t 43 s, step wall 1009 unbiased 1009 interrupt 1009 ms, idle 0 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:35.308 +  45461ms [listen] 'Speakers (Realtek(R) Audio)': alive, 216 packets, 2.2 s of audio, 0 silent packets
+2026-11-03 14:58:35.478 +  45632ms [tick] [after-work] t 44 s, step wall 1005 unbiased 1006 interrupt 1005 ms, idle 0 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:36.482 +  46637ms [tick] [after-work] t 45 s, step wall 1005 unbiased 1004 interrupt 1005 ms, idle 1 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:37.490 +  47644ms [tick] [after-work] t 46 s, step wall 1005 unbiased 1006 interrupt 1006 ms, idle 2 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 44.1 C limit 100%
+2026-11-03 14:58:38.496 +  48650ms [tick] [after-work] t 47 s, step wall 1007 unbiased 1008 interrupt 1008 ms, idle 3 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:39.501 +  49655ms [tick] [after-work] t 48 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 4 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:40.512 +  50667ms [tick] [after-work] t 49 s, step wall 1011 unbiased 1011 interrupt 1011 ms, idle 5 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:41.520 +  51673ms [tick] [after-work] t 50 s, step wall 1006 unbiased 1006 interrupt 1006 ms, idle 6 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:42.532 +  52686ms [tick] [after-work] t 51 s, step wall 1011 unbiased 1013 interrupt 1013 ms, idle 0 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 44.1 C limit 100%
+2026-11-03 14:58:43.539 +  53692ms [tick] [after-work] t 52 s, step wall 1007 unbiased 1007 interrupt 1007 ms, idle 0 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:44.546 +  54700ms [tick] [after-work] t 53 s, step wall 1006 unbiased 1007 interrupt 1007 ms, idle 0 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:45.555 +  55709ms [tick] [after-work] t 54 s, step wall 1009 unbiased 1009 interrupt 1009 ms, idle 0 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:46.566 +  56720ms [tick] [after-work] t 55 s, step wall 1010 unbiased 1012 interrupt 1011 ms, idle 2 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:47.577 +  57731ms [tick] [after-work] t 56 s, step wall 1010 unbiased 1010 interrupt 1010 ms, idle 0 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 42.1 C limit 100%
+2026-11-03 14:58:48.585 +  58739ms [tick] [after-work] t 57 s, step wall 1008 unbiased 1007 interrupt 1008 ms, idle 0 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:49.595 +  59750ms [tick] [after-work] t 58 s, step wall 1011 unbiased 1012 interrupt 1012 ms, idle 0 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:50.317 +  60470ms [listen] 'Speakers (Realtek(R) Audio)': alive, 216 packets, 2.2 s of audio, 0 silent packets
+2026-11-03 14:58:50.602 +  60756ms [tick] [after-work] t 59 s, step wall 1006 unbiased 1007 interrupt 1007 ms, idle 0 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:51.610 +  61763ms [tick] [after-work] t 60 s, step wall 1006 unbiased 1006 interrupt 1006 ms, idle 1 s, AC false, bat 93%, unlocked, displays int 1 ext 0 other 0 (SM_CMONITORS 1), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 14:58:51.610 +  61763ms [lid] max time reached
+2026-11-03 14:58:51.624 +  61778ms [listen] 'Speakers (Realtek(R) Audio)': off. 2 sound(s) heard, 216 packets, 2.2 s of audio
+2026-11-03 14:58:51.650 +  61805ms [result] RESULT: with the request held, the PC kept running with the lid closed
+2026-11-03 14:58:51.650 +  61805ms [result] RESULT: the lid was open when work ended, so no end method ran
+2026-11-03 14:58:51.650 +  61807ms [after] active plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 14:58:51.654 +  61810ms [after] plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 14:58:51.657 +  61811ms [after] lid: ac 1, dc 1 (Sleep, Sleep)
+2026-11-03 14:58:51.659 +  61812ms [after] sleep: ac 10800, dc 600
+2026-11-03 14:58:51.659 +  61813ms [after] display-off: ac 300, dc 180
+2026-11-03 14:58:51.659 +  61814ms [after] hibernate-after: ac 0, dc 2147483647
+2026-11-03 14:58:51.659 +  61815ms [after] wake-timers: ac 0, dc 0
+2026-11-03 14:58:51.659 +  61816ms [after] consolelock: ac 1, dc 1
+2026-11-03 14:58:51.664 +  61817ms [after] energy-saver-threshold: ac 0, dc 30
+2026-11-03 14:58:51.747 +  61900ms [after] powercfg /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 14:58:51.826 +  61980ms [after] powercfg /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 14:58:51.907 +  62061ms [after] powercfg /q SCHEME_CURRENT SUB_VIDEO VIDEOIDLE rc 0: Current AC Power Setting Index: 0x0000012c | Current DC Power Setting Index: 0x000000b4
+2026-11-03 14:58:51.987 +  62143ms [after] powercfg /qh SCHEME_CURRENT SUB_SLEEP RTCWAKE rc 0: Current AC Power Setting Index: 0x00000000 | Current DC Power Setting Index: 0x00000000
+2026-11-03 14:58:53.916 +  64072ms [events] none since 2026-11-03 14:57:00 (rc 1)
+2026-11-03 14:58:53.916 +  64072ms [result] gaps: none
+2026-11-03 14:58:53.919 +  64072ms [result] DONE: plan restored. You can close this window.
+2026-11-03 14:58:53.919 +  64072ms [end] exit code 0, log C:\Users\haika\code\wakeshot\spikes\lid-sleep\out\lid-limited-20261103-145749.log

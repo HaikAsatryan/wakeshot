@@ -1,0 +1,2 @@
+2026-11-03 03:56:40.312 +      0ms [start] mode lid, args ["--max-minutes", "1"], pid 24168, elevated true, integrity High (0x3000), on AC true, battery 100%, energy saver on false, idle 7217 s
+2026-11-03 03:56:40.312 +      0ms [start] refusing: elevated token. Wakeshot runs as a normal user. Open C:\Users\haika\code\wakeshot\spikes\morning-shell.cmd from File Explorer and run it there.

@@ -1,0 +1,8 @@
+2026-11-03 03:01:21.936 +      0ms [start] mode timer-check, args ["--after", "20", "--log", "C:\\Users\\haika\\code\\wakeshot\\spikes\\lid-sleep\\out\\timer-check-limited-20261103-030121.log"], pid 30872, elevated false, integrity Medium (0x2000), on AC true, battery 100%, energy saver on false, idle 3895 s
+2026-11-03 03:01:21.936 +      0ms [timer] allow wake timers ac: 0 (Disable)
+2026-11-03 03:01:21.936 +      1ms [timer] allow wake timers dc: 0 (Disable)
+2026-11-03 03:01:21.936 +      1ms [timer] SetWaitableTimer(absolute +20 s, resume TRUE) ok true, last error 0
+2026-11-03 03:01:21.946 +     19ms [timer] powercfg /waketimers rc 1:
+2026-11-03 03:01:21.946 +     19ms [timer]   This command requires administrator privileges and must be executed from an elevated command prompt.
+2026-11-03 03:01:41.977 +  20040ms [timer] fired after 20.040 s (due 20 s)
+2026-11-03 03:01:41.977 +  20041ms [end] exit code 0, log C:\Users\haika\code\wakeshot\spikes\lid-sleep\out\timer-check-limited-20261103-030121.log

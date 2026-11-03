@@ -1,0 +1,5 @@
+2026-11-03 16:21:10.209 +      0ms [start] mode restore, pid 16316, elevated false, integrity Medium (0x2000), on AC true, battery 75%, energy saver on false, idle 87 s
+2026-11-03 16:21:10.262 +     48ms [restore] PowerSetActiveScheme(381b4222-f694-41f0-9685-ff5bb260df2e) rc 0 ERROR_SUCCESS
+2026-11-03 16:21:10.262 +     49ms [restore] PowerDeleteScheme(d4adc592-5207-4940-90ee-ad96ac121eb9) rc 0 ERROR_SUCCESS
+2026-11-03 16:21:10.262 +     50ms [restore] done, journal removed
+2026-11-03 16:21:10.262 +     50ms [end] exit code 0, log C:\Users\haika\code\wakeshot\spikes\power-settings\out\restore-limited-20261103-162110.log

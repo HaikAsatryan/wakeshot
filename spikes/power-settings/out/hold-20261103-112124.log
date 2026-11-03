@@ -1,0 +1,131 @@
+2026-11-03 11:21:24.554 +      0ms [start] mode hold, pid 30632, elevated false, integrity Medium (0x2000), on AC false, battery 98%, energy saver on false, idle 0 s
+2026-11-03 11:21:24.554 +      4ms [setup] SetConsoleCtrlHandler Ok(())
+2026-11-03 11:21:24.698 +    149ms [hold] copy b899cdca-77bd-4b2d-aef1-ed201165e222 active (rc 0 ERROR_SUCCESS), sleep.dc 60 s (rc 0 ERROR_SUCCESS); user's own sleep.dc is 600 s
+2026-11-03 11:21:24.715 +    161ms [hold] DelayLockInterval = 0
+2026-11-03 11:21:24.715 +    161ms [hold] active = b899cdca-77bd-4b2d-aef1-ed201165e222
+2026-11-03 11:21:24.715 +    161ms [hold] consolelock.ac = 1
+2026-11-03 11:21:24.722 +    168ms [hold] consolelock.dc = 1
+2026-11-03 11:21:24.722 +    168ms [hold] display-off.ac = 300
+2026-11-03 11:21:24.722 +    168ms [hold] display-off.dc = 180
+2026-11-03 11:21:24.722 +    168ms [hold] energy-saver-threshold.ac = 0
+2026-11-03 11:21:24.722 +    168ms [hold] energy-saver-threshold.dc = 30
+2026-11-03 11:21:24.722 +    169ms [hold] lid.ac = 1
+2026-11-03 11:21:24.722 +    169ms [hold] lid.dc = 1
+2026-11-03 11:21:24.722 +    169ms [hold] overlay.ac.reg = ded574b5-45a0-4f42-8737-46345c09c238
+2026-11-03 11:21:24.722 +    169ms [hold] overlay.actual = 00000000-0000-0000-0000-000000000000 (balanced, no overlay?)
+2026-11-03 11:21:24.722 +    169ms [hold] overlay.dc.reg = <absent>
+2026-11-03 11:21:24.722 +    169ms [hold] overlay.effective = 00000000-0000-0000-0000-000000000000 (balanced, no overlay?)
+2026-11-03 11:21:24.722 +    170ms [hold] sleep.ac = 10800
+2026-11-03 11:21:24.722 +    170ms [hold] sleep.dc = 60
+2026-11-03 11:21:24.722 +    170ms [setup] PowerSettingRegisterNotification(display-state) rc 0
+2026-11-03 11:21:24.722 +    170ms [setup] PowerSettingRegisterNotification(power-source) rc 0
+2026-11-03 11:21:24.722 +    170ms [setup] PowerSettingRegisterNotification(active-scheme) rc 0
+2026-11-03 11:21:24.722 +    170ms [setup] PowerSettingRegisterNotification(energy-saver-status) rc 0
+2026-11-03 11:21:24.722 +    171ms [notify] power-source = 1
+2026-11-03 11:21:24.726 +    171ms [setup] PowerRegisterSuspendResumeNotification rc 0
+2026-11-03 11:21:24.726 +    171ms [notify] display-state = 1
+2026-11-03 11:21:24.726 +    171ms [hold] PowerSetRequest(SystemRequired) Ok(())
+2026-11-03 11:21:24.726 +    172ms [notify] energy-saver-status = 0
+2026-11-03 11:21:24.726 +    172ms [hold] PowerSetRequest(ExecutionRequired) Ok(())
+2026-11-03 11:21:24.726 +    172ms [hold] holding 'system+execution' for 12 min. No request: sleep about 60 s after the last input. With the documented rule: requests end about 360 s after the last input.
+2026-11-03 11:21:24.727 +    172ms [notify] active-scheme = b899cdca-77bd-4b2d-aef1-ed201165e222
+2026-11-03 11:21:29.782 +   5227ms [tick] t 5 s, idle 5 s, wall step 5055 ms, unbiased step 5055 ms, AC false, battery 98%
+2026-11-03 11:21:34.851 +  10296ms [tick] t 10 s, idle 10 s, wall step 5068 ms, unbiased step 5069 ms, AC false, battery 98%
+2026-11-03 11:21:39.918 +  15363ms [tick] t 15 s, idle 15 s, wall step 5067 ms, unbiased step 5068 ms, AC false, battery 98%
+2026-11-03 11:21:44.983 +  20429ms [tick] t 20 s, idle 20 s, wall step 5065 ms, unbiased step 5065 ms, AC false, battery 98%
+2026-11-03 11:21:50.052 +  25497ms [tick] t 25 s, idle 25 s, wall step 5068 ms, unbiased step 5068 ms, AC false, battery 98%
+2026-11-03 11:21:55.119 +  30564ms [tick] t 30 s, idle 30 s, wall step 5067 ms, unbiased step 5068 ms, AC false, battery 98%
+2026-11-03 11:22:00.166 +  35612ms [tick] t 35 s, idle 35 s, wall step 5047 ms, unbiased step 5047 ms, AC false, battery 98%
+2026-11-03 11:22:05.224 +  40669ms [tick] t 40 s, idle 40 s, wall step 5057 ms, unbiased step 5057 ms, AC false, battery 98%
+2026-11-03 11:22:10.290 +  45736ms [tick] t 45 s, idle 45 s, wall step 5066 ms, unbiased step 5067 ms, AC false, battery 98%
+2026-11-03 11:22:15.360 +  50805ms [tick] t 50 s, idle 50 s, wall step 5069 ms, unbiased step 5069 ms, AC false, battery 98%
+2026-11-03 11:22:20.423 +  55868ms [tick] t 55 s, idle 55 s, wall step 5063 ms, unbiased step 5064 ms, AC false, battery 98%
+2026-11-03 11:22:25.495 +  60941ms [tick] t 60 s, idle 60 s, wall step 5071 ms, unbiased step 5071 ms, AC false, battery 98%
+2026-11-03 11:22:30.522 +  65967ms [tick] t 65 s, idle 65 s, wall step 5027 ms, unbiased step 5027 ms, AC false, battery 98%
+2026-11-03 11:22:35.581 +  71026ms [tick] t 70 s, idle 70 s, wall step 5058 ms, unbiased step 5059 ms, AC false, battery 98%
+2026-11-03 11:22:40.653 +  76099ms [tick] t 75 s, idle 76 s, wall step 5072 ms, unbiased step 5073 ms, AC false, battery 98%
+2026-11-03 11:22:45.716 +  81161ms [tick] t 80 s, idle 81 s, wall step 5062 ms, unbiased step 5063 ms, AC false, battery 98%
+2026-11-03 11:22:50.778 +  86223ms [tick] t 86 s, idle 86 s, wall step 5061 ms, unbiased step 5061 ms, AC false, battery 98%
+2026-11-03 11:22:55.837 +  91283ms [tick] t 91 s, idle 91 s, wall step 5059 ms, unbiased step 5060 ms, AC false, battery 98%
+2026-11-03 11:23:00.909 +  96355ms [tick] t 96 s, idle 96 s, wall step 5071 ms, unbiased step 5071 ms, AC false, battery 98%
+2026-11-03 11:23:05.966 + 101411ms [tick] t 101 s, idle 101 s, wall step 5056 ms, unbiased step 5058 ms, AC false, battery 98%
+2026-11-03 11:23:11.017 + 106462ms [tick] t 106 s, idle 106 s, wall step 5050 ms, unbiased step 5050 ms, AC false, battery 98%
+2026-11-03 11:23:16.069 + 111515ms [tick] t 111 s, idle 111 s, wall step 5052 ms, unbiased step 5053 ms, AC false, battery 98%
+2026-11-03 11:23:21.138 + 116583ms [tick] t 116 s, idle 116 s, wall step 5068 ms, unbiased step 5068 ms, AC false, battery 98%
+2026-11-03 11:23:26.199 + 121645ms [tick] t 121 s, idle 121 s, wall step 5062 ms, unbiased step 5062 ms, AC false, battery 98%
+2026-11-03 11:23:31.257 + 126702ms [tick] t 126 s, idle 126 s, wall step 5056 ms, unbiased step 5057 ms, AC false, battery 98%
+2026-11-03 11:23:36.315 + 131760ms [tick] t 131 s, idle 131 s, wall step 5058 ms, unbiased step 5059 ms, AC false, battery 98%
+2026-11-03 11:23:41.384 + 136829ms [tick] t 136 s, idle 136 s, wall step 5068 ms, unbiased step 5068 ms, AC false, battery 98%
+2026-11-03 11:23:46.453 + 141898ms [tick] t 141 s, idle 141 s, wall step 5069 ms, unbiased step 5069 ms, AC false, battery 98%
+2026-11-03 11:23:51.508 + 146953ms [tick] t 146 s, idle 146 s, wall step 5055 ms, unbiased step 5056 ms, AC false, battery 98%
+2026-11-03 11:23:56.574 + 152019ms [tick] t 151 s, idle 151 s, wall step 5065 ms, unbiased step 5065 ms, AC false, battery 98%
+2026-11-03 11:24:01.644 + 157089ms [tick] t 156 s, idle 157 s, wall step 5070 ms, unbiased step 5070 ms, AC false, battery 98%
+2026-11-03 11:24:06.709 + 162155ms [tick] t 161 s, idle 162 s, wall step 5065 ms, unbiased step 5066 ms, AC false, battery 98%
+2026-11-03 11:24:09.970 + 165416ms [notify] display-state = 2
+2026-11-03 11:24:11.762 + 167207ms [tick] t 167 s, idle 167 s, wall step 5052 ms, unbiased step 5052 ms, AC false, battery 98%
+2026-11-03 11:24:16.785 + 172230ms [tick] t 172 s, idle 172 s, wall step 5022 ms, unbiased step 5023 ms, AC false, battery 98%
+2026-11-03 11:24:21.820 + 177265ms [tick] t 177 s, idle 177 s, wall step 5035 ms, unbiased step 5036 ms, AC false, battery 98%
+2026-11-03 11:24:24.948 + 180393ms [notify] display-state = 0
+2026-11-03 11:24:26.852 + 182298ms [tick] t 182 s, idle 182 s, wall step 5032 ms, unbiased step 5032 ms, AC false, battery 97%
+2026-11-03 11:24:31.884 + 187330ms [tick] t 187 s, idle 187 s, wall step 5032 ms, unbiased step 5032 ms, AC false, battery 97%
+2026-11-03 11:24:36.964 + 192409ms [tick] t 192 s, idle 192 s, wall step 5078 ms, unbiased step 5079 ms, AC false, battery 97%
+2026-11-03 11:24:42.055 + 197501ms [tick] t 197 s, idle 197 s, wall step 5091 ms, unbiased step 5092 ms, AC false, battery 97%
+2026-11-03 11:24:47.144 + 202589ms [tick] t 202 s, idle 202 s, wall step 5088 ms, unbiased step 5088 ms, AC false, battery 97%
+2026-11-03 11:24:52.221 + 207667ms [tick] t 207 s, idle 207 s, wall step 5077 ms, unbiased step 5078 ms, AC false, battery 97%
+2026-11-03 11:24:57.302 + 212749ms [tick] t 212 s, idle 212 s, wall step 5081 ms, unbiased step 5081 ms, AC false, battery 97%
+2026-11-03 11:25:02.363 + 217808ms [tick] t 217 s, idle 217 s, wall step 5059 ms, unbiased step 5061 ms, AC false, battery 97%
+2026-11-03 11:25:07.435 + 222880ms [tick] t 222 s, idle 222 s, wall step 5071 ms, unbiased step 5071 ms, AC false, battery 97%
+2026-11-03 11:25:12.520 + 227965ms [tick] t 227 s, idle 227 s, wall step 5085 ms, unbiased step 5085 ms, AC false, battery 97%
+2026-11-03 11:25:17.604 + 233050ms [tick] t 232 s, idle 233 s, wall step 5084 ms, unbiased step 5085 ms, AC false, battery 97%
+2026-11-03 11:25:22.630 + 238075ms [tick] t 237 s, idle 238 s, wall step 5025 ms, unbiased step 5025 ms, AC false, battery 97%
+2026-11-03 11:25:27.733 + 243179ms [tick] t 243 s, idle 243 s, wall step 5103 ms, unbiased step 5103 ms, AC false, battery 97%
+2026-11-03 11:25:32.747 + 248193ms [tick] t 248 s, idle 248 s, wall step 5013 ms, unbiased step 5015 ms, AC false, battery 97%
+2026-11-03 11:25:37.763 + 253210ms [tick] t 253 s, idle 253 s, wall step 5016 ms, unbiased step 5016 ms, AC false, battery 97%
+2026-11-03 11:25:42.848 + 258294ms [tick] t 258 s, idle 258 s, wall step 5084 ms, unbiased step 5085 ms, AC false, battery 97%
+2026-11-03 11:25:47.856 + 263302ms [tick] t 263 s, idle 263 s, wall step 5008 ms, unbiased step 5008 ms, AC false, battery 97%
+2026-11-03 11:25:52.876 + 268321ms [tick] t 268 s, idle 268 s, wall step 5018 ms, unbiased step 5019 ms, AC false, battery 97%
+2026-11-03 11:25:57.881 + 273326ms [tick] t 273 s, idle 273 s, wall step 5005 ms, unbiased step 5006 ms, AC false, battery 97%
+2026-11-03 11:26:02.959 + 278404ms [tick] t 278 s, idle 278 s, wall step 5077 ms, unbiased step 5078 ms, AC false, battery 97%
+2026-11-03 11:26:08.031 + 283477ms [tick] t 283 s, idle 283 s, wall step 5073 ms, unbiased step 5071 ms, AC false, battery 97%
+2026-11-03 11:26:13.124 + 288570ms [tick] t 288 s, idle 288 s, wall step 5092 ms, unbiased step 5093 ms, AC false, battery 97%
+2026-11-03 11:26:18.200 + 293646ms [tick] t 293 s, idle 293 s, wall step 5076 ms, unbiased step 5077 ms, AC false, battery 97%
+2026-11-03 11:26:23.274 + 298720ms [tick] t 298 s, idle 298 s, wall step 5073 ms, unbiased step 5074 ms, AC false, battery 97%
+2026-11-03 11:26:28.366 + 303811ms [tick] t 303 s, idle 303 s, wall step 5091 ms, unbiased step 5091 ms, AC false, battery 97%
+2026-11-03 11:26:33.459 + 308905ms [tick] t 308 s, idle 308 s, wall step 5094 ms, unbiased step 5094 ms, AC false, battery 97%
+2026-11-03 11:26:38.471 + 313917ms [tick] t 313 s, idle 313 s, wall step 5011 ms, unbiased step 5012 ms, AC false, battery 97%
+2026-11-03 11:26:43.494 + 318939ms [tick] t 318 s, idle 318 s, wall step 5022 ms, unbiased step 5022 ms, AC false, battery 97%
+2026-11-03 11:26:48.589 + 324034ms [tick] t 323 s, idle 323 s, wall step 5095 ms, unbiased step 5096 ms, AC false, battery 97%
+2026-11-03 11:26:53.664 + 329110ms [tick] t 328 s, idle 329 s, wall step 5075 ms, unbiased step 5075 ms, AC false, battery 97%
+2026-11-03 11:26:58.750 + 334196ms [tick] t 334 s, idle 334 s, wall step 5086 ms, unbiased step 5085 ms, AC false, battery 97%
+2026-11-03 11:27:03.831 + 339276ms [tick] t 339 s, idle 339 s, wall step 5080 ms, unbiased step 5082 ms, AC false, battery 97%
+2026-11-03 11:27:08.913 + 344358ms [tick] t 344 s, idle 344 s, wall step 5082 ms, unbiased step 5082 ms, AC false, battery 97%
+2026-11-03 11:27:13.929 + 349375ms [tick] t 349 s, idle 349 s, wall step 5016 ms, unbiased step 5016 ms, AC false, battery 97%
+2026-11-03 11:27:18.930 + 354376ms [tick] t 354 s, idle 354 s, wall step 5001 ms, unbiased step 5000 ms, AC false, battery 97%
+2026-11-03 11:27:24.027 + 359473ms [tick] t 359 s, idle 359 s, wall step 5097 ms, unbiased step 5098 ms, AC false, battery 97%
+2026-11-03 11:27:29.105 + 364551ms [tick] t 364 s, idle 364 s, wall step 5077 ms, unbiased step 5078 ms, AC false, battery 97%
+2026-11-03 11:27:34.180 + 369625ms [tick] t 369 s, idle 369 s, wall step 5074 ms, unbiased step 5074 ms, AC false, battery 97%
+2026-11-03 11:27:39.254 + 374699ms [tick] t 374 s, idle 374 s, wall step 5074 ms, unbiased step 5074 ms, AC false, battery 97%
+2026-11-03 11:27:44.129 + 379575ms [suspend] PBT_APMSUSPEND (4)
+2026-11-03 11:37:10.313 + 945759ms [suspend] PBT_APMRESUMEAUTOMATIC (18)
+2026-11-03 11:37:10.323 + 945769ms [tick] t 945 s, idle 945 s, wall step 571060 ms, unbiased step 4882 ms, AC false, battery 97%
+2026-11-03 11:37:10.333 + 945778ms [notify] energy-saver-status = 0
+2026-11-03 11:37:10.339 + 945784ms [suspend] PBT_APMRESUMESUSPEND (7)
+2026-11-03 11:37:10.342 + 945788ms [tick] GAP at t 945 s (2026-11-03 11:37:10.333): wall step 571060 ms, unbiased step 4882 ms
+2026-11-03 11:37:10.344 + 945790ms [notify] display-state = 1
+2026-11-03 11:37:10.357 + 945802ms [notify] active-scheme = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 11:37:10.493 + 945939ms [hold] restore: PowerSetActiveScheme(original) 0 ERROR_SUCCESS, PowerDeleteScheme(copy) 0 ERROR_SUCCESS
+2026-11-03 11:37:10.606 + 946052ms [events] Date: 2026-11-03T11:20:39.9810000Z
+2026-11-03 11:37:10.607 + 946053ms [events] Event ID: 105
+2026-11-03 11:37:10.607 + 946053ms [events] Date: 2026-11-03T11:24:24.9620000Z
+2026-11-03 11:37:10.607 + 946053ms [events] Event ID: 506
+2026-11-03 11:37:10.607 + 946053ms [events] The system is entering Modern Standby
+2026-11-03 11:37:10.607 + 946053ms [events] Reason: Idle Timeout. 
+2026-11-03 11:37:10.608 + 946054ms [events] Date: 2026-11-03T11:37:09.4140000Z
+2026-11-03 11:37:10.608 + 946054ms [events] Event ID: 507
+2026-11-03 11:37:10.608 + 946054ms [events] The system is exiting Modern Standby
+2026-11-03 11:37:10.608 + 946054ms [events] Reason: Power Button. 
+2026-11-03 11:37:10.608 + 946054ms [result] gaps: GAP at t 945 s (2026-11-03 11:37:10.333): wall step 571060 ms, unbiased step 4882 ms
+2026-11-03 11:37:10.682 + 946127ms [powercfg] /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 11:37:10.729 + 946176ms [powercfg] /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 11:37:10.729 + 946176ms [hold] clean: original plan active, copy removed
+2026-11-03 11:37:10.729 + 946176ms [end] exit code 0, log C:\Users\haika\code\wakeshot\spikes\power-settings\out\hold-20261103-112124.log

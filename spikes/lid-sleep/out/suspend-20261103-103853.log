@@ -1,0 +1,113 @@
+2026-11-03 10:38:53.343 +      0ms [start] mode suspend, args ["--method", "hibernate"], pid 9180, elevated false, integrity Medium (0x2000), on AC true, battery 100%, energy saver on false, idle 0 s
+2026-11-03 10:38:53.343 +      0ms [setup] SetConsoleCtrlHandler Ok(())
+2026-11-03 10:38:53.343 +      1ms [before] active plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 10:38:53.343 +      2ms [before] plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 10:38:53.343 +      2ms [before] lid: ac 1, dc 1 (Sleep, Sleep)
+2026-11-03 10:38:53.343 +      2ms [before] sleep: ac 10800, dc 600
+2026-11-03 10:38:53.343 +      3ms [before] display-off: ac 300, dc 180
+2026-11-03 10:38:53.343 +      4ms [before] hibernate-after: ac 0, dc 2147483647
+2026-11-03 10:38:53.343 +      4ms [before] wake-timers: ac 0, dc 0
+2026-11-03 10:38:53.343 +      4ms [before] consolelock: ac 1, dc 1
+2026-11-03 10:38:53.343 +      5ms [before] energy-saver-threshold: ac 0, dc 30
+2026-11-03 10:38:53.375 +     32ms [before] powercfg /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 10:38:53.396 +     54ms [before] powercfg /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 10:38:53.418 +     76ms [before] powercfg /q SCHEME_CURRENT SUB_VIDEO VIDEOIDLE rc 0: Current AC Power Setting Index: 0x0000012c | Current DC Power Setting Index: 0x000000b4
+2026-11-03 10:38:53.439 +    100ms [before] powercfg /qh SCHEME_CURRENT SUB_SLEEP RTCWAKE rc 0: Current AC Power Setting Index: 0x00000000 | Current DC Power Setting Index: 0x00000000
+2026-11-03 10:38:53.439 +    101ms [setup] PowerSettingRegisterNotification(lid) rc 0 in 22 us
+2026-11-03 10:38:53.439 +    101ms [setup] PowerSettingRegisterNotification(display) rc 0 in 9 us
+2026-11-03 10:38:53.439 +    101ms [notify] lid = 1 (open)
+2026-11-03 10:38:53.439 +    101ms [setup] PowerSettingRegisterNotification(session-display) rc 0 in 22 us
+2026-11-03 10:38:53.439 +    101ms [notify] display = 1 (on)
+2026-11-03 10:38:53.439 +    101ms [setup] PowerSettingRegisterNotification(power-source) rc 0 in 5 us
+2026-11-03 10:38:53.439 +    101ms [notify] session-display = 1 (on)
+2026-11-03 10:38:53.439 +    102ms [notify] power-source = 0 (AC)
+2026-11-03 10:38:53.439 +    102ms [setup] PowerSettingRegisterNotification(battery) rc 0 in 5 us
+2026-11-03 10:38:53.439 +    102ms [notify] battery = 100
+2026-11-03 10:38:53.439 +    102ms [setup] PowerSettingRegisterNotification(active-scheme) rc 0 in 11 us
+2026-11-03 10:38:53.439 +    102ms [notify] active-scheme = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 10:38:53.439 +    102ms [setup] PowerRegisterSuspendResumeNotification rc 0
+2026-11-03 10:38:53.565 +    220ms [suspend] >>> In 10 s this program calls 'hibernate'. Do not touch the PC after that. <<<
+2026-11-03 10:38:53.565 +    225ms [tick] [countdown] t 0 s, step wall 0 unbiased 0 interrupt 0 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 60.1 C limit 100%
+2026-11-03 10:38:54.576 +   1233ms [tick] [countdown] t 1 s, step wall 1010 unbiased 1012 interrupt 1012 ms, idle 1 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:38:55.585 +   2242ms [tick] [countdown] t 2 s, step wall 1009 unbiased 1009 interrupt 1009 ms, idle 2 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:38:56.596 +   3253ms [tick] [countdown] t 3 s, step wall 1010 unbiased 1010 interrupt 1011 ms, idle 3 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:38:57.605 +   4261ms [tick] [countdown] t 4 s, step wall 1008 unbiased 1009 interrupt 1009 ms, idle 4 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:38:58.615 +   5273ms [tick] [countdown] t 5 s, step wall 1010 unbiased 1011 interrupt 1010 ms, idle 5 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 54.1 C limit 100%
+2026-11-03 10:38:59.626 +   6282ms [tick] [countdown] t 6 s, step wall 1010 unbiased 1010 interrupt 1011 ms, idle 6 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:39:00.637 +   7293ms [tick] [countdown] t 7 s, step wall 1010 unbiased 1010 interrupt 1010 ms, idle 7 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:39:01.645 +   8300ms [tick] [countdown] t 8 s, step wall 1007 unbiased 1008 interrupt 1008 ms, idle 8 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:39:02.651 +   9308ms [tick] [countdown] t 9 s, step wall 1007 unbiased 1008 interrupt 1007 ms, idle 9 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:39:03.661 +  10317ms [end] enable SeShutdownPrivilege: ok true: AdjustTokenPrivileges ok, last error 0
+2026-11-03 10:39:03.663 +  10318ms [end] calling SetSuspendState(hibernate true, force false, wake events on)
+2026-11-03 10:39:04.422 +  11082ms [suspend] PBT_APMSUSPEND (4)
+2026-11-03 10:39:04.431 +  11086ms [notify] display = 0 (off)
+2026-11-03 10:39:04.431 +  11086ms [notify] session-display = 0 (off)
+2026-11-03 10:40:13.738 +  88368ms [suspend] PBT_APMRESUMESUSPEND (7)
+2026-11-03 10:40:14.117 +  88747ms [suspend] PBT_APMRESUMEAUTOMATIC (18)
+2026-11-03 10:40:14.126 +  88757ms [end] SetSuspendState returned true, last error 1300, after 78438 ms
+2026-11-03 10:40:14.126 +  88757ms [suspend] PBT_APMSUSPEND at t 80 s
+2026-11-03 10:40:14.126 +  88758ms [suspend] PBT_APMRESUMESUSPEND at t 80 s
+2026-11-03 10:40:14.126 +  88758ms [suspend] PBT_APMRESUMEAUTOMATIC at t 80 s
+2026-11-03 10:40:14.783 +  89424ms [tick] [after-call] t 80 s, step wall 71478 unbiased 7806 interrupt 71475 ms, idle 80 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 74.1 C limit 100%
+2026-11-03 10:40:14.783 +  89424ms [tick] GAP Slept [after-call] ending 2026-11-03 10:40:14.783: wall 71478 ms, unbiased 7806 ms, interrupt 71475 ms
+2026-11-03 10:40:14.830 +  89459ms [notify] display = 1 (on)
+2026-11-03 10:40:14.840 +  89469ms [notify] session-display = 1 (on)
+2026-11-03 10:40:15.808 +  90437ms [tick] [after-call] t 82 s, step wall 1678 unbiased 1683 interrupt 1682 ms, idle 82 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:16.813 +  91441ms [tick] [after-call] t 83 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 83 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:40:17.817 +  92445ms [tick] [after-call] t 84 s, step wall 1003 unbiased 1003 interrupt 1004 ms, idle 84 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:18.823 +  93452ms [tick] [after-call] t 85 s, step wall 1006 unbiased 1007 interrupt 1006 ms, idle 85 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:19.829 +  94459ms [tick] [after-call] t 86 s, step wall 1006 unbiased 1006 interrupt 1006 ms, idle 86 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 81.1 C limit 100%
+2026-11-03 10:40:20.837 +  95465ms [tick] [after-call] t 87 s, step wall 1007 unbiased 1007 interrupt 1008 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:20.837 +  95465ms [suspend] input seen: finishing in 20 s
+2026-11-03 10:40:21.843 +  96471ms [tick] [after-call] t 88 s, step wall 1005 unbiased 1006 interrupt 1005 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:22.849 +  97478ms [tick] [after-call] t 89 s, step wall 1006 unbiased 1007 interrupt 1007 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:23.854 +  98482ms [tick] [after-call] t 90 s, step wall 1005 unbiased 1005 interrupt 1005 ms, idle 1 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:24.860 +  99488ms [tick] [after-call] t 91 s, step wall 1005 unbiased 1005 interrupt 1005 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 68.1 C limit 100%
+2026-11-03 10:40:25.866 + 100494ms [tick] [after-call] t 92 s, step wall 1006 unbiased 1006 interrupt 1007 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:26.871 + 101499ms [tick] [after-call] t 93 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:27.874 + 102502ms [tick] [after-call] t 94 s, step wall 1003 unbiased 1003 interrupt 1003 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:28.881 + 103509ms [tick] [after-call] t 95 s, step wall 1006 unbiased 1007 interrupt 1006 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:29.889 + 104519ms [tick] [after-call] t 96 s, step wall 1008 unbiased 1008 interrupt 1009 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 65.1 C limit 100%
+2026-11-03 10:40:30.900 + 105530ms [tick] [after-call] t 97 s, step wall 1011 unbiased 1012 interrupt 1011 ms, idle 1 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:31.909 + 106538ms [tick] [after-call] t 98 s, step wall 1008 unbiased 1008 interrupt 1009 ms, idle 2 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:32.916 + 107544ms [tick] [after-call] t 99 s, step wall 1006 unbiased 1008 interrupt 1007 ms, idle 3 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:33.923 + 108552ms [tick] [after-call] t 100 s, step wall 1007 unbiased 1007 interrupt 1007 ms, idle 4 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:34.933 + 109562ms [tick] [after-call] t 101 s, step wall 1009 unbiased 1010 interrupt 1010 ms, idle 5 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 65.1 C limit 100%
+2026-11-03 10:40:35.940 + 110569ms [tick] [after-call] t 102 s, step wall 1007 unbiased 1007 interrupt 1007 ms, idle 6 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:36.948 + 111576ms [tick] [after-call] t 103 s, step wall 1007 unbiased 1007 interrupt 1008 ms, idle 7 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:37.952 + 112581ms [tick] [after-call] t 104 s, step wall 1004 unbiased 1005 interrupt 1004 ms, idle 8 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:38.956 + 113584ms [tick] [after-call] t 105 s, step wall 1003 unbiased 1003 interrupt 1004 ms, idle 9 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:39.959 + 114588ms [tick] [after-call] t 106 s, step wall 1003 unbiased 1004 interrupt 1003 ms, idle 10 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 73.1 C limit 100%
+2026-11-03 10:40:40.964 + 115592ms [tick] [after-call] t 107 s, step wall 1004 unbiased 1004 interrupt 1005 ms, idle 11 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:40:40.964 + 115592ms [result] RESULT: the PC stopped (Slept) 0 s after the call, for 71 s
+2026-11-03 10:40:40.965 + 115594ms [after] active plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 10:40:40.965 + 115594ms [after] plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 10:40:40.965 + 115595ms [after] lid: ac 1, dc 1 (Sleep, Sleep)
+2026-11-03 10:40:40.965 + 115596ms [after] sleep: ac 10800, dc 600
+2026-11-03 10:40:40.965 + 115596ms [after] display-off: ac 300, dc 180
+2026-11-03 10:40:40.965 + 115596ms [after] hibernate-after: ac 0, dc 2147483647
+2026-11-03 10:40:40.965 + 115597ms [after] wake-timers: ac 0, dc 0
+2026-11-03 10:40:40.965 + 115597ms [after] consolelock: ac 1, dc 1
+2026-11-03 10:40:40.965 + 115597ms [after] energy-saver-threshold: ac 0, dc 30
+2026-11-03 10:40:40.981 + 115623ms [after] powercfg /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 10:40:41.012 + 115646ms [after] powercfg /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 10:40:41.034 + 115670ms [after] powercfg /q SCHEME_CURRENT SUB_VIDEO VIDEOIDLE rc 0: Current AC Power Setting Index: 0x0000012c | Current DC Power Setting Index: 0x000000b4
+2026-11-03 10:40:41.060 + 115693ms [after] powercfg /qh SCHEME_CURRENT SUB_SLEEP RTCWAKE rc 0: Current AC Power Setting Index: 0x00000000 | Current DC Power Setting Index: 0x00000000
+2026-11-03 10:40:41.966 + 116605ms [events] 10:38:04.764 Kernel-Power 566: The system session has transitioned from 49 to 50. Reason SxTransition BootId: 12
+2026-11-03 10:40:41.966 + 116605ms [events] 10:38:04.765 Kernel-Power 506: The system is entering Modern Standby Reason: Sleep, Hibernate, or Shutdown.
+2026-11-03 10:40:41.966 + 116605ms [events] 10:38:05.857 Kernel-Power 507: The system is exiting Modern Standby Reason: Power Button.
+2026-11-03 10:40:41.966 + 116605ms [events] 10:38:05.857 Kernel-Power 566: The system session has transitioned from 50 to 52. Reason Unknown BootId: 12
+2026-11-03 10:40:41.966 + 116605ms [events] 10:38:05.935 Power-Troubleshooter 1: The system has returned from a low power state. Sleep Time: ?2026?-?11?-?03T06:36:59.513223600Z Wake Time: ?2026?-?11?-?03T06:38:05.209613200Z Wake Source: Unknown
+2026-11-03 10:40:41.966 + 116606ms [events] 10:39:03.664 Kernel-Power 187: User-mode process attempted to change the system state by calling SetSuspendState or SetSystemPowerState APIs. caller \Device\HarddiskVolume3\Users\haika\code\wakeshot\spikes\lid-sleep\target\release\lid-sleep-spike.exe
+2026-11-03 10:40:41.966 + 116606ms [events] 10:39:03.667 Kernel-Power 566: The system session has transitioned from 52 to 53. Reason Unknown BootId: 12
+2026-11-03 10:40:41.966 + 116606ms [events] 10:39:06.386 Kernel-Power 40: The driver \Driver\ACPI for device stopped the power transition.
+2026-11-03 10:40:41.966 + 116606ms [events] 10:39:06.511 Kernel-Power 42: The system is entering sleep. Sleep Reason: Application API
+2026-11-03 10:40:41.966 + 116606ms [events] 10:39:08.832 Kernel-Power 107: The system has resumed from sleep.
+2026-11-03 10:40:41.966 + 116606ms [events] 10:40:13.740 Kernel-Power 566: The system session has transitioned from 53 to 54. Reason SxTransition BootId: 12
+2026-11-03 10:40:41.966 + 116606ms [events] 10:40:13.741 Kernel-Power 506: The system is entering Modern Standby Reason: Sleep, Hibernate, or Shutdown.
+2026-11-03 10:40:41.966 + 116606ms [events] 10:40:14.771 Power-Troubleshooter 1: The system has returned from a low power state. Sleep Time: ?2026?-?11?-?03T06:39:03.663362200Z Wake Time: ?2026?-?11?-?03T06:40:14.126481800Z Wake Source: Unknown
+2026-11-03 10:40:41.966 + 116607ms [events] 10:40:14.812 Kernel-Power 507: The system is exiting Modern Standby Reason: Power Button.
+2026-11-03 10:40:41.966 + 116607ms [events] 10:40:14.812 Kernel-Power 566: The system session has transitioned from 54 to 56. Reason Unknown BootId: 12
+2026-11-03 10:40:41.966 + 116607ms [result] gaps: GAP Slept [after-call] ending 2026-11-03 10:40:14.783: wall 71478 ms, unbiased 7806 ms, interrupt 71475 ms
+2026-11-03 10:40:41.966 + 116607ms [result] DONE: plan restored. You can close this window.
+2026-11-03 10:40:41.966 + 116607ms [end] exit code 0, log C:\Users\haika\code\wakeshot\spikes\lid-sleep\out\suspend-20261103-103853.log

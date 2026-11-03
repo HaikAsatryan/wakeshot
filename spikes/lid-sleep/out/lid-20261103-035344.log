@@ -1,0 +1,18 @@
+2026-11-03 03:53:44.084 +      0ms [start] mode lid, args ["--simulate-close-after", "5", "--work", "5", "--no-lock", "--no-sound", "--max-minutes", "1"], pid 29464, elevated false, integrity Medium (0x2000), on AC true, battery 100%, energy saver on false, idle 7040 s
+2026-11-03 03:53:44.084 +      0ms [setup] SetConsoleCtrlHandler Ok(())
+2026-11-03 03:53:44.084 +      0ms [before] active plan 936a5b53-199c-4985-852d-e163f7031240 (Wakeshot spike copy)
+2026-11-03 03:53:44.084 +      1ms [before] plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 03:53:44.084 +      1ms [before] plan 936a5b53-199c-4985-852d-e163f7031240 (Wakeshot spike copy)
+2026-11-03 03:53:44.095 +      8ms [before] lid: ac 1, dc 1 (Sleep, Sleep)
+2026-11-03 03:53:44.095 +      8ms [before] sleep: ac 10800, dc 600
+2026-11-03 03:53:44.095 +      8ms [before] display-off: ac 300, dc 180
+2026-11-03 03:53:44.095 +      9ms [before] hibernate-after: ac 0, dc 2147483647
+2026-11-03 03:53:44.097 +      9ms [before] wake-timers: ac 0, dc 0
+2026-11-03 03:53:44.097 +      9ms [before] consolelock: ac 1, dc 1
+2026-11-03 03:53:44.097 +     10ms [before] energy-saver-threshold: ac 0, dc 30
+2026-11-03 03:53:44.114 +     38ms [before] powercfg /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 03:53:44.145 +     61ms [before] powercfg /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 03:53:44.161 +     84ms [before] powercfg /q SCHEME_CURRENT SUB_VIDEO VIDEOIDLE rc 0: Current AC Power Setting Index: 0x0000012c | Current DC Power Setting Index: 0x000000b4
+2026-11-03 03:53:44.193 +    108ms [before] powercfg /qh SCHEME_CURRENT SUB_SLEEP RTCWAKE rc 0: Current AC Power Setting Index: 0x00000000 | Current DC Power Setting Index: 0x00000000
+2026-11-03 03:53:44.193 +    108ms [lid] cannot make plan copy: the power spike's journal C:\Users\haika\code\wakeshot\spikes\lid-sleep\..\power-settings\out\journal.txt exists. Run its `restore` first.
+2026-11-03 03:53:44.193 +    108ms [end] exit code 1, log C:\Users\haika\code\wakeshot\spikes\lid-sleep\out\lid-20261103-035344.log

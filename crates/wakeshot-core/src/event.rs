@@ -1,0 +1,93 @@
+//! Everything the core reacts to (architecture section 3). Every event comes with a `Now`.
+
+use crate::command::{Command, Failure, Outcome};
+use crate::files::Config;
+use crate::holds::HoldFacts;
+use crate::process::{Alive, ProcessRef};
+use crate::settings::{Guid, Journal, OwnedKey, PlanValues};
+use crate::sources::{SessionFacts, SourceId};
+use crate::view::MenuCommand;
+
+/// A change to this Windows session, from `WM_WTSSESSION_CHANGE` and `WM_QUERYENDSESSION` / `WM_ENDSESSION`.
+///
+/// Owner: power track (Phase 3) posts it. `ConsoleLeft` and `ConsoleBack` are this session leaving and getting back
+/// the PC's own screen and keyboard (`WTS_CONSOLE_DISCONNECT`, `WTS_CONSOLE_CONNECT`); the core restores while away.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SessionChange {
+    Locked,
+    Unlocked,
+    Ending,
+    EndCancelled,
+    Ended,
+    ConsoleLeft,
+    ConsoleBack,
+}
+
+/// One input to the core. Snapshots (`Sources`, `Holds`) are full, so a lost event is mended by the next one.
+///
+/// Owner: core track (Phase 2) for the meaning; each producer owns its variants: power track (Phase 3) `Started`,
+/// `SettingsOwner`, `Lid`, `Power`, `Plan`, `ActivePlan`, `UserChanged`, `JournalCorrupt`, `InputIdle`,
+/// `Suspending`, `Resumed`, `Session` and most `Done`; sources track (Phase 4) `Sources`, `Holds`, `ConfigChanged`;
+/// tray track (Phase 5) `Menu`; ship track (Phase 6) `UpdateReady`; the loop `Tick`. The core may rely on:
+///
+/// - `Started` comes first and once. Its `config` wins over the one `Core::new` got. `journal`: the entries this
+///   version knows, `None` when there are none. `owner`: this tray holds the settings mutex. `on_console`: this
+///   session is on the PC's own screen. `tray`: this tray's own process, for `state.json` and the Keep awake hold.
+///   `first_run`: `config.json` was missing at start, so the core shows `Notice::FirstRun` and writes the config.
+/// - `Sources` pairs each session with the adapter's liveness answer; the parser never checks liveness.
+/// - `Plan(Err)` is a failed read: never values, and it releases nothing.
+/// - `ActivePlan`: the active plan changed (`GUID_ACTIVE_POWERSCHEME`). The core sends `ReadPlan` when it differs
+///   from the last read's `active` and never acts on it alone.
+/// - `UserChanged` comes after the IO thread already dropped that entry from the journal.
+/// - `JournalCorrupt`: a corrupt journal was set aside, once per corrupt file (at start for one left by restore mode,
+///   the guard or a hook; at once for the tray's own restore).
+/// - `UpdateReady`: an update is downloaded, at most once per version per run.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Event {
+    Started {
+        config: Config,
+        journal: Option<Journal>,
+        owner: bool,
+        on_console: bool,
+        tray: ProcessRef,
+        first_run: bool,
+    },
+    SettingsOwner,
+    Tick,
+    Sources {
+        source: SourceId,
+        sessions: Vec<(SessionFacts, Alive)>,
+    },
+    Holds(Vec<HoldFacts>),
+    ConfigChanged(Config),
+    Menu(MenuCommand),
+    Lid {
+        closed: bool,
+    },
+    Power {
+        ac: bool,
+        battery_pct: Option<u8>,
+    },
+    Plan(Result<PlanValues, Failure>),
+    ActivePlan(Guid),
+    UserChanged(OwnedKey),
+    JournalCorrupt,
+    InputIdle {
+        ms: u64,
+    },
+    Suspending,
+    Resumed,
+    Session(SessionChange),
+    UpdateReady {
+        version: String,
+    },
+    Done(Outcome),
+}
+
+// Events come from four threads and commands go to the IO thread. A variant that is not `Send` would break every
+// poster, so it fails the core's own build instead.
+const _: () = {
+    const fn is_send<T: Send>() {}
+    is_send::<Event>();
+    is_send::<Command>();
+};

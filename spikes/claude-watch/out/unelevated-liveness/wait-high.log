@@ -1,0 +1,3 @@
+03:37:03.858 self pid 16528: integrity Medium (S-1-16-8192), elevation type Limited (filtered, not elevated), logon SID S-1-5-5-0-930782
+03:37:03.858 [32484] handle open, creation time 134381362023868191; waiting up to 400000 ms
+03:37:24.791 [32484] signaled after 20932 ms, exit code 0

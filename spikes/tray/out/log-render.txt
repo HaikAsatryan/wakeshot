@@ -1,0 +1,28 @@
+[      0 ms] ==== start 2026-11-03 15:48:44 args ["--render"]
+[      2 ms] render: owner-drawn menu: dpi 96, dark false, high contrast false, font 'Segoe UI Variable Text' 14 px, glyphs 'Segoe Fluent Icons' 12 px, item 33 px, separator 3 px, bg f9f9f9 text 1a1a1a hover f0f0f0 separator eaeaea border eaeaea
+[     21 ms] render C:\Users\haika\code\wakeshot\spikes\tray\out\look\render-96dpi-light-main.png: Ok("302 x 372, item 33 px")
+[     25 ms] render C:\Users\haika\code\wakeshot\spikes\tray\out\look\render-96dpi-light-sub.png: Ok("157 x 234, item 33 px")
+[     26 ms] render: owner-drawn menu: dpi 96, dark true, high contrast false, font 'Segoe UI Variable Text' 14 px, glyphs 'Segoe Fluent Icons' 12 px, item 33 px, separator 3 px, bg 2c2c2c text ffffff hover 383838 separator 3d3d3d border 232323
+[     32 ms] render C:\Users\haika\code\wakeshot\spikes\tray\out\look\render-96dpi-dark-main.png: Ok("302 x 372, item 33 px")
+[     35 ms] render C:\Users\haika\code\wakeshot\spikes\tray\out\look\render-96dpi-dark-sub.png: Ok("157 x 234, item 33 px")
+[     35 ms] render: owner-drawn menu: dpi 96, dark false, high contrast true, font 'Segoe UI Variable Text' 14 px, glyphs 'Segoe Fluent Icons' 12 px, item 33 px, separator 3 px, bg ffffff text 000000 hover 0078d7 separator 000000 border 000000
+[     40 ms] render C:\Users\haika\code\wakeshot\spikes\tray\out\look\render-96dpi-hc-main.png: Ok("302 x 372, item 33 px")
+[     42 ms] render C:\Users\haika\code\wakeshot\spikes\tray\out\look\render-96dpi-hc-sub.png: Ok("157 x 234, item 33 px")
+[     42 ms] render: owner-drawn menu: dpi 120, dark false, high contrast false, font 'Segoe UI Variable Text' 18 px, glyphs 'Segoe Fluent Icons' 15 px, item 41 px, separator 4 px, bg f9f9f9 text 1a1a1a hover f0f0f0 separator eaeaea border eaeaea
+[     52 ms] render C:\Users\haika\code\wakeshot\spikes\tray\out\look\render-120dpi-light-main.png: Ok("391 x 463, item 41 px")
+[     56 ms] render C:\Users\haika\code\wakeshot\spikes\tray\out\look\render-120dpi-light-sub.png: Ok("199 x 291, item 41 px")
+[     57 ms] render: owner-drawn menu: dpi 120, dark true, high contrast false, font 'Segoe UI Variable Text' 18 px, glyphs 'Segoe Fluent Icons' 15 px, item 41 px, separator 4 px, bg 2c2c2c text ffffff hover 383838 separator 3d3d3d border 232323
+[     63 ms] render C:\Users\haika\code\wakeshot\spikes\tray\out\look\render-120dpi-dark-main.png: Ok("391 x 463, item 41 px")
+[     66 ms] render C:\Users\haika\code\wakeshot\spikes\tray\out\look\render-120dpi-dark-sub.png: Ok("199 x 291, item 41 px")
+[     66 ms] render: owner-drawn menu: dpi 120, dark false, high contrast true, font 'Segoe UI Variable Text' 18 px, glyphs 'Segoe Fluent Icons' 15 px, item 41 px, separator 4 px, bg ffffff text 000000 hover 0078d7 separator 000000 border 000000
+[     73 ms] render C:\Users\haika\code\wakeshot\spikes\tray\out\look\render-120dpi-hc-main.png: Ok("391 x 463, item 41 px")
+[     76 ms] render C:\Users\haika\code\wakeshot\spikes\tray\out\look\render-120dpi-hc-sub.png: Ok("199 x 291, item 41 px")
+[     76 ms] render: owner-drawn menu: dpi 144, dark false, high contrast false, font 'Segoe UI Variable Text' 21 px, glyphs 'Segoe Fluent Icons' 18 px, item 50 px, separator 5 px, bg f9f9f9 text 1a1a1a hover f0f0f0 separator eaeaea border eaeaea
+[     89 ms] render C:\Users\haika\code\wakeshot\spikes\tray\out\look\render-144dpi-light-main.png: Ok("458 x 565, item 50 px")
+[     94 ms] render C:\Users\haika\code\wakeshot\spikes\tray\out\look\render-144dpi-light-sub.png: Ok("237 x 355, item 50 px")
+[     94 ms] render: owner-drawn menu: dpi 144, dark true, high contrast false, font 'Segoe UI Variable Text' 21 px, glyphs 'Segoe Fluent Icons' 18 px, item 50 px, separator 5 px, bg 2c2c2c text ffffff hover 383838 separator 3d3d3d border 232323
+[    103 ms] render C:\Users\haika\code\wakeshot\spikes\tray\out\look\render-144dpi-dark-main.png: Ok("458 x 565, item 50 px")
+[    106 ms] render C:\Users\haika\code\wakeshot\spikes\tray\out\look\render-144dpi-dark-sub.png: Ok("237 x 355, item 50 px")
+[    106 ms] render: owner-drawn menu: dpi 144, dark false, high contrast true, font 'Segoe UI Variable Text' 21 px, glyphs 'Segoe Fluent Icons' 18 px, item 50 px, separator 5 px, bg ffffff text 000000 hover 0078d7 separator 000000 border 000000
+[    117 ms] render C:\Users\haika\code\wakeshot\spikes\tray\out\look\render-144dpi-hc-main.png: Ok("458 x 565, item 50 px")
+[    122 ms] render C:\Users\haika\code\wakeshot\spikes\tray\out\look\render-144dpi-hc-sub.png: Ok("237 x 355, item 50 px")

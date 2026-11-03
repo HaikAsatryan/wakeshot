@@ -1,0 +1,44 @@
+2026-11-03 03:58:36.995 +      0ms [start] mode watch, pid 23324, elevated false, integrity Medium (0x2000), on AC true, battery 100%, energy saver on false, idle 7333 s
+2026-11-03 03:58:36.995 +      0ms [setup] SetConsoleCtrlHandler Ok(())
+2026-11-03 03:58:37.005 +      2ms [watch] start: DelayLockInterval = 0
+2026-11-03 03:58:37.005 +      2ms [watch] start: active = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 03:58:37.005 +      2ms [watch] start: consolelock.ac = 1
+2026-11-03 03:58:37.005 +      2ms [watch] start: consolelock.dc = 1
+2026-11-03 03:58:37.005 +      2ms [watch] start: display-off.ac = 300
+2026-11-03 03:58:37.012 +      7ms [watch] start: display-off.dc = 180
+2026-11-03 03:58:37.012 +      7ms [watch] start: energy-saver-threshold.ac = 0
+2026-11-03 03:58:37.012 +      7ms [watch] start: energy-saver-threshold.dc = 30
+2026-11-03 03:58:37.012 +      8ms [watch] start: lid.ac = 1
+2026-11-03 03:58:37.012 +      8ms [watch] start: lid.dc = 1
+2026-11-03 03:58:37.012 +      8ms [watch] start: overlay.ac.reg = ded574b5-45a0-4f42-8737-46345c09c238
+2026-11-03 03:58:37.012 +      8ms [watch] start: overlay.actual = ded574b5-45a0-4f42-8737-46345c09c238 (best performance?)
+2026-11-03 03:58:37.012 +      8ms [watch] start: overlay.dc.reg = <absent>
+2026-11-03 03:58:37.012 +      8ms [watch] start: overlay.effective = ded574b5-45a0-4f42-8737-46345c09c238 (best performance?)
+2026-11-03 03:58:37.012 +      8ms [watch] start: sleep.ac = 10800
+2026-11-03 03:58:37.012 +      8ms [watch] start: sleep.dc = 600
+2026-11-03 03:58:37.012 +      8ms [setup] PowerSettingRegisterNotification(lid) rc 0
+2026-11-03 03:58:37.012 +      8ms [setup] PowerSettingRegisterNotification(sleep) rc 0
+2026-11-03 03:58:37.012 +      8ms [setup] PowerSettingRegisterNotification(energy-saver-threshold) rc 0
+2026-11-03 03:58:37.012 +      8ms [setup] PowerSettingRegisterNotification(consolelock) rc 0
+2026-11-03 03:58:37.012 +      8ms [notify] lid = 2
+2026-11-03 03:58:37.012 +      8ms [setup] PowerSettingRegisterNotification(display-off) rc 0
+2026-11-03 03:58:37.012 +      8ms [notify] sleep = 10800
+2026-11-03 03:58:37.012 +      8ms [notify] energy-saver-threshold = 0
+2026-11-03 03:58:37.012 +      8ms [notify] consolelock = 1
+2026-11-03 03:58:37.012 +      8ms [setup] PowerSettingRegisterNotification(active-scheme) rc 0
+2026-11-03 03:58:37.012 +      8ms [setup] PowerSettingRegisterNotification(power-source) rc 0
+2026-11-03 03:58:37.012 +      8ms [notify] display-off = 300
+2026-11-03 03:58:37.012 +      8ms [setup] PowerSettingRegisterNotification(energy-saver-status) rc 0
+2026-11-03 03:58:37.012 +      8ms [setup] PowerSettingRegisterNotification(display-state) rc 0
+2026-11-03 03:58:37.012 +      8ms [setup] PowerRegisterForEffectivePowerModeNotifications Ok(())
+2026-11-03 03:58:37.012 +      8ms [notify] power-source = 0
+2026-11-03 03:58:37.012 +      9ms [effmode] MaxPerformance (4)
+2026-11-03 03:58:37.012 +      9ms [setup] PowerRegisterSuspendResumeNotification rc 0
+2026-11-03 03:58:37.012 +      9ms [notify] active-scheme = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 03:58:37.012 +      9ms [notify] energy-saver-status = 0
+2026-11-03 03:58:37.012 +      9ms [notify] display-state = 0
+2026-11-03 03:58:37.012 +      9ms [setup] RegOpenKeyExW(SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes) rc 0
+2026-11-03 03:58:37.012 +      9ms [watch] watching for 3 s. Press Ctrl+C once to end early; the check below still runs.
+2026-11-03 03:58:37.012 +      9ms [setup] RegOpenKeyExW(Control Panel\Desktop) rc 0
+2026-11-03 03:58:40.060 +   3059ms [watch] every value is back to its start value
+2026-11-03 03:58:40.060 +   3059ms [end] exit code 0, log C:\Users\haika\code\wakeshot\spikes\power-settings\out\watch-20261103-035836.log

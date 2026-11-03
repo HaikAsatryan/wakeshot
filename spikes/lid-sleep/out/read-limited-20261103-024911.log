@@ -1,0 +1,79 @@
+2026-11-03 02:49:11.513 +      0ms [start] mode read, args ["--log", "C:\\Users\\haika\\code\\wakeshot\\spikes\\lid-sleep\\out\\read-limited-20261103-024911.log"], pid 17944, elevated false, integrity Medium (0x2000), on AC true, battery 100%, energy saver on false, idle 3165 s
+2026-11-03 02:49:11.513 +      0ms [caps] LidPresent true, S3 false, S4 true, HiberFilePresent true, AoAc true, AoAcConnectivity true, FastSystemS4 false, Hiberboot true, WakeAlarmPresent false, RtcWake S4, AcOnLineWake S-1, SoftLidWake S-1, ThermalControl true
+2026-11-03 02:49:11.513 +      1ms [caps] IsPwrHibernateAllowed true, IsPwrSuspendAllowed false
+2026-11-03 02:49:11.513 +      1ms [caps] HKLM\SYSTEM\CurrentControlSet\Control\Power\HibernateEnabled = None
+2026-11-03 02:49:11.513 +      1ms [caps] HKLM\SYSTEM\CurrentControlSet\Control\Power\HibernateEnabledDefault = Some(1)
+2026-11-03 02:49:11.513 +      1ms [caps] HKLM\SYSTEM\CurrentControlSet\Control\Power\PlatformAoAcOverride = None
+2026-11-03 02:49:11.513 +      1ms [caps] HKLM\SYSTEM\CurrentControlSet\Control\Power\CsEnabled = None
+2026-11-03 02:49:11.536 +     21ms [caps] powercfg /a rc 0
+2026-11-03 02:49:11.536 +     22ms [caps]   The following sleep states are available on this system:
+2026-11-03 02:49:11.536 +     22ms [caps]   Standby (S0 Low Power Idle) Network Connected
+2026-11-03 02:49:11.536 +     22ms [caps]   Hibernate
+2026-11-03 02:49:11.536 +     22ms [caps]   Fast Startup
+2026-11-03 02:49:11.536 +     22ms [caps]   The following sleep states are not available on this system:
+2026-11-03 02:49:11.536 +     22ms [caps]   Standby (S1)
+2026-11-03 02:49:11.536 +     22ms [caps]   The system firmware does not support this standby state.
+2026-11-03 02:49:11.536 +     22ms [caps]   This standby state is disabled when S0 low power idle is supported.
+2026-11-03 02:49:11.536 +     22ms [caps]   Standby (S2)
+2026-11-03 02:49:11.536 +     22ms [caps]   The system firmware does not support this standby state.
+2026-11-03 02:49:11.536 +     22ms [caps]   This standby state is disabled when S0 low power idle is supported.
+2026-11-03 02:49:11.536 +     23ms [caps]   Standby (S3)
+2026-11-03 02:49:11.536 +     23ms [caps]   The system firmware does not support this standby state.
+2026-11-03 02:49:11.536 +     23ms [caps]   This standby state is disabled when S0 low power idle is supported.
+2026-11-03 02:49:11.537 +     23ms [caps]   The current Device Guard configuration has disabled this standby state.
+2026-11-03 02:49:11.537 +     23ms [caps]   Hybrid Sleep
+2026-11-03 02:49:11.537 +     23ms [caps]   Standby (S3) is not available.
+2026-11-03 02:49:11.537 +     23ms [caps]   The hypervisor does not support this standby state.
+2026-11-03 02:49:11.537 +     24ms [plan] active plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 02:49:11.537 +     25ms [plan] plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 02:49:11.539 +     25ms [plan] lid: ac 1, dc 1 (Sleep, Sleep)
+2026-11-03 02:49:11.539 +     26ms [plan] sleep: ac 10800, dc 600
+2026-11-03 02:49:11.539 +     26ms [plan] display-off: ac 300, dc 180
+2026-11-03 02:49:11.539 +     26ms [plan] hibernate-after: ac 0, dc 2147483647
+2026-11-03 02:49:11.539 +     27ms [plan] wake-timers: ac 0, dc 0
+2026-11-03 02:49:11.539 +     27ms [plan] consolelock: ac 1, dc 1
+2026-11-03 02:49:11.539 +     27ms [plan] energy-saver-threshold: ac 0, dc 30
+2026-11-03 02:49:11.559 +     53ms [plan] powercfg /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 02:49:11.587 +     76ms [plan] powercfg /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 02:49:11.603 +     99ms [plan] powercfg /q SCHEME_CURRENT SUB_VIDEO VIDEOIDLE rc 0: Current AC Power Setting Index: 0x0000012c | Current DC Power Setting Index: 0x000000b4
+2026-11-03 02:49:11.634 +    123ms [plan] powercfg /qh SCHEME_CURRENT SUB_SLEEP RTCWAKE rc 0: Current AC Power Setting Index: 0x00000000 | Current DC Power Setting Index: 0x00000000
+2026-11-03 02:49:11.634 +    123ms [setup] PowerSettingRegisterNotification(lid) rc 0 in 30 us
+2026-11-03 02:49:11.634 +    123ms [setup] PowerSettingRegisterNotification(display) rc 0 in 11 us
+2026-11-03 02:49:11.634 +    123ms [notify] lid = 1 (open)
+2026-11-03 02:49:11.634 +    124ms [setup] PowerSettingRegisterNotification(power-source) rc 0 in 11 us
+2026-11-03 02:49:11.634 +    124ms [notify] display = 0 (off)
+2026-11-03 02:49:11.638 +    124ms [setup] PowerSettingRegisterNotification(battery) rc 0 in 12 us
+2026-11-03 02:49:11.638 +    124ms [notify] power-source = 0 (AC)
+2026-11-03 02:49:11.638 +    124ms [setup] PowerSettingRegisterNotification(active-scheme) rc 0 in 12 us
+2026-11-03 02:49:11.638 +    124ms [notify] battery = 100
+2026-11-03 02:49:11.638 +    124ms [notify] active-scheme = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 02:49:12.444 +    930ms [notify] 5 first callbacks within 800 ms
+2026-11-03 02:49:12.444 +    931ms [display] active target: INTERNAL (-2147483648), kind Internal, name N160JCA-GT1
+2026-11-03 02:49:12.444 +    931ms [display] active target: DISPLAYPORT_EXTERNAL (10), kind External, name DELL U2723QE
+2026-11-03 02:49:12.446 +    933ms [display] count: int 1 ext 1 other 0 (SM_CMONITORS 2)
+2026-11-03 02:49:13.253 +   1742ms [display] WMI DISPLAY\LEN41B7\5&2a766683&0&UID256_0 active=True tech=2147483648
+2026-11-03 02:49:13.253 +   1742ms [display] WMI DISPLAY\DEL4279\5&2a766683&0&UID261_0 active=True tech=10
+2026-11-03 02:49:13.377 +   1867ms [heat] PDH \_TZ.THM0 temp_k = 320 (status 0x0)
+2026-11-03 02:49:13.377 +   1867ms [heat] PDH \_TZ.THM0 hp_temp_dk = 3202 (status 0x0)
+2026-11-03 02:49:13.377 +   1867ms [heat] PDH \_TZ.THM0 passive_limit_pct = 100 (status 0x0)
+2026-11-03 02:49:13.377 +   1867ms [heat] PDH \_TZ.THM0 throttle_reasons = 0 (status 0x0)
+2026-11-03 02:49:13.377 +   1867ms [heat] summary: \_TZ.THM0 47.1 C limit 100%
+2026-11-03 02:49:14.155 +   2645ms [heat] WMI \_TZ.THM0 T=320K HP=3202 passive=100% throttle=0
+2026-11-03 02:49:14.155 +   2646ms [heat] WMI MSAcpi_ThermalZoneTemperature error: Access denied
+2026-11-03 02:49:14.155 +   2646ms [ntpower] LastSleepTime 0 (100 ns): 34325 s before now by interrupt time, 34325 s by unbiased time
+2026-11-03 02:49:14.155 +   2646ms [ntpower] LastWakeTime 0 (100 ns): 34325 s before now by interrupt time, 34325 s by unbiased time
+2026-11-03 02:49:14.155 +   2646ms [ntpower] interrupt time 34325 s, unbiased 34325 s (difference = time asleep since boot)
+2026-11-03 02:49:14.155 +   2646ms [ntpower] SystemExecutionState 0x1 (ES_SYSTEM_REQUIRED 0x1, ES_DISPLAY_REQUIRED 0x2, ES_USER_PRESENT 0x4, ES_AWAYMODE 0x40)
+2026-11-03 02:49:14.155 +   2646ms [ntpower] SystemPowerInformation MaxIdlenessAllowed 0, Idleness 86, TimeRemaining 0 s, CoolingMode 1
+2026-11-03 02:49:14.155 +   2646ms [priv] enable SeShutdownPrivilege: ok false: OpenProcessToken(ADJUST_PRIVILEGES) failed: Access is denied. (0x80070005) (1300 = not held)
+2026-11-03 02:49:14.155 +   2647ms [session] locked Some(true)
+2026-11-03 02:49:15.244 +   3731ms [service] IBMPMSVC | Lenovo PM Service | Running | Auto
+2026-11-03 02:49:15.244 +   3731ms [service] LenovoAICCLoader | Lenovo Adaptive ICC Profile Loader | Running | Auto
+2026-11-03 02:49:15.244 +   3731ms [service] LenovoBrightCtrl | Lenovo Display Brightness Control Service | Stopped | Disabled
+2026-11-03 02:49:15.244 +   3731ms [service] LenovoSmartStandby | Lenovo Smart Standby | Running | Auto
+2026-11-03 02:49:15.244 +   3731ms [service] LenovoVantageService | Critical Service for Lenovo Vantage | Running | Auto
+2026-11-03 02:49:15.244 +   3732ms [service] LITSSVC | Lenovo Intelligent Thermal Solution Service | Running | Auto
+2026-11-03 02:49:15.244 +   3732ms [service] LPlatSvc | Lenovo Platform Service | Stopped | Auto
+2026-11-03 02:49:15.244 +   3732ms [service] LvfInstallService | Lenovo View Install Service | Running | Auto
+2026-11-03 02:49:15.244 +   3732ms [service] TPHKLOAD | Lenovo Hotkey Client Loader | Running | Auto
+2026-11-03 02:49:15.244 +   3732ms [end] exit code 0, log C:\Users\haika\code\wakeshot\spikes\lid-sleep\out\read-limited-20261103-024911.log

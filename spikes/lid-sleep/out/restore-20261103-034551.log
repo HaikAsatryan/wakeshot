@@ -1,0 +1,3 @@
+2026-11-03 03:45:51.308 +      0ms [start] mode restore, args [], pid 8788, elevated false, integrity Medium (0x2000), on AC true, battery 100%, energy saver on false, idle 6568 s
+2026-11-03 03:45:51.308 +      0ms [restore] no journal: nothing to restore
+2026-11-03 03:45:51.308 +      0ms [end] exit code 0, log C:\Users\haika\code\wakeshot\spikes\lid-sleep\out\restore-20261103-034551.log

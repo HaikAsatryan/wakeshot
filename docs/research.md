@@ -1,0 +1,1295 @@
+# Research
+
+Collected on 2026-11-02 on the Windows laptop. Each fact says how it was checked. "Not verified" means read
+somewhere or remembered, not tested.
+
+## The problem
+
+A laptop sleeps in the middle of long work: an AI agent run, a build, a download. People either change power
+settings by hand (and forget to change them back) or use a keep-awake tool that stays on all the time.
+
+### Claude Code today
+
+- **Windows CLI holds nothing.** In the installed `claude.exe` 2.1.316 the sleep inhibitor only returns spawn args on
+  macOS (`caffeinate -i -t 300`) and `null` everywhere else. Checked in the binary. Open issue: anthropics/claude-code#96679.
+- **macOS CLI** spawns `caffeinate -i -t 300`, restarts it every 240 s while work runs, and releases 30 s after work
+  ends. Checked in the binary (constants 300, 240000, 30000). Users complain it sometimes holds while idle (#21432).
+- **Desktop app** has "Keep computer awake while Claude works". On Windows it takes only an EXECUTION power request,
+  so Modern Standby laptops still sleep mid-task (#103669, open). Not verified by us.
+- **Docs** (code.claude.com, desktop scheduled tasks): "Closing the laptop lid still puts it to sleep." Remote Control
+  has a desktop setting "Keep this computer awake for Remote Control"; #100743 says it holds only in 5 minute windows.
+
+### Windows power facts
+
+- **Modern Standby.** This laptop has only "Standby (S0 Low Power Idle) Network Connected", no S3. Checked with
+  `powercfg /a`. Most laptops from the last years are the same.
+- **Request types.** `PowerRequestSystemRequired` blocks idle sleep. `PowerRequestExecutionRequired` alone does not
+  block idle sleep on Modern Standby. Source: the PowerSetRequest docs (re-read 2026-11-03): SystemRequired "The
+  system continues to run instead of entering sleep after a period of user inactivity"; ExecutionRequired "On
+  Traditional Sleep (S3) systems, an active PowerRequestExecutionRequired request implies
+  PowerRequestSystemRequired", so not on Modern Standby. Not tested by us.
+- **Battery.** PowerSetRequest docs, Remarks (re-read 2026-11-03): "On Modern Standby systems on DC power, system and
+  execution required power requests are terminated 5 minutes after the system sleep timeout has expired." Tested on
+  this laptop: it holds (slept 380 s after the last input with a 60 s battery timeout and the requests held; "Power
+  settings spike" below). So a tool must also change the sleep timer on battery. Battery sleep Never stopped the
+  rule in a 16 minute test, lid open (same section).
+- **Lid close.** It counts as the user asking for sleep. No power request can block it. The only way is to set the lid
+  action to "Do nothing". PowerSetRequest docs (re-read 2026-11-03): "power requests are terminated upon
+  user-initiated system sleep entry (power button, lid close or selecting Sleep from the Start menu)", except Away
+  mode on S3. SetThreadExecutionState docs: it "cannot be used to prevent the user from putting the computer to
+  sleep". Tested here for Start > Sleep with a request held: the request was not honored after resume ("Lid and sleep
+  spike", morning results, "Resume"). Not tested here with a request held: lid close with action Sleep, power button.
+- **Electron.** `powerSaveBlocker` "prevent-app-suspension" maps to `PowerRequestExecutionRequired` only, so Electron
+  apps that use it do not block idle sleep on Modern Standby. Checked in Chromium
+  `services/device/wake_lock/power_save_blocker/power_save_blocker_win.cc`. "prevent-display-sleep" adds
+  `PowerRequestSystemRequired`, but keeps the screen on.
+- **Power setting IDs.**
+  - Lid action: subgroup `4f971e89-eebd-4455-a8de-9e59040e7347`, setting `5ca83367-6e45-459f-a27b-476b1d01c936`.
+    Values: 0 Do nothing, 1 Sleep, 2 Hibernate, 3 Shut down. It is a hidden setting: read it with `powercfg /qh`.
+  - Sleep after: subgroup `238c9fa8-0aad-41ed-83f4-97be242c8f20`, setting `29f6c1db-86da-48c5-9fdb-f2b67b1f44da`.
+    Seconds, 0 = never.
+- **No admin needed.** A normal user can write both settings on the active plan with `PowerWriteACValueIndex` /
+  `PowerWriteDCValueIndex` and apply them with `PowerSetActiveScheme`. Tested with an unelevated Medium token: see
+  "Power settings spike" below. `PowerSettingAccessCheckEx` reports a plain access denial too, not only a policy.
+- `powercfg /requests` needs an admin prompt.
+
+### How to know Claude Code is working
+
+- **Status files.** Claude Code writes `~/.claude/sessions/<pid>.json` per running session. Seen fields: `pid`,
+  `procStart` (Windows FILETIME as a string), `status` (`busy`, `idle`, `waiting`, `shell`), `cwd`,
+  `kind`, `entrypoint` (`cli`, `claude-vscode`, `sdk-cli`), `statusUpdatedAt`, `bridgeSessionId` (Remote Control
+  session id; `null` after a disconnect, seen live). Checked on this machine. The format is undocumented and can change in
+  any release.
+  - A file can be left behind by a crash: count it only if the pid is alive and its start time equals `procStart`.
+  - Never read the `<pid>.<hash>.key` files next to them. They hold a peer token.
+  - Not verified: whether desktop app sessions write these files (app not installed).
+  - Live tests 2026-11-03 (Claude Code 2.1.316, test sessions driven by `spikes/claude-watch`; details and the
+    results table in `docs/research/claude-code-signals.md`):
+    - Terminal sessions: `shell` while a background shell or shell Monitor runs and the turn is over; `busy` stays on
+      while background subagents run. `waiting` comes with `permission prompt`, `input needed` or `dialog open` (a
+      slash command dialog, not a real block).
+    - SDK path (VS Code, `claude -p` stream-json): no `shell`. A background shell shows `idle`; only the transcript
+      shows it. A background subagent keeps `busy`.
+    - Timers leave the status `idle`. The transcript shows them: `CronCreate` (`nextFireAt`, a float in ms) or
+      `ScheduleWakeup` (`scheduledFor`, rounded up to a whole minute, no job id), then `scheduled_task_fire` lines. An
+      Esc cancel of a wakeup writes nothing. `/clear` changes `sessionId` but jobs keep firing; the new transcript
+      starts with a `session_cron_carry` line listing them.
+    - Durable cron jobs are off in this build ("durable persistence is not available"), so no
+      `scheduled_tasks.json`.
+    - A hard kill leaves the `.json`; the pid plus start time check drops it at once, and the next Claude Code start
+      deletes it. Remote Control off writes `bridgeSessionId: null`.
+- **Hooks.** `UserPromptSubmit`, `PreToolUse`, `Stop`, `SessionEnd` in `~/.claude/settings.json`. Exact, but means
+  editing the user's settings. Insomnia does this.
+- **Transcripts.** `~/.claude/projects/**/*.jsonl` grow while a session works. Nightcrew watches their size.
+
+### Reading elevated Claude Code sessions from an unelevated process
+
+Checked 2026-11-03 (card `p0-unelevated-liveness`, Claude Code 2.1.316) with `spikes/claude-watch --probe` and
+`--wait-exit`. Logs in `spikes/claude-watch/out/unelevated-liveness/` (user SID masked).
+
+- **How the levels were checked.** Reader: the probe started by Explorer from a `.cmd` (opened with `explorer.exe`, no
+  parent spoofing). Its own token (`GetTokenInformation`): Medium `S-1-16-8192`, elevation type Limited; `whoami
+  /groups` in the same `.cmd`: Medium Mandatory Level. Targets: the token of each `claude.exe`, read with
+  `OpenProcessToken`: High `S-1-16-12288`, elevation type Full. Targets were Haik's sessions 20636 and 32332 (CLI,
+  read only), my own test sessions over stream-json (one clean exit, one hard kill), and an elevated `pwsh` as a
+  stand-in for an elevated `wakeshot run`. Both sides had the same logon SID (`S-1-5-5-0-930782`).
+- **Medium reader, High `claude.exe`: everything the design needs works.**
+  - Status files read fine. Files written by the High process carry only inherited ACEs (SYSTEM, Administrators,
+    haika: full) and no mandatory label (`icacls`). Same for transcripts.
+  - `OpenProcess` with `PROCESS_QUERY_LIMITED_INFORMATION`, with `SYNCHRONIZE`, and with both: ok.
+    `PROCESS_QUERY_INFORMATION`, `PROCESS_VM_READ` and `READ_CONTROL`: access denied (`0x80070005`). So ask for
+    exactly `QUERY_LIMITED_INFORMATION | SYNCHRONIZE`: one extra right fails the whole open.
+  - On that handle: `GetProcessTimes` creation time equals `procStart` for every session; `QueryFullProcessImageNameW`
+    gives `C:\Users\haika\.local\bin\claude.exe`; `GetExitCodeProcess` gives `STILL_ACTIVE`.
+  - Wait on the handle: a 1 s `WaitForSingleObject` times out while the session runs. Clean exit of a High test
+    session (its stdin closed): the Medium wait signaled 0.4 s after the driver stopped, exit code 0. Hard kill
+    (`Stop-Process -Force` on the High `claude.exe`): signaled 24 ms after, exit code `0xFFFFFFFF`.
+  - `OpenProcessToken(TOKEN_QUERY)` on the High process also works from Medium (shows High, Full).
+  - The system process list (`NtQuerySystemInformation(SystemProcessInformation)`) works at Medium and its create
+    time equals `procStart`. No handle needed. One call took about 5 to 9 ms here (log timestamps).
+  - Transcript `projects\<folder>\<sessionId>.jsonl` read fine (the 2 MB orchestrator transcript).
+  - Change notifications: `ReadDirectoryChangesW` on `~/.claude/sessions` (opened with `FILE_LIST_DIRECTORY`) works at
+    Medium and reports writes by the High process: `<pid>.json` added, modified, removed. A status write with
+    `updatedAt` 03:44:36.544 was reported at 03:44:36.549; the removal at exit 8 ms after the driver stopped. The
+    `.key` file shows up too (added, modified, renamed from a temp name, removed); its name was not logged.
+  - The elevated `pwsh` stand-in gave the same results, so an elevated `wakeshot run` can be watched the same way.
+- **Why the open works** (inference from the security descriptor, not checked in the docs). Read from the High side:
+  `O:BA D:(A;;0x1fffff;;;BA)(A;;0x1fffff;;;SY)(A;;0x121411;;;<logon SID>) S:(ML;;NWNR;;;HI)`. The logon SID ACE grants
+  `0x121411` (SYNCHRONIZE, READ_CONTROL, QUERY_LIMITED_INFORMATION, QUERY_INFORMATION, VM_READ, TERMINATE). The High
+  label with no-read-up seems to remove the read rights (QUERY_INFORMATION, VM_READ, READ_CONTROL) for a lower
+  caller, which matches the denied set exactly.
+- **Gone vs no access.** After the hard kill the `<pid>.json` stayed. At Medium every `OpenProcess` on that pid
+  failed with `0x80070057` (invalid parameter: no such process) and the pid was not in the system process list. A
+  denial is `0x80070005`, so a reader can tell "gone" from "no access". The next Claude Code start deleted the file.
+- **Medium reader, Medium `claude.exe`** (the normal case for other users): all six rights open and every check
+  works. Security descriptor `O:<user SID> D:(A;;0x1fffff;;;<user SID>)(A;;0x1fffff;;;SY)(A;;0x121411;;;<logon SID>)
+  S:(ML;;NWNR;;;ME)`. `ReadDirectoryChangesW` reported the new file and each status write (the `busy` write came
+  0.26 s after the prompt was handed to the driver); the wait signaled 0.6 s after the driver stopped. A High reader (an elevated tool) also sees a Medium session fully.
+- **Not verified.** Elevation with another account's password (a standard user typing an admin's credentials): the
+  elevated process then runs as another user with another logon SID, and the open would likely fail with
+  `0x80070005`. Also not checked: sessions in another Windows session (RDP, fast user switching), the Desktop app.
+- **Workaround if the open is ever denied.** Use the system process list: create time equals `procStart` means
+  alive; pid missing or another create time means dead. Cost: about 5 to 9 ms per call, and no handle to wait on, so
+  an exit is seen only at the next poll (the safety tick), not at once.
+
+## Competitors
+
+| Tool | Platform | Tech | Agent aware | Blocks idle sleep on Modern Standby | Lid close | Stars |
+|---|---|---|---|---|---|---|
+| Nightcrew (leikauskas/nightcrew) | Windows | C#, .NET Framework 4.8, WPF | Claude Code, Codex | Yes | Yes | 9 |
+| Insomnia (stanley-projects/Insomnia) | Windows | Electron | Claude Code, Codex (hooks); apps by process | No (see Electron above) | No | 7 |
+| LidGuard (airtaxi/LidGuard) | Windows, Linux, macOS | C#, `dotnet tool` CLI | Codex, Claude Code, Copilot CLI, OpenCode | Not checked | Yes | 13 |
+| PowerToys Awake | Windows | Microsoft | No: manual, timer or process id | Not checked | No | n/a |
+| Insomnia (krishhgg/Insomnia) | macOS | | | | Yes | 1,894 |
+
+Stars as of 2026-11-02. Many more tiny tools exist (0 to 30 stars): LidAwake, lidwake, LidGuard (macOS),
+wakekeeper (Windows and macOS), StayLit, WideAwake, Caffeinator, DozeGuard, a claude-kit keep-awake plugin, the
+claudfeine wrapper.
+
+**Demand:** real on macOS (1.9k stars for a lid keep-awake app). On Windows every tool found is small and young.
+The space is busy with small projects. Simple, native and correct on Modern Standby is the open spot.
+
+### Nightcrew review (code read 2026-11-02, v0.3.1 installed and tested on this laptop)
+
+What it does: every 10 s it checks Claude Code status files, transcript growth, CPU of processes an agent started,
+and GPU use. While work runs it holds SYSTEM and EXECUTION requests, sets lid action to Do nothing on AC and DC, sets
+sleep after to Never on AC and to "lid-closed limit + 1 h + 7 s" on DC. After 5 minutes with no work it puts the
+user's values back. Tested here: it armed within a second of start and wrote exactly these values. Uninstalled 2026-11-03; nothing of it is left (checked 2026-11-03: `Test-Path` false for `%LOCALAPPDATA%\Programs\Nightcrew`, `%LOCALAPPDATA%\Nightcrew` and `HKCU:\Software\Nightcrew`; no Nightcrew entry in the HKCU Run key or in `Get-ScheduledTask`).
+
+Worth copying:
+
+- A pure state machine (`Controller`: inputs in, commands out) and a separate `Engine` that runs the commands. All
+  Windows calls behind small interfaces, so it has 404 tests. Dry run by swapping implementations.
+- Restore safety: atomic file plus registry copy; a field the user changes while armed is kept as theirs; follows a
+  power plan switch; checks policy locks; restores on quit, sign-out and next start.
+- A watchdog scheduled task (`schtasks` XML, logon trigger plus every 5 minutes, runs `exe --watchdog`) that restores
+  settings if the app was killed.
+- Marks its own battery timer value with "+7 seconds" so it can tell its values from the user's after both saved
+  copies are lost. Windows offers only whole minutes.
+- With the lid closed: locks the PC (unless the user's own lid action is Do nothing, which means docked use);
+  hibernates at 20% battery or after 8 hours with no input.
+- When work ends with the lid closed: waits for 5 minutes with no input, turns the screen off, and hibernates if the
+  PC is still awake 5 minutes later.
+- Clock that ignores sleep time (`QueryUnbiasedInterruptTime`). Handles `PBT_APMSUSPEND` so a late tick after wake
+  cannot hibernate the PC in front of the user.
+- WPF set to software rendering, which saves about 75 MB (their comment).
+
+Weak spots:
+
+- Edits the user's real power plan in place. The safety net for that is complex (368 line journal, registry copy,
+  the +7 s trick, which does not work when the lid-closed limit is off).
+- Scope creep: about 800 lines of "Efficiency mode" that slows other apps, a GPU signal, a loopback connection scan,
+  a custom drawn panel with bundled fonts.
+- CPU based detection: a background dev server started by an agent and using over 10% CPU likely keeps the PC awake
+  as long as it runs. Not tested.
+- Rules for any process exist only as a JSON hack (add the name as an "agent"), and need a restart.
+- One author, created 2026-10-13, about 100 commits in 10 days, unsigned. About 80 MB RAM with the panel open.
+- UI: tray icon is WinForms `NotifyIcon`, panel is a borderless WPF window. Not WinUI 3 (cannot run on .NET
+  Framework 4.8).
+
+UX problems (product owner view, agreed with Haik):
+
+- Too many modes: "Hold awake" and "Pause". Pause is kept in memory only, so a reboot turns it back on.
+- Tray icon style choice (removed upstream after v0.3.1).
+- "Lock when lid closes" is optional. It should not be: closing the lid normally means sleep and a password on wake.
+- "Stay awake for approvals" and "Battery floor" are settings that should be fixed behavior. "Lid-closed limit" should not exist at all (decision 3, 2026-11-03).
+- Look is borrowed from Wispr Flow's design language (their credits) with serif fonts. Does not look like Windows.
+
+### Insomnia review (code read 2026-11-02)
+
+Electron app. Polls `tasklist` every 10 s for watched apps. For Claude Code it adds hooks to `~/.claude/settings.json`
+and keeps awake for 15 minutes after the last hook. Uses `prevent-app-suspension`, so on Modern Standby it does not
+stop idle sleep. No lid handling, no battery rules.
+
+## Distribution
+
+Checked 2026-11-03 (card `p0-distribution-facts`). Details, sources and marks: `docs/research/distribution.md`.
+
+- **Velopack 1.2.161 works with Rust.** Tested on this laptop with a throwaway crate: `vpk pack`, silent install
+  (`Setup.exe --silent`) to `%LocalAppData%\{packId}` with no admin, update with all hooks, silent uninstall. Every
+  hook reaches Rust through `VelopackApp` callbacks. `vpk` 1.2.161 installs as a .NET tool and runs on the .NET 10
+  SDK (it ships net8, net9 and net10 builds).
+- **Velopack kills the app without warning** before uninstall, before an update swap, when Setup.exe runs over an
+  existing install, and after every hook. Setup.exe over an existing install runs no uninstall hook and wipes the
+  install folder. Uninstall runs `--veloapp-uninstall` after the kill (30 s limit in the docs). Silent install does
+  not start the app. Seen in source and in the trial.
+- **Size.** `Setup.exe` was 10.7 MB for a 1.5 MB app, mostly Velopack's own `Update.exe` (5.2 MB). Tested.
+- **winget** accepts unsigned installers: an unsigned Velopack `Setup.exe` (Flowersauce.FSClicker 1.4.0) is merged.
+  Manifest: `InstallerType: exe`, `Scope: user`, silent switch `--silent`, `ProductCode` = pack id. Validation runs
+  installed exes with no arguments and flags non-zero exit codes. Checked in winget-pkgs.
+- **SignPath Foundation** certificates are issued to "SignPath Foundation", so users see that name as publisher.
+  It requires an existing release, MFA, CI builds on GitHub-hosted runners, a code signing policy page, manual
+  approval per release, and "a certain verifiable reputation". Several new projects were declined in 2026 for lack
+  of users (reported). Read on signpath.org and docs.signpath.io.
+- **GitHub Actions**: standard runners, including Windows ARM64 (`windows-11-arm`), are free and unlimited for public
+  repos. 6 h per job, 20 concurrent jobs. Read on docs.github.com.
+- **scoop**: Extras needs about 100 stars or 50 forks, so only an own bucket at launch. A Scoop uninstall does not run
+  the Velopack hook. Read in ScoopInstaller repos.
+
+## Name research
+
+Picked: **Wakeshot**. On 2026-11-02 there was no GitHub repo with that name, no winget package and no NuGet package.
+Domains and trademarks not checked.
+
+Rejected:
+
+- Taken by big or same-space projects: Insomnia (Kong API client 40k stars, plus two keep-awake apps), Adrenaline
+  (several large repos; AMD's driver software is "AMD Software: Adrenalin Edition", from memory), Caffeinator,
+  Unblink, Allnighter, OpenEyes, Wakekeeper, LidAwake, Lidwake, LidGuard, StayLit, WideAwake, Shutlid.
+- Common coffee words, all used: Espresso, Doppio, Cortado, Barista, Jolt, Taurine, Redeye, Doubleshot.
+- Free but weaker: EyesOpen (clear, great eye icon, but a search finds a song and eye clinics), EyesAwake, WideEyed
+  (also means naive), NoBlink, Blinkless, Wakebrew, Wakejolt, Wakedose, Holdwake.
+
+## Toolchain
+
+Set up on 2026-11-03 on the Windows laptop (card `docs/tasks/p0-toolchain.md`).
+
+- **Build Tools.** Visual Studio Build Tools 2026, version 18.11.2 (installationVersion 18.11.12324.101), in
+  `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools`. Installed by Haik with workload VCTools, component
+  VC.Tools.ARM64 and `--includeRecommended`. Checked with `vswhere -products *`.
+- **MSVC and SDK.** MSVC 14.51.36231 with `bin\Hostx64\x64`, `arm64` and `x86`. Windows SDK 10.0.26100.0 with `um`
+  libs for x64, arm64 and x86. Checked by listing the folders.
+- **rustup.** 1.29.2 (2026-10-21), the current release per `static.rust-lang.org/rustup/release-stable.toml`.
+  `winget install --id Rustlang.Rustup` installs it per user with no admin prompt, into `%USERPROFILE%\.cargo` and
+  `%USERPROFILE%\.rustup`, and adds `.cargo\bin` to the user PATH. Adding `--scope user` fails with "No applicable
+  installer found": the manifest declares no scope. Shells and Claude Code sessions started before the install do not
+  see the new PATH.
+- **Rust.** Stable 1.99.1 (2026-10-13), LLVM 23.1.1, host `x86_64-pc-windows-msvc`, profile default. The Rust blog's
+  latest release page points to 1.99.1. Other versions: cargo 1.99.1, clippy 0.1.99, rustfmt 1.10.0, rust-analyzer
+  1.99.1 (rustup component). Targets `x86_64-pc-windows-msvc` and `aarch64-pc-windows-msvc`. Checked with `rustc -vV`,
+  `rustup show` and each tool's `--version`.
+- **`cargo new`** uses edition 2024 by default.
+- **Linker.** rustc finds the Build Tools 2026 linker by itself, with no Developer prompt or env setup:
+  `MSVC\14.51.36231\bin\HostX64\x64\link.exe` for x64 and `HostX64\arm64\link.exe` for ARM64. Checked with
+  `cargo rustc -- --print link-args`.
+- **Cross build.** A hello-world builds in release for both targets. The PE machine field is `0x8664` (x64) and
+  `0xAA64` (ARM64); each exe is about 130 KB. The x64 exe runs and prints. The ARM64 exe was not run: there is no ARM64
+  device here.
+- **Lint and format.** `cargo clippy -- -D warnings` passes for both targets. `cargo fmt --check` passes on clean code
+  and prints a diff on badly formatted code.
+- **Claude Code LSP.** The official plugin is `rust-analyzer-lsp@claude-plugins-official` 1.0.0 (marketplace
+  `anthropics/claude-plugins-official`). It runs the `rust-analyzer` command from PATH, which the rustup proxy
+  provides. Installed at user scope and listed as enabled by `claude plugin list`. Not verified: that it serves a
+  session; it loads only in a session started after the install.
+
+## Tray, menu and notifications
+
+Checked on 2026-11-03 on the Windows laptop with the spike in `spikes/tray/` (card `docs/tasks/p0-spike-tray.md`).
+Windows 11 26H2, build 26300.9711. Two displays: the primary 3840x2160 at 150% holds the taskbar and tray, a second
+1920x1200 at 125%. Theme during the checks: apps dark, taskbar dark. Raw logs: `spikes/tray/out/`. Screenshots:
+`docs/research/img/tray-*.png`. How our menu compares with current Windows 11 menus, and the pick for the menu look:
+`docs/research/tray-menu-look.md`.
+
+- **Crates.** `windows` 0.62.2, `embed-resource` 3.0.12, `png` 0.18.1 (spike screenshots only). Current per
+  `cargo search` and `cargo info`. `embed-resource` found the SDK `rc.exe` by itself for both targets.
+- **Manifest needed.** `LoadIconMetric` is exported only by Common Controls 6 (WinSxS
+  `6.0.26100.9711`), not by `System32\comctl32.dll` 5.82. Checked with `dumpbin /exports`. So the exe needs a manifest
+  that asks for Common-Controls 6. The spike embeds one as `RT_MANIFEST` 1 through the `.rc` file; the log confirms
+  per-monitor v2 DPI awareness came from it.
+- **Add and update.** From a hidden top-level window: `NIM_ADD`, `NIM_SETVERSION` (version 4) and `NIM_MODIFY` (new
+  icon and two-line tooltip) all return TRUE. With version 4, a right-click arrives as `WM_CONTEXTMENU` in
+  `LOWORD(lParam)` with the point in `wParam`, after `WM_RBUTTONDOWN` and `WM_RBUTTONUP`. Checked in the logs.
+- **First add lands in the overflow.** On the first `NIM_ADD` from a new exe path, Windows writes
+  `HKCU\Control Panel\NotifyIconSettings\<id>` with `ExecutablePath`, `UID`, `InitialTooltip`, `IconSnapshot` and no
+  `IsPromoted`. Icons the user pinned have `IsPromoted=1` (OneDrive, Telegram here). `Shell_NotifyIconGetRect` then
+  returns the rect of the `^` button: `tray-icon-first-add-overflow.png` shows only the chevron. Haik's right-click
+  during a run came from above the taskbar, so from the flyout. Checked with the registry, the screenshot and the log.
+- **Explorer applies `IsPromoted` live.** 2026-11-03 10:20, from the elevated agent session (card
+  `p0-spike-tray`, T2): with the spike running (Medium token) and its icon in the overflow, writing `IsPromoted` = 1
+  (DWORD) on its own `NotifyIconSettings\<id>` key moved the icon onto the taskbar within 3 s, with no Explorer
+  restart and no input. Checked with taskbar screenshots before and after (`tray-taskbar-before-promote.png`,
+  `tray-taskbar-after-promote.png`). `Shell_NotifyIconGetRect` gave the same
+  RECT both times: the chevron moved one slot left and the icon took its place, so the rect alone cannot tell hidden
+  from pinned. Whether Windows also does this for an unpinned icon that the user had moved back to the overflow: not
+  checked.
+- **`NIF_GUID` and the exe path.** An icon with a fixed `NIF_GUID` was added from the build folder, then from a copy
+  in another folder: `NIM_ADD` returned TRUE both times. Windows kept one settings entry for the GUID and pointed it at
+  the second path. So on this build a moved exe does not break a GUID icon. Not checked: whether a pinned state
+  survives the move.
+- **Dark menus.** uxtheme ordinals 135 (`SetPreferredAppMode`), 136 (`FlushMenuThemes`), 104
+  (`RefreshImmersiveColorPolicyState`) and 132 (`ShouldAppsUseDarkMode`) all resolve by ordinal on 26300.
+  `SetPreferredAppMode` returned the previous mode each time (0, then 1, 3, 2), which matches the 1903+ meaning, not
+  the 1809 `AllowDarkModeForApp`. Ordinals and the mode enum from `ysc3839/win32-darkmode` `DarkMode.h`.
+  - `AllowDark` set before the first menu: the menu follows the app theme (dark here). Tested apart on 2026-11-03 in
+    Custom mode (Windows mode dark, app mode light): the `AllowDark` menu was light, while Windows' own tray menus were
+    dark (`docs/research/tray-menu-look.md`, "Which mode the tray menus follow").
+  - `ForceLight` or `ForceDark` plus `FlushMenuThemes` switch the next menu of the running process at once.
+  - Submenu arrow, check mark, radio bullet, disabled line, separators and Windows 11 rounded corners render correctly
+    in both. Screenshots `tray-menu-forcelight*.png`, `tray-menu-forcedark*.png`, `tray-menu-allowdark-system-dark.png`,
+    and `tray-menu-live-dark-*.png` from Haik's own right-click.
+  - The disabled status line is grey and low contrast in both themes.
+- **Menu details.** `SetForegroundWindow` before `TrackPopupMenuEx` returned TRUE after every right-click on the icon.
+  For menus opened by code it returned FALSE at 01:33, 01:35, 11:37 and 12:04 and TRUE at 13:01 and 13:02: Windows'
+  foreground rules decide, not who opened the menu. Menu windows (`#32768`) belong to the thread that calls
+  `TrackPopupMenuEx`. Posting `WM_CHAR 'k'` to the menu window opened the `&Keep awake` submenu. Checked in the logs
+  and screenshots. Microsoft's `TrackPopupMenuEx` Remarks (read 2026-11-03): for a notification icon's menu the window
+  must be the foreground window before the call; "Otherwise, the menu will not disappear when the user clicks outside
+  of the menu" (the old KB135788 problem). So a menu opened by code (a hotkey, a notice click) may not close on an
+  outside click when `SetForegroundWindow` fails; not tested (tray review, `reviews/p0-tray.md` finding 6).
+- **Theme and contrast reads.** `AppsUseLightTheme=0` and `SystemUsesLightTheme=0` under
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`; `ShouldAppsUseDarkMode()` agreed.
+  `SPI_GETHIGHCONTRAST`: off. Checked in the log.
+- **DPI.** `GetDpiForSystem` 144. `LoadIconMetric(LIM_SMALL)` returned a 24 px icon, the `SM_CXSMICON` for 144 dpi, so
+  the resource frame was used without scaling. `GetSystemMetricsForDpi(SM_CXSMICON, 120)` is 20 for the second
+  display. Not verified: that Windows 11 shows tray icons only on the primary taskbar.
+- **Balloon.** `NIM_MODIFY` with `NIF_INFO` from the unregistered exe returns TRUE; `NIN_BALLOONSHOW` comes at once and
+  `NIN_BALLOONTIMEOUT` about 6.5 s later. So Windows shows it, with no registration. Checked in the log.
+  `NIN_BALLOONTIMEOUT` came twice in the same millisecond in both runs (`log-auto.txt` 15696 ms,
+  `log-interactive.txt` 9522219 ms; grep 2026-11-03), so balloon events must not be counted. Windows files a balloon
+  under `NotifyIconGeneratedAumid_<NotifyIconSettings id>`: the tray review found that handler in the notification
+  database with 0 stored rows, and a `Notifications\Settings` key of that name (registry and database reads,
+  `reviews/p0-tray.md` finding 2). So balloons are not stored, and a balloon's on/off switch most likely follows the
+  icon's settings entry (inferred from the name; not tested).
+- **Toast.** `ToastNotificationManager::CreateToastNotifierWithId(aumid).Show()` after `RoInitialize`:
+  - Unregistered app id: `Show()` succeeds and `History.GetHistoryWithId(aumid)` counts 1, so Windows stored it (the
+    notification database holds it), but the notification centre does not show it (Win+N, below). No `Dismissed`
+    event within 10 s, and the 12:58 screenshots below show no banner.
+  - App id registered per user, no admin: values `DisplayName` and `IconUri` (path to a PNG) under
+    `HKCU\Software\Classes\AppUserModelId\<aumid>`. `Show()` succeeds, history counts 1, and `Dismissed` fires with
+    reason `TimedOut` after 6.5 s, which means a banner showed and timed out.
+  - `ToastNotifier.Setting` throws `0x80070490` (element not found) in both cases in that run; in the later Medium
+    run it returned `Enabled` (see below).
+  - Windows adds `HKCU\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\<aumid>` after the first toast.
+  - Microsoft Learn ("Send a local toast notification from other types of unpackaged apps", found by search; the page
+    URL now returns 404) shows the same values under HKLM plus a `CustomActivator` COM class for clicks. Click
+    handling was not tested.
+- **Sound.** `PlaySoundW("SystemNotification", SND_ALIAS | SND_ASYNC | SND_NODEFAULT | SND_SYSTEM)` and
+  `PlaySoundW("CHIME", module, SND_RESOURCE | ...)` with a 13 KB embedded WAVE both return TRUE. The user's scheme maps
+  `SystemNotification` to `C:\WINDOWS\media\Windows Background.wav`; a user who picked "No sounds" gets silence with
+  the alias. `SND_SYSTEM` puts the sound under the "System Sounds" volume slider (docs, not checked by ear).
+- **Size.** x64 release with LTO, one codegen unit, `panic = "abort"`, `strip`: 504 KB at first, 519,168 bytes after
+  the token code (built 03:41); 420 KB without the PNG encoder (first build). About 198 KB of that is resources: four uncompressed
+  32-bit icons of 45 KB each, the WAV and the manifest. So the code (Win32 tray, menu, WinRT toast, registry) is about
+  220 KB. ARM64 release builds (486 KB, the 01:43 build from before the token code, PE machine `0xAA64`) and passes
+  clippy. Not run on ARM64: no device.
+- **Memory.** In-process `GetProcessMemoryInfo` and `Get-Process` from outside agree. Icon only, idle: working set
+  10.0 to 10.4 MB, private 1.6 to 1.7 MB in the logs (9.7 MB, 1.5 MB, 133 handles and threads dropping from 4 to 1
+  after about 30 s are from outside reads that were not saved). After opening menus: working set 16 to 19 MB, private
+  2.0 to 3.3 MB. After WinRT toasts: working set 25 to 28 MB, private 3.2 to 3.9 MB. The working set counts shared system DLL
+  pages; private bytes is the app's own cost.
+
+Live checks on 2026-11-03 10:27 (Haik's Explorer restart) and 12:53 to 13:04 (agent steps T3 to T12), with the
+interactive spike running at Medium since 10:19 and its icon pinned by `IsPromoted`. Only the laptop screen was active
+at 12:53 (1920x1200 at 125%). Evidence: `spikes/tray/out/log-interactive.txt`, the card's Log, and the agent's
+scripts and shots in the scratchpad named there.
+
+- **Explorer restart.** `TaskbarCreated` reached the hidden top-level window; the message-only window logged nothing.
+  `NIM_ADD` right after it returned TRUE, and `tray-icon-add2-dark-taskbar.png` shows the icon on the taskbar, not the
+  chevron: a pinned icon stays pinned across an Explorer restart.
+- **Live theme switch through Settings.** Settings > Personalization > Colors > "Choose your mode", Light then Dark,
+  driven by UI Automation. Each switch sent two `WM_SETTINGCHANGE` "ImmersiveColorSet" about 0.1 s apart. In the first
+  one the values were not all updated yet (`SystemUsesLightTheme` still 0 in the Light switch; `ShouldAppsUseDarkMode`
+  still old in both, but the spike reads it without calling `RefreshImmersiveColorPolicyState` first); in the second
+  they agreed. So act once the broadcasts settle (the spike waits 2.5 s). The icon switched to the glyph for the new
+  taskbar colour (`tray-icon-switch3-light-taskbar.png`, `...switch4-dark...`). With `SetPreferredAppMode(AllowDark)`,
+  `RefreshImmersiveColorPolicyState` and `FlushMenuThemes` once at start (and after each earlier settle, after its no-flush
+  capture) and a new menu built for each open, the next
+  menu already had the new theme without another `FlushMenuThemes` (`tray-menu-switch3-light-noflush.png` light,
+  `tray-menu-switch4-dark-noflush.png` dark; submenus too). Every other theme value (Themes, Personalize, DWM, Accent,
+  `Custom.theme` hash) was the same after Light and back to Dark.
+- **"ImmersiveColorSet" also comes without a theme change.** Two arrived at about 11:37 and 12:04 with both values
+  still 0, during or right after Haik's battery steps; the `switch1` and `switch2` pictures are from those. Cause not
+  checked. A tray app must compare the values, not trust the broadcast.
+- **Tooltip.** Hovering the icon shows a native dark tooltip with both `szTip` lines (`tray-tooltip-dark.png`). It
+  showed the new text 3 s after a `NIM_MODIFY`. It also stayed on top of the open menu while the cursor rested on the
+  icon.
+- **Synthetic right-click.** A right-click sent with `mouse_event` inside the icon rect gave the same `WM_CONTEXTMENU`
+  as a real one, and `SetForegroundWindow` before the menu returned TRUE.
+- **Balloon on Windows 11** (`tray-balloon-dark.png`): shown as a toast banner. Header "Wakeshot tray spike" with the
+  tray icon (the exe's version info has that string as both `FileDescription` and `ProductName`, so which one Windows
+  reads is not known), a large blue "i" for `NIIF_INFO`, then title and text. `NIN_BALLOONTIMEOUT` 6.6 s later.
+- **Registered toast** (`tray-toast-registered-dark.png`): banner with the registered `DisplayName` and the `IconUri`
+  picture, `Dismissed` reason TimedOut after 6.5 s. The picture showed orange, while the spike draws RGB 2b7cd3
+  (blue). The PNG on disk is blue (43, 124, 211) and the spike writes straight RGBA, so Windows or a cached copy
+  swapped R and B; which one was not checked. Phase 5 checks its real toast icon on screen: show a registered toast
+  with an asymmetric test icon (pure red), compare on screen, and try a fresh `IconUri` path to rule out a cache.
+  **Unregistered toast:** no banner at 2 s or 4 s, no `Dismissed` event (`tray-toast-unregistered-none.png` keeps only the
+  taskbar and the spike tooltip; the area above it, where a banner would show, held other apps' content and is greyed).
+- **`ToastNotifier.Setting`** returned `Enabled` (0) for both app ids in this Medium process; in the 01:33 `--auto`
+  run, which was probably elevated, it threw `0x80070490`. The cause of the difference was not checked.
+- **Notification centre** (Win+N): a "Wakeshot tray spike" group with the registered toast and "+1 notifications";
+  no separate entry for the balloon or the unregistered toast. The notification database holds two toasts for the
+  registered id (01:33:39 and 12:58:07), so the "+1" is most likely the 01:33 toast, which survived that run's key
+  deletion.
+- **Windows writes `Notifications\Settings\<aumid>` only for the registered app id**; quit removed it and the
+  `AppUserModelId` key (`unregister` log: 0 for the registered id, 2 = not found for the unregistered one). Not
+  removed by quit: the balloon's `Notifications\Settings\NotifyIconGeneratedAumid_<NotifyIconSettings id>` key and the
+  stored toasts in the notification database (they expire after 3 days). So an uninstall must clear the toast
+  history, not only delete the keys.
+- **`LoadIconMetric` follows the system DPI, which is fixed at sign-in.** With the DELL (144 dpi) primary at sign-in
+  and only the 120 dpi laptop screen left later, the spike still got 24 px icons while the taskbar slot was 40x60
+  physical pixels; Windows scaled the icon. How sharp it looks was not judged. The hidden window got `WM_DISPLAYCHANGE`
+  nine times and never `WM_DPICHANGED`.
+- **The spike's log clock drifted 16 s.** The spike stamps each line with milliseconds since start (`Instant`). By
+  11:37 that clock ran 16 s ahead of the wall clock (picture file times and the notification database agree); at 10:27
+  it was still in step. So "start plus ms" times after 10:27 read up to about 16 s later than the real time (13:02:04
+  for the Light switch, really 13:01:48). Cause not checked (likely the sleep
+  during Haik's battery steps, or a clock sync). A log must read wall time for every line (tray review,
+  `reviews/p0-tray.md` finding 13).
+
+## Power settings spike
+
+Checked on 2026-11-03 (night) on the Windows laptop with `spikes/power-settings/` (card
+`docs/tasks/p0-spike-power-settings.md`). The laptop was on AC the whole time. The Claude Code session runs elevated
+(High integrity), so every write test ran through the spike's `limited` mode: a child of Explorer with an unelevated
+Medium integrity token, which the spike logs at start. Raw logs: `spikes/power-settings/out/`. Results marked
+"morning" wait for Haik's steps in the card.
+
+- **Writes as a normal user.** With the Medium token, `PowerWriteACValueIndex` and `PowerWriteDCValueIndex` on the
+  active built-in Balanced plan return 0 for the lid action and sleep after, AC and DC; `PowerSetActiveScheme`
+  returns 0. `powercfg` in the same run showed the new values, and the restore put the old ones back
+  (`write-test-limited-20261103-021636.log`).
+- **`PowerSettingAccessCheckEx`.** Returns 0 (`ERROR_SUCCESS`) for read and write of the lid action, sleep after,
+  energy saver threshold and display off, AC and DC. Also 0 for `ACCESS_ACTIVE_SCHEME`, `ACCESS_CREATE_SCHEME` and
+  `ACCESS_ACTIVE_OVERLAY_SCHEME` with a null GUID. For a write of CONSOLELOCK (require sign-in) it returns 5
+  (`ERROR_ACCESS_DENIED`) with the Medium token and 0 elevated. So it reports a plain access denial, not only a
+  policy. `ACCESS_SCHEME` with a null GUID returns 87. No group policy here, so 1260
+  (`ERROR_ACCESS_DISABLED_BY_POLICY`) was not seen. Checked with `read` and `limited read`.
+- **Stored at once, applied only on `PowerSetActiveScheme`.** Right after a write call the registry and a read show
+  the new value, but the setting notification (the live value) changes only after `PowerSetActiveScheme`,
+  `powercfg /setactive`, or `powercfg /change` (which applies by itself). `powercfg /setacvalueindex` alone stores
+  without applying.
+- **Detection latency.** From the start of the call (or of the `powercfg` start, about 25 ms of which is process
+  start). `PowerSetActiveScheme` itself takes 37 to 76 ms. From `write-test` and `copy-test`:
+
+  | Change | Setting notification | Registry notification | Poll every 250 ms |
+  |---|---|---|---|
+  | API write, no SetActive | none | 0 to 1 ms | 5 to 15 ms |
+  | `PowerSetActiveScheme` after that write | 10 to 13 ms | none | none |
+  | `powercfg /setacvalueindex`, no `/setactive` | none | 28 ms | 267 ms |
+  | then `powercfg /setactive` | 29 ms | none | none |
+  | `powercfg /change standby-timeout-ac` | 34 ms | 62 ms | 208 ms |
+  | DC value changed while on AC | none | 27 ms | 159 ms |
+  | Plan switch | 4 ms (active plan GUID) | 57 to 78 ms | 57 to 78 ms |
+
+- **What each detector sees.**
+  - Registry: `RegNotifyChangeKeyValue` on `HKLM\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes`, subtree,
+    opened with `KEY_NOTIFY | KEY_READ` by the Medium token. Fires for every stored change on any plan, AC and DC, a
+    plan switch (`ActivePowerScheme`), and a plan create, rename or delete. It says only "something changed", so the
+    code must read again. The key path is not a documented API.
+  - Setting notification: `PowerSettingRegisterNotification` with `DEVICE_NOTIFY_CALLBACK`. Fires once at
+    registration with the current value (as the docs say), then only when the live value of the active plan changes
+    for the current power source. A DC change on AC, or a write without SetActive, gives nothing.
+  - Poll: sees everything at the poll interval. A read of five values takes under 1 ms.
+- **The lid value in the notification is not the index.** The setting notification for the lid action gave 2 while
+  the stored index was 1 (Sleep), and 0 for Do nothing. 2 matches `PowerActionSleep` in the `POWER_ACTION` enum
+  (winnt.h); that link is an inference, Hibernate and Shut down were not tried. Read the index with
+  `PowerRead*ValueIndex`, not from the payload.
+- **Our writes and the user's look the same.** No detector says who wrote. Our API writes and `powercfg` writes give
+  the same events. The only way to tell is to compare the new value with the one we wrote.
+- **Plan copy.** With the Medium token `PowerDuplicateScheme` (2 ms), `PowerWriteFriendlyName`,
+  `PowerSetActiveScheme` to the copy and back, and `PowerDeleteScheme` all return 0. The copy has every value of the
+  source (lid, sleep, energy saver threshold, CONSOLELOCK, display off). Deleting the copy while it is active returns
+  50 (`ERROR_NOT_SUPPORTED`) and keeps it. After switching back and deleting: gone from `PowerEnumerate`, its registry
+  key is gone, `powercfg /list` shows only Balanced (`copy-test-limited-20261103-021755.log`).
+  - Power mode: the overlay stayed `ded574b5-...` (registry `ActiveOverlayAcPowerScheme`,
+    `PowerGetActualOverlayScheme`, `PowerGetEffectiveOverlayScheme`) and the effective power mode stayed
+    MaxPerformance before, during and after; no effective power mode event fired at either switch. The two overlay
+    getters are undocumented powrprof exports.
+  - Settings shows and enables Power mode while a copy is active, and Lenovo Vantage's Power page does not change
+    ("What Windows Settings writes" below). Not done: whether the copy stays active after a restart (B5, dropped
+    2026-11-03: in place stays, so nothing depends on it).
+- **Reads without admin** (Medium token).
+  - Energy saver threshold: subgroup `de830923-a562-41af-a086-e3a2c6bad2da`, setting
+    `e69653ca-cf7f-4f05-aa73-cb833fa90ad4`, a per-plan percent. Balanced here: AC 0, DC 30. Its setting notification
+    gives the value for the current power source (0 on AC). Settings stores Never as 0 and "On Battery" as 100 (below).
+  - Require sign-in: CONSOLELOCK (subgroup `fea3413e-7e05-4911-9a71-700331f1c294`, setting
+    `0e796bdb-100d-47d6-a2d5-f7d2daa51f51`) AC 1, DC 1. `HKCU\Control Panel\Desktop\DelayLockInterval` = 0. Which of
+    them the Settings sign-in choice changes: not tested, Windows Hello greys the choice out here (below).
+  - Idle: `GetLastInputInfo` works. The overnight `ES_SYSTEM_REQUIRED` hold does not reset it: idle grew from 1182 s
+    to 1430 s between runs.
+  - Active plan change: the setting notification for `GUID_ACTIVE_POWERSCHEME` fires 4 ms after the
+    `PowerSetActiveScheme` call starts, with the new plan GUID.
+  - Effective power mode (`PowerRegisterForEffectivePowerModeNotifications`, version 2): MaxPerformance on AC here.
+- **Screen off starts Modern Standby here.** Kernel-Power 506 "entering Modern Standby, Reason: Idle Timeout" came
+  at 02:01:26, about 5 minutes after the last input, which is the AC display timeout (300 s); sleep after is 3 h and
+  an `ES_SYSTEM_REQUIRED` hold was active. Shells kept running after it. Checked with `Get-WinEvent` and
+  `GetLastInputInfo`; the link to the display timeout is an inference from the timing.
+- **Battery rule: it holds on this laptop.** Microsoft's text is in "Windows power facts" above. Tested in Haik's
+  block C, 2026-11-03 11:21 to 11:37 (`hold-20261103-112124.log`): on battery (98%), Medium token, a plan copy with
+  battery sleep after 60 s, SYSTEM and EXECUTION requests set at 11:21:24.7, no input after (idle 0 at start). The 5 s
+  ticks ran with no gap. The screen dimmed at 165 s and turned off at 180 s (Kernel-Power 506 "Idle Timeout"), and the
+  ticks went on. At 379.6 s after the last input (`PBT_APMSUSPEND`, 11:27:44.1) the system slept while the requests
+  were still set. The next tick came at 11:37:10 after the power button (507): wall step 571 s, unbiased step 4.9 s.
+  The rule predicts 60 s + 5 minutes = 360 s; seen about 20 s later. The orchestrator's `powercfg /requests` log (every
+  30 s) shows only the spike's two requests from 11:21:29 to 11:27:30, no other app's request during C, and no sample
+  from 11:27:30 to 11:37:26 (the logger slept too). The log's "GAP at t 945 s" line names the gap by its end; it
+  started at 379.6 s. A 600 s timeout was tried later in the lid spike's block I, with the same result ("Lid and sleep
+  spike", morning results, "Battery rule").
+- **Battery sleep Never stops the battery rule** (Haik's check M1 from the delta review, 2026-11-03 13:13 to 13:29,
+  `hold-20261103-131303.log`, read by the `p0-close-results` worker). On battery (94% to 93%), Medium token through
+  Explorer, lid open, a plan copy with battery sleep after 0 (Never), SYSTEM and EXECUTION requests set at 13:13:04.1,
+  idle 29 s at the start and no input after. The display turned off at 13:16:04 (Kernel-Power 506 "Idle Timeout")
+  and the 5 s ticks went on (largest step 5105 ms, wall and unbiased alike) until the end at 13:29:05, idle 990 s:
+  past the 916 s where block I (Haik's 600 s timeout) suspended. `gaps: none`. Restored: Balanced active, copy
+  deleted, sleep after AC 10800 and DC 600, lid 1/1. Only Never was tried; a raised finite value was not. The log's
+  start lines read the 0 as a 0 s timeout ("requests end about 300 s after the last input"); 0 means Never.
+- **What Windows Settings writes** (2026-11-03 12:29 to 12:33, an agent step with UI Automation on Settings, Windows
+  build 26300, on AC, plan copy `42ffeeaa-...` of Balanced active, `watch-20261103-122958.log`). Each test value was
+  set, read 5 s later with `powercfg /qh <guid>` on the copy and on Balanced, then put back and read again:
+  - Sleep after, on battery (15 minutes): DC 900 on the copy and on Balanced. Lid on battery (Do Nothing): DC 0 on the
+    copy and on Balanced. So for these two Settings writes the active plan and also the inactive Balanced. Why, and
+    whether it writes other plans too: not checked. The watch saw two registry events for each such change.
+  - Energy saver threshold: only the active plan (the copy). Never is stored as DC 0, "On Battery" (the list's last
+    item) as DC 100. AC stays 0. The list has Never, 10% to 50% and On Battery. "Always use energy saver" is a
+    separate toggle; not touched.
+  - Power mode, "Plugged in" to Balanced: `ActiveOverlayAcPowerScheme` becomes
+    `00000000-0000-0000-0000-000000000000` and the effective power mode event says Balanced (2); back to Best
+    Performance: `ded574b5-...` and MaxPerformance (4). The page has separate "Plugged in" and "On battery" choices;
+    "On battery" shows Balanced while `ActiveOverlayDcPowerScheme` is absent. "On battery" was not touched.
+  - Power mode is shown and enabled while a copy of Balanced is active (both choices).
+  - Sign-in options, "If you've been away": shows "Every Time", greyed out, with "Windows Hello is preventing some
+    options from being shown" (UI Automation: `SystemSettings_Users_DelayLock_ComboBox`, IsEnabled False). So on this
+    laptop it cannot be changed in Settings, and which value it maps to was not tested. CONSOLELOCK 1/1 and
+    `DelayLockInterval` 0 at every read.
+  - With "Every Time", the session locks when the screen turns off on AC: LogonUI started at 12:33:48, the same second
+    as Kernel-Power 506 "Idle Timeout".
+  - Lenovo Vantage (10.2608.62.0) with a copy active (12:43 to 12:45, a second copy `fa098892-...`): Device settings
+    > Power read the same with and without the copy (whole UI Automation tree compared as text, no line differs):
+    Smart standby Off (Auto, greyed), Battery charge threshold Off (75% to 80%, default), Always on USB On, "even when
+    device is shut off" Off, no warning. This build has no thermal or performance page (Device settings has Power,
+    Display, Sound, Input, Device details). Its pages are web content: UI Automation `FindAll` did not reach the
+    items, a `TreeWalker` walk did. A feedback survey covered the page once; its Close button dismissed it.
+  - Not done: a restart with a copy active (B5, dropped 2026-11-03: in place stays).
+- **Lenovo software here.** Lenovo Vantage `E046963F.LenovoCompanion` 10.2608.62.0. Running services: Lenovo Smart
+  Standby, Lenovo Intelligent Thermal Solution, Lenovo PM Service, Critical Service for Lenovo Vantage. Checked with
+  `Get-AppxPackage` and `Get-Service`. What Smart Standby does to standby: not checked.
+- **`wevtutil /f:text`** prints local time with a `Z` suffix on this machine (the same events show local time in
+  `Get-WinEvent`).
+
+## Lid and sleep spike
+
+Checked on 2026-11-03 (night) on the Windows laptop with `spikes/lid-sleep/` (card
+`docs/tasks/p0-spike-lid-sleep.md`). On AC, lid open, docked to a DELL U2723QE. The orchestrator held
+`ES_SYSTEM_REQUIRED` all night, so nothing that needs a real sleep, an idle sleep or a lid close ran; those are
+Haik's morning steps in the card. Tests ran with an unelevated Medium token (the spike's `limited` mode, or a process
+started by Explorer) unless marked. Raw logs: `spikes/lid-sleep/out/`. Haik's morning runs (10:30 to 12:19) are in
+"Morning results" at the end of this section.
+
+- **Capabilities.** `GetPwrCapabilities` (Medium token): LidPresent, AoAc and AoAcConnectivitySupported true; S3
+  false; S4 and HiberFilePresent true; Hiberboot (fast startup) true; WakeAlarmPresent false; RtcWake S4;
+  ThermalControl true. `IsPwrHibernateAllowed` true, `IsPwrSuspendAllowed` false. Registry
+  `HKLM\SYSTEM\CurrentControlSet\Control\Power`: `HibernateEnabled` absent, `HibernateEnabledDefault` 1.
+  `powercfg /a` runs without admin: S0 Low Power Idle Network Connected, Hibernate, Fast Startup.
+- **Hibernate works here, and Windows uses it by itself.** System log: Kernel-Power 187 at 2026-11-01 23:46:42 (caller
+  `winlogon.exe`, SystemAction 3 = hibernate), then 42 "Sleep Reason: Application API", 107, and Kernel-Boot boot type
+  0x1 at 23:47:58: a hibernate and resume. (The morning's own hibernates logged boot type 0x2. 0x1 is often read as
+  fast startup, so this one may have been a shutdown with fast startup; the meaning of the values is not verified.)
+  On 2026-11-02 08:48 Kernel-Power 42 "Hibernate from Sleep - Standby
+  Battery Budget Exceeded": Windows hibernated a sleeping laptop on its own. 506/507 "Austerity Battery Drain Budget
+  Exceeded" also appear (2026-11-02 02:29 and 13:59). Microsoft's Modern Standby wake sources page (read
+  2026-11-03): "Starting in Windows 11, version 24H2, ... If excessive battery drain is detected, most wake sources
+  will be disabled. In this state, the device can be woken from Modern Standby by pressing the power button or
+  opening the lid."
+- **"Hibernate after"** (`9d7815a6-...`) on Balanced: AC 0, DC 2147483647. What the DC value means: not verified.
+- **Entering Modern Standby.** Lid close with action Sleep: 506 "Reason: Lid" (2026-11-02 22:57). Idle: 506 "Idle
+  Timeout" at 02:01:26. At 02:44 the session was locked (`WTSQuerySessionInformation` SessionFlags) with the display
+  off and 47 minutes idle; CONSOLELOCK is 1/1 and `DelayLockInterval` 0. The morning runs logged it: Windows locks
+  within 1 s of the display-off standby entry (morning results).
+- **SetSuspendState.** Doc text (re-read 2026-11-03): "The calling process must have the SE_SHUTDOWN_NAME
+  privilege"; `bForce` "has no effect". The page says nothing about Modern Standby. Not called tonight. A process
+  started by Explorer (Medium token) enables SeShutdownPrivilege (`AdjustTokenPrivileges` ok, last error 0;
+  `out/read-explorer.log`). Under `limited` (parent process spoofing) `OpenProcessToken(TOKEN_ADJUST_PRIVILEGES)`
+  fails with 5, so `limited` cannot test `SetSuspendState`; that failure is an artifact of the launch. Both
+  `SetSuspendState(FALSE)` and `(TRUE)` hibernate this laptop (morning results).
+- **Hibernate off.** Not tested: the card forbids turning hibernate off. The rivals check `SystemS4` and
+  `HiberFilePresent` first (`rivals-nightcrew-lidguard.md`); `IsPwrHibernateAllowed` is the documented single call.
+- **Lid notification.** `PowerSettingRegisterNotification(GUID_LIDSWITCH_STATE_CHANGE, DEVICE_NOTIFY_CALLBACK)` works
+  with the Medium token, no window. The first callback came within 1 ms of the call with the current state (1, open).
+  The same holds for `GUID_CONSOLE_DISPLAY_STATE`, `GUID_SESSION_DISPLAY_STATUS`, power source, battery percent and
+  active plan. Doc (Power Setting GUIDs page, read 2026-11-03): lid 0 closed, 1 opened; "The callback won't be called
+  until a lid device is found and its current state is known". It also says interactive user-mode apps should use
+  `GUID_SESSION_DISPLAY_STATUS`. Timing at a real close, the sound and the lock: morning results.
+- **Sound at lid close: Microsoft's rule.** Wake sources page, Audio table: playback during screen off is enabled for
+  "Idle to Standby" and not for "Explicit entry to Standby (Power button press, closing the lid or through Start
+  menu)". A close with action Do nothing is no standby entry at all: no 506 at the close in D, E or I (morning
+  results).
+- **Input with the lid closed.** Same page: from Windows 11 24H2, input suppression keeps the display off when the lid
+  is closed, unless an external display is connected.
+- **Counting screens without admin.** `QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS)` with the Medium token returned two
+  active paths: `INTERNAL` (0x80000000) "N160JCA-GT1" and `DISPLAYPORT_EXTERNAL` (10) "DELL U2723QE";
+  `SM_CMONITORS` 2. WMI `root\wmi WmiMonitorConnectionParams` also works unelevated and agrees
+  (`VideoOutputTechnology` 2147483648 and 10), but through PowerShell it takes about 1 s; the API takes under 1 ms.
+  Kinds used by the spike: internal = INTERNAL, LVDS (6), DISPLAYPORT_EMBEDDED (11), UDI_EMBEDDED (13); Miracast and
+  indirect (15 to 17) are not a docked screen. What the count shows with the lid closed: morning results.
+- **Temperature without admin.** PDH counters `\Thermal Zone Information(*)\Temperature`, `High Precision
+  Temperature`, `% Passive Limit` and `Throttle Reasons` read with the Medium token. One zone, `\_TZ.THM0`. Temperature
+  is whole Kelvin; the high precision value is tenths of Kelvin but always ends in 2 (3382 = 338.2 K), so 1 K steps
+  in practice. WMI `Win32_PerfFormattedData_Counters_ThermalZoneInformation` gives the same data.
+  `MSAcpi_ThermalZoneTemperature` (root\wmi) returns Access denied to a normal user.
+  - It is meaningful: it follows CPU load within seconds. Idle 41 to 47 C. With 8 busy threads: 47 C after 2 s, 54 C
+    after 4 s, 67 C after 60 s; 51 C 8 s after the load stopped (`out/heat-limited-20261103-024517.log`).
+  - Limits: Kernel-Power 125 says `_CRT` = `_HOT` = 386 K (112.85 C) and `_PSV` = 0 K (no passive trip point).
+    Throttle reasons stayed 0 and the passive limit 100% at 67 C. Closed on a desk in the morning runs: 35 to 60 C.
+    No bag test.
+- **Wake timers.** "Allow wake timers" (RTCWAKE `bd3b718a-...`) on Haik's Balanced plan: AC 0, DC 0 (Disable).
+  Values: 0 Disable, 1 Enable, 2 Important Wake Timers Only (`powercfg /qh`).
+  - `SetWaitableTimer(..., fResume TRUE)` with the Medium token succeeds with last error 0, not `ERROR_NOT_SUPPORTED`
+    (the doc says that error means "the system does not support a restore"), even with RTCWAKE Disable. So the call
+    does not tell whether the timer can wake the PC. `SetWaitableTimerEx` with a reason context behaves the same.
+  - `powercfg /waketimers` needs admin. From the elevated session it listed the spike's timer ("Timer set by
+    [PROCESS] ...lid-sleep-spike.exe", with our reason text when set through `SetWaitableTimerEx`), and a Lenovo task
+    `LvfGuiRemoval` that asks to wake the PC at 17:17.
+  - Doc text (SetWaitableTimer, read 2026-11-03): "Windows 8 and newer ... If relative time is specified, the timer
+    does not include time spent in low-power states. For example, the timer does not continue counting down while
+    the computer is asleep." So a wake timer must use an absolute UTC due time. The spike does.
+  - The wake sources page says the always-on timer "wakes SoC but cannot turn on display". No Microsoft page found
+    on how a desktop app's wake timer behaves in Modern Standby (search 2026-11-03). Whether it wakes this laptop, on
+    AC and on battery, and whether RTCWAKE matters: could not test. The morning trim dropped G and I3 because no
+    design item uses wake timers.
+- **`CallNtPowerInformation` without admin.**
+  - `SystemExecutionState` returned 0x1 (`ES_SYSTEM_REQUIRED`) while only the orchestrator held a request. So a normal
+    user may see "someone holds a system request" without `powercfg /requests`. Morning: it reads 0x0 with no
+    request, and 0x1 for up to 30 s after some resumes because of Windows' own request (morning results).
+  - `LastSleepTime` and `LastWakeTime` are 0 since boot (2026-11-02 17:17), although the System log shows Modern
+    Standby sessions since then. They do not record Modern Standby.
+  - Interrupt time and unbiased interrupt time were equal (34028 s) after 9.5 hours with several Modern Standby
+    sessions. So `QueryUnbiasedInterruptTime` did not skip those sessions. The morning gaps explain it: unbiased time
+    skips the time the PC is suspended, not the screen-off part of Modern Standby where apps still run. The night
+    hold kept the PC from suspending (morning results).
+  - `SystemPowerInformation.TimeRemaining` (idle countdown) read 0 while the request was held.
+- **Plan copy with lid Do nothing.** Made, applied and removed with the Medium token. A run killed by PID left the copy
+  active with LIDACTION 0/0 until `restore` put Balanced back and deleted it. Ctrl+C runs the restore within 100 ms
+  (console handler). Closing a classic console window runs it too (safety review, 03:18, and "Spike launch and stop
+  checks" below); closing a Windows Terminal tab was not tested.
+- **Lenovo Smart Standby** service is running (Auto); its description says only "Provides the functionalities of
+  Lenovo Smart Standby". What it changes: not checked.
+
+**Morning results** (2026-11-03, 10:30 to 12:19). Haik ran blocks D, F, H, E and I of
+`docs/phases/00-morning-steps.md`; C belongs to the power settings spike. Medium token; every run restored the plan
+(`after` equals `before` in each log). A read-only `powercfg /requests` log every 30 s showed no other app's DISPLAY,
+SYSTEM or EXECUTION request in any block. System log entries read with `Get-WinEvent`. Logs: D
+`out/lid-20261103-103006.log`, F `out/suspend-20261103-103649.log` and `-103853.log`, H
+`out/resume-20261103-104117.log`, `-105721.log` and `-120914.log`, E `out/lid-20261103-111112.log`, I
+`out/lid-20261103-114033.log`. Some spike `RESULT` lines misread their own data; each is noted at its result below,
+and the readings here come from the events (delta review `docs/reviews/p0-delta.md`, m1; each line re-read by the
+`p0-close-results` worker). If Phase 3 reuses a spike: judge a suspend by `PBT_APMSUSPEND`, the S-state by the System
+log, and name a gap by its start.
+
+- **Lid callback at a real close.** It arrives at once; the spike reacted 370 to 561 ms later only because it acts on
+  its next loop step. A close with action Do nothing logs no 506 and does not turn the display off. In E (no external
+  screen) the display state stayed on until the DC display timeout. In D (DELL in) the internal path dropped and the
+  DELL stayed on.
+- **Lock.** With `--no-lock` (E) the session stayed unlocked for 176 s with the lid closed. `LockWorkStation` right at
+  the close (I) returned Ok in 0.5 ms and the session read locked 1 s later; one `QueryDisplayConfig` call during the
+  lock returned 31. Windows itself locks within 1 s of every display-off standby entry (506 Idle Timeout), with or
+  without a held request, on AC (H) and on battery (E). Haik's CONSOLELOCK is 1/1 and `DelayLockInterval` 0; other
+  values not tested.
+- **Display off on the lock screen.** 31 s after `LockWorkStation` in I, and 32 s after a key press on the lock screen
+  in H4. Which setting gives this: not verified.
+- **Sound.** `PlaySound("SystemNotification", SND_ALIAS | SND_ASYNC | SND_NODEFAULT | SND_SYSTEM)` returned true in D,
+  E and I. With `SND_ASYNC`, true only means the sound started. Haik heard: D "sound from laptop", E "the laptop sound
+  again (not windows one)", I nothing. In D the default device was the DELL, which has no built-in speakers (Macworld
+  review and a Dell community staff post, web, 2026-11-03), so our sound could not come from the laptop. The DELL
+  cable came out 33 s after the close in D and 4.3 s before it in E, and the sound scheme plays `Windows Hardware
+  Remove.wav` on device removal. Most likely reading (inference): what Haik heard in D and E was that device sound,
+  and our sound was heard in no block. Our alias plays `Windows Background.wav`, not the toast sound `Windows Notify
+  System Generic.wav`, so the E sound may also have been ours. The System Sounds level, the closed lid and the lock
+  were checked later: see "Lid-close sound" (System Sounds 100%, not muted; at two later closes neither the lock nor
+  the closed lid stopped a sound, and Haik heard it).
+- **Hold with the lid closed.** The held request kept the closed laptop running: D 163 s through undock, power unplug
+  and replug (only Kernel-Power 105, no 506, no gap); E 60 s; I 912 s. Trap 12 of `research/rivals-others.md` (power
+  switch with the lid closed) did not break the hold here.
+- **Battery rule.** In I (battery, lid closed, request held, Haik's 600 s DC sleep) the PC suspended
+  (`PBT_APMSUSPEND`, gap 514 s) 916 s after the last input. The power spike's C run (copy with sleep.dc 60 s, lid open)
+  suspended about 380 s after the last input (`spikes/power-settings/out/hold-20261103-112124.log`, read only). Both
+  are the DC sleep timeout plus 316 to 320 s, as the "5 minutes after the sleep timeout" rule quoted under "Windows
+  power facts" says. In I `SystemExecutionState` read 0x1 up to the last tick before the suspend (11:55:54.8), so it
+  gives no warning that the rule is about to end the request. Battery sleep Never stopped the rule in a 16 minute
+  test, lid open ("Power settings spike", "Battery sleep Never stops the battery rule"). I's RESULT line "the lid was
+  open when work ended, so no end method ran" misreads the run: the work end (1200 s) was due inside the suspend
+  (11:55:56 to 12:04:28), and the tool saw the lid open first.
+- **Screen off is not suspend.** Display off at the display timeout logs 506 Idle Timeout, but desktop apps keep
+  running; the spike's 1 s tick then fires about every 1.5 s. Apps pause only at `PBT_APMSUSPEND`. With no request it
+  came at the sleep timeout: 67 to 70 s after the last input on a 60 s copy (H control phases, AC, lid open). In E
+  (lid closed, battery) the spike released its request and put Balanced back (lid action Sleep) at 11:12:52 with the
+  lid still closed (`lid-20261103-111112.log:143-149`). The PC did not sleep: putting the lid action back does not
+  sleep a laptop whose lid is already closed. It ran for 263 s after the 506, until the lid opened at 455 s idle,
+  below the 600 s sleep timeout; the spike's "no standby" RESULT means only "no gap". So after a release, a closed
+  laptop most likely stays awake until the user's sleep timeout (inferred from H; Haik's AC value is 3 h; not tested
+  with the lid closed).
+- **SetSuspendState.** `(FALSE)` (sleep) and `(TRUE)` (hibernate), Medium token, lid open, AC: both hibernated.
+  Kernel-Power 187 SystemAction 2 and 3, then 42 and 107 with TargetState and EffectiveState 5 (S4);
+  Power-Troubleshooter 1 HiberWriteDuration 7950 and 8156 ms (about 1.3 M pages), BiosInitDuration 8584 and 8566 ms,
+  HiberReadDuration 10196 and 9581 ms; Kernel-Boot 27 boot type 0x2;
+  Kernel-General 1 set the clock forward 59 and 64 s. The call returns true only after resume (74 and 78 s). After
+  resume: 506 "Sleep, Hibernate, or Shutdown", 507 Power Button 1 s later, session locked. The thermal zone read 73 to
+  87 C for about 30 s after each resume. F3 (screen off) did not run because F1 slept. Hibernate off: not tested, by
+  rule. Kernel-Power 40 "The driver \Driver\ACPI for device stopped the power transition" came about 0.1 s before the
+  42 in both runs (10:37:02.2 and 10:39:06.4, `Get-WinEvent`); both hibernates still completed. Meaning not checked.
+  The spike's RESULT lines say "the PC stopped (Slept)" for both: its gap kind cannot tell standby from hibernate.
+- **Start > Power > Sleep with a request held** (H run 2, H4): 506 "Screen Off Request" and `PBT_APMSUSPEND` 0.13 s
+  later. A held request does not block the user's own sleep.
+- **Resume.** H run 2: a request held through Start > Sleep was not honored after resume. At the next display off
+  (61 s after resume) the PC suspended within 17 ms, gap 319 s; `SystemExecutionState` read 0x0 in every hold tick
+  (0x1 before the sleep). H4, re-take (clear, then set again) right after resume: display off, then 3 minutes with no
+  suspend until the release; `SystemExecutionState` 0x1. The control phases slept both times, so both runs are valid.
+  One run each, both on AC. Only clear then set on the same handle was tested; taking a new request before dropping
+  the old one was not. In H run 2's hold phase the requests log still listed the spike's SYSTEM and EXECUTION requests
+  at 10:58:45 and 10:59:15 (`requests.log` in the orchestrator's scratchpad), while `SystemExecutionState` read 0x0
+  and the PC suspended at 10:59:25.9. So `powercfg /requests` lists a request that Windows no longer honors.
+  `SystemExecutionState` showed this loss, but gave no warning before the battery rule ("Battery rule" above). Design
+  effect (delta review, m2): re-take always and raise the battery timer; do not rely on detecting the loss. H run 1 had
+  no sleep (the manual sleep did not register); it shows that a request held from before any sleep kept the PC running
+  through three display-off standby entries. Its RESULT line "hold-phase gaps 0 (request honored)" is a tool misread:
+  no hold phase ran (all 744 ticks are `[before-sleep]`).
+- **Clock.** In every gap unbiased interrupt time skipped the suspended time: wall 40 to 514 s against unbiased 0.15
+  to 1.35 s for Modern Standby suspends (the power spike's C gap: 571 s against 4.9 s), 7.4 and 7.8 s for the
+  hibernates. While the screen was off and apps still
+  ran, unbiased time and wall time moved together. Idle time from `GetLastInputInfo` counts suspended time: at the
+  first tick after the I suspend it read 1430 s (514 s of it suspended), after C 945 s (571 s suspended). So never
+  compare it with unbiased time.
+- **SystemExecutionState.** 0x0 with no request (step 0 read at 10:22 after the keep-awake stopped,
+  `out/read-limited-20261103-102214.log`; F; D and E after the release). 0x1 for up to 30 s right after
+  some resumes with no request held; the requests log showed `[DRIVER] Legacy Kernel Caller` under SYSTEM at
+  12:15:09, right after such a resume.
+- **Screen count with the lid closed.** Docked (D): the internal path dropped at the close (int 0, ext 1). After the
+  cable came out with the lid closed, ext stayed 1 until the lid opened, so the count was stale. Not docked (E): int
+  stayed 1 with the lid closed. Lid open (E): unplugging dropped ext to 0 within 1 s.
+- **Heat** (whole runs): D 40 to 52 C, E 39 to 60 C, I 35 to 53 C. One tick right after a resume read 7.1 C, a bad
+  first read.
+
+## Lid-close sound
+
+Card `docs/tasks/p1-lid-sound.md`, 2026-11-03 from 14:37. Agent tests with the lid open, on battery, DELL not
+connected, Speakers (Realtek) the default for all roles at 67.3%. Code: `spikes/lid-sleep/src/sound.rs`, modes
+`audio-read` and `sound-test`, `lid --listen`. Logs in `spikes/lid-sleep/out/`.
+
+- **Loopback works as an agent check.** WASAPI loopback (`AUDCLNT_STREAMFLAGS_LOOPBACK`, shared mode, the endpoint's
+  mix format: float32, 2 ch, 48 kHz) on the Speakers saw every sound the tests played, with its length and peak, from
+  the elevated agent and from a Medium process (`out/sound-test-20261103-145607.log`,
+  `out/lid-limited-20261103-145749.log`). It shows what the audio engine sent to the endpoint, not what the speaker
+  made: a closed lid, a muted amplifier or a codec that wakes late are not seen by it. No packets arrive while nothing
+  plays (the "alive" lines stop counting), so silence and a stalled engine look the same to it.
+- **Peaks in loopback are higher than in the files.** `Windows Background.wav` peaks at -9.2 dBFS in the file
+  (`wavstat.py`, below) and at -1.2 dBFS in loopback; our chime peaks at -6 dBFS in the PCM and -0.4 dBFS in
+  loopback. Something in the endpoint path adds about 6 to 8 dB; the Realtek driver has Dolby settings
+  (`DolbySlidingBass` under its Class key), so a Dolby effect is the likely cause (not verified).
+- **System Sounds level.** The System Sounds session on the Speakers reads 100%, not muted
+  (`IAudioSessionControl2::IsSystemSoundsSession`, `ISimpleAudioVolume`; `out/audio-read-20261103-145551.log`). So
+  the mixer slider did not silence run I (assuming it was the same then; it was not read during I).
+- **`SND_SYSTEM` routing.** PlaySound doc (archived page dd743680, read 2026-11-03): with `SND_SYSTEM` "the sound is
+  assigned to the audio session for system notification sounds", under the System Sounds slider; it names no device.
+  Loopback: the alias sound reached the default device (Speakers), 1210 ms long. With the DELL as default (run D) it
+  goes to the DELL, which has no speakers. That explains D, not I.
+- **Start delay.** `PlaySound(SND_ASYNC)` returned in 5 to 8 ms, but the sound reached the endpoint 390 to 760 ms
+  later. Our chime: from the call to a running stream took 290 to 570 ms in three runs, almost all of it in
+  `IAudioClient::Initialize` (device pick 5 ms, stream ready at 482 ms in the timed run). Loading the audio stack
+  first (warm-up: enumerate, activate, mix format, 6 ms) did not help in that run (one run). So any sound starts
+  about 0.3 to 0.8 s after the call on this laptop. In run I the lock came 2 ms after `PlaySound` returned, so it came
+  well before the sound reached the endpoint. Whether that matters: lid-close results below.
+- **Sound file levels** (`wavstat.py` in the card worker's scratchpad, reads the PCM): `Windows Background.wav` (our
+  alias) 1.29 s, peak -9.2 dBFS, loudest 50 ms -17.1 dBFS; the toast sound `Windows Notify System Generic.wav`
+  -9.8 / -18.3; `Windows Hardware Remove.wav` -12.9 / -19.4. Our alias sound is not quieter than the device-remove
+  sound Haik most likely heard in D (with the lid closed, 33 s after the close). So the file is not the reason for I.
+- **Device form factors** (registry `MMDevices\Audio\Render\<id>\Properties`, `{1da5d803-...},0`, and
+  `PKEY_AudioEndpoint_FormFactor` through Core Audio): both DELL U2723QE endpoints 9 (`DigitalAudioDisplayDevice`),
+  Speakers 1 (`Speakers`), "Realtek HD Audio 2nd output" 3 (`Headphones`). So "default is a screen's audio" is
+  readable without names.
+- **No lid setting in the audio driver.** No value or key with "lid" in its name under the audio Class key
+  `{4d36e96c-...}` (Realtek 6.0.10007.1, AMD HD Audio, AMD USB and Bluetooth audio); the two matches were
+  `ValidateCodecWrites` and `DolbySlidingBass`. Lenovo Vantage settings were not looked at. Whether the closed lid
+  muffles the speakers: only an ear can tell (lid-close results below).
+- **Lid-close results** (Haik, 15:16 to 15:20, Medium token through `sound-close-1.cmd` and `sound-close-2.cmd`;
+  logs `out/lid-20261103-151653.log` and `out/lid-20261103-151907.log`; plan copy restored in both, 13 `after`
+  lines equal the `before` lines). Haik's words: "Both close 1 and close 2 tests work", in close 1 "first was windows
+  sound then your custom", in close 2 the reverse.
+  - Close 1, laptop alone on battery, exactly as run I: `PlaySound` at the close, `LockWorkStation` 0.2 ms after it
+    returned. The alias reached the Speakers 504 ms after the call, 1202 ms long, peak -1.2 dBFS (the same as with
+    the lid open), and Haik heard it. Our chime 3.05 s after the close (session locked, lid shut): stream running in
+    125 ms, all 750 ms taken by the engine, 503 ms in loopback, heard. So neither the lock nor the closed lid stops
+    or mutes a sound on this laptop, and run I's silence did not repeat. Its cause stays unknown; most likely it was
+    not noticed (inference).
+  - Close 2, DELL connected on AC; Windows had made the DELL (`{...ca5b6419...}`, form factor 9, 26.0%) the default
+    for all roles. The chime picked the Speakers (`SpeakersInsteadOfDisplay`), ran 427 ms after the call, then the
+    lock came; 498 ms in loopback on the Speakers, all taken by the engine, heard. The alias control 3.4 s after the
+    close went to the DELL: 944 ms in the DELL's loopback, nothing on the Speakers. The Windows sound Haik heard after
+    the chime was most likely the device-remove sound when he unplugged the DELL: power went DC at 15:19:37.9, the
+    DELL endpoint was invalidated at 15:19:39.7 (`0x88890004`), and the Speakers' loopback logged a 351 ms sound at
+    15:19:40.4, about 20 s after the lid opened (inference; the DELL has no speakers, see run D).
+  - The alias in the DELL's loopback peaked at -31.7 dBFS against -1.2 dBFS on the Speakers. -9.2 dBFS (file) at the
+    DELL's 26% volume is about -31 dB, so the DELL's loopback looks like it is after the volume and the Speakers' is
+    before it (inference, not verified).
+  - So: our chime on the picked device was in loopback and heard at both closes, with the lock on, once before the
+    lock and once after it.
+
+## Spike launch and stop checks
+
+Checked on 2026-11-03 between 03:30 and 03:57 (round 2: 04:20 to 04:30) for card
+`docs/tasks/p0-spike-safety-fixes.md`, on the Windows laptop, from an elevated agent session. Logs and scripts are in
+that card's Log.
+
+- **Windows Terminal opens elevated here.** Its `settings.json` has `profiles.defaults.elevate: true`; UAC is on
+  (`EnableLUA` 1) with `ConsentPromptBehaviorAdmin` 0 (no prompt). The running `WindowsTerminal.exe` had a High,
+  elevated token; the shell `explorer.exe` (the one that owns the desktop window) had Medium, not elevated (token read
+  with `OpenProcessToken` from the elevated session). `HKCU\Console\%%Startup` names Windows Terminal as the default
+  terminal. `SeparateProcess` is 0, so File Explorer windows run in the shell Explorer.
+- **A `.cmd` opened through Explorer runs at Medium.** `explorer.exe <file>.cmd` from the elevated session was served
+  by a new `explorer.exe /factory,{75dff2b7-6936-4c06-a8bb-676a7b00b24b} -Embedding` started by `svchost -k
+  DcomLaunch`; the chain was pwsh <- cmd <- that Explorer. `whoami /groups`: Medium Mandatory Level; Administrators
+  not enabled. Every exe started from that pwsh (both spikes and the tray spike) reported "elevated false, integrity
+  Medium (0x2000)", and the lid spike enabled SeShutdownPrivilege (last error 0). A real mouse double-click goes
+  through the shell Explorer instead of a factory instance; that path was not run by an agent (the morning shell
+  prints the token, so Haik sees it).
+- **That `.cmd` runs in a new Windows Terminal window, not a classic console** (checked 04:26 for round 2 of the same
+  card, `<scratchpad>\r2-test.cmd` opened with `explorer.exe`). From inside the shell, `GetConsoleWindow` gave a
+  window of class `PseudoConsoleWindow` whose owner window belonged to a new `WindowsTerminal.exe` (not Haik's
+  elevated one, PID 13456), while `WT_SESSION` was empty. So a missing `WT_SESSION` does not mean a classic console
+  here: Windows Terminal takes over the console after the shell has started (it is the default terminal), too late to
+  add the variable. The round 1 line "the console host hosted it" was wrong. The shell token was still Medium, not
+  elevated. `morning-shell.ps1` now logs the window class and owner instead.
+- **powercfg as a normal user.** At Medium: `/duplicatescheme`, `/changename`, `/setacvalueindex` and
+  `/setdcvalueindex` (LIDACTION, STANDBYIDLE, VIDEOIDLE, RTCWAKE, ESBATTTHRESHOLD) on a plan copy, `/setactive`,
+  `/list` and `/delete` of an inactive copy all exit 0, and the values read back. CONSOLELOCK writes fail with exit 1,
+  "You do not have the permissions required to perform this action."; elevated they work. Same as the spike's
+  `PowerSettingAccessCheckEx` result (5 for a CONSOLELOCK write).
+- **Ctrl+C and window close through pwsh.** A spike exe started by `pwsh -Command` in a new console host window gets
+  Ctrl+C (`GenerateConsoleCtrlEvent` to the console group) in its own handler (event 0); pwsh waits for it and then
+  exits. `WM_CLOSE` to the console window gives the exe event 2 (close); the power spike switched back and deleted its
+  copy 130 ms later, before Windows ended the process. (That test used an explicit `conhost.exe` window.)
+- **Closing the morning shell's Windows Terminal window** (04:28 and 04:29, round 2; `<scratchpad>\r2-wtclose-run.ps1`
+  and `r2-wtclose-lid-run.ps1`: the exe run through a `function spike { & exe @args }` wrapper in a window started like
+  `morning-shell.cmd`, then `WM_CLOSE` posted to that Terminal window). `spike hold --allow-ac`: event 2 arrived 0.33 s
+  after the close, the plan was back and the copy deleted 0.47 s after it, the journal was gone, and the exe, pwsh and
+  that Terminal process all ended. `lidspike lid` (closed while it waited for the lid): restored 0.1 s after event 2,
+  and every log line through `DONE` and `[end]` was written before the process ended, 1.1 s after the close. Ctrl+C
+  typed into a Windows Terminal window was not tested by an agent.
+- **After a close event, Windows ends the process as soon as the handler returns.** Microsoft's `HandlerRoutine` page
+  (read 2026-11-03 04:20): for `CTRL_CLOSE_EVENT`, returning TRUE means "the system terminates the process"; the
+  time-out is `SPI_GETHUNGAPPTIMEOUT`, 5000 ms. Seen above: `hold` ended right after its handler returned (it marks
+  itself clean right after the restore); `lid` waits in its handler until its log is done (up to 4.5 s), so its log
+  survived. Marking the lid tool clean right after the restore would cut its RESULT lines.
+- **Logoff and shutdown never reach the spikes' console handlers.** Both spike exes import `user32.dll` (`dumpbin
+  /imports`). The rule that a console app which loads user32 gets no `CTRL_LOGOFF_EVENT` or `CTRL_SHUTDOWN_EVENT` is
+  from Microsoft's docs as the safety review quotes it; not re-read. The `HandlerRoutine` page (read 2026-11-03) says
+  more broadly that interactive apps are ended at logoff and shutdown before those two signals are sent, so only
+  services receive them.
+- **PowerShell pipelines can stop a native exe early.** `lid-sleep-spike.exe read | Select-String ... |
+  Select-Object -First 1` in pwsh 7.6.9 left a log with 2 lines; the same run with the output collected first logged
+  everything. So step lists must not pipe a spike into `Select-Object -First`. Whether pwsh ended the process or its
+  output pipe broke: not checked.
+- **Thermal zone with the lid open on AC** read 55.1 C and 53.1 C at 03:47 and 03:51 during the dry runs (idle 41 to
+  47 C at 02:45). The spikes' new default heat limit of 85 C sits above both and the 67 C full-load reading, and below
+  `_CRT` 112.85 C.
+
+## Agent reach on this laptop
+
+Checked on 2026-11-03 at about 09:37 to 09:45 for card `docs/tasks/p0-morning-trim.md`, from the elevated agent
+session, reads only. Scripts `probe.ps1` and `volume-read.ps1` are in that worker's scratchpad
+(`C:\Users\haika\AppData\Local\Temp\claude\C--Users-haika-code-wakeshot\06511897-9625-4d7a-b494-37b2b0bd9eb2\scratchpad`).
+
+- **Screenshots work while the session is unlocked.** `Graphics.CopyFromScreen` in pwsh 7 saved the 3840x2160
+  primary screen to a PNG, and the agent read it back as an image (it showed the orchestrator chat). `LogonUI` was not
+  running, so the session was unlocked. Not checked: a capture while locked or with the screen off (expected useless),
+  and whether a capture shows toasts.
+- **UI Automation loads.** `Add-Type -AssemblyName UIAutomationClient` worked in pwsh 7.6.9, and the root element
+  found the taskbar (`Shell_TrayWnd`). Not tried: driving Settings, Lenovo Vantage or a tray menu with it.
+- **Volume reads through Core Audio.** `IAudioEndpointVolume` on the default playback device: 24%, not muted. A write
+  was not tried. The safety review of this card (`docs/reviews/p0-morning-trim-safety.md`, finding 6, read-only Core
+  Audio scripts) found that the default device then was the DELL U2723QE (DisplayPort audio, 24%), and the laptop
+  Speakers (Realtek) were at 67%, not muted. So volume steps must name the device by endpoint ID. The IDs (read
+  2026-11-03 10:21 with `IMMDeviceEnumerator::GetDevice` and the `MMDevices\Audio\Render` registry names): Speakers
+  `{0.0.0.00000000}.{fb152119-7d6e-4352-a9bf-882ae54afa03}` (67.3%), DELL
+  `{0.0.0.00000000}.{ca5b6419-0bd3-4065-b7b7-0b7fc5450811}` (24.0%, default for all three roles while connected).
+- **Power mode GUID.** Microsoft Learn, "Customize the Windows performance power slider" (read 2026-11-03): overlay
+  `ded574b5-45a0-4f42-8737-46345c09c238` is "Best Performance", `961cc777-2547-4f9d-8174-7d86181b8a7a` "Better
+  Battery", `3af9B8d9-7c97-431d-ad78-34a8bfea439f` "Better Performance". The same page says the slider appears only
+  when Balanced or a plan derived from Balanced is active. Haik's AC overlay is `ded574b5-...`, so his Power mode is
+  Best performance (the label in Settings was not looked at).
+- **State at 09:37.** Theme Dark (`AppsUseLightTheme` 0, `SystemUsesLightTheme` 0). On AC, battery 100%.
+  `powercfg /requests`: only SYSTEM, the orchestrator's keep-awake (`pwsh`, PID 11284, command line
+  `keep-awake.ps1`). The tray spike's `HKCU\Control Panel\NotifyIconSettings\17618738229921704208` (its release exe)
+  has no `IsPromoted` value. `HKCU\AppEvents\Schemes\Apps\.Default\SystemNotification\.Current` names
+  `C:\WINDOWS\media\Windows Background.wav`, so the spikes' alias sound is that file. Lenovo Vantage is installed
+  (`E046963F.LenovoCompanion` 10.2608.62.0, app id `E046963F.LenovoCompanion_k1h2ywk1493x8!App`).
+- **The tray spike takes no power request.** `spikes/tray/src` has no `PowerSetRequest`, `PowerCreateRequest` or
+  `SetThreadExecutionState` (grep), so it can sit idle in the tray during power tests. Its logs append, so a second
+  run does not erase the first.
+- **Opening the morning shell from an agent.** `morning-shell.log` lines at 03:41, 03:56, 04:26 and 04:34 come from
+  agents that ran `explorer.exe ...morning-shell.cmd`: Medium, not admin, in a new Windows Terminal window since 04:26.
+  So an agent can open it for Haik.
+- **Not tried, by rule or choice:** a theme switch (registry or Settings), synthetic mouse or keyboard input, an
+  Explorer restart (Haik's rule: agents end only processes they started), and any power setting change. (The theme
+  switch and synthetic input were tried later the same day: see "Tray menus, synthetic input and the theme switch".)
+- **UI Automation drives Settings** (2026-11-03 12:28 to 12:33, power card agent steps, from the elevated session,
+  scripts `ab-uia.ps1` and `ab-tour.ps1` in the scratchpad above). `ms-settings:powersleep` and
+  `ms-settings:signinoptions` open the pages; "Show more settings" buttons expand with ExpandCollapse; a combo box
+  changes with Expand, SelectionItem.Select on the named list item, Collapse. The AC and DC combo boxes share a name
+  ("Make my device sleep after"), so find them by AutomationId (`..._AC2_ComboBox`, `..._DC2_ComboBox`).
+- **Tray menus, synthetic input and the theme switch** (2026-11-03 12:53 to 13:04, tray card agent steps, from the
+  elevated session, scripts `tray-*.ps1` in the scratchpad above). pwsh 7's managed UI Automation shows a Win32 popup
+  menu (`#32768`) as an empty Pane, and registering `UIAutomationClientSideProviders` fails (type not found). MSAA
+  works: `AccessibleObjectFromWindow(menu, OBJID_CLIENT)` lists every item with name, role and state, and
+  `accDoDefaultAction` runs an item or opens a submenu. In PowerShell the `IAccessible` object must be returned with
+  `return , $o`, or the pipeline unrolls its children. `mouse_event` (absolute move, right button) inside the icon
+  rect and `keybd_event` (Esc, Win+N) reach the Medium taskbar and spike. Esc goes to the foreground window, so send
+  it only after checking that the foreground belongs to the target. Settings > Colors "Choose your mode" changes
+  with Expand, SelectionItem.Select, Collapse on AutomationId `SystemSettings_Personalize_Color_ColorMode_ComboBox`.
+  The notification centre (foreground `ShellExperienceHost`) gave no UIA element from this session.
+- **AC can drop for a few seconds while docked.** Kernel-Power 105 (power source change) at 12:27:54 and 12:28:00 on
+  2026-11-03, while the laptop sat on the DELL USB-C cable with no one touching it; a screen holder that checks
+  `PowerLineStatus` every 5 s saw it as battery and ended. The cause was not checked. One more came in the
+  night (setup then not checked): AC off at 01:50:47.1 and back at 01:50:52.4 (Kernel-Power 105 `AcOnline` false,
+  then true; `Get-WinEvent`, read 2026-11-03).
+
+## Phase 1 design checks
+
+Checked 2026-11-03 between 14:37 and 15:06 for card `docs/tasks/p1-detailed-design.md`. Reads only; nothing installed
+or changed.
+
+- **Crate versions.** crates.io API `https://crates.io/api/v1/crates/<name>/versions` (newest first) and `cargo info`:
+  `windows` 0.62.2 (2025-10-06, newest; MSRV 1.82), `windows-sys` 0.61.2, `serde` 1.0.229, `serde_json` 1.0.154,
+  `embed-resource` 3.0.12, `proptest` 1.12.0, `jiff` 0.2.39, `croner` 4.0.2. `velopack`: newest stable 1.2.161
+  (2026-09-29); 1.3.39-g8d2844f (2026-10-17) carries a semver pre-release tag.
+- **windows-rs 0.100.** `windows-core`, `windows-result` and `windows-strings` are at 0.100.0 (2026-09-03), but
+  `windows` and `windows-sys` are not (crates.io lists above). GitHub release 74 (2026-09-03) points to issue #4867,
+  the August 2026 newsletter (read with `gh api`): 0.100 moves the crates to new metadata parsed from the SDK headers,
+  MSRV 1.95; "We may initially publish the release without `windows` and `windows-sys`"; API shapes change (raw
+  `HRESULT` values, header-named modules). The same release ships `windows-reactor` and `windows-window` as first real
+  versions.
+- **GitHub Actions** (`gh api repos/<repo>/releases/latest`): `actions/checkout` v7.0.1, `actions/upload-artifact`
+  v7.0.2, `actions/cache` v6.1.0, `Swatinem/rust-cache` v2.9.3.
+- **ARM64 runner image.** `actions/partner-runner-images`, `images/arm-windows-11-image.md` (image version
+  20260105.41.1): Rust 1.92.0, Rustup 1.28.2, Rustfmt, Visual Studio Enterprise 2022. The live image may be newer, and
+  whether it has the MSVC ARM64 tools the workspace needs: not verified.
+- **Posted thread messages and modal loops.** Microsoft, `PostThreadMessageW` Remarks (page updated 2025-07-01): "if
+  the recipient thread is in a modal loop (as used by MessageBox or DialogBox), the messages will be lost"; limit of
+  10,000 posted messages per queue.
+- **RunOnce.** Microsoft, "Run and RunOnce Registry Keys" (updated 2026-02-21): "By default, the value of a `RunOnce`
+  key is deleted before the command line is run"; a `!` prefix defers the delete until after the command; command
+  line at most 260 characters; a program run from these keys "should not write to the key during its execution";
+  ignored in Safe Mode. HKLM RunOnce runs only for administrators; the HKCU key has no such note. Not tested here.
+- **`Global\` named objects.** Microsoft, "Kernel object namespaces" (updated 2025-04-15): the namespaces cover
+  events, semaphores, mutexes, waitable timers, file mappings, jobs and symbolic links. Only creating a file mapping or
+  a symbolic link in the global namespace from a non-zero session needs SeCreateGlobalPrivilege. So a normal user may
+  create a `Global\` mutex. Whether another user's process can open it (default security): not verified.
+- **Secret scan patterns, dry run** (2026-11-03 15:48, card `p1-design-review-fixes`). The patterns in
+  `phases/01-design-skeleton.md`, "Secret scan", parse as ERE: GNU `grep -rnIE -f` (Git Bash) over the working tree
+  without `target/`. Hits: only redacted values in `spikes/claude-watch/fixtures/live-tests.log`, a test value in
+  `spikes/claude-watch/src/watch.rs`, and the public Common Controls `publicKeyToken` in the tray spike manifest. No
+  key, certificate, `.env`, credentials or exe file in the tree. Not run through `git grep` (no repo yet); git's own
+  regex engine may differ.
+
+## Repo files
+
+Checked 2026-11-03 between 15:51 and 15:57 for card `docs/tasks/p1-repo-files.md`. Reads only.
+
+- **MIT text.** SPDX `https://spdx.org/licenses/MIT.html` and `spdx/license-list-data` `text/MIT.txt` (downloaded
+  with `Invoke-WebRequest`) give the same text once the page's optional words ("on", "(including the next
+  paragraph)") are left out. `LICENSE` is `MIT.txt` byte for byte, except the copyright line (script compare).
+- **Claude Code and git.** Claude Code docs, "Run parallel sessions with worktrees": worktrees go to
+  `.claude/worktrees/<name>/` at the repo root, and "Add `.claude/worktrees/` to your `.gitignore` so worktree contents
+  don't appear as untracked files". "Settings files and precedence": Claude Code adds
+  `**/.claude/settings.local.json` to the global git excludes the first time it writes the file; a file made by hand
+  needs its own `.gitignore` entry. On Windows the local file stays next to `.claude/settings.json`.
+- **When git sees a text file as binary.** git source, `master` on GitHub: `convert.c` `convert_is_binary` treats a
+  file with a lone CR, a NUL, or too many control bytes as binary, so `text=auto` stores it unchanged. Diff and
+  `git grep -I` use another test, `buffer_is_binary` in `xdiff-interface.c`: a NUL in the first 8000 bytes.
+- **Odd files in this repo** (a script with the same tests over every file, 15:56). Six spike logs are binary to
+  `text=auto` and are stored unchanged: three `power-settings/out/copy-test-*` logs with lone CRs (`powercfg` output)
+  and three `power-settings/out/hold-*` logs with NUL bytes (inside Windows event messages). One of them,
+  `hold-limited-20261103-021916.log`, has a NUL in its first 8000 bytes, so `git grep -I` skips it. Not run through
+  git (no repo yet).
+
+## Workspace build
+
+Checked 2026-11-03 between 16:02 and 16:12 for card `docs/tasks/p1-cargo-workspace.md`, on the Windows laptop.
+
+- **Pinned toolchain.** A `rust-toolchain.toml` with `channel = "1.99.1"` needs a toolchain named
+  `1.99.1-x86_64-pc-windows-msvc`; the existing `stable` (also 1.99.1) does not count. `rustup toolchain install 1.99.1
+  --profile minimal` with rustfmt, clippy and both targets took 17 s. Under the pin, the rustup proxy runs the pinned
+  toolchain's `rust-analyzer`, so the Claude Code LSP plugin needs `rustup component add rust-analyzer --toolchain
+  1.99.1` (done here). `rustup show active-toolchain` in `spikes\tray` names the root file as the override.
+- **Static CRT.** With `-C target-feature=+crt-static` in `.cargo/config.toml`, all four release exes (x64 and ARM64)
+  import only `KERNEL32.dll`, `ntdll.dll` and `api-ms-win-core-synch-l1-2-0.dll` (`dumpbin /dependents`). A control
+  build of `wakeshot.exe` with `RUSTFLAGS=-C debuginfo=0` imports `VCRUNTIME140.dll` and six `api-ms-win-crt-*` DLLs and
+  is 120,320 bytes against 217,600. So Rust links the CRT DLL by default and the flag removes it, for about 97 KB.
+- **RUSTFLAGS.** Cargo reference, "Configuration", `build.rustflags`: four sources, "mutually exclusive", first match
+  wins: `CARGO_ENCODED_RUSTFLAGS`, `RUSTFLAGS`, then `target.<triple>.rustflags`, then `build.rustflags`. The control
+  build above confirms it: any `RUSTFLAGS` drops the static CRT. With `--target`, config rustflags skip build scripts
+  and proc macros.
+- **Skeleton sizes.** Release, static CRT: x64 `wakeshot-tray.exe` 212,992 bytes, `wakeshot.exe` 217,600; ARM64
+  210,944 and 216,064. PE machine `0x8664` and `0xAA64` (script reads the PE header).
+- **`embed-resource` 3.0.12.** docs.rs page for `compile` and the crate source: since rustc 1.50 the resource links
+  only to the bins (`cargo:rustc-link-arg-bins`), or to the lib when there are none; `manifest_required()` turns "not
+  attempted" into an error. The SDK `rc.exe` was found for both targets with no setup. `mt.exe -inputresource:<exe>;#1`
+  reads the embedded manifest back.
+- **Manifest.** Microsoft, "Application manifests" (updated 2026-04-15): `assemblyIdentity` with `type`, `name` and
+  `version` is required and must be the first child; one supportedOS Id, `{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}`,
+  covers Windows 10 and Windows 11; "Application manifests without a compatibility element default to Windows Vista
+  compatibility on Windows 7".
+- **Clock calls.** `windows` 0.62.2 source: `GetSystemTimePreciseAsFileTime` is under feature
+  `Win32_System_SystemInformation` and returns `FILETIME` (`Win32_Foundation`); `QueryUnbiasedInterruptTime` is under
+  `Win32_System_WindowsProgramming`. Microsoft (updated 2025-07-01): it counts 100 ns units without sleep or
+  hibernation and fails only when called with a null pointer. The test reads wall time after 2026-01-01 and mono time
+  above 0.
+- **Spikes outside the workspace.** `cargo metadata --no-deps --manifest-path spikes\<name>\Cargo.toml` gives each
+  spike's own folder as workspace root, for all four. The tray spike builds in release from its folder with the root
+  toolchain and static CRT (676,864 bytes; Phase 0's 519,168-byte build had no static CRT and older code), and
+  `--locked` leaves its `Cargo.lock` unchanged.
+
+## Design verify checks
+
+Checked 2026-11-03 between 16:07 and 16:10 for card `docs/tasks/p1-design-verify-fixes.md`. Reads only; no power
+setting written.
+
+- **End of the plan list.** A read-only script (`PowerEnumerate` with `ACCESS_SCHEME`, index 0 up, through PowerShell
+  `Add-Type`) listed two plans (Balanced and the orchestrator's spike copy `d4adc592-...`), then returned 259
+  (`ERROR_NO_MORE_ITEMS`) at index 2. Microsoft's `PowerEnumerate` page (updated 2024-02-22) names no end code: only
+  `ERROR_SUCCESS`, `ERROR_MORE_DATA` and "a nonzero value if the call failed". The power spike's `schemes` loop
+  (`spikes/power-settings/src/power.rs`) breaks on 259 and on any other error alike, so a failed call there looks like
+  a shorter list.
+- **Console notices.** Microsoft, `WM_WTSSESSION_CHANGE` (updated 2025-10-22): `WTS_CONSOLE_CONNECT` "The session
+  identified by lParam was connected to the console terminal or RemoteFX session", `WTS_CONSOLE_DISCONNECT` the same
+  for disconnected; sent only to windows registered with `WTSRegisterSessionNotification`. That fast user switching
+  and Remote Desktop send them to the session that leaves: not verified (no test).
+- **Abandoned mutex.** Microsoft, `WaitForSingleObject` (updated 2024-11-20): `WAIT_ABANDONED` means the owner thread
+  ended without releasing the mutex; "Ownership of the mutex object is granted to the calling thread", and "If the
+  mutex was protecting persistent state information, you should check it for consistency".
+- **Panic hook.** Rust std docs, `std::panic::set_hook` (read 2026-11-03): "The panic hook is invoked when a thread
+  panics, but before the panic runtime is invoked. As such, the hook will run with both the aborting and unwinding
+  runtimes." So `std::process::abort()` in the hook ends the process before any unwinding. Whether proptest needs
+  unwinding to shrink: not verified.
+- **commit-msg pattern.**
+  `'^[[:space:]]*(co-authored-by|claude-session):|generated with|anthropic\.com|claude\.ai/code'` with `grep -qiE`
+  (GNU grep 3.0, Git Bash) on nine sample messages: rejects a co-author trailer, a `Claude-Session:` trailer with and
+  without leading spaces, a tab before `co-authored-by:`, a bare `https://claude.ai/code/session_...` line and
+  "Generated with Claude Code"; passes "Add Claude Code status file parser", "Read ~/.claude/sessions files"
+  and "Initial commit". Not run as a real git hook (no repo yet).
+
+## CI workflow
+
+Checked 2026-11-03 between 16:14 and 16:25 for card `docs/tasks/p1-ci.md`: `gh api`, docs.github.com, and local runs
+on the Windows laptop.
+
+- **Action versions.** `gh api repos/<repo>/releases/latest`: `actions/checkout` v7.0.1, `actions/upload-artifact`
+  v7.0.2, `actions/cache` v6.1.0 (same as "Phase 1 design checks"). The major tags `v7`, `v7` and `v6` point at those
+  release commits (`gh api repos/<repo>/git/ref/tags/<tag>`). All three run on `node24` (their `action.yml`).
+- **Runner labels.** docs.github.com, "GitHub-hosted runners" reference: Windows x64 `windows-latest`, `windows-2025`,
+  `windows-2025-vs2026`, `windows-2022`; Windows arm64 `windows-11-arm`, `windows-11-vs2026-arm`; Ubuntu x64
+  `ubuntu-latest`, `ubuntu-24.04`, `ubuntu-22.04`, `ubuntu-26.04`. `windows-latest` is Windows Server 2025 and
+  `ubuntu-latest` is Ubuntu 24.04. No preview mark on `windows-11-arm`.
+- **ARM64 image.** The current Windows 11 ARM64 readmes are in `actions/runner-images`, `images/windows/`
+  (`Windows11-Arm64-Readme.md`, image 20261006.188.1, VS 2022; `Windows11-VS2026-Arm64-Readme.md`, image
+  20261026.197.1, VS 2026 18.11); the copy in `actions/partner-runner-images` is older (20260105.41.1). Both current
+  images list rustup 1.29.x, Rust 1.99.x, `VC.Tools.ARM64`, `VC.Tools.x86.x64` and Windows SDK 10.0.26100.0, which
+  answers the open point in "Phase 1 design checks". Issue `actions/runner-images#14602`: `windows-11-arm` moves to
+  the VS 2026 image between 2026-09-21 and 2026-09-30; the issue is still open, so which image the label gives today:
+  not verified. The image script `Install-Rust.ps1` downloads the `aarch64-pc-windows-msvc` rustup-init on ARM64, so
+  the toolchain there is native ARM64.
+- **x64 and Linux images.** Windows Server 2025 image 20261021.299.1: rustup 1.29.1, Rust 1.99.1, VS 2022 17.14 with
+  `VC.Tools.x86.x64` and `VC.Tools.ARM64`, SDK 10.0.26100.0, PowerShell 7.6. Ubuntu 24.04 image 20261026.354.1:
+  rustup 1.29.2, Rust 1.99.1. Ubuntu installs rustup into `/etc/skel`, which becomes the runner's home; that `~/.cargo`
+  is the cargo home at run time: not verified (the `actions/cache` Rust example assumes it).
+- **Toolchain step.** `rustup toolchain install` with no toolchain name installs "by default the active toolchain"
+  (rustup 1.29.2 help). `rustup toolchain install --no-self-update`, run from the repo root on an empty scratch
+  `RUSTUP_HOME`, installed `1.99.1-x86_64-pc-windows-msvc` with 6 components (cargo, clippy, rustc, rustfmt, rust-std
+  for both Windows targets) in 10 s. So it honors the profile, components and targets in `rust-toolchain.toml`.
+- **pwsh steps.** docs.github.com, "Workflow syntax", "Exit codes and error action preference": the `pwsh` shell
+  prepends `$ErrorActionPreference = 'stop'` and appends `if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit
+  $LASTEXITCODE }`, so only the last native exit code of a step counts. pwsh is the default shell on Windows runners.
+- **CRT check.** `vswhere -latest -products * -find 'VC\Tools\MSVC\**\dumpbin.exe'` lists six `dumpbin.exe` here
+  (Build Tools 2026). The CI step, run on this laptop's release builds: x64 and ARM64 `wakeshot.exe` and
+  `wakeshot-tray.exe` import only `KERNEL32.dll`, `ntdll.dll` and `api-ms-win-core-synch-l1-2-0.dll`, and it passes. On
+  a control build with `RUSTFLAGS=-C debuginfo=0`, which imports `VCRUNTIME140.dll` and six `api-ms-win-crt-*` DLLs,
+  it fails. That the same lookup works on the runners: not verified until the first run.
+- **actionlint** 1.7.12 (release exe, SHA-256 matches the release checksum list): 0 errors on `ci.yml`. It knows
+  `windows-11-arm` and the `actions/upload-artifact@v7` inputs: a copy with a bad label and a bad input is flagged. Its
+  label list lacks `windows-11-vs2026-arm` and `ubuntu-26.04` (neither is used). It does not check pwsh scripts.
+
+## Contracts build
+
+Checked 2026-11-03 between 16:24 and 16:34 for card `docs/tasks/p1-contracts.md`, on the Windows laptop, each build
+in the worker's own target folder.
+
+- **`velopack` 1.2.161 weight.** A scratch project outside the repo, `cargo add velopack@=1.2.161`, then
+  `cargo tree -e normal --target x86_64-pc-windows-msvc`: 113 packages besides the project itself (`cargo add` locked
+  148, for all targets). Among them `ring`, `rustls`, `rustls-webpki`, `webpki-roots`, `ureq`, `zip`, `zopfli`,
+  `flate2`, `regex`, `uuid` and `xml`. Default features only; it also offers `file-logging`, `log-panics`,
+  `public-utils`, `simplelog` and `time`. Whether `ring` builds for `aarch64-pc-windows-msvc` with the tools on this
+  laptop: not verified. Not built here.
+- **Fakes stay out of normal builds.** Both libs have a `test-support` feature that only the bins' dev-dependencies
+  turn on (resolver 3). `cargo tree -p wakeshot-tray -p wakeshot-cli -e normal,features` lists only `default` for
+  both libs; `-e dev,features` lists `test-support`. The release exes are byte-count identical to the workspace card's
+  (x64 212,992 and 217,600; ARM64 210,944 and 216,064) after both bins gained both libs and `windows`, so an unused
+  dependency adds nothing to an exe (sizes compared, contents not compared).
+- **The core stays free of Windows crates.** `cargo tree -p wakeshot-core -e normal`: only `serde`, `serde_json` and
+  their own dependencies. With dev-dependencies on the Windows host, `windows-sys` 0.61.2 and `windows-link` appear,
+  through `proptest`'s dependencies (test builds only). `cargo tree -p wakeshot-core --target
+  x86_64-unknown-linux-gnu` lists no `windows` crate. The core was not compiled for Linux here (no Linux target
+  installed); CI does that.
+- **A module named `core`.** `pub mod core;` in `wakeshot-core` builds and passes `clippy -D warnings` with serde and
+  std derives in other modules. Not tried: a `use core::...` at the crate root, where Rust 2018 and later would see two
+  `core` names.
+- **Unknown journal keys.** serde `#[serde(untagged)]` over `Known(SettingKey)` and `Other(String)` reads `"sleepAc"`
+  as `Other` and `"sleepDc"` as `Known`, and writes both back unchanged (`files::tests`).
+
+## Sources track plan checks
+
+Checked 2026-11-03 between 16:40 and 16:50 for card `docs/tasks/p4-plan-sources.md`. Reads only.
+
+- **Claude Code cron syntax.** Docs "Run prompts on a schedule" (`code.claude.com/docs/en/scheduled-tasks`, read
+  2026-11-03): `CronCreate` takes a standard 5-field expression `minute hour day-of-month month day-of-week`; every
+  field takes `*`, single values, steps (`*/15`), ranges (`1-5`) and lists (`1,15,30`); day of week `0` or `7` is
+  Sunday; `L`, `W`, `?` and names such as `MON` or `JAN` are "not supported". When both day fields are constrained, a
+  date matches if either matches (vixie-cron). "All times are interpreted in your local timezone." Jitter as in
+  `research/claude-code-signals.md`, plus: recurring tasks run late by up to half the gap to the next run, at most 30
+  minutes; `*/5 * * * *` runs 15 s early; one-shots on `:00` or `:30` up to 90 s early. A task restored by `--resume`
+  "doesn't fire for the runs it missed"; a self-paced `/loop` is not restored. Whether a range takes a step
+  (`1-30/5`): not stated.
+- **Cron and date crates.** `cargo info` (crates.io index, 2026-11-03): `croner` 4.0.2 has features `chrono` (default)
+  and `jiff`; `jiff` 0.2.39 default features are `std`, `tz-system` (pulls `windows-link`), `tz-fat`,
+  `tzdb-bundle-platform`, `tzdb-zoneinfo`, `tzdb-concatenated`, `perf-inline`. Exe size cost of either: not measured.
+- **`windows` 0.62.2 features for the sources track.** Read in the crate source in the cargo registry: features
+  `Win32_System_RestartManager` and `Win32_System_Time` exist. `RmStartSession`, `RmRegisterResources`, `RmGetList`,
+  `RmEndSession` are in the first; `RM_UNIQUE_PROCESS` has `dwProcessId` and `ProcessStartTime` (a `FILETIME`), so a
+  lock file holder comes back as pid plus start time. `GetDynamicTimeZoneInformation`,
+  `SystemTimeToTzSpecificLocalTimeEx` and `TzSpecificLocalTimeToSystemTimeEx` are in the second. Whether Restart
+  Manager lists Codex as the holder of its thread lock file: not verified (Phase 4 live test).
+- **Rust `Command` on Windows does not use `PATHEXT`.** std docs, `Command::new` (read 2026-11-03): the program is
+  searched in the child's `PATH` if set, the current exe's folder, the system folder, the Windows folder, then the
+  parent's `PATH`; "the `.exe` extension may be omitted. Files with other extensions must include the extension".
+  So `Command::new("npm")` does not find `npm.cmd`. The docs warn that `cmd.exe` and `.bat` files decode arguments
+  their own way.
+- **Ctrl+C ignore is inherited.** Microsoft, `SetConsoleCtrlHandler` (page updated 2021-12-30): with a NULL handler
+  and TRUE, "the calling process [ignores] CTRL+C input ... This attribute of ignoring or processing CTRL+C is
+  inherited by child processes". Handler routines are per process ("does not affect the list of handler functions
+  for other processes"). So a wrapper that must leave Ctrl+C to its child installs a handler that returns TRUE
+  instead of the NULL form. Not tested here.
+
+## Power track plan checks
+
+Checked 2026-11-03 between 16:45 and 16:50 for card `docs/tasks/p3-plan-windows-power.md`. Reads only: the
+`windows` 0.62.2 crate source in the local cargo registry and `crates/wakeshot-windows/Cargo.toml`; nothing built or
+run.
+
+- **The process list needs one more `windows` feature.** `NtQuerySystemInformation` and the class value
+  `SystemProcessInformation` are in `Wdk::System::SystemInformation` (feature `Wdk_System_SystemInformation`, which
+  pulls in `Wdk_System`, `Wdk` and `Win32_Foundation` by the crate's own feature table). The record type
+  `SYSTEM_PROCESS_INFORMATION` is in `Win32::System::WindowsProgramming`. `wakeshot-windows` declares
+  `Win32_System_WindowsProgramming` but no `Wdk_*` feature, so the liveness fallback (the system process list, research
+  "Reading elevated Claude Code sessions") does not compile without a contract change. The spike that used it
+  (`spikes/claude-watch/Cargo.toml`) declared `Wdk_System_SystemInformation`.
+- **Every other call the power track needs is behind a declared feature.** A script over the crate source found the
+  module of 50 functions: power requests, plan reads, writes, copies and access checks, suspend and setting
+  notifications, `SetSuspendState`, `IsPwrHibernateAllowed`, `GetSystemPowerStatus` (`Win32_System_Power`); process
+  open, times, waits, mutexes, events, `RegisterWaitForSingleObject`, the parent process attribute and `CreateProcessW`
+  (`Win32_System_Threading`); `GetShellWindow` (`Win32_UI_WindowsAndMessaging`); WTS session calls and
+  `ProcessIdToSessionId` (`Win32_System_RemoteDesktop`); `LockWorkStation` (`Win32_System_Shutdown`); token privilege
+  calls (`Win32_Security`); `MoveFileExW`, `FlushFileBuffers`, `FileTimeToLocalFileTime` (`Win32_Storage_FileSystem`);
+  registry values (`Win32_System_Registry`); `SHGetKnownFolderPath` (`Win32_UI_Shell`); `GetLastInputInfo`
+  (`Win32_UI_Input_KeyboardAndMouse`). That a function compiles with only its own module's feature: not verified (some
+  take types from other modules); the spikes built these calls with the same feature list.
+- **Local time for log lines.** `FileTimeToLocalFileTime` (declared) gives local time from UTC with the current time
+  zone rules, enough for a line stamped "now"; its offset is local minus UTC. `GetDynamicTimeZoneInformation` and
+  `SystemTimeToTzSpecificLocalTime` are in `Win32_System_Time`, which is not declared. That
+  `FileTimeToLocalFileTime` uses the current time zone and daylight saving settings: not verified (Microsoft's page
+  not re-read; the log card checks it).
+
+## Ship track planning checks
+
+Checked 2026-11-03 between 16:40 and 16:50 for card `docs/tasks/p6-plan-ship.md`. Reads only; nothing installed,
+built or changed.
+
+- **`ring` needs clang for ARM64.** `ring`'s `BUILDING.md` (GitHub, `main`): for `aarch64-pc-windows-msvc` the Build
+  Tools need the C++ ARM64 build tools and clang, with the Visual Studio LLVM folder on the PATH. `ring` comes into
+  the tray with `velopack` (research "Contracts build" saw it in the tree). Build scripts run for `cargo clippy` too,
+  so once `velopack` is declared, an ARM64 clippy, test or build of the workspace needs clang. Not tried here.
+- **This laptop has no clang.** `Get-Command clang` finds nothing, and `vswhere -all -products * -find
+  'VC\Tools\Llvm\**\clang.exe'` finds nothing in Build Tools 2026 18.11. So local ARM64 checks with `velopack` fail
+  until the clang component is added (inferred from the two facts above; not tried).
+- **Runner images have LLVM.** `actions/runner-images` readmes: `Windows11-Arm64-Readme.md` (image 20261006.188.1)
+  lists LLVM 22.1.8 and the VS components `VC.Llvm.Clang` and `VC.Llvm.ClangToolset`, and .NET SDKs up to 10.0.401;
+  `Windows2025-Readme.md` (image 20261021.299.1) lists LLVM 20.1.8, `VC.Llvm.Clang` and .NET SDKs up to 10.0.402.
+  Whether `clang` is on the runner's PATH and `ring` builds there: not verified (the first CI run with `velopack`
+  shows it).
+- **`velopack` 1.2.161 manifest** (docs.rs, `Cargo.toml.orig`): features `default = []`, `file-logging`,
+  `public-utils`; `ureq` 3.4 with no features named, so its TLS stack comes from `ureq`'s defaults and cannot be
+  switched off from our side (features only add). That `ureq`'s defaults pick `rustls` with `ring`: inferred from the
+  tree in "Contracts build", not read in `ureq`'s manifest.
+- **`UpdateManager` API** (docs.rs 1.2.161): `new(source, Option<UpdateOptions>, Option<VelopackLocatorConfig>)`,
+  `check_for_updates() -> Result<UpdateCheck, Error>`, `download_updates(&UpdateInfo, Option<Sender<i16>>)`,
+  `apply_updates_and_restart`, `apply_updates_and_exit` (both "exit your app immediately"),
+  `wait_exit_then_apply_updates(asset, silent, restart, restart_args)` ("You clean up any state and exit your app
+  after calling this method"; the updater waits only 60 s for the exit), `get_update_pending_restart()`,
+  `get_current_version()`. `UpdateManager` is `Clone`; whether it is `Send`: not shown. `UpdateOptions` fields:
+  `AllowVersionDowngrade`, `ExplicitChannel` ("should usually be left None"), `MaximumDeltasBeforeFallback`.
+- **Tools on this laptop.** `vpk` 1.2.161 is still installed (`~\.dotnet\tools\vpk.exe`, `vpk --help`). `winget
+  --version`: v1.29.380, the release that fixed the Velopack install bug (`distribution.md`, section 2).
+
+## Tray UX track plan checks
+
+Card `docs/tasks/p5-plan-tray-ux.md`, 2026-11-03 16:50. A scratch crate outside the repo (`featcheck` in the card's
+scratchpad, own `CARGO_TARGET_DIR`, no `RUSTFLAGS`, toolchain 1.99.1, `--offline`) with `windows` 0.62.2 and exactly
+the 32 features `crates/wakeshot-windows/Cargo.toml` declares, importing each API the tray track plans to call.
+
+- **The declared features cover the tray track.** The crate built on `x86_64-pc-windows-msvc` and
+  `aarch64-pc-windows-msvc` with these imports: `Shell_NotifyIconW`, `Shell_NotifyIconGetRect`, `NOTIFYICONDATAW`,
+  `NOTIFYICONIDENTIFIER`, `NIF_GUID`, `NIF_INFO`, `NIIF_USER`, `NIIF_LARGE_ICON`, `NIIF_NOSOUND`, `NIN_SELECT`,
+  `NINF_KEY`, `NIN_BALLOONUSERCLICK`, `ShellExecuteExW`, `SHELLEXECUTEINFOW`, `AssocQueryStringW`,
+  `SHQueryUserNotificationState` (`Win32_UI_Shell`); `CreateIconIndirect`, `DestroyIcon`, `ICONINFO`,
+  `TrackPopupMenuEx`, `MENUITEMINFOW`, `WM_MENUCHAR`, `MNC_EXECUTE`, `ChangeWindowMessageFilterEx`,
+  `AllowSetForegroundWindow`, `RegisterWindowMessageW`, `SystemParametersInfoW`, `SPI_GETHIGHCONTRAST`
+  (`Win32_UI_WindowsAndMessaging`); `DRAWITEMSTRUCT`, `MEASUREITEMSTRUCT`, `LoadIconMetric` (`Win32_UI_Controls`);
+  `MSAAMENUINFO`, `HIGHCONTRASTW`, `HCF_HIGHCONTRASTON`, `AccessibleObjectFromWindow`, `IAccessible`
+  (`Win32_UI_Accessibility`); `GetDpiForMonitor`, `GetDpiForWindow`, `GetSystemMetricsForDpi`,
+  `SetProcessDpiAwarenessContext` (`Win32_UI_HiDpi`); `DwmSetWindowAttribute`, `DWMWA_WINDOW_CORNER_PREFERENCE`,
+  `DWMWA_BORDER_COLOR`, `DWMWCP_ROUND`; `CreateDIBSection`, `CreateCompatibleDC`, `CreateFontIndirectW`, `DrawTextW`,
+  `RoundRect`, `ExcludeClipRect`, `GetSysColor`, `MonitorFromPoint`; `RegGetValueW`; `IMMDeviceEnumerator`,
+  `MMDeviceEnumerator`, `IAudioClient`, `IAudioRenderClient`, `IAudioSessionControl`, `PKEY_AudioEndpoint_FormFactor`,
+  `AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM`, `WAVEFORMATEXTENSIBLE`; `KSDATAFORMAT_SUBTYPE_IEEE_FLOAT`
+  (`Win32_Media_Multimedia`); `PKEY_Device_FriendlyName`; `IPropertyStore`; `CoInitializeEx`, `CoCreateInstance`;
+  `GetProcAddress`, `LoadLibraryW`. So no tray card needs a new `windows` feature.
+- **Not in `windows` 0.62.2:** `NIN_KEYSELECT` (Win32 defines it as `NIN_SELECT | NINF_KEY`; the crate has both
+  parts). `DRAWITEMSTRUCT` and `MEASUREITEMSTRUCT` live in `Win32::UI::Controls`, not `WindowsAndMessaging`. Both seen
+  as compile errors on the first try.
+- **A file module can have child modules without moving to `mod.rs`.** `tray.rs` with `pub mod art;` resolved to
+  `tray/art.rs` (the build ran and printed the child's constant). So the contracts card can declare `tray`'s children
+  in `tray.rs` and keep the file name.
+
+## Contracts split checks
+
+Card `p1-contracts-split`, 2026-11-03. Pinned toolchain 1.99.1, own `CARGO_TARGET_DIR`, no `RUSTFLAGS`.
+
+- **A folder under `crates/` without a `Cargo.toml` breaks the workspace; a plain file does not.** Checked in a
+  scratch workspace with `members = ["crates/*"]` and `cargo metadata --no-deps --offline`: a stray `crates/shared.rs`
+  is ignored (exit 0, one member); a `crates/build/` folder fails with "failed to load manifest for workspace member".
+  So the shared build file is `crates/build-resources.rs`, not the `crates/build/resources.rs` the general review
+  suggested.
+- **The new features exist in `windows` 0.62.2 and change nothing in `Cargo.lock`.** `Wdk_System_SystemInformation`,
+  `Win32_System_RestartManager` and `Win32_System_Time` added; `cargo clippy` and `cargo build --release` with
+  `--locked` pass on x64 and ARM64.
+- **The clippy run without `--all-targets` catches what the review predicted.** Its first run failed on an import used
+  only by a fake (`std::sync::Mutex` in `sink.rs`), while the `--all-targets` run passed. Fixed with a `cfg`.
+- **The core's tree on every target has no `windows` crate.** `cargo tree -p wakeshot-core -e normal --target all
+  --prefix none --locked` lists only `serde`, `serde_core`, `serde_derive`, `serde_json`, `itoa`, `memchr`, `zmij`,
+  `proc-macro2`, `quote`, `syn`, `unicode-ident`. The CI step's `grep -E '^windows'` was run in Git Bash on that output
+  (no hit) and on a made-up line `windows-sys v0.61` (hit).
+- **The app icon is in both exes.** A placeholder `assets/wakeshot.ico` (a ring, 16, 32 and 48 px, 32-bit frames) is
+  embedded through `1 ICON` in the generated `.rc`; a script found all three frames byte for byte in all four release
+  exes (x64 and ARM64).
+- **The CI `dumpbin` pick.** On this laptop `vswhere -find` lists six `dumpbin.exe` (`Hostx64` and `Hostx86`, each for
+  `arm64`, `x64`, `x86`), the first being `Hostx64\arm64`; the new rule picks the first under the runner's own host
+  folder (`Hostx64` here). Whether the `windows-11-arm` image has a `HostARM64` folder: not verified.
+- **A `std::sync::Mutex` guard as a temporary blocks a second lock in the same statement.** The first `FakePlans` test
+  hung on `fake.script(fake.state().calls.len(), ..)`: the guard from `state()` lives to the end of the statement.
+  Its doc now says so.
+
+## Track plan fixes checks
+
+Checked 2026-11-03 by `p1-track-plan-fixes`, for the per-card check rule (cross-track review B1). Tools: rustfmt
+1.10.0 and cargo 1.99.1 (the pinned toolchain), on throwaway files in the session scratchpad, not on `crates/`.
+
+- **A bare `rustfmt` uses the 2015 edition.** With no `rustfmt.toml` up the tree, `rustfmt --check` on a file with
+  `pub async fn` failed with "`async fn` is not permitted in Rust 2015"; `--edition 2024` parsed it (and rejected
+  `let gen`, a 2024 keyword). The repo has no `rustfmt.toml`, so a card that checks its own files passes
+  `--edition 2024`.
+- **`rustfmt` on a file also checks the child modules it declares.** `rustfmt --check lib.rs`, where `lib.rs` says
+  `mod child;`, printed the diff of an unformatted `child.rs` and exited 1. So `--check` on a module-list file reports
+  other cards' files, and `rustfmt` without `--check` on it would rewrite them.
+- **`cargo test` takes one test-name filter before `--`.** `cargo test alpha:: beta::` failed: "unexpected argument
+  'beta::' found". After `--` several filters work and run tests matching any of them (`cargo test --lib -- alpha::
+  beta::` ran the tests of both modules).
+- **`real_` with `--ignored` runs every ignored test whose name holds `real_`, in any module.** `cargo test --lib
+  real_ -- --ignored` ran `alpha::tests::real_alpha` and `beta::tests::real_beta`; `cargo test --lib -- --ignored
+  alpha::` ran only the first. So a real-laptop card filters by its own module (review m15).

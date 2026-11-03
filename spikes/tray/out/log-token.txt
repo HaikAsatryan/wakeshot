@@ -1,0 +1,2 @@
+[      0 ms] ==== start 2026-11-03 04:34:16 args ["--token"]
+[      0 ms] token: pid 28180, elevated false, integrity Medium (0x2000)

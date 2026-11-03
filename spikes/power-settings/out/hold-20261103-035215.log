@@ -1,0 +1,62 @@
+2026-11-03 03:52:15.506 +      0ms [start] mode hold, pid 5824, elevated false, integrity Medium (0x2000), on AC true, battery 100%, energy saver on false, idle 6952 s
+2026-11-03 03:52:15.506 +      1ms [setup] SetConsoleCtrlHandler Ok(())
+2026-11-03 03:52:15.557 +     55ms [hold] copy 7134837e-3411-4e27-a646-642f1447486e active (rc 0 ERROR_SUCCESS), sleep.dc 600 s (rc 0 ERROR_SUCCESS); user's own sleep.dc is 600 s
+2026-11-03 03:52:15.570 +     57ms [hold] DelayLockInterval = 0
+2026-11-03 03:52:15.570 +     57ms [hold] active = 7134837e-3411-4e27-a646-642f1447486e
+2026-11-03 03:52:15.570 +     57ms [hold] consolelock.ac = 1
+2026-11-03 03:52:15.570 +     58ms [hold] consolelock.dc = 1
+2026-11-03 03:52:15.570 +     58ms [hold] display-off.ac = 300
+2026-11-03 03:52:15.570 +     58ms [hold] display-off.dc = 180
+2026-11-03 03:52:15.570 +     58ms [hold] energy-saver-threshold.ac = 0
+2026-11-03 03:52:15.570 +     58ms [hold] energy-saver-threshold.dc = 30
+2026-11-03 03:52:15.570 +     58ms [hold] lid.ac = 1
+2026-11-03 03:52:15.570 +     58ms [hold] lid.dc = 1
+2026-11-03 03:52:15.570 +     58ms [hold] overlay.ac.reg = ded574b5-45a0-4f42-8737-46345c09c238
+2026-11-03 03:52:15.570 +     58ms [hold] overlay.actual = ded574b5-45a0-4f42-8737-46345c09c238 (best performance?)
+2026-11-03 03:52:15.570 +     58ms [hold] overlay.dc.reg = <absent>
+2026-11-03 03:52:15.570 +     58ms [hold] overlay.effective = ded574b5-45a0-4f42-8737-46345c09c238 (best performance?)
+2026-11-03 03:52:15.570 +     58ms [hold] sleep.ac = 10800
+2026-11-03 03:52:15.570 +     58ms [hold] sleep.dc = 600
+2026-11-03 03:52:15.570 +     58ms [setup] PowerSettingRegisterNotification(display-state) rc 0
+2026-11-03 03:52:15.570 +     58ms [setup] PowerSettingRegisterNotification(power-source) rc 0
+2026-11-03 03:52:15.570 +     58ms [setup] PowerSettingRegisterNotification(active-scheme) rc 0
+2026-11-03 03:52:15.570 +     58ms [setup] PowerSettingRegisterNotification(energy-saver-status) rc 0
+2026-11-03 03:52:15.570 +     58ms [setup] PowerRegisterSuspendResumeNotification rc 0
+2026-11-03 03:52:15.570 +     58ms [notify] power-source = 0
+2026-11-03 03:52:15.570 +     58ms [notify] display-state = 0
+2026-11-03 03:52:15.570 +     58ms [hold] PowerSetRequest(SystemRequired) Ok(())
+2026-11-03 03:52:15.570 +     58ms [notify] active-scheme = 7134837e-3411-4e27-a646-642f1447486e
+2026-11-03 03:52:15.570 +     58ms [hold] PowerSetRequest(ExecutionRequired) Ok(())
+2026-11-03 03:52:15.570 +     58ms [notify] energy-saver-status = 0
+2026-11-03 03:52:15.570 +     58ms [hold] holding 'system+execution' for 1 min. No request: sleep about 600 s after the last input. With the documented rule: requests end about 900 s after the last input.
+2026-11-03 03:52:20.605 +   5091ms [tick] t 5 s, idle 6957 s, wall step 5032 ms, unbiased step 5035 ms, AC true, battery 100%
+2026-11-03 03:52:20.605 +   5091ms [tick] WARNING: on AC, the battery rule does not apply now
+2026-11-03 03:52:25.645 +  10131ms [tick] t 10 s, idle 6962 s, wall step 5040 ms, unbiased step 5040 ms, AC true, battery 100%
+2026-11-03 03:52:25.645 +  10132ms [tick] WARNING: on AC, the battery rule does not apply now
+2026-11-03 03:52:30.689 +  15175ms [tick] t 15 s, idle 6967 s, wall step 5044 ms, unbiased step 5044 ms, AC true, battery 100%
+2026-11-03 03:52:30.689 +  15176ms [tick] WARNING: on AC, the battery rule does not apply now
+2026-11-03 03:52:35.722 +  20208ms [tick] t 20 s, idle 6972 s, wall step 5032 ms, unbiased step 5033 ms, AC true, battery 100%
+2026-11-03 03:52:35.722 +  20208ms [tick] WARNING: on AC, the battery rule does not apply now
+2026-11-03 03:52:40.758 +  25244ms [tick] t 25 s, idle 6977 s, wall step 5036 ms, unbiased step 5036 ms, AC true, battery 100%
+2026-11-03 03:52:40.758 +  25245ms [tick] WARNING: on AC, the battery rule does not apply now
+2026-11-03 03:52:45.791 +  30278ms [tick] t 30 s, idle 6982 s, wall step 5033 ms, unbiased step 5033 ms, AC true, battery 100%
+2026-11-03 03:52:45.791 +  30278ms [tick] WARNING: on AC, the battery rule does not apply now
+2026-11-03 03:52:50.818 +  35304ms [tick] t 35 s, idle 6987 s, wall step 5026 ms, unbiased step 5027 ms, AC true, battery 100%
+2026-11-03 03:52:50.818 +  35305ms [tick] WARNING: on AC, the battery rule does not apply now
+2026-11-03 03:52:55.857 +  40343ms [tick] t 40 s, idle 6992 s, wall step 5039 ms, unbiased step 5039 ms, AC true, battery 100%
+2026-11-03 03:52:55.857 +  40343ms [tick] WARNING: on AC, the battery rule does not apply now
+2026-11-03 03:53:00.891 +  45377ms [tick] t 45 s, idle 6997 s, wall step 5033 ms, unbiased step 5034 ms, AC true, battery 100%
+2026-11-03 03:53:00.891 +  45377ms [tick] WARNING: on AC, the battery rule does not apply now
+2026-11-03 03:53:05.924 +  50410ms [tick] t 50 s, idle 7002 s, wall step 5033 ms, unbiased step 5033 ms, AC true, battery 100%
+2026-11-03 03:53:05.924 +  50410ms [tick] WARNING: on AC, the battery rule does not apply now
+2026-11-03 03:53:10.961 +  55447ms [tick] t 55 s, idle 7007 s, wall step 5036 ms, unbiased step 5036 ms, AC true, battery 100%
+2026-11-03 03:53:10.961 +  55447ms [tick] WARNING: on AC, the battery rule does not apply now
+2026-11-03 03:53:15.996 +  60482ms [tick] t 60 s, idle 7012 s, wall step 5035 ms, unbiased step 5036 ms, AC true, battery 100%
+2026-11-03 03:53:15.996 +  60482ms [tick] WARNING: on AC, the battery rule does not apply now
+2026-11-03 03:53:16.003 +  60491ms [notify] active-scheme = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 03:53:16.031 +  60525ms [hold] restore: PowerSetActiveScheme(original) 0 ERROR_SUCCESS, PowerDeleteScheme(copy) 0 ERROR_SUCCESS
+2026-11-03 03:53:16.070 +  60558ms [result] gaps: none
+2026-11-03 03:53:16.093 +  60585ms [powercfg] /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 03:53:16.109 +  60607ms [powercfg] /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 03:53:16.109 +  60607ms [hold] clean: original plan active, copy removed
+2026-11-03 03:53:16.109 +  60607ms [end] exit code 0

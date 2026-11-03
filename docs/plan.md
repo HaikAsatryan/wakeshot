@@ -1,0 +1,142 @@
+# Plan
+
+Start here in every new context: read this file, then the current phase file in `docs/phases/`.
+
+## How we work
+
+### Roles
+
+- **Haik**: product decisions, sign-off on each phase design, physical tests (lid, battery, theme switch).
+- **Orchestrator**: a main session started with `/orchestrate`. It turns the plan into task cards, spawns agents,
+  commits, and keeps the status current. It does not do task work itself. Haik clears it often, so all state lives in
+  files.
+- **Worker** (`wakeshot-worker`, Opus, xhigh effort): does one task card end to end.
+- **Reviewer** (`wakeshot-reviewer`, Opus, xhigh effort): reviews finished work with fresh eyes. Never fixes.
+
+### Phase loop
+
+1. Plan: a worker writes the phase design into the phase file and splits the work into task cards. Haik signs off.
+2. Build: workers do the cards. Cards that touch the same files or the same real power settings run one at a time.
+   Everything else runs in parallel, at full effort (Haik, 2026-11-03: parallelize whenever possible, for speed,
+   without lowering effort). Full effort means xhigh, the agent files' default: never lower, never max. Work that
+   needs the screen or sound runs one card at a time. Haik (2026-11-03): the orchestrator decides how much to run in
+   parallel; the goal is zero conflicts, quality work and no work lost to conflicts. While other cards run, a card
+   checks only its own package and files (`cargo fmt` on its own files, `cargo clippy -p` and `cargo test -p`), and
+   a failure in another card's file is reported, never fixed or formatted. At most four cards build at the same time
+   (the laptop has 24 threads and every cargo build takes them all); each card deletes its build folder when done. The whole-workspace check runs when the
+   orchestrator closes a wave. A card that signs out, restarts Explorer or reboots runs only when no other agent
+   runs.
+3. Review: at least two reviewers per phase, one general code review and one domain review with a narrow brief (for
+   example "find any path where user power settings are not restored"). Findings go to `docs/reviews/`.
+4. Fix: a worker fixes the findings; a reviewer verifies.
+5. Test: automated tests pass; manual checks that need Haik are listed in the phase file with exact steps.
+6. Record: phase file, the status below, and every doc the phase changed.
+
+### Task cards (`docs/tasks/`)
+
+- One file per task, from `docs/tasks/_template.md`. Name: phase plus what it does, for example
+  `p1-cargo-workspace.md`.
+- Size: one worker finishes it within about 150K tokens of context. Split bigger work; merge tiny pieces.
+- A card holds everything a worker needs: goal, what to read, deliverables, acceptance checks, what is out of scope.
+  The worker appends its log and result to the card.
+
+### Context
+
+- One session stays within about 150K to 250K tokens. Stop at a clean point and update the files first.
+- The orchestrator reads cards, phase files and agents' short final replies, never agent transcripts or whole reports
+  unless a decision depends on them.
+
+### Git (Haik's standing rule, 2026-11-03)
+
+- The orchestrator commits after each finished card and after review fixes. Only Haik's name; no AI mention or
+  co-author lines. Workers and reviewers never run git.
+- Push after a phase passes review.
+- No worktrees in this repo (Question 9, decided by the orchestrator under Haik's delegation of parallelism,
+  2026-11-03 15:55). Instead, so parallel work never conflicts or gets lost:
+  - each card names the files and folders it owns; two running cards never own the same one;
+  - shared files take additions only, re-read right before each edit (`docs/research.md`); the root `Cargo.toml`,
+    `Cargo.lock` and the contracts change only through a card the orchestrator runs alone;
+  - each worker builds into its own `CARGO_TARGET_DIR`, named after its card (`<scratchpad>\<card>\target`): all
+    agents of one session share one scratchpad, so a plain `<scratchpad>\target` collides;
+  - the orchestrator commits each finished card's own files by path (`git add <paths>`), never `git add -A` while
+    other cards run.
+  Change it when an agent must run git, or two cards must edit one file at the same time.
+- Fully public from the first push (Haik, 2026-11-03): docs, planning and spikes go public as they are; temporary
+  junk in the remote is fine, nobody watches the profile. Secrets never go public: a secret scan before each push.
+  Phase 8 cleans the repo and squashes the history into one commit; ask Haik right before that force push.
+
+### Where things go
+
+Facts with how they were checked: `docs/research.md`. Longer research: `docs/research/`. Decisions:
+`docs/product.md`. Design: `docs/architecture.md`. Reviews: `docs/reviews/`.
+
+## Phases
+
+| # | Phase | Output | Status |
+|---|---|---|---|
+| 0 | Facts | Spikes on the test laptop, rival and agent research, final decisions | Done (signed off 2026-11-03) |
+| 1 | Detailed design and skeleton | Detailed `architecture.md`, public GitHub repo, Cargo workspace, the contracts between the parts (`p1-contracts`), CI (fmt, clippy, tests, x64 and ARM64 builds), tray menu look that matches Windows 11 (`p1-tray-menu-look`), audible lid-close sound (`p1-lid-sound`) | In progress (`docs/phases/01-design-skeleton.md`) |
+| 2 | Core (track) | State machine, policies, settings ownership rules, file formats, full tests | |
+| 3 | Windows power layer (track) | Power requests and settings, journal and restore, guard process, OS events | |
+| 4 | Sources (track) | Claude Code (with timers), Codex and Copilot CLI, `wakeshot run` and hold files, Keep awake | |
+| 5 | Tray UX (track) | Icons (design, light and dark, high contrast, every scale), menu, notifications, sounds, first run, log | |
+| 6 | Ship (track, then integration) | Velopack installer and updates, start at login, uninstall restore, signing, winget manifest, README, GitHub Pages; then wiring all tracks into the two exes, end-to-end tests, Haik's manual checklist | |
+| 7 | Field test | A week of real use on the test laptop, fixes, v1.0 | |
+| 8 | Launch cleanup | A clean public repo (Haik, 2026-11-03): short `CLAUDE.md` and README, maybe one Claude skill if it matters; internal planning, reviews and junk removed; history squashed into one commit (Haik's go right before the force push); then the winget submission | |
+
+Phases 2 to 6 are parallel tracks, not steps (Haik, 2026-11-03: like two devs and a devops person on separate parts,
+test-first). They start together after Phase 1 and build against the Phase 1 contracts: the boundary types and
+traits from `architecture.md` sections 2, 3 and 6, compiled into the skeleton, with every dependency declared up
+front. A contract change goes through one card and the orchestrator, never as a side edit in a track. One plan step
+writes the cards for all tracks; Haik signs off once. Code and unit tests run in parallel, each worker with its own
+`CARGO_TARGET_DIR` so builds do not block each other. Anything on the real laptop (power settings, screen, sound,
+installs) runs one card at a time, and that, plus Haik's manual steps, sets the pace. Integration (wiring, end-to-end
+tests, Haik's checklist) starts when the tracks it needs are done.
+
+## Status
+
+- 2026-11-03: decisions fixed (`product.md`). Phase 0 research done: four reports in `docs/research/`. Remaining
+  Phase 0 work is in task cards (`docs/phases/00-facts.md`).
+- Agents `wakeshot-worker` and `wakeshot-reviewer` are defined in `.claude/agents/`. The `/orchestrate` skill is in
+  `.claude/skills/orchestrate/SKILL.md`. If a session does not list the agent types (they load at Claude Code start),
+  use a general-purpose agent on Opus, xhigh effort, told to follow the agent file.
+- Build Tools 2026 (18.11.2) installed 2026-11-03: MSVC 14.51 with x64 and ARM64 targets, Windows SDK 10.0.26100.
+- Nightcrew uninstalled 2026-11-03; Haik's power values restored and checked.
+- The orchestrator session runs elevated, so `powercfg /requests` works from it. Spikes test writes through an
+  unelevated token, because Wakeshot runs unelevated.
+- Phase 0: research, toolchain, distribution facts, Claude live tests, unelevated liveness, spike safety fixes and
+  the close list are done. Haik answered every close decision (2026-11-03): no lid-closed time limit, no heat guard,
+  every signal checked against a fact; his yes to part 2 is recorded in `docs/reviews/p0-close-proposals.md`. His
+  manual list was cut to about 80 minutes (`docs/phases/00-morning-steps.md`, card `p0-morning-trim`).
+- Morning steps, agent steps, delta review, M1 battery check and `p0-close-results` done (2026-11-03). No spike,
+  holder, keep-awake or requests-log process left (lid card AFTER line, 13:08; M1 restore checked 14:12). Haik's
+  T13 verdict on the tray menu (looks old) became card `p1-tray-menu-look`.
+- Haik's parallel session (2026-11-03, about 14:24 to 14:58) did `p1-tray-menu-research`
+  (`docs/research/tray-menu-look.md`) and the tray Result review (`docs/reviews/p0-tray.md`). Its findings were
+  applied by `p1-tray-review-fixes` and verified (`docs/reviews/p0-tray-verify.md`).
+- Phase 0 signed off by Haik 2026-11-03 14:35, before the tray review finished. Public repo:
+  `HaikAsatryan/wakeshot` (name free at 14:34). Phase 1 file: `docs/phases/01-design-skeleton.md` (card table and
+  work log live there from now on).
+- 2026-11-03 16:52: Phase 1 design signed off by Haik (16:44). Done: lid sound, tray menu look (waits only for
+  Haik's look at the pictures), repo files, Cargo workspace, CI, contracts. Running: five track plan cards
+  (`p2-plan-core` to `p6-plan-ship`) and the Phase 1 general review. Contracts domain review done: 1 blocker
+  (tracks would share contract files).
+- 2026-11-03 17:22: all five track plans done (63 cards, about 6.15M tokens, phase files `02-core.md` to
+  `06-ship.md`). Orchestrator decision 17:05: apply, restore and check routines live in the core behind `PlanIo` and
+  `SafetyNet`; the Windows track implements them. Running: `p1-contracts-split` and the cross-track review.
+- 2026-11-03 17:43: cross-track review done (2 blockers, 10 majors, 19 minors); `p1-track-plan-fixes` running;
+  `p1-tray-menu-look` done (Haik likes it; an icon per menu item, Phase 5).
+- 2026-11-03 17:57: `p1-contracts-split` done (no shared files left; owner table in its Result). Its 10 card edits
+  were sent to `p1-track-plan-fixes`, which still runs (started 17:43, agent of the 14:31 orchestrator session).
+- 2026-11-03 18:02: Haik gave Gate B (go public: yes) and signed off the five track plans ahead; the planners'
+  product questions still go to him with defaults. Order now: `p1-track-plan-fixes` ends, then the freeze and git
+  steps 4 to 10, then the reviewer check of the plan fixes and the contracts split, then the track builds.
+- 2026-11-03 18:07: `p1-track-plan-fixes` done; no agent runs.
+- 2026-11-03 18:09: Haik answered the 12 questions in `docs/phases/02-06-signoff.md`: all defaults.
+- Next (orchestrator), see the Phase 1 file (card table, work log, git steps): (1) Gate B is given: freeze, then
+  git steps 4 to 10 (`git init`, secret scan with self-test, first commit with only Haik's name, `gh repo create
+  HaikAsatryan/wakeshot --public`, push, CI); (2) a reviewer checks the contracts split against
+  `docs/reviews/p1-contracts-domain.md` and the plan fixes against `docs/reviews/p2-6-cross-track.md`; fix any
+  findings; (3) the Question 7 contracts change (a notice after a self-update), run alone, early; (4) track builds in waves (laptop cards one at a time, at
+  most four building cards at once); (5) an integration plan card. A SYSTEM power request from the orchestrator (pwsh, `away-system-holder.ps1`) runs until about 20:20; Haik's
+  power values are back (checked 16:21).

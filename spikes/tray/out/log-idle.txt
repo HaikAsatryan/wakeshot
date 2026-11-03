@@ -1,0 +1,23 @@
+[      0 ms] ==== start 2026-11-03 01:35:41 args ["--idle", "60"]
+[      3 ms] exe C:\Users\haika\code\wakeshot\spikes\tray\target\x86_64-pc-windows-msvc\release\tray-spike.exe
+[      3 ms] os 26H2 build 26300.9711
+[      3 ms] dpi: per-monitor v2 from manifest=true, system dpi=144
+[      3 ms] monitor RECT { left: 3840, top: 817, right: 5760, bottom: 2017 } effective dpi 120, SM_CXSMICON at that dpi = 20
+[      4 ms] monitor RECT { left: 0, top: 0, right: 3840, bottom: 2160 } effective dpi 144, SM_CXSMICON at that dpi = 24
+[      4 ms] SM_CXSMICON=24 SM_MENUDROPALIGNMENT=0
+[      4 ms] uxtheme: SetPreferredAppMode(135)=true FlushMenuThemes(136)=true RefreshImmersiveColorPolicyState(104)=true ShouldAppsUseDarkMode(132)=true
+[      9 ms] SetPreferredAppMode(AllowDark) returned previous mode Some(0)
+[     10 ms] theme (start): AppsUseLightTheme=Some(false) SystemUsesLightTheme=Some(false) ShouldAppsUseDarkMode=Some(true) high contrast=Some(false)
+[     10 ms] LoadIconMetric(id 101, LIM_SMALL): 24 px
+[     17 ms] NIM_ADD (start, attempt 1): true; NIM_SETVERSION 4: true
+[  44549 ms] tray: event 0x204
+[  44549 ms] tray: event 0x205
+[  44549 ms] tray: right click at (3297, 1975)
+[  45304 ms] live capture: 1 menu window(s) -> tray-menu-live-dark-01-1menus.png: Ok((466, 440))
+[  51411 ms] live capture: 2 menu window(s) -> tray-menu-live-dark-02-2menus.png: Ok((721, 440))
+[  55749 ms] live capture: 1 menu window(s) -> tray-menu-live-dark-03-1menus.png: Ok((466, 440))
+[  57048 ms] menu closed: SetForegroundWindow=true command=0
+[  60026 ms] memory (idle): working set 19356 KB, peak working set 20724 KB, private 3252 KB
+[  60026 ms] NIM_DELETE: true
+[  60027 ms] unregister toast app ids: AppUserModelId\Wakeshot.TraySpike: WIN32_ERROR(2); Notifications\Settings\Wakeshot.TraySpike: WIN32_ERROR(2); AppUserModelId\Wakeshot.TraySpike.Unregistered: WIN32_ERROR(2); Notifications\Settings\Wakeshot.TraySpike.Unregistered: WIN32_ERROR(2)
+[  60031 ms] message loop ended

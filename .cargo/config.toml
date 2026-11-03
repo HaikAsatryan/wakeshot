@@ -1,0 +1,7 @@
+# Static CRT, so the exes run on a PC that has no Visual C++ runtime installed.
+# A RUSTFLAGS environment variable replaces these flags, so builds must not set it.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

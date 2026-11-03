@@ -1,0 +1,279 @@
+2026-11-03 10:57:21.248 +      0ms [start] mode resume, args [], pid 17136, elevated false, integrity Medium (0x2000), on AC true, battery 100%, energy saver on false, idle 0 s
+2026-11-03 10:57:21.248 +      0ms [setup] SetConsoleCtrlHandler Ok(())
+2026-11-03 10:57:21.248 +      1ms [before] active plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 10:57:21.248 +      2ms [before] plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 10:57:21.251 +      3ms [before] lid: ac 1, dc 1 (Sleep, Sleep)
+2026-11-03 10:57:21.251 +      3ms [before] sleep: ac 10800, dc 600
+2026-11-03 10:57:21.251 +      4ms [before] display-off: ac 300, dc 180
+2026-11-03 10:57:21.251 +      4ms [before] hibernate-after: ac 0, dc 2147483647
+2026-11-03 10:57:21.251 +      5ms [before] wake-timers: ac 0, dc 0
+2026-11-03 10:57:21.253 +      5ms [before] consolelock: ac 1, dc 1
+2026-11-03 10:57:21.253 +      6ms [before] energy-saver-threshold: ac 0, dc 30
+2026-11-03 10:57:21.278 +     35ms [before] powercfg /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 10:57:21.301 +     59ms [before] powercfg /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 10:57:21.317 +     82ms [before] powercfg /q SCHEME_CURRENT SUB_VIDEO VIDEOIDLE rc 0: Current AC Power Setting Index: 0x0000012c | Current DC Power Setting Index: 0x000000b4
+2026-11-03 10:57:21.355 +    109ms [before] powercfg /qh SCHEME_CURRENT SUB_SLEEP RTCWAKE rc 0: Current AC Power Setting Index: 0x00000000 | Current DC Power Setting Index: 0x00000000
+2026-11-03 10:57:21.355 +    113ms [plan] copy 84c26c98-5083-46b0-9459-0b3f1349838e of 381b4222-f694-41f0-9685-ff5bb260df2e made, named (rc 0)
+2026-11-03 10:57:21.355 +    113ms [plan] copy sleep.ac = 60: rc 0
+2026-11-03 10:57:21.355 +    114ms [plan] copy display-off.ac = 60: rc 0
+2026-11-03 10:57:21.355 +    114ms [plan] copy sleep.dc = 60: rc 0
+2026-11-03 10:57:21.355 +    114ms [plan] copy display-off.dc = 60: rc 0
+2026-11-03 10:57:21.397 +    162ms [plan] PowerSetActiveScheme(copy) rc 0
+2026-11-03 10:57:21.397 +    162ms [setup] PowerSettingRegisterNotification(lid) rc 0 in 23 us
+2026-11-03 10:57:21.397 +    163ms [setup] PowerSettingRegisterNotification(display) rc 0 in 25 us
+2026-11-03 10:57:21.397 +    163ms [setup] PowerSettingRegisterNotification(session-display) rc 0 in 6 us
+2026-11-03 10:57:21.397 +    163ms [notify] lid = 1 (open)
+2026-11-03 10:57:21.397 +    163ms [setup] PowerSettingRegisterNotification(power-source) rc 0 in 8 us
+2026-11-03 10:57:21.397 +    163ms [setup] PowerSettingRegisterNotification(battery) rc 0 in 7 us
+2026-11-03 10:57:21.397 +    164ms [notify] display = 1 (on)
+2026-11-03 10:57:21.397 +    164ms [setup] PowerSettingRegisterNotification(active-scheme) rc 0 in 6 us
+2026-11-03 10:57:21.397 +    164ms [notify] session-display = 1 (on)
+2026-11-03 10:57:21.412 +    164ms [setup] PowerRegisterSuspendResumeNotification rc 0
+2026-11-03 10:57:21.412 +    164ms [notify] power-source = 0 (AC)
+2026-11-03 10:57:21.412 +    164ms [hold] PowerSetRequest SystemRequired Ok(()), ExecutionRequired Ok(())
+2026-11-03 10:57:21.412 +    165ms [notify] battery = 100
+2026-11-03 10:57:21.412 +    165ms [notify] active-scheme = 84c26c98-5083-46b0-9459-0b3f1349838e
+2026-11-03 10:57:21.527 +    286ms [resume] >>> Now: Start > Power > Sleep. Wait 20 s. Press the power button and sign in. Then do not touch the PC until it prints DONE. <<< (request 'power', retake false, sleep and display off 60 s on the copy)
+2026-11-03 10:57:21.527 +    292ms [tick] [before-sleep] t 0 s, step wall 0 unbiased 0 interrupt 0 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1, heat \_TZ.THM0 47.1 C limit 100%
+2026-11-03 10:57:22.548 +   1299ms [tick] [before-sleep] t 1 s, step wall 1011 unbiased 1019 interrupt 1020 ms, idle 1 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:23.556 +   2309ms [tick] [before-sleep] t 2 s, step wall 1009 unbiased 1010 interrupt 1009 ms, idle 2 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:24.567 +   3320ms [tick] [before-sleep] t 3 s, step wall 1010 unbiased 1010 interrupt 1011 ms, idle 3 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:25.579 +   4331ms [tick] [before-sleep] t 4 s, step wall 1010 unbiased 1011 interrupt 1011 ms, idle 4 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:26.585 +   5338ms [tick] [before-sleep] t 5 s, step wall 1006 unbiased 1007 interrupt 1007 ms, idle 5 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1, heat \_TZ.THM0 46.1 C limit 100%
+2026-11-03 10:57:27.595 +   6348ms [tick] [before-sleep] t 6 s, step wall 1010 unbiased 1011 interrupt 1010 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:28.605 +   7357ms [tick] [before-sleep] t 7 s, step wall 1009 unbiased 1009 interrupt 1009 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:29.613 +   8366ms [tick] [before-sleep] t 8 s, step wall 1008 unbiased 1008 interrupt 1009 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:30.627 +   9379ms [tick] [before-sleep] t 9 s, step wall 1012 unbiased 1013 interrupt 1013 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:31.636 +  10388ms [tick] [before-sleep] t 10 s, step wall 1008 unbiased 1009 interrupt 1008 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1, heat \_TZ.THM0 46.1 C limit 100%
+2026-11-03 10:57:32.645 +  11398ms [tick] [before-sleep] t 11 s, step wall 1010 unbiased 1010 interrupt 1011 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:33.656 +  12409ms [tick] [before-sleep] t 12 s, step wall 1011 unbiased 1012 interrupt 1011 ms, idle 1 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:34.665 +  13418ms [tick] [before-sleep] t 13 s, step wall 1008 unbiased 1009 interrupt 1009 ms, idle 2 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:35.675 +  14427ms [tick] [before-sleep] t 14 s, step wall 1009 unbiased 1009 interrupt 1010 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:36.681 +  15435ms [tick] [before-sleep] t 15 s, step wall 1006 unbiased 1006 interrupt 1006 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1, heat \_TZ.THM0 48.1 C limit 100%
+2026-11-03 10:57:37.688 +  16441ms [tick] [before-sleep] t 16 s, step wall 1007 unbiased 1008 interrupt 1007 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:38.699 +  17452ms [tick] [before-sleep] t 17 s, step wall 1010 unbiased 1011 interrupt 1011 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:39.709 +  18461ms [tick] [before-sleep] t 18 s, step wall 1008 unbiased 1008 interrupt 1009 ms, idle 1 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:40.724 +  19478ms [tick] [before-sleep] t 19 s, step wall 1016 unbiased 1017 interrupt 1016 ms, idle 2 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:41.737 +  20490ms [tick] [before-sleep] t 20 s, step wall 1010 unbiased 1011 interrupt 1011 ms, idle 3 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1, heat \_TZ.THM0 46.1 C limit 100%
+2026-11-03 10:57:42.747 +  21501ms [tick] [before-sleep] t 21 s, step wall 1011 unbiased 1012 interrupt 1012 ms, idle 4 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:43.758 +  22511ms [tick] [before-sleep] t 22 s, step wall 1010 unbiased 1010 interrupt 1010 ms, idle 5 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:44.766 +  23518ms [tick] [before-sleep] t 23 s, step wall 1007 unbiased 1008 interrupt 1008 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1
+2026-11-03 10:57:44.776 +  23530ms [notify] display = 0 (off)
+2026-11-03 10:57:44.776 +  23530ms [notify] session-display = 0 (off)
+2026-11-03 10:57:44.904 +  23656ms [suspend] PBT_APMSUSPEND (4)
+2026-11-03 10:58:25.081 +  63836ms [suspend] PBT_APMRESUMEAUTOMATIC (18)
+2026-11-03 10:58:25.090 +  63844ms [resume] PBT_APMSUSPEND in phase BeforeSleep
+2026-11-03 10:58:25.092 +  63846ms [notify] display = 1 (on)
+2026-11-03 10:58:25.096 +  63849ms [suspend] PBT_APMRESUMESUSPEND (7)
+2026-11-03 10:58:25.101 +  63853ms [notify] session-display = 1 (on)
+2026-11-03 10:58:25.107 +  63860ms [tick] [before-sleep] t 63 s, step wall 40328 unbiased 149 interrupt 40327 ms, idle 40 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:25.115 +  63867ms [tick] GAP Slept [before-sleep] ending 2026-11-03 10:58:25.115: wall 40328 ms, unbiased 149 ms, interrupt 40327 ms
+2026-11-03 10:58:25.119 +  63870ms [resume] RESUMED: hold phase for 240 s starts
+2026-11-03 10:58:26.126 +  64877ms [resume] PBT_APMRESUMEAUTOMATIC in phase Hold { until_ms: 1793689345119 }
+2026-11-03 10:58:26.126 +  64877ms [resume] PBT_APMRESUMESUSPEND in phase Hold { until_ms: 1793689345119 }
+2026-11-03 10:58:26.126 +  64880ms [tick] [hold] t 64 s, step wall 1031 unbiased 1034 interrupt 1033 ms, idle 41 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 51.1 C limit 100%
+2026-11-03 10:58:27.132 +  65885ms [tick] [hold] t 65 s, step wall 1006 unbiased 1006 interrupt 1007 ms, idle 42 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:28.138 +  66891ms [tick] [hold] t 66 s, step wall 1005 unbiased 1006 interrupt 1006 ms, idle 43 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:29.143 +  67896ms [tick] [hold] t 67 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 44 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:30.149 +  68902ms [tick] [hold] t 68 s, step wall 1006 unbiased 1006 interrupt 1006 ms, idle 45 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:31.156 +  69910ms [tick] [hold] t 69 s, step wall 1006 unbiased 1007 interrupt 1007 ms, idle 46 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 56.1 C limit 100%
+2026-11-03 10:58:32.165 +  70917ms [tick] [hold] t 70 s, step wall 1008 unbiased 1008 interrupt 1008 ms, idle 47 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:33.170 +  71922ms [tick] [hold] t 71 s, step wall 1005 unbiased 1006 interrupt 1006 ms, idle 48 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:34.180 +  72932ms [tick] [hold] t 72 s, step wall 1009 unbiased 1009 interrupt 1009 ms, idle 49 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:35.186 +  73938ms [tick] [hold] t 73 s, step wall 1006 unbiased 1007 interrupt 1006 ms, idle 50 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:36.191 +  74944ms [tick] [hold] t 74 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 52 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 51.1 C limit 100%
+2026-11-03 10:58:37.200 +  75952ms [tick] [hold] t 75 s, step wall 1009 unbiased 1009 interrupt 1010 ms, idle 53 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:38.206 +  76958ms [tick] [hold] t 76 s, step wall 1005 unbiased 1006 interrupt 1006 ms, idle 54 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:39.210 +  77962ms [tick] [hold] t 77 s, step wall 1004 unbiased 1004 interrupt 1004 ms, idle 55 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:40.213 +  78965ms [tick] [hold] t 78 s, step wall 1003 unbiased 1004 interrupt 1003 ms, idle 56 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:41.218 +  79970ms [tick] [hold] t 79 s, step wall 1003 unbiased 1003 interrupt 1004 ms, idle 57 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 58.1 C limit 100%
+2026-11-03 10:58:42.222 +  80974ms [tick] [hold] t 80 s, step wall 1005 unbiased 1006 interrupt 1005 ms, idle 58 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:43.226 +  81978ms [tick] [hold] t 81 s, step wall 1003 unbiased 1003 interrupt 1004 ms, idle 59 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:44.231 +  82983ms [tick] [hold] t 82 s, step wall 1005 unbiased 1005 interrupt 1005 ms, idle 60 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:45.235 +  83987ms [tick] [hold] t 83 s, step wall 1003 unbiased 1004 interrupt 1004 ms, idle 61 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:46.239 +  84992ms [tick] [hold] t 84 s, step wall 1003 unbiased 1004 interrupt 1003 ms, idle 62 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 59.1 C limit 100%
+2026-11-03 10:58:47.243 +  85995ms [tick] [hold] t 85 s, step wall 1004 unbiased 1004 interrupt 1005 ms, idle 63 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:48.247 +  86999ms [tick] [hold] t 86 s, step wall 1003 unbiased 1004 interrupt 1003 ms, idle 64 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:49.253 +  88005ms [tick] [hold] t 87 s, step wall 1006 unbiased 1006 interrupt 1006 ms, idle 65 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:50.259 +  89012ms [tick] [hold] t 88 s, step wall 1006 unbiased 1006 interrupt 1007 ms, idle 66 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:51.266 +  90019ms [tick] [hold] t 89 s, step wall 1006 unbiased 1007 interrupt 1006 ms, idle 67 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 56.1 C limit 100%
+2026-11-03 10:58:52.271 +  91024ms [tick] [hold] t 90 s, step wall 1005 unbiased 1006 interrupt 1006 ms, idle 68 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:53.283 +  92036ms [tick] [hold] t 91 s, step wall 1011 unbiased 1011 interrupt 1012 ms, idle 69 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:54.292 +  93045ms [tick] [hold] t 92 s, step wall 1009 unbiased 1009 interrupt 1009 ms, idle 70 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:55.304 +  94056ms [tick] [hold] t 93 s, step wall 1011 unbiased 1012 interrupt 1011 ms, idle 71 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:56.311 +  95065ms [tick] [hold] t 94 s, step wall 1007 unbiased 1007 interrupt 1007 ms, idle 72 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 50.1 C limit 100%
+2026-11-03 10:58:57.321 +  96074ms [tick] [hold] t 95 s, step wall 1010 unbiased 1010 interrupt 1011 ms, idle 73 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:58.329 +  97081ms [tick] [hold] t 96 s, step wall 1006 unbiased 1008 interrupt 1007 ms, idle 74 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:58:59.338 +  98091ms [tick] [hold] t 97 s, step wall 1009 unbiased 1009 interrupt 1010 ms, idle 75 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:00.346 +  99099ms [tick] [hold] t 98 s, step wall 1007 unbiased 1008 interrupt 1008 ms, idle 76 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:01.356 + 100110ms [tick] [hold] t 99 s, step wall 1010 unbiased 1010 interrupt 1010 ms, idle 77 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 48.1 C limit 100%
+2026-11-03 10:59:02.366 + 101119ms [tick] [hold] t 100 s, step wall 1010 unbiased 1010 interrupt 1010 ms, idle 78 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:03.373 + 102126ms [tick] [hold] t 101 s, step wall 1006 unbiased 1007 interrupt 1007 ms, idle 79 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:04.384 + 103136ms [tick] [hold] t 102 s, step wall 1009 unbiased 1010 interrupt 1010 ms, idle 80 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:05.392 + 104144ms [tick] [hold] t 103 s, step wall 1008 unbiased 1009 interrupt 1008 ms, idle 81 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:06.401 + 105155ms [tick] [hold] t 104 s, step wall 1009 unbiased 1009 interrupt 1009 ms, idle 82 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 47.1 C limit 100%
+2026-11-03 10:59:07.410 + 106163ms [tick] [hold] t 105 s, step wall 1009 unbiased 1009 interrupt 1010 ms, idle 83 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:08.419 + 107171ms [tick] [hold] t 106 s, step wall 1008 unbiased 1009 interrupt 1009 ms, idle 84 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:09.425 + 108178ms [tick] [hold] t 107 s, step wall 1006 unbiased 1006 interrupt 1006 ms, idle 85 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:10.433 + 109186ms [tick] [hold] t 108 s, step wall 1008 unbiased 1009 interrupt 1008 ms, idle 86 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:11.442 + 110197ms [tick] [hold] t 109 s, step wall 1008 unbiased 1008 interrupt 1009 ms, idle 87 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 46.1 C limit 100%
+2026-11-03 10:59:12.454 + 111207ms [tick] [hold] t 110 s, step wall 1012 unbiased 1012 interrupt 1012 ms, idle 88 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:13.460 + 112213ms [tick] [hold] t 111 s, step wall 1006 unbiased 1006 interrupt 1006 ms, idle 89 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:14.469 + 113222ms [tick] [hold] t 112 s, step wall 1008 unbiased 1009 interrupt 1009 ms, idle 90 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:15.477 + 114229ms [tick] [hold] t 113 s, step wall 1007 unbiased 1008 interrupt 1007 ms, idle 91 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:16.485 + 115239ms [tick] [hold] t 114 s, step wall 1008 unbiased 1008 interrupt 1009 ms, idle 92 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 46.1 C limit 100%
+2026-11-03 10:59:17.494 + 116247ms [tick] [hold] t 115 s, step wall 1009 unbiased 1009 interrupt 1009 ms, idle 93 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:18.503 + 117257ms [tick] [hold] t 116 s, step wall 1009 unbiased 1010 interrupt 1009 ms, idle 94 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:19.511 + 118263ms [tick] [hold] t 117 s, step wall 1007 unbiased 1007 interrupt 1008 ms, idle 95 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:20.519 + 119272ms [tick] [hold] t 118 s, step wall 1008 unbiased 1009 interrupt 1008 ms, idle 96 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:21.528 + 120281ms [tick] [hold] t 119 s, step wall 1008 unbiased 1008 interrupt 1009 ms, idle 97 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 45.1 C limit 100%
+2026-11-03 10:59:22.532 + 121285ms [tick] [hold] t 120 s, step wall 1004 unbiased 1005 interrupt 1004 ms, idle 98 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:23.538 + 122290ms [tick] [hold] t 122 s, step wall 1005 unbiased 1005 interrupt 1006 ms, idle 99 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:24.541 + 123294ms [tick] [hold] t 123 s, step wall 1003 unbiased 1003 interrupt 1003 ms, idle 100 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:25.546 + 124299ms [tick] [hold] t 124 s, step wall 1005 unbiased 1006 interrupt 1005 ms, idle 101 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 10:59:25.899 + 124651ms [notify] display = 0 (off)
+2026-11-03 10:59:25.899 + 124651ms [notify] session-display = 0 (off)
+2026-11-03 10:59:25.916 + 124670ms [suspend] PBT_APMSUSPEND (4)
+2026-11-03 11:04:44.280 + 443031ms [suspend] PBT_APMRESUMEAUTOMATIC (18)
+2026-11-03 11:04:44.286 + 443037ms [resume] PBT_APMSUSPEND in phase Hold { until_ms: 1793689345119 }
+2026-11-03 11:04:44.288 + 443040ms [notify] display = 1 (on)
+2026-11-03 11:04:44.288 + 443040ms [suspend] PBT_APMRESUMESUSPEND (7)
+2026-11-03 11:04:44.289 + 443041ms [notify] session-display = 1 (on)
+2026-11-03 11:04:44.298 + 443050ms [tick] [hold] t 442 s, step wall 318741 unbiased 377 interrupt 318742 ms, idle 1 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 7.1 C limit 100%
+2026-11-03 11:04:44.304 + 443055ms [tick] GAP Slept [hold] ending 2026-11-03 11:04:44.304: wall 318741 ms, unbiased 377 ms, interrupt 318742 ms
+2026-11-03 11:04:44.313 + 443065ms [resume] REQUEST NOT HONORED: the PC slept or paused while held
+2026-11-03 11:04:44.315 + 443067ms [hold] released: clear Ok(()) Ok(()), handle closed
+2026-11-03 11:04:44.315 + 443068ms [resume] control phase for 180 s: request released, the PC should sleep about 60 s after the last input
+2026-11-03 11:04:45.325 + 444077ms [resume] PBT_APMRESUMEAUTOMATIC in phase Control { until_ms: 1793689664314 }
+2026-11-03 11:04:45.325 + 444077ms [resume] PBT_APMRESUMESUSPEND in phase Control { until_ms: 1793689664314 }
+2026-11-03 11:04:45.325 + 444078ms [tick] [control] t 443 s, step wall 1037 unbiased 1038 interrupt 1037 ms, idle 2 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:04:46.330 + 445082ms [tick] [control] t 444 s, step wall 1003 unbiased 1004 interrupt 1004 ms, idle 3 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:04:47.336 + 446088ms [tick] [control] t 445 s, step wall 1006 unbiased 1006 interrupt 1006 ms, idle 4 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:04:48.340 + 447092ms [tick] [control] t 446 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:04:49.346 + 448099ms [tick] [control] t 447 s, step wall 1005 unbiased 1006 interrupt 1006 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 59.1 C limit 100%
+2026-11-03 11:04:50.351 + 449103ms [tick] [control] t 448 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:04:51.356 + 450108ms [tick] [control] t 449 s, step wall 1004 unbiased 1004 interrupt 1005 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:04:52.362 + 451114ms [tick] [control] t 450 s, step wall 1005 unbiased 1006 interrupt 1005 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:04:53.366 + 452118ms [tick] [control] t 451 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:04:54.369 + 453122ms [tick] [control] t 452 s, step wall 1003 unbiased 1003 interrupt 1003 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 51.1 C limit 100%
+2026-11-03 11:04:55.374 + 454126ms [tick] [control] t 453 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:04:56.379 + 455131ms [tick] [control] t 454 s, step wall 1004 unbiased 1004 interrupt 1004 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:04:57.383 + 456135ms [tick] [control] t 455 s, step wall 1004 unbiased 1004 interrupt 1005 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:04:58.387 + 457139ms [tick] [control] t 456 s, step wall 1003 unbiased 1004 interrupt 1003 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:04:59.393 + 458145ms [tick] [control] t 457 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 54.1 C limit 100%
+2026-11-03 11:05:00.397 + 459150ms [tick] [control] t 458 s, step wall 1006 unbiased 1006 interrupt 1006 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:01.401 + 460154ms [tick] [control] t 459 s, step wall 1004 unbiased 1004 interrupt 1004 ms, idle 0 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:02.405 + 461158ms [tick] [control] t 460 s, step wall 1004 unbiased 1004 interrupt 1004 ms, idle 1 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:03.410 + 462162ms [tick] [control] t 461 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 2 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:04.415 + 463169ms [tick] [control] t 462 s, step wall 1005 unbiased 1005 interrupt 1005 ms, idle 3 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 57.1 C limit 100%
+2026-11-03 11:05:05.423 + 464175ms [tick] [control] t 463 s, step wall 1007 unbiased 1007 interrupt 1008 ms, idle 4 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:06.429 + 465182ms [tick] [control] t 464 s, step wall 1006 unbiased 1007 interrupt 1006 ms, idle 5 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:07.434 + 466186ms [tick] [control] t 465 s, step wall 1004 unbiased 1004 interrupt 1005 ms, idle 6 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:08.439 + 467192ms [tick] [control] t 466 s, step wall 1005 unbiased 1006 interrupt 1005 ms, idle 7 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:09.446 + 468200ms [tick] [control] t 467 s, step wall 1006 unbiased 1007 interrupt 1007 ms, idle 8 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 55.1 C limit 100%
+2026-11-03 11:05:10.453 + 469206ms [tick] [control] t 468 s, step wall 1007 unbiased 1007 interrupt 1007 ms, idle 9 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:11.461 + 470213ms [tick] [control] t 469 s, step wall 1007 unbiased 1008 interrupt 1008 ms, idle 10 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:12.468 + 471220ms [tick] [control] t 470 s, step wall 1006 unbiased 1006 interrupt 1007 ms, idle 11 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:13.478 + 472230ms [tick] [control] t 471 s, step wall 1009 unbiased 1010 interrupt 1009 ms, idle 12 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:14.482 + 473236ms [tick] [control] t 472 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 13 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 54.1 C limit 100%
+2026-11-03 11:05:15.491 + 474243ms [tick] [control] t 473 s, step wall 1008 unbiased 1008 interrupt 1008 ms, idle 14 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:16.499 + 475251ms [tick] [control] t 474 s, step wall 1008 unbiased 1008 interrupt 1008 ms, idle 15 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:17.506 + 476259ms [tick] [control] t 475 s, step wall 1007 unbiased 1007 interrupt 1008 ms, idle 16 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:18.516 + 477269ms [tick] [control] t 476 s, step wall 1009 unbiased 1010 interrupt 1009 ms, idle 17 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:19.525 + 478279ms [tick] [control] t 477 s, step wall 1009 unbiased 1010 interrupt 1010 ms, idle 18 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 49.1 C limit 100%
+2026-11-03 11:05:20.534 + 479287ms [tick] [control] t 479 s, step wall 1008 unbiased 1009 interrupt 1009 ms, idle 19 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:21.542 + 480295ms [tick] [control] t 480 s, step wall 1007 unbiased 1008 interrupt 1008 ms, idle 20 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:22.551 + 481304ms [tick] [control] t 481 s, step wall 1008 unbiased 1008 interrupt 1009 ms, idle 21 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:23.559 + 482312ms [tick] [control] t 482 s, step wall 1008 unbiased 1009 interrupt 1008 ms, idle 22 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:24.568 + 483322ms [tick] [control] t 483 s, step wall 1008 unbiased 1008 interrupt 1009 ms, idle 23 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 46.1 C limit 100%
+2026-11-03 11:05:25.576 + 484329ms [tick] [control] t 484 s, step wall 1007 unbiased 1008 interrupt 1008 ms, idle 24 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:26.585 + 485337ms [tick] [control] t 485 s, step wall 1008 unbiased 1009 interrupt 1008 ms, idle 25 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:27.594 + 486346ms [tick] [control] t 486 s, step wall 1009 unbiased 1009 interrupt 1009 ms, idle 26 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:28.603 + 487355ms [tick] [control] t 487 s, step wall 1008 unbiased 1009 interrupt 1009 ms, idle 27 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:29.608 + 488362ms [tick] [control] t 488 s, step wall 1005 unbiased 1006 interrupt 1006 ms, idle 28 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 47.1 C limit 100%
+2026-11-03 11:05:30.618 + 489371ms [tick] [control] t 489 s, step wall 1009 unbiased 1010 interrupt 1010 ms, idle 29 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:31.628 + 490381ms [tick] [control] t 490 s, step wall 1010 unbiased 1010 interrupt 1010 ms, idle 30 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:32.635 + 491388ms [tick] [control] t 491 s, step wall 1007 unbiased 1007 interrupt 1007 ms, idle 31 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:33.644 + 492396ms [tick] [control] t 492 s, step wall 1008 unbiased 1009 interrupt 1009 ms, idle 32 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:34.649 + 493403ms [tick] [control] t 493 s, step wall 1005 unbiased 1005 interrupt 1005 ms, idle 33 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 47.1 C limit 100%
+2026-11-03 11:05:35.658 + 494411ms [tick] [control] t 494 s, step wall 1009 unbiased 1009 interrupt 1009 ms, idle 34 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:36.668 + 495421ms [tick] [control] t 495 s, step wall 1009 unbiased 1010 interrupt 1010 ms, idle 35 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:37.680 + 496433ms [tick] [control] t 496 s, step wall 1011 unbiased 1011 interrupt 1012 ms, idle 36 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:38.689 + 497441ms [tick] [control] t 497 s, step wall 1008 unbiased 1009 interrupt 1008 ms, idle 37 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:39.697 + 498450ms [tick] [control] t 498 s, step wall 1008 unbiased 1008 interrupt 1008 ms, idle 38 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 47.1 C limit 100%
+2026-11-03 11:05:40.706 + 499458ms [tick] [control] t 499 s, step wall 1008 unbiased 1008 interrupt 1009 ms, idle 39 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:41.713 + 500466ms [tick] [control] t 500 s, step wall 1008 unbiased 1009 interrupt 1008 ms, idle 40 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:42.720 + 501472ms [tick] [control] t 501 s, step wall 1006 unbiased 1007 interrupt 1007 ms, idle 41 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:43.727 + 502480ms [tick] [control] t 502 s, step wall 1007 unbiased 1007 interrupt 1007 ms, idle 42 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:44.736 + 503488ms [tick] [control] t 503 s, step wall 1007 unbiased 1007 interrupt 1008 ms, idle 43 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 47.1 C limit 100%
+2026-11-03 11:05:45.742 + 504494ms [tick] [control] t 504 s, step wall 1007 unbiased 1008 interrupt 1007 ms, idle 44 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:46.751 + 505503ms [tick] [control] t 505 s, step wall 1007 unbiased 1008 interrupt 1008 ms, idle 45 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:47.758 + 506511ms [tick] [control] t 506 s, step wall 1008 unbiased 1008 interrupt 1008 ms, idle 46 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:48.766 + 507519ms [tick] [control] t 507 s, step wall 1008 unbiased 1008 interrupt 1008 ms, idle 47 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:49.774 + 508528ms [tick] [control] t 508 s, step wall 1007 unbiased 1007 interrupt 1008 ms, idle 48 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 47.1 C limit 100%
+2026-11-03 11:05:50.785 + 509537ms [tick] [control] t 509 s, step wall 1010 unbiased 1011 interrupt 1010 ms, idle 49 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:51.794 + 510547ms [tick] [control] t 510 s, step wall 1010 unbiased 1010 interrupt 1010 ms, idle 50 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:52.802 + 511555ms [tick] [control] t 511 s, step wall 1007 unbiased 1007 interrupt 1008 ms, idle 51 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:53.810 + 512563ms [tick] [control] t 512 s, step wall 1008 unbiased 1009 interrupt 1008 ms, idle 52 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:54.820 + 513574ms [tick] [control] t 513 s, step wall 1009 unbiased 1010 interrupt 1010 ms, idle 53 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 46.1 C limit 100%
+2026-11-03 11:05:55.830 + 514583ms [tick] [control] t 514 s, step wall 1009 unbiased 1010 interrupt 1010 ms, idle 54 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:57.076 + 515829ms [tick] [control] t 515 s, step wall 1007 unbiased 1007 interrupt 1007 ms, idle 55 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:58.081 + 516834ms [tick] [control] t 516 s, step wall 1243 unbiased 1244 interrupt 1244 ms, idle 57 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:05:59.086 + 517838ms [tick] [control] t 517 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 58 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:06:00.092 + 518845ms [tick] [control] t 518 s, step wall 1005 unbiased 1005 interrupt 1005 ms, idle 59 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 71.1 C limit 100%
+2026-11-03 11:06:01.099 + 519852ms [tick] [control] t 519 s, step wall 1007 unbiased 1008 interrupt 1008 ms, idle 60 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:06:01.519 + 520272ms [notify] display = 0 (off)
+2026-11-03 11:06:01.520 + 520272ms [notify] session-display = 0 (off)
+2026-11-03 11:06:02.104 + 520856ms [tick] [control] t 520 s, step wall 1004 unbiased 1005 interrupt 1005 ms, idle 61 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:06:03.444 + 522201ms [tick] [control] t 521 s, step wall 1005 unbiased 1005 interrupt 1005 ms, idle 62 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:06:04.949 + 523708ms [tick] [control] t 522 s, step wall 1346 unbiased 1346 interrupt 1347 ms, idle 63 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:06:06.444 + 525203ms [tick] [control] t 524 s, step wall 1508 unbiased 1508 interrupt 1508 ms, idle 64 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0, heat \_TZ.THM0 66.1 C limit 100%
+2026-11-03 11:06:07.926 + 526682ms [tick] [control] t 525 s, step wall 1494 unbiased 1495 interrupt 1494 ms, idle 66 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:06:09.418 + 528172ms [tick] [control] t 527 s, step wall 1478 unbiased 1478 interrupt 1479 ms, idle 67 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:06:10.884 + 529642ms [tick] [control] t 528 s, step wall 1490 unbiased 1491 interrupt 1490 ms, idle 69 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:06:12.361 + 531117ms [tick] [control] t 530 s, step wall 1471 unbiased 1471 interrupt 1471 ms, idle 70 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x0
+2026-11-03 11:06:12.782 + 531542ms [suspend] PBT_APMSUSPEND (4)
+2026-11-03 11:09:07.523 + 706275ms [suspend] PBT_APMRESUMEAUTOMATIC (18)
+2026-11-03 11:09:07.533 + 706286ms [resume] PBT_APMSUSPEND in phase Control { until_ms: 1793689664314 }
+2026-11-03 11:09:07.539 + 706291ms [notify] display = 1 (on)
+2026-11-03 11:09:07.548 + 706299ms [suspend] PBT_APMRESUMESUSPEND (7)
+2026-11-03 11:09:07.553 + 706305ms [tick] [control] t 706 s, step wall 175641 unbiased 911 interrupt 175641 ms, idle 1 s, AC true, bat 100%, unlocked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 4294967295 s, exec-state 0x1, heat \_TZ.THM0 38.1 C limit 100%
+2026-11-03 11:09:07.553 + 706305ms [notify] session-display = 1 (on)
+2026-11-03 11:09:07.554 + 706306ms [tick] GAP Slept [control] ending 2026-11-03 11:09:07.553: wall 175641 ms, unbiased 911 ms, interrupt 175641 ms
+2026-11-03 11:09:07.554 + 706307ms [resume] control: the PC slept without the request (expected)
+2026-11-03 11:09:07.770 + 706522ms [restore] PowerSetActiveScheme(381b4222-f694-41f0-9685-ff5bb260df2e) rc 0
+2026-11-03 11:09:07.773 + 706525ms [restore] PowerDeleteScheme(84c26c98-5083-46b0-9459-0b3f1349838e) rc 0
+2026-11-03 11:09:07.775 + 706527ms [restore] check: active 381b4222-f694-41f0-9685-ff5bb260df2e, copy left false
+2026-11-03 11:09:07.775 + 706528ms [plan] restored: user's plan active, copy deleted, journal removed
+2026-11-03 11:09:07.777 + 706528ms [result] hold-phase gaps 1 (request NOT honored), control-phase gaps 1 (control slept: the test is valid)
+2026-11-03 11:09:07.777 + 706530ms [after] active plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 11:09:07.781 + 706533ms [after] plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 11:09:07.783 + 706535ms [after] lid: ac 1, dc 1 (Sleep, Sleep)
+2026-11-03 11:09:07.783 + 706536ms [after] sleep: ac 10800, dc 600
+2026-11-03 11:09:07.785 + 706537ms [after] display-off: ac 300, dc 180
+2026-11-03 11:09:07.785 + 706538ms [after] hibernate-after: ac 0, dc 2147483647
+2026-11-03 11:09:07.785 + 706539ms [after] wake-timers: ac 0, dc 0
+2026-11-03 11:09:07.785 + 706540ms [after] consolelock: ac 1, dc 1
+2026-11-03 11:09:07.788 + 706541ms [after] energy-saver-threshold: ac 0, dc 30
+2026-11-03 11:09:07.843 + 706595ms [after] powercfg /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 11:09:07.883 + 706638ms [after] powercfg /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 11:09:07.925 + 706680ms [after] powercfg /q SCHEME_CURRENT SUB_VIDEO VIDEOIDLE rc 0: Current AC Power Setting Index: 0x0000012c | Current DC Power Setting Index: 0x000000b4
+2026-11-03 11:09:07.969 + 706723ms [after] powercfg /qh SCHEME_CURRENT SUB_SLEEP RTCWAKE rc 0: Current AC Power Setting Index: 0x00000000 | Current DC Power Setting Index: 0x00000000
+2026-11-03 11:09:08.919 + 707672ms [events] 10:57:44.763 Kernel-Power 566: The system session has transitioned from 65 to 66. Reason FullWake BootId: 12
+2026-11-03 11:09:08.919 + 707672ms [events] 10:57:44.764 Kernel-Power 506: The system is entering Modern Standby Reason: Screen Off Request.
+2026-11-03 11:09:08.919 + 707673ms [events] 10:57:44.916 Kernel-Power 566: The system session has transitioned from 66 to 67. Reason FullWake BootId: 12
+2026-11-03 11:09:08.919 + 707673ms [events] 10:58:23.794 Kernel-Power 507: The system is exiting Modern Standby Reason: Power Button.
+2026-11-03 11:09:08.919 + 707673ms [events] 10:58:23.794 Kernel-Power 566: The system session has transitioned from 67 to 68. Reason Unknown BootId: 12
+2026-11-03 11:09:08.919 + 707673ms [events] 10:59:25.899 Kernel-Power 566: The system session has transitioned from 68 to 69. Reason SessionUnlock BootId: 12
+2026-11-03 11:09:08.919 + 707673ms [events] 10:59:25.902 Kernel-Power 506: The system is entering Modern Standby Reason: Idle Timeout.
+2026-11-03 11:09:08.919 + 707673ms [events] 10:59:25.924 Kernel-Power 566: The system session has transitioned from 69 to 70. Reason SessionUnlock BootId: 12
+2026-11-03 11:09:08.919 + 707673ms [events] 11:04:43.069 Kernel-Power 507: The system is exiting Modern Standby Reason: Input Mouse.
+2026-11-03 11:09:08.919 + 707673ms [events] 11:04:43.069 Kernel-Power 566: The system session has transitioned from 70 to 71. Reason InputHid BootId: 12
+2026-11-03 11:09:08.919 + 707673ms [events] 11:06:01.525 Kernel-Power 566: The system session has transitioned from 71 to 72. Reason SessionUnlock BootId: 12
+2026-11-03 11:09:08.919 + 707673ms [events] 11:06:01.529 Kernel-Power 506: The system is entering Modern Standby Reason: Idle Timeout.
+2026-11-03 11:09:08.919 + 707673ms [events] 11:06:12.797 Kernel-Power 566: The system session has transitioned from 72 to 73. Reason SessionUnlock BootId: 12
+2026-11-03 11:09:08.919 + 707673ms [events] 11:09:06.239 Kernel-Power 507: The system is exiting Modern Standby Reason: Input Mouse.
+2026-11-03 11:09:08.919 + 707674ms [events] 11:09:06.239 Kernel-Power 566: The system session has transitioned from 73 to 74. Reason InputHid BootId: 12
+2026-11-03 11:09:08.919 + 707674ms [result] gaps: GAP Slept [before-sleep] ending 2026-11-03 10:58:25.115: wall 40328 ms, unbiased 149 ms, interrupt 40327 ms / GAP Slept [hold] ending 2026-11-03 11:04:44.304: wall 318741 ms, unbiased 377 ms, interrupt 318742 ms / GAP Slept [control] ending 2026-11-03 11:09:07.553: wall 175641 ms, unbiased 911 ms, interrupt 175641 ms
+2026-11-03 11:09:08.919 + 707674ms [result] DONE: plan restored. You can close this window.
+2026-11-03 11:09:08.919 + 707674ms [end] exit code 0, log C:\Users\haika\code\wakeshot\spikes\lid-sleep\out\resume-20261103-105721.log

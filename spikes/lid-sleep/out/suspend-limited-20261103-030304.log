@@ -1,0 +1,67 @@
+2026-11-03 03:03:04.241 +      0ms [start] mode suspend, args ["--method", "screen-off", "--dry", "--countdown", "2", "--log", "C:\\Users\\haika\\code\\wakeshot\\spikes\\lid-sleep\\out\\suspend-limited-20261103-030304.log"], pid 28744, elevated false, integrity Medium (0x2000), on AC true, battery 100%, energy saver on false, idle 3998 s
+2026-11-03 03:03:04.241 +      0ms [setup] SetConsoleCtrlHandler Ok(())
+2026-11-03 03:03:04.241 +      1ms [before] active plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 03:03:04.241 +      2ms [before] plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 03:03:04.249 +      3ms [before] lid: ac 1, dc 1 (Sleep, Sleep)
+2026-11-03 03:03:04.249 +      3ms [before] sleep: ac 10800, dc 600
+2026-11-03 03:03:04.249 +      4ms [before] display-off: ac 300, dc 180
+2026-11-03 03:03:04.249 +      4ms [before] hibernate-after: ac 0, dc 2147483647
+2026-11-03 03:03:04.249 +      4ms [before] wake-timers: ac 0, dc 0
+2026-11-03 03:03:04.249 +      5ms [before] consolelock: ac 1, dc 1
+2026-11-03 03:03:04.249 +      5ms [before] energy-saver-threshold: ac 0, dc 30
+2026-11-03 03:03:04.280 +     33ms [before] powercfg /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 03:03:04.296 +     56ms [before] powercfg /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 03:03:04.313 +     78ms [before] powercfg /q SCHEME_CURRENT SUB_VIDEO VIDEOIDLE rc 0: Current AC Power Setting Index: 0x0000012c | Current DC Power Setting Index: 0x000000b4
+2026-11-03 03:03:04.344 +    102ms [before] powercfg /qh SCHEME_CURRENT SUB_SLEEP RTCWAKE rc 0: Current AC Power Setting Index: 0x00000000 | Current DC Power Setting Index: 0x00000000
+2026-11-03 03:03:04.344 +    102ms [setup] PowerSettingRegisterNotification(lid) rc 0 in 25 us
+2026-11-03 03:03:04.344 +    102ms [notify] lid = 1 (open)
+2026-11-03 03:03:04.344 +    102ms [notify] display = 0 (off)
+2026-11-03 03:03:04.344 +    103ms [setup] PowerSettingRegisterNotification(display) rc 0 in 34 us
+2026-11-03 03:03:04.344 +    103ms [setup] PowerSettingRegisterNotification(session-display) rc 0 in 14 us
+2026-11-03 03:03:04.344 +    103ms [notify] session-display = 0 (off)
+2026-11-03 03:03:04.344 +    103ms [setup] PowerSettingRegisterNotification(power-source) rc 0 in 10 us
+2026-11-03 03:03:04.344 +    103ms [notify] power-source = 0 (AC)
+2026-11-03 03:03:04.344 +    103ms [setup] PowerSettingRegisterNotification(battery) rc 0 in 11 us
+2026-11-03 03:03:04.344 +    103ms [notify] battery = 100
+2026-11-03 03:03:04.344 +    103ms [setup] PowerSettingRegisterNotification(active-scheme) rc 0 in 12 us
+2026-11-03 03:03:04.344 +    103ms [notify] active-scheme = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 03:03:04.344 +    103ms [setup] PowerRegisterSuspendResumeNotification rc 0
+2026-11-03 03:03:04.464 +    220ms [suspend] >>> In 2 s this program calls 'screen-off'. Do not touch the PC after that. <<<
+2026-11-03 03:03:04.552 +    312ms [tick] [countdown] t 0 s, step wall 0 unbiased 0 interrupt 0 ms, idle 3998 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1, heat \_TZ.THM0 50.1 C limit 100%
+2026-11-03 03:03:06.060 +   1817ms [tick] [countdown] t 1 s, step wall 1098 unbiased 1102 interrupt 1102 ms, idle 3999 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1
+2026-11-03 03:03:07.073 +   2826ms [suspend] dry run: not calling 'screen-off'
+2026-11-03 03:03:07.073 +   2827ms [suspend] enable SeShutdownPrivilege: ok false: OpenProcessToken(ADJUST_PRIVILEGES) failed: Access is denied. (0x80070005)
+2026-11-03 03:03:07.537 +   3298ms [tick] [after-call] t 2 s, step wall 1507 unbiased 1507 interrupt 1507 ms, idle 4001 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1
+2026-11-03 03:03:08.554 +   4309ms [tick] [after-call] t 4 s, step wall 1480 unbiased 1481 interrupt 1481 ms, idle 4002 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1
+2026-11-03 03:03:09.938 +   5695ms [tick] [after-call] t 5 s, step wall 1012 unbiased 1013 interrupt 1013 ms, idle 4003 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1
+2026-11-03 03:03:10.954 +   6711ms [tick] [after-call] t 6 s, step wall 1387 unbiased 1387 interrupt 1387 ms, idle 4004 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1, heat \_TZ.THM0 46.1 C limit 100%
+2026-11-03 03:03:11.969 +   7722ms [tick] [after-call] t 7 s, step wall 1013 unbiased 1014 interrupt 1014 ms, idle 4005 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1
+2026-11-03 03:03:13.051 +   8807ms [tick] [after-call] t 8 s, step wall 1009 unbiased 1009 interrupt 1009 ms, idle 4006 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1
+2026-11-03 03:03:14.566 +  10320ms [tick] [after-call] t 9 s, step wall 1086 unbiased 1086 interrupt 1086 ms, idle 4007 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1
+2026-11-03 03:03:16.055 +  11817ms [tick] [after-call] t 11 s, step wall 1513 unbiased 1514 interrupt 1514 ms, idle 4009 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1
+2026-11-03 03:03:17.550 +  13312ms [tick] [after-call] t 12 s, step wall 1497 unbiased 1498 interrupt 1498 ms, idle 4011 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1, heat \_TZ.THM0 46.1 C limit 100%
+2026-11-03 03:03:19.042 +  14798ms [tick] [after-call] t 14 s, step wall 1495 unbiased 1494 interrupt 1494 ms, idle 4012 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1
+2026-11-03 03:03:20.537 +  16296ms [tick] [after-call] t 15 s, step wall 1485 unbiased 1486 interrupt 1486 ms, idle 4013 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1
+2026-11-03 03:03:22.047 +  17805ms [tick] [after-call] t 17 s, step wall 1497 unbiased 1498 interrupt 1498 ms, idle 4015 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1
+2026-11-03 03:03:23.549 +  19308ms [tick] [after-call] t 18 s, step wall 1508 unbiased 1508 interrupt 1508 ms, idle 4016 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1
+2026-11-03 03:03:25.044 +  20803ms [tick] [after-call] t 20 s, step wall 1505 unbiased 1505 interrupt 1505 ms, idle 4018 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1, heat \_TZ.THM0 45.1 C limit 100%
+2026-11-03 03:03:26.531 +  22293ms [tick] [after-call] t 21 s, step wall 1495 unbiased 1495 interrupt 1495 ms, idle 4019 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1
+2026-11-03 03:03:28.011 +  23768ms [tick] [after-call] t 23 s, step wall 1490 unbiased 1491 interrupt 1491 ms, idle 4021 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1
+2026-11-03 03:03:28.011 +  23769ms [result] RESULT: the PC did not sleep after the call
+2026-11-03 03:03:28.011 +  23770ms [after] active plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 03:03:28.018 +  23772ms [after] plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 03:03:28.018 +  23773ms [after] lid: ac 1, dc 1 (Sleep, Sleep)
+2026-11-03 03:03:28.018 +  23773ms [after] sleep: ac 10800, dc 600
+2026-11-03 03:03:28.021 +  23774ms [after] display-off: ac 300, dc 180
+2026-11-03 03:03:28.021 +  23774ms [after] hibernate-after: ac 0, dc 2147483647
+2026-11-03 03:03:28.021 +  23775ms [after] wake-timers: ac 0, dc 0
+2026-11-03 03:03:28.021 +  23776ms [after] consolelock: ac 1, dc 1
+2026-11-03 03:03:28.023 +  23776ms [after] energy-saver-threshold: ac 0, dc 30
+2026-11-03 03:03:28.046 +  23806ms [after] powercfg /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 03:03:28.074 +  23829ms [after] powercfg /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 03:03:28.099 +  23852ms [after] powercfg /q SCHEME_CURRENT SUB_VIDEO VIDEOIDLE rc 0: Current AC Power Setting Index: 0x0000012c | Current DC Power Setting Index: 0x000000b4
+2026-11-03 03:03:28.122 +  23876ms [after] powercfg /qh SCHEME_CURRENT SUB_SLEEP RTCWAKE rc 0: Current AC Power Setting Index: 0x00000000 | Current DC Power Setting Index: 0x00000000
+2026-11-03 03:03:28.961 +  24715ms [events] none since 2026-11-03 03:03:00 (rc 1)
+2026-11-03 03:03:28.961 +  24715ms [result] gaps: none
+2026-11-03 03:03:28.961 +  24715ms [result] DONE: plan restored. You can close this window.
+2026-11-03 03:03:28.962 +  24715ms [end] exit code 0, log C:\Users\haika\code\wakeshot\spikes\lid-sleep\out\suspend-limited-20261103-030304.log

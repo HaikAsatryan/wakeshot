@@ -1,0 +1,3 @@
+/target/
+# Raw look-card captures can show parts of the owner's screen; only curated crops go to docs/research/img.
+out/look/

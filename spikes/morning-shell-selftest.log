@@ -1,0 +1,6 @@
+selftest 04:34:05: shell pid 29444, integrity Medium, admin-enabled False
+2026-11-03 04:34:05.375 +      0ms [start] mode read, pid 9788, elevated false, integrity Medium (0x2000), on AC true, battery 100%, energy saver on false, idle 9462 s
+2026-11-03 04:34:06.938 +      0ms [start] mode read, args [], pid 34260, elevated false, integrity Medium (0x2000), on AC true, battery 100%, energy saver on false, idle 9463 s
+2026-11-03 04:34:14.966 +   8028ms [priv] enable SeShutdownPrivilege: ok true: AdjustTokenPrivileges ok, last error 0 (1300 = not held)
+[      0 ms] token: pid 28180, elevated false, integrity Medium (0x2000)
+checkpower: 0 different

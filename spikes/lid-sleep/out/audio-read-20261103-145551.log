@@ -1,0 +1,8 @@
+2026-11-03 14:55:51.245 +      0ms [start] mode audio-read, args [], pid 34864, elevated true, integrity High (0x3000), on AC false, battery 93%, energy saver on false, idle 11 s
+2026-11-03 14:55:51.262 +     15ms [audio] default console: Some("{0.0.0.00000000}.{fb152119-7d6e-4352-a9bf-882ae54afa03}")
+2026-11-03 14:55:51.262 +     17ms [audio] default multimedia: Some("{0.0.0.00000000}.{fb152119-7d6e-4352-a9bf-882ae54afa03}")
+2026-11-03 14:55:51.270 +     19ms [audio] default communications: Some("{0.0.0.00000000}.{fb152119-7d6e-4352-a9bf-882ae54afa03}")
+2026-11-03 14:55:51.277 +     27ms [audio] endpoint {0.0.0.00000000}.{fb152119-7d6e-4352-a9bf-882ae54afa03} 'Speakers (Realtek(R) Audio)' form factor 1 (speakers), volume 67.3%, muted false
+2026-11-03 14:55:51.286 +     38ms [audio]   session: system sounds true, pid 0, state 0 (0 inactive, 1 active, 2 expired), session volume 100.0%, muted false, name '@%SystemRoot%\System32\AudioSrv.Dll,-202'
+2026-11-03 14:55:51.286 +     38ms [audio]   session: system sounds false, pid 5508, state 0 (0 inactive, 1 active, 2 expired), session volume 100.0%, muted false, name ''
+2026-11-03 14:55:51.286 +     38ms [end] exit code 0, log C:\Users\haika\code\wakeshot\spikes\lid-sleep\out\audio-read-20261103-145551.log

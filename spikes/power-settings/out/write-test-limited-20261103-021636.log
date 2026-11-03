@@ -1,0 +1,85 @@
+2026-11-03 02:16:36.539 +      0ms [start] mode write-test, pid 1584, elevated false, integrity Medium (0x2000), on AC true, battery 98%, energy saver on false, idle 1210 s
+2026-11-03 02:16:36.542 +      1ms [write] active scheme 381b4222-f694-41f0-9685-ff5bb260df2e "Balanced"
+2026-11-03 02:16:36.570 +     29ms [powercfg] /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 02:16:36.595 +     54ms [powercfg] /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 02:16:36.595 +     60ms [setup] PowerSettingRegisterNotification(lid) rc 0
+2026-11-03 02:16:36.595 +     61ms [setup] PowerSettingRegisterNotification(sleep) rc 0
+2026-11-03 02:16:36.595 +     61ms [notify] lid = 2
+2026-11-03 02:16:36.595 +     61ms [setup] PowerSettingRegisterNotification(active-scheme) rc 0
+2026-11-03 02:16:36.595 +     61ms [notify] active-scheme = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 02:16:36.595 +     61ms [notify] sleep = 10800
+2026-11-03 02:16:36.595 +     62ms [setup] RegOpenKeyExW(SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes) rc 0
+2026-11-03 02:16:38.104 +   1563ms [write] lid.ac original 1, will write 0; PowerSettingAccessCheckEx write 0 ERROR_SUCCESS
+2026-11-03 02:16:38.104 +   1564ms [write] lid.dc original 1, will write 0; PowerSettingAccessCheckEx write 0 ERROR_SUCCESS
+2026-11-03 02:16:38.104 +   1565ms [write] sleep.ac original 10800, will write 10807; PowerSettingAccessCheckEx write 0 ERROR_SUCCESS
+2026-11-03 02:16:38.104 +   1565ms [write] sleep.dc original 600, will write 607; PowerSettingAccessCheckEx write 0 ERROR_SUCCESS
+2026-11-03 02:16:38.104 +   1566ms [trigger] >>> API write lid.ac = 0
+2026-11-03 02:16:38.104 +   1566ms [write] API write lid.ac = 0: rc 0 ERROR_SUCCESS
+2026-11-03 02:16:38.104 +   1567ms [reg-hklm] key changed: lid.ac 1 -> 0
+2026-11-03 02:16:38.113 +   1571ms [poll] lid.ac 1 -> 0
+2026-11-03 02:16:40.609 +   4067ms [result] | API write lid.ac = 0, no SetActive | 0 ms | none | 0 ms | 5 ms |
+2026-11-03 02:16:40.609 +   4067ms [trigger] >>> PowerSetActiveScheme(active)
+2026-11-03 02:16:40.621 +   4080ms [notify] lid = 0
+2026-11-03 02:16:40.656 +   4115ms [write] PowerSetActiveScheme rc 0 ERROR_SUCCESS
+2026-11-03 02:16:43.158 +   6616ms [result] | then PowerSetActiveScheme | 47 ms | 13 ms | none | none |
+2026-11-03 02:16:43.158 +   6616ms [write] read back lid.ac = Ok(0)
+2026-11-03 02:16:43.158 +   6617ms [trigger] >>> API write lid.dc = 0
+2026-11-03 02:16:43.158 +   6617ms [write] API write lid.dc = 0: rc 0 ERROR_SUCCESS
+2026-11-03 02:16:43.158 +   6619ms [reg-hklm] key changed: lid.dc 1 -> 0
+2026-11-03 02:16:43.171 +   6630ms [poll] lid.dc 1 -> 0
+2026-11-03 02:16:45.660 +   9118ms [result] | API write lid.dc = 0, no SetActive | 0 ms | none | 1 ms | 13 ms |
+2026-11-03 02:16:45.660 +   9118ms [trigger] >>> PowerSetActiveScheme(active)
+2026-11-03 02:16:45.701 +   9165ms [write] PowerSetActiveScheme rc 0 ERROR_SUCCESS
+2026-11-03 02:16:48.208 +  11665ms [result] | then PowerSetActiveScheme | 46 ms | none | none | none |
+2026-11-03 02:16:48.208 +  11666ms [write] read back lid.dc = Ok(0)
+2026-11-03 02:16:48.208 +  11666ms [trigger] >>> API write sleep.ac = 10807
+2026-11-03 02:16:48.208 +  11667ms [write] API write sleep.ac = 10807: rc 0 ERROR_SUCCESS
+2026-11-03 02:16:48.208 +  11668ms [reg-hklm] key changed: sleep.ac 10800 -> 10807
+2026-11-03 02:16:48.222 +  11680ms [poll] sleep.ac 10800 -> 10807
+2026-11-03 02:16:50.710 +  14167ms [result] | API write sleep.ac = 10807, no SetActive | 0 ms | none | 1 ms | 14 ms |
+2026-11-03 02:16:50.710 +  14168ms [trigger] >>> PowerSetActiveScheme(active)
+2026-11-03 02:16:50.715 +  14178ms [notify] sleep = 10807
+2026-11-03 02:16:50.747 +  14217ms [write] PowerSetActiveScheme rc 0 ERROR_SUCCESS
+2026-11-03 02:16:53.260 +  16718ms [result] | then PowerSetActiveScheme | 49 ms | 10 ms | none | none |
+2026-11-03 02:16:53.260 +  16718ms [write] read back sleep.ac = Ok(10807)
+2026-11-03 02:16:53.260 +  16718ms [trigger] >>> API write sleep.dc = 607
+2026-11-03 02:16:53.260 +  16719ms [write] API write sleep.dc = 607: rc 0 ERROR_SUCCESS
+2026-11-03 02:16:53.260 +  16720ms [reg-hklm] key changed: sleep.dc 600 -> 607
+2026-11-03 02:16:53.274 +  16733ms [poll] sleep.dc 600 -> 607
+2026-11-03 02:16:55.761 +  19219ms [result] | API write sleep.dc = 607, no SetActive | 0 ms | none | 1 ms | 14 ms |
+2026-11-03 02:16:55.761 +  19220ms [trigger] >>> PowerSetActiveScheme(active)
+2026-11-03 02:16:55.797 +  19257ms [write] PowerSetActiveScheme rc 0 ERROR_SUCCESS
+2026-11-03 02:16:58.300 +  21758ms [result] | then PowerSetActiveScheme | 37 ms | none | none | none |
+2026-11-03 02:16:58.300 +  21758ms [write] read back sleep.dc = Ok(607)
+2026-11-03 02:16:58.329 +  21788ms [powercfg] /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000000 | Current DC Power Setting Index: 0x00000000
+2026-11-03 02:16:58.345 +  21811ms [powercfg] /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a37 | Current DC Power Setting Index: 0x0000025f
+2026-11-03 02:16:58.345 +  21811ms [trigger] >>> restore originals
+2026-11-03 02:16:58.345 +  21812ms [restore] write 381b4222-f694-41f0-9685-ff5bb260df2e lid.ac = 1: rc 0 ERROR_SUCCESS
+2026-11-03 02:16:58.345 +  21813ms [restore] write 381b4222-f694-41f0-9685-ff5bb260df2e lid.dc = 1: rc 0 ERROR_SUCCESS
+2026-11-03 02:16:58.345 +  21813ms [restore] write 381b4222-f694-41f0-9685-ff5bb260df2e sleep.ac = 10800: rc 0 ERROR_SUCCESS
+2026-11-03 02:16:58.345 +  21813ms [reg-hklm] key changed: lid.ac 0 -> 1; lid.dc 0 -> 1; sleep.ac 10807 -> 10800
+2026-11-03 02:16:58.345 +  21814ms [restore] write 381b4222-f694-41f0-9685-ff5bb260df2e sleep.dc = 600: rc 0 ERROR_SUCCESS
+2026-11-03 02:16:58.345 +  21815ms [reg-hklm] key changed: sleep.dc 607 -> 600
+2026-11-03 02:16:58.361 +  21819ms [notify] sleep = 10800
+2026-11-03 02:16:58.377 +  21836ms [notify] lid = 2
+2026-11-03 02:16:58.377 +  21839ms [restore] PowerSetActiveScheme(381b4222-f694-41f0-9685-ff5bb260df2e) rc 0 ERROR_SUCCESS
+2026-11-03 02:16:58.377 +  21840ms [verify] 381b4222-f694-41f0-9685-ff5bb260df2e lid.ac = 1 (original 1, written 0) ok
+2026-11-03 02:16:58.377 +  21840ms [verify] 381b4222-f694-41f0-9685-ff5bb260df2e lid.dc = 1 (original 1, written 0) ok
+2026-11-03 02:16:58.377 +  21840ms [verify] 381b4222-f694-41f0-9685-ff5bb260df2e sleep.ac = 10800 (original 10800, written 10807) ok
+2026-11-03 02:16:58.377 +  21840ms [verify] 381b4222-f694-41f0-9685-ff5bb260df2e sleep.dc = 600 (original 600, written 607) ok
+2026-11-03 02:16:58.568 +  22027ms [poll] lid.ac 0 -> 1; lid.dc 0 -> 1; sleep.ac 10807 -> 10800; sleep.dc 607 -> 600
+2026-11-03 02:17:00.884 +  24341ms [result] | restore (writes + SetActive) | 29 ms | 8 ms | 2 ms | 215 ms |
+2026-11-03 02:17:00.913 +  24372ms [powercfg] /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 02:17:00.934 +  24393ms [powercfg] /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 02:17:01.083 +  24542ms [result] | trigger | call time | setting notification | registry notification | poll 250 ms |
+2026-11-03 02:17:01.083 +  24542ms [result] | API write lid.ac = 0, no SetActive | 0 ms | none | 0 ms | 5 ms |
+2026-11-03 02:17:01.083 +  24542ms [result] | then PowerSetActiveScheme | 47 ms | 13 ms | none | none |
+2026-11-03 02:17:01.083 +  24542ms [result] | API write lid.dc = 0, no SetActive | 0 ms | none | 1 ms | 13 ms |
+2026-11-03 02:17:01.083 +  24543ms [result] | then PowerSetActiveScheme | 46 ms | none | none | none |
+2026-11-03 02:17:01.083 +  24543ms [result] | API write sleep.ac = 10807, no SetActive | 0 ms | none | 1 ms | 14 ms |
+2026-11-03 02:17:01.083 +  24543ms [result] | then PowerSetActiveScheme | 49 ms | 10 ms | none | none |
+2026-11-03 02:17:01.083 +  24543ms [result] | API write sleep.dc = 607, no SetActive | 0 ms | none | 1 ms | 14 ms |
+2026-11-03 02:17:01.083 +  24543ms [result] | then PowerSetActiveScheme | 37 ms | none | none | none |
+2026-11-03 02:17:01.083 +  24543ms [result] | restore (writes + SetActive) | 29 ms | 8 ms | 2 ms | 215 ms |
+2026-11-03 02:17:01.083 +  24544ms [write] restored and verified; journal removed
+2026-11-03 02:17:01.083 +  24544ms [end] exit code 0

@@ -1,0 +1,2 @@
+2026-11-03 03:53:44.383 +      0ms [start] mode hold, pid 28936, elevated false, integrity Medium (0x2000), on AC true, battery 100%, energy saver on false, idle 7041 s
+2026-11-03 03:53:44.383 +      0ms [start] refusing: the lid spike's journal C:\Users\haika\code\wakeshot\spikes\power-settings\..\lid-sleep\out\journal.txt exists. Run its `restore` first.

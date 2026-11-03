@@ -1,0 +1,6 @@
+2026-11-03 02:56:27.307 +      0ms [start] mode restore, args ["--log", "C:\\Users\\haika\\code\\wakeshot\\spikes\\lid-sleep\\out\\restore-limited-20261103-025627.log"], pid 8140, elevated false, integrity Medium (0x2000), on AC true, battery 100%, energy saver on false, idle 3601 s
+2026-11-03 02:56:27.338 +     42ms [restore] PowerSetActiveScheme(381b4222-f694-41f0-9685-ff5bb260df2e) rc 0
+2026-11-03 02:56:27.349 +     43ms [restore] PowerDeleteScheme(227d0496-009d-47fb-b06a-3dd1cf0e9f2d) rc 0
+2026-11-03 02:56:27.349 +     44ms [restore] check: active 381b4222-f694-41f0-9685-ff5bb260df2e, copy left false
+2026-11-03 02:56:27.349 +     45ms [restore] done, journal removed
+2026-11-03 02:56:27.349 +     45ms [end] exit code 0, log C:\Users\haika\code\wakeshot\spikes\lid-sleep\out\restore-limited-20261103-025627.log

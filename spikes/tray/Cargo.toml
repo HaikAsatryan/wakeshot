@@ -1,0 +1,50 @@
+[package]
+name = "tray-spike"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Wakeshot Phase 0 spike: tray icon, menu, notifications, sound, footprint"
+license = "MIT"
+
+[features]
+default = ["screenshots"]
+# Off only to measure how much of the exe size the PNG encoder takes.
+screenshots = ["dep:png"]
+
+[dependencies]
+png = { version = "0.18.1", optional = true }
+
+[dependencies.windows]
+version = "0.62.2"
+features = [
+    "Data_Xml_Dom",
+    "Foundation",
+    "Foundation_Collections",
+    "UI_Notifications",
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    "Win32_Media_Audio",
+    "Win32_Security",
+    "Win32_System_LibraryLoader",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Registry",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_System_WinRT",
+    "Win32_UI_Accessibility",
+    "Win32_UI_Controls",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+]
+
+[build-dependencies]
+embed-resource = "3.0.12"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

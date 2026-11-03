@@ -1,0 +1,71 @@
+03:37:05.742 self pid 13048: integrity Medium (S-1-16-8192), elevation type Limited (filtered, not elevated), logon SID S-1-5-5-0-930782
+03:37:05.743 list C:\Users\haika\.claude\sessions: 6 entries, 3 status files
+03:37:05.744 [20636] status file 20636.json: read ok, 626 bytes: status=busy kind=interactive entrypoint=cli procStart=134381211391959336
+03:37:05.744 [20636] OpenProcess QUERY_LIMITED_INFORMATION: ok
+03:37:05.744 [20636] OpenProcess SYNCHRONIZE: ok
+03:37:05.744 [20636] OpenProcess QUERY_LIMITED_INFORMATION|SYNCHRONIZE: ok
+03:37:05.744 [20636] OpenProcess QUERY_INFORMATION: FAILED 0x80070005
+03:37:05.745 [20636] OpenProcess VM_READ: FAILED 0x80070005
+03:37:05.745 [20636] OpenProcess READ_CONTROL: FAILED 0x80070005
+03:37:05.745 [20636] GetProcessTimes: creation time 134381211391959336, equals procStart
+03:37:05.745 [20636] QueryFullProcessImageNameW: C:\Users\haika\.local\bin\claude.exe
+03:37:05.745 [20636] GetExitCodeProcess: STILL_ACTIVE
+03:37:06.752 [20636] WaitForSingleObject: timed out after 1000 ms (still running)
+03:37:06.752 [20636] target token: integrity High (S-1-16-12288), elevation type Full (elevated), logon SID S-1-5-5-0-930782
+03:37:06.752 [20636] process security descriptor: no READ_CONTROL handle 0x80070005
+03:37:06.759 [20636] system process list: create time 134381211391959336, equals procStart
+03:37:06.759 [20636] watcher verdict: alive, start time matches
+03:37:06.761 [20636] transcript C:\Users\haika\.claude\projects\C--Users-haika-code-wakeshot\1828f2de-68d5-4148-9124-8321986ceb05.jsonl: read ok, 2036305 bytes, 727 lines
+03:37:06.761 [32332] status file 32332.json: read ok, 626 bytes: status=idle kind=interactive entrypoint=cli procStart=134381298442346173
+03:37:06.761 [32332] OpenProcess QUERY_LIMITED_INFORMATION: ok
+03:37:06.761 [32332] OpenProcess SYNCHRONIZE: ok
+03:37:06.761 [32332] OpenProcess QUERY_LIMITED_INFORMATION|SYNCHRONIZE: ok
+03:37:06.761 [32332] OpenProcess QUERY_INFORMATION: FAILED 0x80070005
+03:37:06.761 [32332] OpenProcess VM_READ: FAILED 0x80070005
+03:37:06.761 [32332] OpenProcess READ_CONTROL: FAILED 0x80070005
+03:37:06.762 [32332] GetProcessTimes: creation time 134381298442346173, equals procStart
+03:37:06.762 [32332] QueryFullProcessImageNameW: C:\Users\haika\.local\bin\claude.exe
+03:37:06.762 [32332] GetExitCodeProcess: STILL_ACTIVE
+03:37:07.767 [32332] WaitForSingleObject: timed out after 1000 ms (still running)
+03:37:07.768 [32332] target token: integrity High (S-1-16-12288), elevation type Full (elevated), logon SID S-1-5-5-0-930782
+03:37:07.768 [32332] process security descriptor: no READ_CONTROL handle 0x80070005
+03:37:07.775 [32332] system process list: create time 134381298442346173, equals procStart
+03:37:07.775 [32332] watcher verdict: alive, start time matches
+03:37:07.776 [32332] transcript C:\Users\haika\.claude\projects\C--Users-haika-code-wakeshot\632b3b8f-f440-40c9-912d-9ad7a732cc8c.jsonl: read ok, 525267 bytes, 91 lines
+03:37:07.776 [32484] status file 32484.json: read ok, 700 bytes: status=idle kind=interactive entrypoint=sdk-cli procStart=134381362023868191
+03:37:07.776 [32484] OpenProcess QUERY_LIMITED_INFORMATION: ok
+03:37:07.776 [32484] OpenProcess SYNCHRONIZE: ok
+03:37:07.776 [32484] OpenProcess QUERY_LIMITED_INFORMATION|SYNCHRONIZE: ok
+03:37:07.777 [32484] OpenProcess QUERY_INFORMATION: FAILED 0x80070005
+03:37:07.777 [32484] OpenProcess VM_READ: FAILED 0x80070005
+03:37:07.777 [32484] OpenProcess READ_CONTROL: FAILED 0x80070005
+03:37:07.777 [32484] GetProcessTimes: creation time 134381362023868191, equals procStart
+03:37:07.777 [32484] QueryFullProcessImageNameW: C:\Users\haika\.local\bin\claude.exe
+03:37:07.777 [32484] GetExitCodeProcess: STILL_ACTIVE
+03:37:08.774 [32484] WaitForSingleObject: timed out after 1000 ms (still running)
+03:37:08.774 [32484] target token: integrity High (S-1-16-12288), elevation type Full (elevated), logon SID S-1-5-5-0-930782
+03:37:08.775 [32484] process security descriptor: no READ_CONTROL handle 0x80070005
+03:37:08.781 [32484] system process list: create time 134381362023868191, equals procStart
+03:37:08.781 [32484] watcher verdict: alive, start time matches
+03:37:08.782 [32484] transcript 9e630da5-1544-45ff-99d3-5c692ce9e871.jsonl: not found under projects
+03:37:08.782 [17588] extra process, no status file
+03:37:08.782 [17588] OpenProcess QUERY_LIMITED_INFORMATION: ok
+03:37:08.782 [17588] OpenProcess SYNCHRONIZE: ok
+03:37:08.782 [17588] OpenProcess QUERY_LIMITED_INFORMATION|SYNCHRONIZE: ok
+03:37:08.782 [17588] OpenProcess QUERY_INFORMATION: FAILED 0x80070005
+03:37:08.782 [17588] OpenProcess VM_READ: FAILED 0x80070005
+03:37:08.782 [17588] OpenProcess READ_CONTROL: FAILED 0x80070005
+03:37:08.782 [17588] GetProcessTimes: creation time 134381362018067142, no procStart to compare
+03:37:08.783 [17588] QueryFullProcessImageNameW: C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.9.0_x64__8wekyb3d8bbwe\pwsh.exe
+03:37:08.783 [17588] GetExitCodeProcess: STILL_ACTIVE
+03:37:09.776 [17588] WaitForSingleObject: timed out after 1000 ms (still running)
+03:37:09.777 [17588] target token: integrity High (S-1-16-12288), elevation type Full (elevated), logon SID S-1-5-5-0-930782
+03:37:09.777 [17588] process security descriptor: no READ_CONTROL handle 0x80070005
+03:37:09.783 [17588] system process list: create time 134381362018067142, no procStart to compare
+03:37:09.783 [17588] watcher verdict: alive, no procStart to compare
+03:37:09.783 change notifications on C:\Users\haika\.claude\sessions for 90000 ms
+03:38:39.781   modified 32484.json
+03:38:39.782   modified 32484.json
+03:38:39.782   removed 32484.json
+03:38:39.782 change notifications: 4 events, 3 on status files
+03:38:39.782 probe done

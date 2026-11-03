@@ -1,0 +1,10 @@
+2026-11-03 03:51:29.855 +      0ms [start] mode heat, args ["--seconds", "12", "--load-threads", "2", "--load-at", "2", "--load-seconds", "8", "--heat-limit", "1"], pid 31772, elevated false, integrity Medium (0x2000), on AC true, battery 100%, energy saver on false, idle 6906 s
+2026-11-03 03:51:29.965 +    111ms [heat] t 0 s, load false: \_TZ.THM0 54.1 C limit 100%, throttle reasons 0
+2026-11-03 03:51:31.973 +   2111ms [heat] load ON: 2 threads for 8 s
+2026-11-03 03:51:31.973 +   2113ms [heat] t 2 s, load true: \_TZ.THM0 53.1 C limit 100%, throttle reasons 0
+2026-11-03 03:51:31.973 +   2114ms [heat] HEAT LIMIT: 53.1 C >= 1 C, load OFF early
+2026-11-03 03:51:33.982 +   4121ms [heat] t 4 s, load false: \_TZ.THM0 49.1 C limit 100%, throttle reasons 0
+2026-11-03 03:51:35.984 +   6123ms [heat] t 6 s, load false: \_TZ.THM0 47.1 C limit 100%, throttle reasons 0
+2026-11-03 03:51:37.986 +   8125ms [heat] t 8 s, load false: \_TZ.THM0 46.1 C limit 100%, throttle reasons 0
+2026-11-03 03:51:39.987 +  10127ms [heat] t 10 s, load false: \_TZ.THM0 46.1 C limit 100%, throttle reasons 0
+2026-11-03 03:51:41.990 +  12128ms [end] exit code 0, log C:\Users\haika\code\wakeshot\spikes\lid-sleep\out\heat-20261103-035129.log

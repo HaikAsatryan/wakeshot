@@ -1,0 +1,7 @@
+# One pinned Rust for every build, local and CI; a bump is its own change (architecture section 10).
+[toolchain]
+channel = "1.99.1"
+# Minimal: CI on every runner skips the large docs download.
+profile = "minimal"
+components = ["rustfmt", "clippy"]
+targets = ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"]

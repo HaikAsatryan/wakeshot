@@ -1,0 +1,49 @@
+2026-11-03 02:16:18.129 +      0ms [start] mode read, pid 28924, elevated false, integrity Medium (0x2000), on AC true, battery 98%, energy saver on false, idle 1192 s
+2026-11-03 02:16:18.129 +      1ms [read] active scheme 381b4222-f694-41f0-9685-ff5bb260df2e "Balanced", built-in Balanced: true
+2026-11-03 02:16:18.129 +      2ms [read] scheme 381b4222-f694-41f0-9685-ff5bb260df2e "Balanced"
+2026-11-03 02:16:18.129 +      2ms [read] lid.ac = Ok(1); PowerSettingAccessCheckEx read 0 ERROR_SUCCESS, write 0 ERROR_SUCCESS
+2026-11-03 02:16:18.129 +      2ms [read] lid.dc = Ok(1); PowerSettingAccessCheckEx read 0 ERROR_SUCCESS, write 0 ERROR_SUCCESS
+2026-11-03 02:16:18.129 +      3ms [read] sleep.ac = Ok(10800); PowerSettingAccessCheckEx read 0 ERROR_SUCCESS, write 0 ERROR_SUCCESS
+2026-11-03 02:16:18.129 +      3ms [read] sleep.dc = Ok(600); PowerSettingAccessCheckEx read 0 ERROR_SUCCESS, write 0 ERROR_SUCCESS
+2026-11-03 02:16:18.129 +      3ms [read] energy-saver-threshold.ac = Ok(0); PowerSettingAccessCheckEx read 0 ERROR_SUCCESS, write 0 ERROR_SUCCESS
+2026-11-03 02:16:18.129 +      4ms [read] energy-saver-threshold.dc = Ok(30); PowerSettingAccessCheckEx read 0 ERROR_SUCCESS, write 0 ERROR_SUCCESS
+2026-11-03 02:16:18.129 +      4ms [read] consolelock.ac = Ok(1); PowerSettingAccessCheckEx read 0 ERROR_SUCCESS, write 5 ERROR_ACCESS_DENIED
+2026-11-03 02:16:18.129 +      5ms [read] consolelock.dc = Ok(1); PowerSettingAccessCheckEx read 0 ERROR_SUCCESS, write 5 ERROR_ACCESS_DENIED
+2026-11-03 02:16:18.129 +      5ms [read] display-off.ac = Ok(300); PowerSettingAccessCheckEx read 0 ERROR_SUCCESS, write 0 ERROR_SUCCESS
+2026-11-03 02:16:18.129 +      5ms [read] display-off.dc = Ok(180); PowerSettingAccessCheckEx read 0 ERROR_SUCCESS, write 0 ERROR_SUCCESS
+2026-11-03 02:16:18.129 +      5ms [read] PowerSettingAccessCheckEx(ACCESS_ACTIVE_SCHEME, null) read 0 ERROR_SUCCESS, write 0 ERROR_SUCCESS
+2026-11-03 02:16:18.129 +      6ms [read] PowerSettingAccessCheckEx(ACCESS_CREATE_SCHEME, null) read 0 ERROR_SUCCESS, write 0 ERROR_SUCCESS
+2026-11-03 02:16:18.129 +      6ms [read] PowerSettingAccessCheckEx(ACCESS_SCHEME, null) read 87 ERROR_INVALID_PARAMETER, write 87 ERROR_INVALID_PARAMETER
+2026-11-03 02:16:18.129 +      6ms [read] PowerSettingAccessCheckEx(ACCESS_ACTIVE_OVERLAY_SCHEME, null) read 0 ERROR_SUCCESS, write 0 ERROR_SUCCESS
+2026-11-03 02:16:18.129 +      8ms [read] snapshot DelayLockInterval = 0
+2026-11-03 02:16:18.129 +      8ms [read] snapshot active = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 02:16:18.129 +      8ms [read] snapshot consolelock.ac = 1
+2026-11-03 02:16:18.129 +      8ms [read] snapshot consolelock.dc = 1
+2026-11-03 02:16:18.129 +      8ms [read] snapshot display-off.ac = 300
+2026-11-03 02:16:18.129 +      8ms [read] snapshot display-off.dc = 180
+2026-11-03 02:16:18.129 +      8ms [read] snapshot energy-saver-threshold.ac = 0
+2026-11-03 02:16:18.129 +      8ms [read] snapshot energy-saver-threshold.dc = 30
+2026-11-03 02:16:18.129 +      8ms [read] snapshot lid.ac = 1
+2026-11-03 02:16:18.129 +      8ms [read] snapshot lid.dc = 1
+2026-11-03 02:16:18.129 +      8ms [read] snapshot overlay.ac.reg = ded574b5-45a0-4f42-8737-46345c09c238
+2026-11-03 02:16:18.129 +      9ms [read] snapshot overlay.actual = ded574b5-45a0-4f42-8737-46345c09c238 (best performance?)
+2026-11-03 02:16:18.129 +      9ms [read] snapshot overlay.dc.reg = <absent>
+2026-11-03 02:16:18.129 +      9ms [read] snapshot overlay.effective = ded574b5-45a0-4f42-8737-46345c09c238 (best performance?)
+2026-11-03 02:16:18.129 +      9ms [read] snapshot sleep.ac = 10800
+2026-11-03 02:16:18.129 +      9ms [read] snapshot sleep.dc = 600
+2026-11-03 02:16:18.129 +      9ms [setup] PowerSettingRegisterNotification(energy-saver-threshold) rc 0
+2026-11-03 02:16:18.129 +      9ms [setup] PowerSettingRegisterNotification(consolelock) rc 0
+2026-11-03 02:16:18.129 +      9ms [notify] energy-saver-threshold = 0
+2026-11-03 02:16:18.129 +      9ms [setup] PowerSettingRegisterNotification(active-scheme) rc 0
+2026-11-03 02:16:18.129 +      9ms [notify] active-scheme = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 02:16:18.129 +     10ms [setup] PowerSettingRegisterNotification(power-source) rc 0
+2026-11-03 02:16:18.129 +     10ms [notify] consolelock = 1
+2026-11-03 02:16:18.129 +     10ms [setup] PowerSettingRegisterNotification(energy-saver-status) rc 0
+2026-11-03 02:16:18.129 +     10ms [notify] power-source = 0
+2026-11-03 02:16:18.129 +     10ms [setup] PowerSettingRegisterNotification(display-state) rc 0
+2026-11-03 02:16:18.129 +     10ms [notify] energy-saver-status = 0
+2026-11-03 02:16:18.129 +     10ms [setup] PowerRegisterForEffectivePowerModeNotifications Ok(())
+2026-11-03 02:16:18.129 +     10ms [effmode] MaxPerformance (4)
+2026-11-03 02:16:18.129 +     10ms [notify] display-state = 0
+2026-11-03 02:16:19.641 +   1511ms [read] idle (GetLastInputInfo) 1193562 ms
+2026-11-03 02:16:19.641 +   1511ms [end] exit code 0

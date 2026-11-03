@@ -1,0 +1,236 @@
+2026-11-03 13:13:03.950 +      0ms [start] mode hold, pid 9608, elevated false, integrity Medium (0x2000), on AC false, battery 94%, energy saver on false, idle 29 s
+2026-11-03 13:13:03.953 +      3ms [setup] SetConsoleCtrlHandler Ok(())
+2026-11-03 13:13:04.120 +    171ms [hold] copy a9528ff1-73ad-4fbc-b8bb-7bd3454eedd5 active (rc 0 ERROR_SUCCESS), sleep.dc 0 s (rc 0 ERROR_SUCCESS); user's own sleep.dc is 600 s
+2026-11-03 13:13:04.128 +    179ms [hold] DelayLockInterval = 0
+2026-11-03 13:13:04.128 +    179ms [hold] active = a9528ff1-73ad-4fbc-b8bb-7bd3454eedd5
+2026-11-03 13:13:04.130 +    179ms [hold] consolelock.ac = 1
+2026-11-03 13:13:04.130 +    180ms [hold] consolelock.dc = 1
+2026-11-03 13:13:04.130 +    180ms [hold] display-off.ac = 300
+2026-11-03 13:13:04.130 +    180ms [hold] display-off.dc = 180
+2026-11-03 13:13:04.130 +    180ms [hold] energy-saver-threshold.ac = 0
+2026-11-03 13:13:04.130 +    180ms [hold] energy-saver-threshold.dc = 30
+2026-11-03 13:13:04.130 +    180ms [hold] lid.ac = 1
+2026-11-03 13:13:04.130 +    180ms [hold] lid.dc = 1
+2026-11-03 13:13:04.130 +    180ms [hold] overlay.ac.reg = ded574b5-45a0-4f42-8737-46345c09c238
+2026-11-03 13:13:04.130 +    180ms [hold] overlay.actual = 00000000-0000-0000-0000-000000000000 (balanced, no overlay?)
+2026-11-03 13:13:04.130 +    181ms [hold] overlay.dc.reg = <absent>
+2026-11-03 13:13:04.130 +    181ms [hold] overlay.effective = 00000000-0000-0000-0000-000000000000 (balanced, no overlay?)
+2026-11-03 13:13:04.130 +    181ms [hold] sleep.ac = 10800
+2026-11-03 13:13:04.130 +    181ms [hold] sleep.dc = 0
+2026-11-03 13:13:04.130 +    181ms [setup] PowerSettingRegisterNotification(display-state) rc 0
+2026-11-03 13:13:04.130 +    181ms [setup] PowerSettingRegisterNotification(power-source) rc 0
+2026-11-03 13:13:04.130 +    181ms [setup] PowerSettingRegisterNotification(active-scheme) rc 0
+2026-11-03 13:13:04.130 +    181ms [setup] PowerSettingRegisterNotification(energy-saver-status) rc 0
+2026-11-03 13:13:04.130 +    181ms [setup] PowerRegisterSuspendResumeNotification rc 0
+2026-11-03 13:13:04.130 +    181ms [notify] power-source = 1
+2026-11-03 13:13:04.130 +    181ms [hold] PowerSetRequest(SystemRequired) Ok(())
+2026-11-03 13:13:04.130 +    181ms [hold] PowerSetRequest(ExecutionRequired) Ok(())
+2026-11-03 13:13:04.130 +    182ms [notify] display-state = 1
+2026-11-03 13:13:04.130 +    182ms [hold] holding 'system+execution' for 16 min. No request: sleep about 0 s after the last input. With the documented rule: requests end about 300 s after the last input.
+2026-11-03 13:13:04.130 +    182ms [notify] active-scheme = a9528ff1-73ad-4fbc-b8bb-7bd3454eedd5
+2026-11-03 13:13:04.130 +    182ms [notify] energy-saver-status = 0
+2026-11-03 13:13:09.168 +   5218ms [tick] t 5 s, idle 34 s, wall step 5036 ms, unbiased step 5038 ms, AC false, battery 94%
+2026-11-03 13:13:14.203 +  10253ms [tick] t 10 s, idle 39 s, wall step 5035 ms, unbiased step 5035 ms, AC false, battery 94%
+2026-11-03 13:13:19.244 +  15293ms [tick] t 15 s, idle 44 s, wall step 5039 ms, unbiased step 5041 ms, AC false, battery 94%
+2026-11-03 13:13:24.301 +  20351ms [tick] t 20 s, idle 49 s, wall step 5057 ms, unbiased step 5057 ms, AC false, battery 94%
+2026-11-03 13:13:29.353 +  25403ms [tick] t 25 s, idle 54 s, wall step 5051 ms, unbiased step 5052 ms, AC false, battery 94%
+2026-11-03 13:13:34.410 +  30460ms [tick] t 30 s, idle 59 s, wall step 5057 ms, unbiased step 5057 ms, AC false, battery 94%
+2026-11-03 13:13:39.454 +  35503ms [tick] t 35 s, idle 64 s, wall step 5043 ms, unbiased step 5044 ms, AC false, battery 94%
+2026-11-03 13:13:44.517 +  40566ms [tick] t 40 s, idle 69 s, wall step 5062 ms, unbiased step 5063 ms, AC false, battery 94%
+2026-11-03 13:13:49.571 +  45620ms [tick] t 45 s, idle 74 s, wall step 5054 ms, unbiased step 5054 ms, AC false, battery 94%
+2026-11-03 13:13:54.625 +  50675ms [tick] t 50 s, idle 79 s, wall step 5054 ms, unbiased step 5054 ms, AC false, battery 94%
+2026-11-03 13:13:59.677 +  55727ms [tick] t 55 s, idle 84 s, wall step 5052 ms, unbiased step 5052 ms, AC false, battery 94%
+2026-11-03 13:14:04.740 +  60791ms [tick] t 60 s, idle 89 s, wall step 5064 ms, unbiased step 5063 ms, AC false, battery 94%
+2026-11-03 13:14:09.804 +  65854ms [tick] t 65 s, idle 94 s, wall step 5062 ms, unbiased step 5064 ms, AC false, battery 94%
+2026-11-03 13:14:14.856 +  70906ms [tick] t 70 s, idle 100 s, wall step 5052 ms, unbiased step 5052 ms, AC false, battery 94%
+2026-11-03 13:14:19.893 +  75943ms [tick] t 75 s, idle 105 s, wall step 5037 ms, unbiased step 5037 ms, AC false, battery 94%
+2026-11-03 13:14:24.929 +  80978ms [tick] t 80 s, idle 110 s, wall step 5034 ms, unbiased step 5036 ms, AC false, battery 94%
+2026-11-03 13:14:29.947 +  85996ms [tick] t 85 s, idle 115 s, wall step 5018 ms, unbiased step 5018 ms, AC false, battery 94%
+2026-11-03 13:14:34.966 +  91016ms [tick] t 90 s, idle 120 s, wall step 5019 ms, unbiased step 5019 ms, AC false, battery 94%
+2026-11-03 13:14:39.987 +  96036ms [tick] t 95 s, idle 125 s, wall step 5020 ms, unbiased step 5020 ms, AC false, battery 94%
+2026-11-03 13:14:45.019 + 101068ms [tick] t 100 s, idle 130 s, wall step 5032 ms, unbiased step 5033 ms, AC false, battery 94%
+2026-11-03 13:14:50.046 + 106096ms [tick] t 105 s, idle 135 s, wall step 5027 ms, unbiased step 5027 ms, AC false, battery 94%
+2026-11-03 13:14:55.116 + 111165ms [tick] t 110 s, idle 140 s, wall step 5069 ms, unbiased step 5070 ms, AC false, battery 94%
+2026-11-03 13:15:00.175 + 116225ms [tick] t 116 s, idle 145 s, wall step 5059 ms, unbiased step 5059 ms, AC false, battery 94%
+2026-11-03 13:15:05.236 + 121286ms [tick] t 121 s, idle 150 s, wall step 5061 ms, unbiased step 5061 ms, AC false, battery 94%
+2026-11-03 13:15:10.285 + 126335ms [tick] t 126 s, idle 155 s, wall step 5048 ms, unbiased step 5049 ms, AC false, battery 94%
+2026-11-03 13:15:15.337 + 131386ms [tick] t 131 s, idle 160 s, wall step 5051 ms, unbiased step 5052 ms, AC false, battery 94%
+2026-11-03 13:15:20.397 + 136447ms [tick] t 136 s, idle 165 s, wall step 5060 ms, unbiased step 5060 ms, AC false, battery 94%
+2026-11-03 13:15:25.452 + 141501ms [tick] t 141 s, idle 170 s, wall step 5054 ms, unbiased step 5055 ms, AC false, battery 94%
+2026-11-03 13:15:30.519 + 146569ms [tick] t 146 s, idle 175 s, wall step 5067 ms, unbiased step 5067 ms, AC false, battery 94%
+2026-11-03 13:15:35.577 + 151626ms [tick] t 151 s, idle 180 s, wall step 5057 ms, unbiased step 5058 ms, AC false, battery 94%
+2026-11-03 13:15:40.624 + 156674ms [tick] t 156 s, idle 185 s, wall step 5047 ms, unbiased step 5047 ms, AC false, battery 94%
+2026-11-03 13:15:45.677 + 161727ms [tick] t 161 s, idle 190 s, wall step 5053 ms, unbiased step 5053 ms, AC false, battery 94%
+2026-11-03 13:15:49.618 + 165668ms [notify] display-state = 2
+2026-11-03 13:15:50.738 + 166787ms [tick] t 166 s, idle 195 s, wall step 5060 ms, unbiased step 5061 ms, AC false, battery 94%
+2026-11-03 13:15:55.790 + 171840ms [tick] t 171 s, idle 200 s, wall step 5052 ms, unbiased step 5052 ms, AC false, battery 94%
+2026-11-03 13:16:00.846 + 176895ms [tick] t 176 s, idle 206 s, wall step 5055 ms, unbiased step 5056 ms, AC false, battery 94%
+2026-11-03 13:16:04.618 + 180668ms [notify] display-state = 0
+2026-11-03 13:16:05.875 + 181925ms [tick] t 181 s, idle 211 s, wall step 5029 ms, unbiased step 5029 ms, AC false, battery 94%
+2026-11-03 13:16:10.902 + 186952ms [tick] t 186 s, idle 216 s, wall step 5027 ms, unbiased step 5027 ms, AC false, battery 94%
+2026-11-03 13:16:15.984 + 192033ms [tick] t 191 s, idle 221 s, wall step 5081 ms, unbiased step 5082 ms, AC false, battery 94%
+2026-11-03 13:16:21.065 + 197114ms [tick] t 196 s, idle 226 s, wall step 5080 ms, unbiased step 5081 ms, AC false, battery 94%
+2026-11-03 13:16:26.095 + 202145ms [tick] t 201 s, idle 231 s, wall step 5030 ms, unbiased step 5030 ms, AC false, battery 94%
+2026-11-03 13:16:31.170 + 207219ms [tick] t 207 s, idle 236 s, wall step 5074 ms, unbiased step 5073 ms, AC false, battery 94%
+2026-11-03 13:16:36.223 + 212272ms [tick] t 212 s, idle 241 s, wall step 5053 ms, unbiased step 5055 ms, AC false, battery 94%
+2026-11-03 13:16:41.305 + 217355ms [tick] t 217 s, idle 246 s, wall step 5082 ms, unbiased step 5082 ms, AC false, battery 94%
+2026-11-03 13:16:46.390 + 222440ms [tick] t 222 s, idle 251 s, wall step 5084 ms, unbiased step 5085 ms, AC false, battery 94%
+2026-11-03 13:16:51.469 + 227518ms [tick] t 227 s, idle 256 s, wall step 5078 ms, unbiased step 5079 ms, AC false, battery 94%
+2026-11-03 13:16:56.472 + 232523ms [tick] t 232 s, idle 261 s, wall step 5004 ms, unbiased step 5003 ms, AC false, battery 94%
+2026-11-03 13:17:01.559 + 237609ms [tick] t 237 s, idle 266 s, wall step 5085 ms, unbiased step 5087 ms, AC false, battery 94%
+2026-11-03 13:17:06.626 + 242675ms [tick] t 242 s, idle 271 s, wall step 5066 ms, unbiased step 5067 ms, AC false, battery 94%
+2026-11-03 13:17:11.710 + 247759ms [tick] t 247 s, idle 276 s, wall step 5083 ms, unbiased step 5084 ms, AC false, battery 94%
+2026-11-03 13:17:16.807 + 252856ms [tick] t 252 s, idle 281 s, wall step 5096 ms, unbiased step 5096 ms, AC false, battery 94%
+2026-11-03 13:17:21.901 + 257950ms [tick] t 257 s, idle 287 s, wall step 5093 ms, unbiased step 5094 ms, AC false, battery 94%
+2026-11-03 13:17:26.984 + 263033ms [tick] t 262 s, idle 292 s, wall step 5082 ms, unbiased step 5084 ms, AC false, battery 94%
+2026-11-03 13:17:32.052 + 268102ms [tick] t 267 s, idle 297 s, wall step 5068 ms, unbiased step 5068 ms, AC false, battery 94%
+2026-11-03 13:17:37.129 + 273179ms [tick] t 272 s, idle 302 s, wall step 5076 ms, unbiased step 5077 ms, AC false, battery 94%
+2026-11-03 13:17:42.134 + 278184ms [tick] t 278 s, idle 307 s, wall step 5005 ms, unbiased step 5005 ms, AC false, battery 94%
+2026-11-03 13:17:47.201 + 283250ms [tick] t 283 s, idle 312 s, wall step 5066 ms, unbiased step 5067 ms, AC false, battery 94%
+2026-11-03 13:17:52.291 + 288341ms [tick] t 288 s, idle 317 s, wall step 5090 ms, unbiased step 5090 ms, AC false, battery 94%
+2026-11-03 13:17:57.391 + 293441ms [tick] t 293 s, idle 322 s, wall step 5100 ms, unbiased step 5100 ms, AC false, battery 94%
+2026-11-03 13:18:02.490 + 298540ms [tick] t 298 s, idle 327 s, wall step 5099 ms, unbiased step 5099 ms, AC false, battery 94%
+2026-11-03 13:18:07.497 + 303547ms [tick] t 303 s, idle 332 s, wall step 5006 ms, unbiased step 5007 ms, AC false, battery 94%
+2026-11-03 13:18:12.517 + 308567ms [tick] t 308 s, idle 337 s, wall step 5020 ms, unbiased step 5020 ms, AC false, battery 94%
+2026-11-03 13:18:17.609 + 313659ms [tick] t 313 s, idle 342 s, wall step 5091 ms, unbiased step 5092 ms, AC false, battery 94%
+2026-11-03 13:18:22.655 + 318705ms [tick] t 318 s, idle 347 s, wall step 5046 ms, unbiased step 5046 ms, AC false, battery 94%
+2026-11-03 13:18:27.704 + 323754ms [tick] t 323 s, idle 352 s, wall step 5048 ms, unbiased step 5049 ms, AC false, battery 94%
+2026-11-03 13:18:32.802 + 328851ms [tick] t 328 s, idle 357 s, wall step 5097 ms, unbiased step 5098 ms, AC false, battery 94%
+2026-11-03 13:18:37.837 + 333886ms [tick] t 333 s, idle 363 s, wall step 5035 ms, unbiased step 5035 ms, AC false, battery 94%
+2026-11-03 13:18:42.918 + 338968ms [tick] t 338 s, idle 368 s, wall step 5081 ms, unbiased step 5081 ms, AC false, battery 94%
+2026-11-03 13:18:47.994 + 344044ms [tick] t 343 s, idle 373 s, wall step 5075 ms, unbiased step 5076 ms, AC false, battery 94%
+2026-11-03 13:18:53.063 + 349113ms [tick] t 348 s, idle 378 s, wall step 5068 ms, unbiased step 5069 ms, AC false, battery 94%
+2026-11-03 13:18:58.134 + 354183ms [tick] t 354 s, idle 383 s, wall step 5070 ms, unbiased step 5071 ms, AC false, battery 94%
+2026-11-03 13:19:03.218 + 359267ms [tick] t 359 s, idle 388 s, wall step 5084 ms, unbiased step 5084 ms, AC false, battery 94%
+2026-11-03 13:19:08.308 + 364358ms [tick] t 364 s, idle 393 s, wall step 5090 ms, unbiased step 5090 ms, AC false, battery 94%
+2026-11-03 13:19:13.378 + 369428ms [tick] t 369 s, idle 398 s, wall step 5070 ms, unbiased step 5070 ms, AC false, battery 93%
+2026-11-03 13:19:18.475 + 374525ms [tick] t 374 s, idle 403 s, wall step 5097 ms, unbiased step 5097 ms, AC false, battery 93%
+2026-11-03 13:19:23.480 + 379529ms [tick] t 379 s, idle 408 s, wall step 5004 ms, unbiased step 5005 ms, AC false, battery 93%
+2026-11-03 13:19:28.487 + 384536ms [tick] t 384 s, idle 413 s, wall step 5006 ms, unbiased step 5007 ms, AC false, battery 93%
+2026-11-03 13:19:33.556 + 389606ms [tick] t 389 s, idle 418 s, wall step 5069 ms, unbiased step 5069 ms, AC false, battery 93%
+2026-11-03 13:19:38.644 + 394694ms [tick] t 394 s, idle 423 s, wall step 5087 ms, unbiased step 5088 ms, AC false, battery 93%
+2026-11-03 13:19:43.650 + 399699ms [tick] t 399 s, idle 428 s, wall step 5005 ms, unbiased step 5006 ms, AC false, battery 93%
+2026-11-03 13:19:48.652 + 404702ms [tick] t 404 s, idle 433 s, wall step 5002 ms, unbiased step 5002 ms, AC false, battery 93%
+2026-11-03 13:19:53.733 + 409783ms [tick] t 409 s, idle 438 s, wall step 5080 ms, unbiased step 5081 ms, AC false, battery 93%
+2026-11-03 13:19:58.823 + 414873ms [tick] t 414 s, idle 443 s, wall step 5090 ms, unbiased step 5090 ms, AC false, battery 93%
+2026-11-03 13:20:03.912 + 419961ms [tick] t 419 s, idle 449 s, wall step 5088 ms, unbiased step 5089 ms, AC false, battery 93%
+2026-11-03 13:20:08.918 + 424967ms [tick] t 424 s, idle 454 s, wall step 5005 ms, unbiased step 5006 ms, AC false, battery 93%
+2026-11-03 13:20:13.944 + 429993ms [tick] t 429 s, idle 459 s, wall step 5025 ms, unbiased step 5025 ms, AC false, battery 93%
+2026-11-03 13:20:19.038 + 435088ms [tick] t 434 s, idle 464 s, wall step 5094 ms, unbiased step 5095 ms, AC false, battery 93%
+2026-11-03 13:20:24.119 + 440169ms [tick] t 439 s, idle 469 s, wall step 5081 ms, unbiased step 5081 ms, AC false, battery 93%
+2026-11-03 13:20:29.178 + 445228ms [tick] t 445 s, idle 474 s, wall step 5058 ms, unbiased step 5059 ms, AC false, battery 93%
+2026-11-03 13:20:34.190 + 450240ms [tick] t 450 s, idle 479 s, wall step 5012 ms, unbiased step 5012 ms, AC false, battery 93%
+2026-11-03 13:20:39.203 + 455253ms [tick] t 455 s, idle 484 s, wall step 5012 ms, unbiased step 5013 ms, AC false, battery 93%
+2026-11-03 13:20:44.246 + 460296ms [tick] t 460 s, idle 489 s, wall step 5043 ms, unbiased step 5043 ms, AC false, battery 93%
+2026-11-03 13:20:49.327 + 465377ms [tick] t 465 s, idle 494 s, wall step 5080 ms, unbiased step 5081 ms, AC false, battery 93%
+2026-11-03 13:20:54.398 + 470448ms [tick] t 470 s, idle 499 s, wall step 5071 ms, unbiased step 5071 ms, AC false, battery 93%
+2026-11-03 13:20:59.477 + 475527ms [tick] t 475 s, idle 504 s, wall step 5078 ms, unbiased step 5079 ms, AC false, battery 93%
+2026-11-03 13:21:04.571 + 480620ms [tick] t 480 s, idle 509 s, wall step 5093 ms, unbiased step 5094 ms, AC false, battery 93%
+2026-11-03 13:21:09.669 + 485718ms [tick] t 485 s, idle 514 s, wall step 5098 ms, unbiased step 5098 ms, AC false, battery 93%
+2026-11-03 13:21:14.677 + 490728ms [tick] t 490 s, idle 519 s, wall step 5009 ms, unbiased step 5008 ms, AC false, battery 93%
+2026-11-03 13:21:19.696 + 495745ms [tick] t 495 s, idle 524 s, wall step 5017 ms, unbiased step 5019 ms, AC false, battery 93%
+2026-11-03 13:21:24.786 + 500836ms [tick] t 500 s, idle 529 s, wall step 5090 ms, unbiased step 5090 ms, AC false, battery 93%
+2026-11-03 13:21:29.878 + 505928ms [tick] t 505 s, idle 535 s, wall step 5092 ms, unbiased step 5092 ms, AC false, battery 93%
+2026-11-03 13:21:34.933 + 510982ms [tick] t 510 s, idle 540 s, wall step 5054 ms, unbiased step 5055 ms, AC false, battery 93%
+2026-11-03 13:21:40.025 + 516075ms [tick] t 515 s, idle 545 s, wall step 5092 ms, unbiased step 5092 ms, AC false, battery 93%
+2026-11-03 13:21:45.085 + 521135ms [tick] t 520 s, idle 550 s, wall step 5060 ms, unbiased step 5060 ms, AC false, battery 93%
+2026-11-03 13:21:50.176 + 526226ms [tick] t 526 s, idle 555 s, wall step 5090 ms, unbiased step 5091 ms, AC false, battery 93%
+2026-11-03 13:21:55.269 + 531318ms [tick] t 531 s, idle 560 s, wall step 5092 ms, unbiased step 5092 ms, AC false, battery 93%
+2026-11-03 13:22:00.270 + 536319ms [tick] t 536 s, idle 565 s, wall step 5001 ms, unbiased step 5002 ms, AC false, battery 93%
+2026-11-03 13:22:05.346 + 541396ms [tick] t 541 s, idle 570 s, wall step 5076 ms, unbiased step 5076 ms, AC false, battery 93%
+2026-11-03 13:22:10.421 + 546471ms [tick] t 546 s, idle 575 s, wall step 5075 ms, unbiased step 5075 ms, AC false, battery 93%
+2026-11-03 13:22:15.526 + 551576ms [tick] t 551 s, idle 580 s, wall step 5104 ms, unbiased step 5105 ms, AC false, battery 93%
+2026-11-03 13:22:20.610 + 556660ms [tick] t 556 s, idle 585 s, wall step 5083 ms, unbiased step 5084 ms, AC false, battery 93%
+2026-11-03 13:22:25.701 + 561752ms [tick] t 561 s, idle 590 s, wall step 5091 ms, unbiased step 5091 ms, AC false, battery 93%
+2026-11-03 13:22:30.783 + 566832ms [tick] t 566 s, idle 595 s, wall step 5080 ms, unbiased step 5082 ms, AC false, battery 93%
+2026-11-03 13:22:35.881 + 571931ms [tick] t 571 s, idle 601 s, wall step 5098 ms, unbiased step 5098 ms, AC false, battery 93%
+2026-11-03 13:22:40.960 + 577009ms [tick] t 576 s, idle 606 s, wall step 5077 ms, unbiased step 5078 ms, AC false, battery 93%
+2026-11-03 13:22:46.027 + 582078ms [tick] t 581 s, idle 611 s, wall step 5069 ms, unbiased step 5068 ms, AC false, battery 93%
+2026-11-03 13:22:51.110 + 587159ms [tick] t 586 s, idle 616 s, wall step 5080 ms, unbiased step 5082 ms, AC false, battery 93%
+2026-11-03 13:22:56.125 + 592174ms [tick] t 591 s, idle 621 s, wall step 5015 ms, unbiased step 5016 ms, AC false, battery 93%
+2026-11-03 13:23:01.137 + 597187ms [tick] t 597 s, idle 626 s, wall step 5012 ms, unbiased step 5012 ms, AC false, battery 93%
+2026-11-03 13:23:06.165 + 602216ms [tick] t 602 s, idle 631 s, wall step 5028 ms, unbiased step 5028 ms, AC false, battery 93%
+2026-11-03 13:23:11.242 + 607291ms [tick] t 607 s, idle 636 s, wall step 5075 ms, unbiased step 5077 ms, AC false, battery 93%
+2026-11-03 13:23:16.328 + 612378ms [tick] t 612 s, idle 641 s, wall step 5086 ms, unbiased step 5086 ms, AC false, battery 93%
+2026-11-03 13:23:21.331 + 617381ms [tick] t 617 s, idle 646 s, wall step 5002 ms, unbiased step 5003 ms, AC false, battery 93%
+2026-11-03 13:23:26.358 + 622408ms [tick] t 622 s, idle 651 s, wall step 5027 ms, unbiased step 5027 ms, AC false, battery 93%
+2026-11-03 13:23:31.455 + 627505ms [tick] t 627 s, idle 656 s, wall step 5096 ms, unbiased step 5097 ms, AC false, battery 93%
+2026-11-03 13:23:36.463 + 632512ms [tick] t 632 s, idle 661 s, wall step 5007 ms, unbiased step 5008 ms, AC false, battery 93%
+2026-11-03 13:23:41.556 + 637605ms [tick] t 637 s, idle 666 s, wall step 5093 ms, unbiased step 5093 ms, AC false, battery 93%
+2026-11-03 13:23:46.567 + 642617ms [tick] t 642 s, idle 671 s, wall step 5011 ms, unbiased step 5011 ms, AC false, battery 93%
+2026-11-03 13:23:51.572 + 647622ms [tick] t 647 s, idle 676 s, wall step 5004 ms, unbiased step 5005 ms, AC false, battery 93%
+2026-11-03 13:23:56.576 + 652625ms [tick] t 652 s, idle 681 s, wall step 5003 ms, unbiased step 5004 ms, AC false, battery 93%
+2026-11-03 13:24:01.664 + 657714ms [tick] t 657 s, idle 686 s, wall step 5088 ms, unbiased step 5088 ms, AC false, battery 93%
+2026-11-03 13:24:06.754 + 662804ms [tick] t 662 s, idle 691 s, wall step 5089 ms, unbiased step 5090 ms, AC false, battery 93%
+2026-11-03 13:24:11.766 + 667815ms [tick] t 667 s, idle 696 s, wall step 5011 ms, unbiased step 5012 ms, AC false, battery 93%
+2026-11-03 13:24:16.849 + 672900ms [tick] t 672 s, idle 702 s, wall step 5084 ms, unbiased step 5083 ms, AC false, battery 93%
+2026-11-03 13:24:21.915 + 677965ms [tick] t 677 s, idle 707 s, wall step 5065 ms, unbiased step 5066 ms, AC false, battery 93%
+2026-11-03 13:24:26.929 + 682979ms [tick] t 682 s, idle 712 s, wall step 5014 ms, unbiased step 5014 ms, AC false, battery 93%
+2026-11-03 13:24:32.020 + 688069ms [tick] t 687 s, idle 717 s, wall step 5090 ms, unbiased step 5091 ms, AC false, battery 93%
+2026-11-03 13:24:37.033 + 693083ms [tick] t 692 s, idle 722 s, wall step 5013 ms, unbiased step 5013 ms, AC false, battery 93%
+2026-11-03 13:24:42.105 + 698154ms [tick] t 697 s, idle 727 s, wall step 5071 ms, unbiased step 5072 ms, AC false, battery 93%
+2026-11-03 13:24:47.192 + 703241ms [tick] t 703 s, idle 732 s, wall step 5086 ms, unbiased step 5087 ms, AC false, battery 93%
+2026-11-03 13:24:52.282 + 708332ms [tick] t 708 s, idle 737 s, wall step 5091 ms, unbiased step 5090 ms, AC false, battery 93%
+2026-11-03 13:24:57.288 + 713338ms [tick] t 713 s, idle 742 s, wall step 5005 ms, unbiased step 5006 ms, AC false, battery 93%
+2026-11-03 13:25:02.299 + 718349ms [tick] t 718 s, idle 747 s, wall step 5011 ms, unbiased step 5011 ms, AC false, battery 93%
+2026-11-03 13:25:07.309 + 723358ms [tick] t 723 s, idle 752 s, wall step 5009 ms, unbiased step 5010 ms, AC false, battery 93%
+2026-11-03 13:25:12.396 + 728446ms [tick] t 728 s, idle 757 s, wall step 5088 ms, unbiased step 5087 ms, AC false, battery 93%
+2026-11-03 13:25:17.470 + 733519ms [tick] t 733 s, idle 762 s, wall step 5072 ms, unbiased step 5074 ms, AC false, battery 93%
+2026-11-03 13:25:22.529 + 738579ms [tick] t 738 s, idle 767 s, wall step 5059 ms, unbiased step 5059 ms, AC false, battery 93%
+2026-11-03 13:25:27.599 + 743649ms [tick] t 743 s, idle 772 s, wall step 5070 ms, unbiased step 5070 ms, AC false, battery 93%
+2026-11-03 13:25:32.684 + 748734ms [tick] t 748 s, idle 777 s, wall step 5085 ms, unbiased step 5085 ms, AC false, battery 93%
+2026-11-03 13:25:37.693 + 753743ms [tick] t 753 s, idle 782 s, wall step 5008 ms, unbiased step 5009 ms, AC false, battery 93%
+2026-11-03 13:25:42.697 + 758746ms [tick] t 758 s, idle 787 s, wall step 5003 ms, unbiased step 5004 ms, AC false, battery 93%
+2026-11-03 13:25:47.793 + 763843ms [tick] t 763 s, idle 792 s, wall step 5096 ms, unbiased step 5096 ms, AC false, battery 93%
+2026-11-03 13:25:52.883 + 768933ms [tick] t 768 s, idle 798 s, wall step 5089 ms, unbiased step 5090 ms, AC false, battery 93%
+2026-11-03 13:25:57.883 + 773933ms [tick] t 773 s, idle 803 s, wall step 5000 ms, unbiased step 5000 ms, AC false, battery 93%
+2026-11-03 13:26:02.959 + 779009ms [tick] t 778 s, idle 808 s, wall step 5075 ms, unbiased step 5076 ms, AC false, battery 93%
+2026-11-03 13:26:08.047 + 784097ms [tick] t 783 s, idle 813 s, wall step 5088 ms, unbiased step 5088 ms, AC false, battery 93%
+2026-11-03 13:26:13.135 + 789185ms [tick] t 789 s, idle 818 s, wall step 5087 ms, unbiased step 5088 ms, AC false, battery 93%
+2026-11-03 13:26:18.240 + 794289ms [tick] t 794 s, idle 823 s, wall step 5104 ms, unbiased step 5105 ms, AC false, battery 93%
+2026-11-03 13:26:23.250 + 799300ms [tick] t 799 s, idle 828 s, wall step 5010 ms, unbiased step 5009 ms, AC false, battery 93%
+2026-11-03 13:26:28.339 + 804390ms [tick] t 804 s, idle 833 s, wall step 5090 ms, unbiased step 5090 ms, AC false, battery 93%
+2026-11-03 13:26:33.433 + 809482ms [tick] t 809 s, idle 838 s, wall step 5092 ms, unbiased step 5094 ms, AC false, battery 93%
+2026-11-03 13:26:38.505 + 814555ms [tick] t 814 s, idle 843 s, wall step 5072 ms, unbiased step 5072 ms, AC false, battery 93%
+2026-11-03 13:26:43.527 + 819577ms [tick] t 819 s, idle 848 s, wall step 5021 ms, unbiased step 5022 ms, AC false, battery 93%
+2026-11-03 13:26:48.543 + 824593ms [tick] t 824 s, idle 853 s, wall step 5016 ms, unbiased step 5016 ms, AC false, battery 93%
+2026-11-03 13:26:53.546 + 829596ms [tick] t 829 s, idle 858 s, wall step 5002 ms, unbiased step 5003 ms, AC false, battery 93%
+2026-11-03 13:26:58.623 + 834672ms [tick] t 834 s, idle 863 s, wall step 5076 ms, unbiased step 5077 ms, AC false, battery 93%
+2026-11-03 13:27:03.722 + 839771ms [tick] t 839 s, idle 868 s, wall step 5099 ms, unbiased step 5099 ms, AC false, battery 93%
+2026-11-03 13:27:08.784 + 844833ms [tick] t 844 s, idle 873 s, wall step 5061 ms, unbiased step 5062 ms, AC false, battery 93%
+2026-11-03 13:27:13.875 + 849924ms [tick] t 849 s, idle 879 s, wall step 5090 ms, unbiased step 5091 ms, AC false, battery 93%
+2026-11-03 13:27:18.973 + 855023ms [tick] t 854 s, idle 884 s, wall step 5098 ms, unbiased step 5098 ms, AC false, battery 93%
+2026-11-03 13:27:23.999 + 860050ms [tick] t 859 s, idle 889 s, wall step 5027 ms, unbiased step 5026 ms, AC false, battery 93%
+2026-11-03 13:27:29.012 + 865062ms [tick] t 864 s, idle 894 s, wall step 5011 ms, unbiased step 5013 ms, AC false, battery 93%
+2026-11-03 13:27:34.012 + 870062ms [tick] t 869 s, idle 899 s, wall step 5000 ms, unbiased step 5000 ms, AC false, battery 93%
+2026-11-03 13:27:39.110 + 875160ms [tick] t 874 s, idle 904 s, wall step 5097 ms, unbiased step 5098 ms, AC false, battery 93%
+2026-11-03 13:27:44.189 + 880238ms [tick] t 880 s, idle 909 s, wall step 5078 ms, unbiased step 5079 ms, AC false, battery 93%
+2026-11-03 13:27:49.266 + 885316ms [tick] t 885 s, idle 914 s, wall step 5077 ms, unbiased step 5077 ms, AC false, battery 93%
+2026-11-03 13:27:54.357 + 890408ms [tick] t 890 s, idle 919 s, wall step 5091 ms, unbiased step 5091 ms, AC false, battery 93%
+2026-11-03 13:27:59.388 + 895438ms [tick] t 895 s, idle 924 s, wall step 5029 ms, unbiased step 5031 ms, AC false, battery 93%
+2026-11-03 13:28:04.397 + 900447ms [tick] t 900 s, idle 929 s, wall step 5009 ms, unbiased step 5009 ms, AC false, battery 93%
+2026-11-03 13:28:09.398 + 905447ms [tick] t 905 s, idle 934 s, wall step 5000 ms, unbiased step 5001 ms, AC false, battery 93%
+2026-11-03 13:28:14.494 + 910544ms [tick] t 910 s, idle 939 s, wall step 5096 ms, unbiased step 5096 ms, AC false, battery 93%
+2026-11-03 13:28:19.498 + 915548ms [tick] t 915 s, idle 944 s, wall step 5003 ms, unbiased step 5004 ms, AC false, battery 93%
+2026-11-03 13:28:24.542 + 920592ms [tick] t 920 s, idle 949 s, wall step 5044 ms, unbiased step 5044 ms, AC false, battery 93%
+2026-11-03 13:28:29.637 + 925687ms [tick] t 925 s, idle 954 s, wall step 5094 ms, unbiased step 5095 ms, AC false, battery 93%
+2026-11-03 13:28:34.645 + 930695ms [tick] t 930 s, idle 959 s, wall step 5008 ms, unbiased step 5008 ms, AC false, battery 93%
+2026-11-03 13:28:39.709 + 935759ms [tick] t 935 s, idle 964 s, wall step 5063 ms, unbiased step 5064 ms, AC false, battery 93%
+2026-11-03 13:28:44.768 + 940818ms [tick] t 940 s, idle 969 s, wall step 5058 ms, unbiased step 5059 ms, AC false, battery 93%
+2026-11-03 13:28:49.783 + 945832ms [tick] t 945 s, idle 974 s, wall step 5014 ms, unbiased step 5015 ms, AC false, battery 93%
+2026-11-03 13:28:54.796 + 950846ms [tick] t 950 s, idle 979 s, wall step 5013 ms, unbiased step 5013 ms, AC false, battery 93%
+2026-11-03 13:28:59.897 + 955948ms [tick] t 955 s, idle 985 s, wall step 5101 ms, unbiased step 5101 ms, AC false, battery 93%
+2026-11-03 13:29:04.981 + 961031ms [tick] t 960 s, idle 990 s, wall step 5082 ms, unbiased step 5084 ms, AC false, battery 93%
+2026-11-03 13:29:04.988 + 961041ms [notify] active-scheme = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 13:29:05.079 + 961135ms [hold] restore: PowerSetActiveScheme(original) 0 ERROR_SUCCESS, PowerDeleteScheme(copy) 0 ERROR_SUCCESS
+2026-11-03 13:29:05.202 + 961255ms [events] Date: 2026-11-03T13:12:24.1020000Z
+2026-11-03 13:29:05.202 + 961255ms [events] Event ID: 105
+2026-11-03 13:29:05.202 + 961255ms [events] Date: 2026-11-03T13:16:04.6270000Z
+2026-11-03 13:29:05.202 + 961255ms [events] Event ID: 506
+2026-11-03 13:29:05.202 + 961255ms [events] The system is entering Modern Standby
+2026-11-03 13:29:05.202 + 961255ms [events] Reason: Idle Timeout. 
+2026-11-03 13:29:05.202 + 961255ms [result] gaps: none
+2026-11-03 13:29:05.281 + 961343ms [powercfg] /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 13:29:05.361 + 961418ms [powercfg] /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 13:29:05.361 + 961419ms [hold] clean: original plan active, copy removed
+2026-11-03 13:29:05.361 + 961419ms [end] exit code 0, log C:\Users\haika\code\wakeshot\spikes\power-settings\out\hold-20261103-131303.log

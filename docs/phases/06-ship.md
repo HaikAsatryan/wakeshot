@@ -1,0 +1,196 @@
+# Phase 6: Ship (track)
+
+Planned 2026-11-03 by card `docs/tasks/p6-plan-ship.md`. Haik signs off all five track plans at once. Integration
+(wiring all tracks into the two exes, end-to-end tests, Haik's checklist) is planned later, not here.
+
+## Goal
+
+Wakeshot installs per user from one `Setup.exe` (and later from winget), starts at login, updates itself from GitHub
+Releases only while nothing holds and nothing is overridden, and leaves the user's power settings, Run values and
+Path as they were when it is uninstalled. v1 ships unsigned. A README and a GitHub Pages page say what Wakeshot does
+and what it changes.
+
+## Track notes
+
+Only what `architecture.md` leaves open for this track. Where these notes change the design, the exact proposal is
+in `p6-plan-ship`, Result, for the orchestrator to route.
+
+### Where the code goes
+
+| File | Holds |
+|---|---|
+| `crates/wakeshot-windows/src/install.rs` | the CLI folder in the user Path: add, remove, the Path text edit, the `WM_SETTINGCHANGE` broadcast. The start-at-login Run value is `store::AutoStart`'s (`p3-store`), its one writer (review m12) |
+| `crates/wakeshot-windows/src/hooks.rs` | what each Velopack hook does, in order and within its time, over trait `HookEnv`; `RealHookEnv` calls `install`, `store::AutoStart` and the power track's `power::journal::restore_locked` (one attempt per call; the hooks keep their own retries and limits), RunOnce and log code |
+| `crates/wakeshot-windows/src/update.rs` | when to check, download and apply an update, over trait `UpdateFeed`; posts `Event::UpdateReady` and `Outcome::Update` |
+| `crates/wakeshot-tray/src/velo.rs` | the only file that names the `velopack` crate: `startup()` runs `VelopackApp` with the four hook callbacks (tray startup step 1) and returns the `UpdateFeed` for tray mode |
+| `packaging/` | `pack.ps1`, `smoke-test.ps1`, `e2e.ps1`, `winget/` |
+| `.github/workflows/release.yml`, `pages.yml`; `site/` | release build, pack, smoke test, upload; the Pages page |
+
+Why the hook and update logic sit in the lib, not the tray: they test without `velopack` and its 113 packages, and a
+bin crate flags every item no `main` calls yet, which would fail `clippy -D warnings` until integration.
+
+### Package and install values
+
+Haik's: pack id `HaikAsatryan.Wakeshot`, data folder `%LocalAppData%\Wakeshot`. Values I set (change any at
+sign-off):
+
+- Pack title `Wakeshot`, authors `Haik Asatryan`, main exe `wakeshot-tray.exe`, `wakeshot.exe` beside it in the same
+  package. Channels `win-x64` and `win-arm64`, always with `-r` (without it `vpk` packs for x86).
+- Start menu shortcut only (`--shortcuts StartMenuRoot`), no desktop shortcut: the tray starts at login anyway.
+- Run value `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Wakeshot`: the quoted path of
+  `current\wakeshot-tray.exe` if `p6-velopack-facts` shows that `current` keeps its path across updates, else the root
+  stub. The user turns start at login off in Settings > Apps > Startup; Windows keeps that choice in its own key, so a
+  reinstall that writes the Run value again does not turn it back on (not verified).
+- Path entry: the `current` folder, so `wakeshot` works in every new terminal.
+- `velopack` pinned exactly (`=1.2.161`), the same version as the `vpk` that packs it.
+
+### Hooks
+
+`architecture.md` section 6 says what the hooks do. Order and times (values I set):
+
+| Hook | Velopack limit | Steps, in order |
+|---|---|---|
+| install (also Setup.exe over an install, which is what `winget upgrade` runs) | 30 s | write the Run value and the Path entry; then the restore routine if a journal exists and its owner is Gone, again every 2 s until 25 s |
+| obsolete (old version, before an update) | 15 s | log only: updates apply only when nothing is overridden, and the updated hook restores anyway |
+| updated (new version) | 15 s | the Path entry (no change when `current` keeps its path); then restore as at install, until 12 s |
+| uninstall | 30 s | remove the Run value, the RunOnce value and the Path entry; then restore with retries until 25 s; then the data folder (Question 2) |
+
+- Registry first, restore last: a restore call that hangs is killed at the limit, and must not leave a Run value or a
+  Path entry pointing into a deleted folder. This changes the order in `architecture.md` section 6 ("restores ...
+  then removes"); proposal in `p6-plan-ship`, Result.
+- An owner that is alive or Unknown at a hook: no restore, a log line (an installed tray is always killed first, so
+  this is a dev build running from elsewhere).
+- Hooks show no UI, never start the tray (Velopack kills every process from the install folder after each hook) and
+  never panic: each failure is a log line with process `hook`.
+
+### Updates
+
+- The update thread runs only in tray mode (not guard, restore or dry run) and only when Velopack finds an install; a
+  build run from `target\` has no updates.
+- First check 5 minutes after start, so sign-in is not slowed; then every 12 hours of wall time, so a PC that slept
+  past a due check checks soon after it wakes. Download at once, then `Event::UpdateReady { version }`. A failed
+  check or download: a log line, tried again at the next check, no notice. Values I set.
+- The core applies only when no hold counts, no hold file names a live process (so an update never kills a
+  `wakeshot run` wrapper, also with Automatic off) and no key is owned. Then `Command::ApplyUpdate`: the update thread
+  calls `wait_exit_then_apply_updates(silent, restart)`, answers `Outcome::Update`, and on success the core issues
+  `Quit`. Velopack waits at most 60 s for the exit (research, "Ship track planning checks"), runs the obsolete and
+  updated hooks, and starts the new tray.
+- After an update, one notice (Question 3).
+- Network: the GitHub API without a token (60 requests an hour per IP); two checks a day. No other network call.
+
+### Release
+
+- `release.yml` on a `v*` tag: the tag must equal `[workspace.package] version`; build and test each CPU on its own
+  runner, with the same checks as `ci.yml`; `pack.ps1` per CPU; `smoke-test.ps1` on each runner (silent install,
+  checks, silent uninstall, checks); one upload job, the only one with `contents: write`, runs `vpk upload github`.
+  Deltas come from the last release (`vpk download github` before the pack). A manual run packs and smoke-tests
+  without uploading.
+- Signing: none in v1 (decision 44). The workflow marks the two places SignPath goes later: the exes before
+  `vpk pack`, `Setup.exe` after it. Applying to SignPath waits for real users (`research/distribution.md`, section 3).
+- ARM64 builds need clang once `velopack` is in (research, "Ship track planning checks"). Both runner images have
+  LLVM; this laptop has none (Question 4).
+
+### Checks while other cards run
+
+From the cross-track review (B1); the rule is `docs/plan.md` "How we work" step 2. Every card of this track checks only
+its own package and files:
+- format: `rustfmt --edition 2024 --check <owned files>`. A bare `rustfmt` uses the 2015 edition (the repo has no
+  `rustfmt.toml`) and also checks the child modules a file declares (both checked 2026-11-03, `docs/research.md` "Track
+  plan fixes checks"), so a diff in another card's child file is not this card's. Format only owned files (`rustfmt
+  --edition 2024 <file>`), never a file whose child modules another card owns.
+- lint: `cargo clippy --locked -p <own package> --all-targets --target <t> -- -D warnings` and the same without
+  `--all-targets` (the libs as they ship, without `test-support`; `CLAUDE.md` "Checks"), for both targets: nothing in
+  the owned files.
+- test: `cargo test --locked -p <own package> <filter>`: the card's own tests pass. Several filters go after `--`
+  (`cargo test --locked -p wakeshot-windows -- a:: b::`); two filters before `--` are a cargo error.
+- Every cargo command takes `--locked`: it fails at once if a build would change `Cargo.lock`, which only
+  `p6-velopack-dependency` changes, alone.
+- A failure in a file another card owns goes in the Log: wait and run again; never edit, format or `--fix` that file.
+  Never run `cargo fmt` without `--check`, `cargo fix` or `cargo clippy --fix`.
+- Every save of an owned file compiles (`todo!()` bodies are fine): one compile error fails every `-p` run of that crate
+  and of the crates that use it.
+- No card runs `--workspace` or `--all` as a done check; the orchestrator runs the whole-workspace check when it closes
+  a wave.
+- Once `p6-velopack-dependency` is done, ARM64 builds of `wakeshot-tray` need clang (only the tray depends on
+  `velopack`); without clang on this laptop they are CI only (review M5).
+- Delete the card's own target folder when the card is done (review m14).
+
+`p6-velopack-dependency` is the one exception: it runs alone, so its whole-workspace runs are right.
+
+### Not in this track
+
+- The winget submission, the first public release and the repo cleanup: Phase 8. scoop: later (an own bucket; its
+  uninstall runs no Velopack hook, so it needs a `pre_uninstall` restore). Microsoft Store: not planned (MSIX has no
+  uninstall hook).
+- Integration: start the update thread in tray mode and run `ApplyUpdate` and `Quit` in the loop; the update path end
+  to end (a GitHub pre-release, Question 5, or a local feed); checklist 14 in `architecture.md` section 9 (`winget
+  upgrade` and uninstall during a real hold), which needs Haik.
+
+## Task cards (`docs/tasks/`)
+
+Real laptop means the card installs software or changes real user state on the test laptop. The orchestrator runs
+those one at a time across all tracks.
+
+| Card | Needs Haik | Runs after | Status |
+|---|---|---|---|
+| `p6-velopack-facts` | no; real laptop: installs and uninstalls a throwaway app | Haik's sign-off of the track plans; the contracts card (it builds the repo's release exes; review m10) | ready |
+| `p6-login-and-path` | no | the contracts card; `p3-store` (test key helper) | ready |
+| `p6-update-schedule` | no | the contracts card | ready |
+| `p6-hooks` | no (uses the answer to Question 2) | `p6-login-and-path`; `p3-store`, `p3-log`, `p3-process`, `p3-journal`, `p3-power-plan`; core `p2-ownership-restore` (review M1) | ready |
+| `p6-velopack-dependency` | Question 4 answered; runs alone on the whole laptop: no other card and no cargo command (review M5) | `p6-hooks`, `p6-update-schedule`, `p6-velopack-facts` | ready |
+| `p6-pack-and-release` | no (Question 5 for the first real run) | `p6-velopack-facts` | ready |
+| `p6-install-e2e` | no; real laptop: installs, the real Run value and Path, a throwaway plan copy | `p6-velopack-dependency`, `p6-pack-and-release`; `p3-power-plan` (its first test shows a write to an inactive copy leaves the real plan alone) | ready |
+| `p6-winget-manifest` | no | `p6-pack-and-release` | ready |
+| `p6-readme` | yes: the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3); a read at sign-off | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-codex`, `p4-live-copilot`; the tray track's `p5-haik-check` (review m2) | ready |
+| `p6-pages` | yes: one look before it goes live at v1 | `p6-readme`; the tray track's `p5-icon-art` and `p5-haik-check` (Haik's icon pick rewrites `assets/wakeshot.ico`; review m3) | ready |
+
+Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
+dependency 110K, pack and release 110K, install e2e 130K, winget 60K, README 70K, Pages 60K. About 880K in all.
+
+### Files each card owns
+
+Every code file below exists after the contracts card (module lines, the `velo::startup()` call in the tray's
+`main.rs`, the new enum variants), so no card of this track edits a module list, a `main.rs` or a shared enum.
+
+| Card | Owns |
+|---|---|
+| `p6-velopack-facts` | a section in `docs/research.md` (additions only); a scratch crate outside the repo |
+| `p6-login-and-path` | `crates/wakeshot-windows/src/install.rs` |
+| `p6-update-schedule` | `crates/wakeshot-windows/src/update.rs` |
+| `p6-hooks` | `crates/wakeshot-windows/src/hooks.rs` |
+| `p6-velopack-dependency` | root `Cargo.toml`, `Cargo.lock`, `crates/wakeshot-tray/Cargo.toml` (run alone); `crates/wakeshot-tray/src/velo.rs`; `.github/workflows/ci.yml` only if the ARM64 job needs a clang step |
+| `p6-pack-and-release` | `packaging/pack.ps1`, `packaging/smoke-test.ps1`, `packaging/README.md`, `.github/workflows/release.yml` |
+| `p6-install-e2e` | `packaging/e2e.ps1`; fixes in `packaging/smoke-test.ps1` (after `p6-pack-and-release`) |
+| `p6-winget-manifest` | `packaging/winget/` |
+| `p6-readme` | `README.md` |
+| `p6-pages` | `site/`, `.github/workflows/pages.yml` |
+
+### Order inside the track
+
+1. After Haik's sign-off and the contracts card: `p6-velopack-facts` (real laptop, no power settings),
+   `p6-update-schedule`; `p6-login-and-path` once `p3-store` is done. In parallel with each other and with any other
+   track's card.
+2. After the facts: `p6-pack-and-release` (it packs into the scratch folder, never installs).
+3. When `p3-store`, `p3-log`, `p3-process`, `p3-journal`, `p3-power-plan` and the core's `p2-ownership-restore` are
+   done: `p6-hooks`.
+4. Before step 5, if Haik says yes to Question 4: install the clang component as its own real-laptop step, with no
+   cargo command running (review M5).
+5. `p6-velopack-dependency`, alone on the whole laptop (no other card, no cargo command), at a quiet point: from then
+   on every build of the tray compiles `velopack` once per target folder, and local ARM64 checks of the tray need
+   clang.
+6. `p6-install-e2e` (real laptop; never beside a card that uses the dry-run data folder), then `p6-winget-manifest`
+   (it can also run right after step 2).
+7. Last: `p6-readme`, then `p6-pages`.
+
+## Questions for Haik
+
+In `p6-plan-ship`, "Questions for Haik", each with the default the cards take: (1) Wakeshot off after `winget
+upgrade` until the next sign-in, (2) the data folder at uninstall, (3) a notice after an update, (4) clang on this
+laptop for ARM64 builds, (5) a public pre-release to test the release workflow. All five are also in
+`docs/phases/02-06-signoff.md`. Question 3 matters early: the contracts card left out `Event::Updated` and
+`Notice::Updated` until his answer, so a yes means one more contracts change, run alone (review m9).
+
+## Work log
+
+- 2026-11-03 16:59: track planned by `p6-plan-ship`: 10 cards, about 880K tokens. Waits for Haik's sign-off of the
+  five track plans and the contracts card.

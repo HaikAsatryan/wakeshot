@@ -1,0 +1,149 @@
+2026-11-03 02:17:55.847 +      0ms [start] mode copy-test, pid 10060, elevated false, integrity Medium (0x2000), on AC true, battery 98%, energy saver on false, idle 1289 s
+2026-11-03 02:17:55.847 +      1ms [copy] active scheme 381b4222-f694-41f0-9685-ff5bb260df2e "Balanced"
+2026-11-03 02:17:55.863 +      2ms [copy] before: DelayLockInterval = 0
+2026-11-03 02:17:55.863 +      3ms [copy] before: active = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 02:17:55.863 +      3ms [copy] before: consolelock.ac = 1
+2026-11-03 02:17:55.863 +      3ms [copy] before: consolelock.dc = 1
+2026-11-03 02:17:55.863 +      3ms [copy] before: display-off.ac = 300
+2026-11-03 02:17:55.863 +      3ms [copy] before: display-off.dc = 180
+2026-11-03 02:17:55.863 +      3ms [copy] before: energy-saver-threshold.ac = 0
+2026-11-03 02:17:55.863 +      3ms [copy] before: energy-saver-threshold.dc = 30
+2026-11-03 02:17:55.863 +      4ms [copy] before: lid.ac = 1
+2026-11-03 02:17:55.863 +      4ms [copy] before: lid.dc = 1
+2026-11-03 02:17:55.863 +      4ms [copy] before: overlay.ac.reg = ded574b5-45a0-4f42-8737-46345c09c238
+2026-11-03 02:17:55.863 +      4ms [copy] before: overlay.actual = ded574b5-45a0-4f42-8737-46345c09c238 (best performance?)
+2026-11-03 02:17:55.863 +      4ms [copy] before: overlay.dc.reg = <absent>
+2026-11-03 02:17:55.863 +      4ms [copy] before: overlay.effective = ded574b5-45a0-4f42-8737-46345c09c238 (best performance?)
+2026-11-03 02:17:55.863 +      4ms [copy] before: sleep.ac = 10800
+2026-11-03 02:17:55.863 +      4ms [copy] before: sleep.dc = 600
+2026-11-03 02:17:55.863 +      4ms [copy] PowerSettingAccessCheckEx(ACCESS_CREATE_SCHEME) write 0 ERROR_SUCCESS, (ACCESS_ACTIVE_SCHEME) write 0 ERROR_SUCCESS
+2026-11-03 02:17:55.863 +      4ms [setup] PowerSettingRegisterNotification(active-scheme) rc 0
+2026-11-03 02:17:55.863 +      4ms [setup] PowerSettingRegisterNotification(personality) rc 0
+2026-11-03 02:17:55.863 +      5ms [notify] active-scheme = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 02:17:55.863 +      5ms [setup] PowerSettingRegisterNotification(lid) rc 0
+2026-11-03 02:17:55.863 +      5ms [notify] personality = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 02:17:55.863 +      5ms [setup] PowerSettingRegisterNotification(sleep) rc 0
+2026-11-03 02:17:55.863 +      5ms [notify] lid = 2
+2026-11-03 02:17:55.863 +      5ms [setup] PowerRegisterForEffectivePowerModeNotifications Ok(())
+2026-11-03 02:17:55.863 +      5ms [effmode] MaxPerformance (4)
+2026-11-03 02:17:55.863 +      5ms [notify] sleep = 10800
+2026-11-03 02:17:55.863 +      5ms [setup] RegOpenKeyExW(SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes) rc 0
+2026-11-03 02:17:57.366 +   1506ms [trigger] >>> PowerDuplicateScheme(active)
+2026-11-03 02:17:57.366 +   1508ms [reg-hklm] key changed, no watched value differs
+2026-11-03 02:17:57.366 +   1509ms [reg-hklm] key changed, no watched value differs
+2026-11-03 02:17:57.366 +   1510ms [copy] copy 7efbae22-6210-4dc2-a71e-194fbcbae8b9
+2026-11-03 02:17:57.366 +   1510ms [reg-hklm] key changed, no watched value differs
+2026-11-03 02:17:57.366 +   1510ms [copy] PowerWriteFriendlyName rc 0 ERROR_SUCCESS
+2026-11-03 02:17:57.366 +   1510ms [reg-hklm] key changed, no watched value differs
+2026-11-03 02:17:59.871 +   4010ms [result] | PowerDuplicateScheme | 2 ms | none | 2 ms | none |
+2026-11-03 02:17:59.871 +   4011ms [trigger] >>> PowerSetActiveScheme(copy)
+2026-11-03 02:17:59.871 +   4014ms [notify] active-scheme = 7efbae22-6210-4dc2-a71e-194fbcbae8b9
+2026-11-03 02:17:59.941 +   4087ms [copy] PowerSetActiveScheme(copy) rc 0 ERROR_SUCCESS
+2026-11-03 02:17:59.941 +   4089ms [poll] active 381b4222-f694-41f0-9685-ff5bb260df2e -> 7efbae22-6210-4dc2-a71e-194fbcbae8b9
+2026-11-03 02:17:59.941 +   4089ms [reg-hklm] key changed: active 381b4222-f694-41f0-9685-ff5bb260df2e -> 7efbae22-6210-4dc2-a71e-194fbcbae8b9
+2026-11-03 02:18:02.948 +   7088ms [result] | PowerSetActiveScheme(copy) | 76 ms | 4 ms | 78 ms | 78 ms |
+2026-11-03 02:18:02.948 +   7091ms [copy] copy active: DelayLockInterval = 0
+2026-11-03 02:18:02.952 +   7091ms [copy] copy active: active = 7efbae22-6210-4dc2-a71e-194fbcbae8b9
+2026-11-03 02:18:02.952 +   7092ms [copy] copy active: consolelock.ac = 1
+2026-11-03 02:18:02.952 +   7092ms [copy] copy active: consolelock.dc = 1
+2026-11-03 02:18:02.952 +   7092ms [copy] copy active: display-off.ac = 300
+2026-11-03 02:18:02.952 +   7092ms [copy] copy active: display-off.dc = 180
+2026-11-03 02:18:02.952 +   7092ms [copy] copy active: energy-saver-threshold.ac = 0
+2026-11-03 02:18:02.952 +   7092ms [copy] copy active: energy-saver-threshold.dc = 30
+2026-11-03 02:18:02.952 +   7092ms [copy] copy active: lid.ac = 1
+2026-11-03 02:18:02.952 +   7093ms [copy] copy active: lid.dc = 1
+2026-11-03 02:18:02.952 +   7093ms [copy] copy active: overlay.ac.reg = ded574b5-45a0-4f42-8737-46345c09c238
+2026-11-03 02:18:02.952 +   7093ms [copy] copy active: overlay.actual = ded574b5-45a0-4f42-8737-46345c09c238 (best performance?)
+2026-11-03 02:18:02.952 +   7093ms [copy] copy active: overlay.dc.reg = <absent>
+2026-11-03 02:18:02.952 +   7093ms [copy] copy active: overlay.effective = ded574b5-45a0-4f42-8737-46345c09c238 (best performance?)
+2026-11-03 02:18:02.952 +   7093ms [copy] copy active: sleep.ac = 10800
+2026-11-03 02:18:02.952 +   7093ms [copy] copy active: sleep.dc = 600
+2026-11-03 02:18:02.952 +   7094ms [trigger] >>> API write sleep.ac = 10807, no SetActive
+2026-11-03 02:18:02.952 +   7095ms [detect] API write sleep.ac = 10807, no SetActive: 0 ERROR_SUCCESS
+2026-11-03 02:18:02.952 +   7095ms [reg-hklm] key changed: sleep.ac 10800 -> 10807
+2026-11-03 02:18:02.968 +   7109ms [poll] sleep.ac 10800 -> 10807
+2026-11-03 02:18:05.456 +   9595ms [result] | API write sleep.ac = 10807, no SetActive | 0 ms | none | 1 ms | 15 ms |
+2026-11-03 02:18:05.456 +   9596ms [trigger] >>> API PowerSetActiveScheme
+2026-11-03 02:18:05.465 +   9606ms [notify] sleep = 10807
+2026-11-03 02:18:05.513 +   9654ms [detect] API PowerSetActiveScheme: 0 ERROR_SUCCESS
+2026-11-03 02:18:08.015 +  12155ms [result] | API PowerSetActiveScheme | 58 ms | 10 ms | none | none |
+2026-11-03 02:18:08.015 +  12155ms [trigger] >>> powercfg /setacvalueindex sleep 10814, no /setactive
+2026-11-03 02:18:08.043 +  12183ms [reg-hklm] key changed: sleep.ac 10807 -> 10814
+2026-11-03 02:18:08.043 +  12183ms [detect] powercfg /setacvalueindex sleep 10814, no /setactive: (0, "")
+2026-11-03 02:18:08.282 +  12422ms [poll] sleep.ac 10807 -> 10814
+2026-11-03 02:18:10.544 +  14684ms [result] | powercfg /setacvalueindex sleep 10814, no /setactive | 28 ms | none | 28 ms | 267 ms |
+2026-11-03 02:18:10.544 +  14684ms [trigger] >>> powercfg /setactive
+2026-11-03 02:18:10.570 +  14713ms [notify] sleep = 10814
+2026-11-03 02:18:10.601 +  14743ms [detect] powercfg /setactive: (0, "")
+2026-11-03 02:18:13.105 +  17244ms [result] | powercfg /setactive | 59 ms | 29 ms | none | none |
+2026-11-03 02:18:13.105 +  17244ms [trigger] >>> powercfg /change standby-timeout-ac 181
+2026-11-03 02:18:13.134 +  17278ms [notify] sleep = 10860
+2026-11-03 02:18:13.157 +  17306ms [detect] powercfg /change standby-timeout-ac 181: (0, "")
+2026-11-03 02:18:13.157 +  17307ms [reg-hklm] key changed: sleep.ac 10814 -> 10860
+2026-11-03 02:18:13.312 +  17452ms [poll] sleep.ac 10814 -> 10860
+2026-11-03 02:18:15.668 +  19807ms [result] | powercfg /change standby-timeout-ac 181 | 61 ms | 34 ms | 62 ms | 208 ms |
+2026-11-03 02:18:15.668 +  19808ms [trigger] >>> powercfg /setdcvalueindex lid 0 + /setactive (DC value, on AC now)
+2026-11-03 02:18:15.696 +  19835ms [reg-hklm] key changed: lid.dc 1 -> 0
+2026-11-03 02:18:15.745 +  19885ms [detect] powercfg /setdcvalueindex lid 0 + /setactive (DC value, on AC now): (0, "") (0, "")
+2026-11-03 02:18:15.826 +  19967ms [poll] lid.dc 1 -> 0
+2026-11-03 02:18:18.246 +  22386ms [result] | powercfg /setdcvalueindex lid 0 + /setactive (DC value, on AC now) | 77 ms | none | 27 ms | 159 ms |
+2026-11-03 02:18:18.246 +  22386ms [trigger] >>> API write lid.ac = 0 + SetActive
+2026-11-03 02:18:18.246 +  22389ms [reg-hklm] key changed: lid.ac 1 -> 0
+2026-11-03 02:18:18.257 +  22403ms [notify] lid = 0
+2026-11-03 02:18:18.288 +  22438ms [detect] API write lid.ac = 0 + SetActive: 0 ERROR_SUCCESS 0 ERROR_SUCCESS
+2026-11-03 02:18:18.341 +  22482ms [poll] lid.ac 1 -> 0
+2026-11-03 02:18:20.799 +  24939ms [result] | API write lid.ac = 0 + SetActive | 51 ms | 16 ms | 2 ms | 95 ms |
+2026-11-03 02:18:20.799 +  24939ms [trigger] >>> API write back sleep.ac 10800, lid.dc 1 + SetActive
+2026-11-03 02:18:20.799 +  24941ms [reg-hklm] key changed: lid.dc 0 -> 1; sleep.ac 10860 -> 10800
+2026-11-03 02:18:20.799 +  24952ms [notify] sleep = 10800
+2026-11-03 02:18:20.861 +  25004ms [detect] API write back sleep.ac 10800, lid.dc 1 + SetActive: 0 0 0
+2026-11-03 02:18:20.861 +  25005ms [poll] lid.dc 0 -> 1; sleep.ac 10860 -> 10800
+2026-11-03 02:18:20.861 +  25005ms [reg-hklm] key changed, no watched value differs
+2026-11-03 02:18:23.365 +  27505ms [result] | API write back sleep.ac 10800, lid.dc 1 + SetActive | 64 ms | 12 ms | 1 ms | 65 ms |
+2026-11-03 02:18:23.365 +  27506ms [copy] PowerDeleteScheme(copy) while it is active: 50
+2026-11-03 02:18:23.365 +  27508ms [copy] copy still listed after that: true
+2026-11-03 02:18:23.365 +  27508ms [trigger] >>> PowerSetActiveScheme(original)
+2026-11-03 02:18:23.370 +  27513ms [notify] active-scheme = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 02:18:23.387 +  27528ms [notify] lid = 2
+2026-11-03 02:18:23.418 +  27564ms [copy] PowerSetActiveScheme(original) rc 0 ERROR_SUCCESS
+2026-11-03 02:18:23.418 +  27566ms [reg-hklm] key changed: active 7efbae22-6210-4dc2-a71e-194fbcbae8b9 -> 381b4222-f694-41f0-9685-ff5bb260df2e; lid.ac 0 -> 1
+2026-11-03 02:18:23.418 +  27566ms [poll] active 7efbae22-6210-4dc2-a71e-194fbcbae8b9 -> 381b4222-f694-41f0-9685-ff5bb260df2e; lid.ac 0 -> 1
+2026-11-03 02:18:26.426 +  30565ms [result] | PowerSetActiveScheme(original) | 55 ms | 4 ms | 57 ms | 57 ms |
+2026-11-03 02:18:26.426 +  30565ms [trigger] >>> PowerDeleteScheme(copy)
+2026-11-03 02:18:26.427 +  30567ms [copy] PowerDeleteScheme(copy) rc 0 ERROR_SUCCESS
+2026-11-03 02:18:26.427 +  30568ms [reg-hklm] key changed, no watched value differs
+2026-11-03 02:18:26.427 +  30569ms [reg-hklm] key changed, no watched value differs
+2026-11-03 02:18:28.928 +  33067ms [result] | PowerDeleteScheme(copy) | 1 ms | none | 2 ms | none |
+2026-11-03 02:18:28.985 +  33125ms [copy] after delete: listed false, registry FriendlyName None
+2026-11-03 02:18:29.019 +  33159ms [copy] powercfg /list: Existing Power Schemes (* Active) | ----------------------------------- | Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced) *
+2026-11-03 02:18:29.020 +  33160ms [copy] after: DelayLockInterval = 0
+2026-11-03 02:18:29.020 +  33161ms [copy] after: active = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 02:18:29.020 +  33161ms [copy] after: consolelock.ac = 1
+2026-11-03 02:18:29.020 +  33161ms [copy] after: consolelock.dc = 1
+2026-11-03 02:18:29.020 +  33161ms [copy] after: display-off.ac = 300
+2026-11-03 02:18:29.020 +  33161ms [copy] after: display-off.dc = 180
+2026-11-03 02:18:29.020 +  33161ms [copy] after: energy-saver-threshold.ac = 0
+2026-11-03 02:18:29.020 +  33161ms [copy] after: energy-saver-threshold.dc = 30
+2026-11-03 02:18:29.020 +  33161ms [copy] after: lid.ac = 1
+2026-11-03 02:18:29.020 +  33162ms [copy] after: lid.dc = 1
+2026-11-03 02:18:29.020 +  33162ms [copy] after: overlay.ac.reg = ded574b5-45a0-4f42-8737-46345c09c238
+2026-11-03 02:18:29.020 +  33162ms [copy] after: overlay.actual = ded574b5-45a0-4f42-8737-46345c09c238 (best performance?)
+2026-11-03 02:18:29.020 +  33162ms [copy] after: overlay.dc.reg = <absent>
+2026-11-03 02:18:29.020 +  33162ms [copy] after: overlay.effective = ded574b5-45a0-4f42-8737-46345c09c238 (best performance?)
+2026-11-03 02:18:29.020 +  33162ms [copy] after: sleep.ac = 10800
+2026-11-03 02:18:29.020 +  33162ms [copy] after: sleep.dc = 600
+2026-11-03 02:18:29.020 +  33163ms [result] | trigger | call time | setting notification | registry notification | poll 250 ms |
+2026-11-03 02:18:29.020 +  33163ms [result] | PowerDuplicateScheme | 2 ms | none | 2 ms | none |
+2026-11-03 02:18:29.020 +  33163ms [result] | PowerSetActiveScheme(copy) | 76 ms | 4 ms | 78 ms | 78 ms |
+2026-11-03 02:18:29.020 +  33163ms [result] | API write sleep.ac = 10807, no SetActive | 0 ms | none | 1 ms | 15 ms |
+2026-11-03 02:18:29.020 +  33163ms [result] | API PowerSetActiveScheme | 58 ms | 10 ms | none | none |
+2026-11-03 02:18:29.020 +  33163ms [result] | powercfg /setacvalueindex sleep 10814, no /setactive | 28 ms | none | 28 ms | 267 ms |
+2026-11-03 02:18:29.020 +  33163ms [result] | powercfg /setactive | 59 ms | 29 ms | none | none |
+2026-11-03 02:18:29.020 +  33163ms [result] | powercfg /change standby-timeout-ac 181 | 61 ms | 34 ms | 62 ms | 208 ms |
+2026-11-03 02:18:29.020 +  33164ms [result] | powercfg /setdcvalueindex lid 0 + /setactive (DC value, on AC now) | 77 ms | none | 27 ms | 159 ms |
+2026-11-03 02:18:29.020 +  33164ms [result] | API write lid.ac = 0 + SetActive | 51 ms | 16 ms | 2 ms | 95 ms |
+2026-11-03 02:18:29.020 +  33164ms [result] | API write back sleep.ac 10800, lid.dc 1 + SetActive | 64 ms | 12 ms | 1 ms | 65 ms |
+2026-11-03 02:18:29.020 +  33164ms [result] | PowerSetActiveScheme(original) | 55 ms | 4 ms | 57 ms | 57 ms |
+2026-11-03 02:18:29.020 +  33164ms [result] | PowerDeleteScheme(copy) | 1 ms | none | 2 ms | none |
+2026-11-03 02:18:29.020 +  33165ms [copy] clean: original active, copy gone, journal removed
+2026-11-03 02:18:29.020 +  33165ms [end] exit code 0

@@ -1,0 +1,5 @@
+2026-11-03 02:24:14.821 +      0ms [start] mode restore, pid 31328, elevated false, integrity Medium (0x2000), on AC true, battery 99%, energy saver on false, idle 1668 s
+2026-11-03 02:24:14.862 +     38ms [restore] PowerSetActiveScheme(381b4222-f694-41f0-9685-ff5bb260df2e) rc 0 ERROR_SUCCESS
+2026-11-03 02:24:14.862 +     39ms [restore] PowerDeleteScheme(f27e2203-ae02-4abc-baf5-c274f113dfec) rc 0 ERROR_SUCCESS
+2026-11-03 02:24:14.862 +     40ms [restore] done, journal removed
+2026-11-03 02:24:14.862 +     41ms [end] exit code 0

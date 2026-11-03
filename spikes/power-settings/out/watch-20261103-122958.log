@@ -1,0 +1,78 @@
+2026-11-03 12:29:58.501 +      0ms [start] mode watch, pid 27664, elevated false, integrity Medium (0x2000), on AC true, battery 95%, energy saver on false, idle 221 s
+2026-11-03 12:29:58.501 +      1ms [setup] SetConsoleCtrlHandler Ok(())
+2026-11-03 12:29:58.505 +      4ms [watch] start: DelayLockInterval = 0
+2026-11-03 12:29:58.505 +      4ms [watch] start: active = 42ffeeaa-7cfe-4ee3-bfbf-1866da247eef
+2026-11-03 12:29:58.505 +      5ms [watch] start: consolelock.ac = 1
+2026-11-03 12:29:58.505 +      5ms [watch] start: consolelock.dc = 1
+2026-11-03 12:29:58.505 +      6ms [watch] start: display-off.ac = 300
+2026-11-03 12:29:58.505 +      6ms [watch] start: display-off.dc = 180
+2026-11-03 12:29:58.505 +      6ms [watch] start: energy-saver-threshold.ac = 0
+2026-11-03 12:29:58.505 +      6ms [watch] start: energy-saver-threshold.dc = 30
+2026-11-03 12:29:58.505 +      6ms [watch] start: lid.ac = 1
+2026-11-03 12:29:58.505 +      6ms [watch] start: lid.dc = 1
+2026-11-03 12:29:58.505 +      6ms [watch] start: overlay.ac.reg = ded574b5-45a0-4f42-8737-46345c09c238
+2026-11-03 12:29:58.505 +      7ms [watch] start: overlay.actual = ded574b5-45a0-4f42-8737-46345c09c238 (best performance?)
+2026-11-03 12:29:58.505 +      7ms [watch] start: overlay.dc.reg = <absent>
+2026-11-03 12:29:58.505 +      7ms [watch] start: overlay.effective = ded574b5-45a0-4f42-8737-46345c09c238 (best performance?)
+2026-11-03 12:29:58.505 +      7ms [watch] start: sleep.ac = 10800
+2026-11-03 12:29:58.505 +      7ms [watch] start: sleep.dc = 600
+2026-11-03 12:29:58.505 +      7ms [setup] PowerSettingRegisterNotification(lid) rc 0
+2026-11-03 12:29:58.505 +      7ms [setup] PowerSettingRegisterNotification(sleep) rc 0
+2026-11-03 12:29:58.505 +      7ms [notify] lid = 2
+2026-11-03 12:29:58.505 +      7ms [notify] energy-saver-threshold = 0
+2026-11-03 12:29:58.505 +      7ms [setup] PowerSettingRegisterNotification(energy-saver-threshold) rc 0
+2026-11-03 12:29:58.505 +      8ms [notify] sleep = 10800
+2026-11-03 12:29:58.505 +      8ms [setup] PowerSettingRegisterNotification(consolelock) rc 0
+2026-11-03 12:29:58.505 +      8ms [notify] consolelock = 1
+2026-11-03 12:29:58.505 +      8ms [setup] PowerSettingRegisterNotification(display-off) rc 0
+2026-11-03 12:29:58.505 +      8ms [notify] display-off = 300
+2026-11-03 12:29:58.505 +      8ms [setup] PowerSettingRegisterNotification(active-scheme) rc 0
+2026-11-03 12:29:58.505 +      8ms [notify] active-scheme = 42ffeeaa-7cfe-4ee3-bfbf-1866da247eef
+2026-11-03 12:29:58.505 +      8ms [setup] PowerSettingRegisterNotification(power-source) rc 0
+2026-11-03 12:29:58.505 +      8ms [notify] power-source = 0
+2026-11-03 12:29:58.505 +      8ms [setup] PowerSettingRegisterNotification(energy-saver-status) rc 0
+2026-11-03 12:29:58.505 +      9ms [notify] energy-saver-status = 0
+2026-11-03 12:29:58.505 +      9ms [setup] PowerSettingRegisterNotification(display-state) rc 0
+2026-11-03 12:29:58.505 +      9ms [notify] display-state = 1
+2026-11-03 12:29:58.505 +      9ms [setup] PowerRegisterForEffectivePowerModeNotifications Ok(())
+2026-11-03 12:29:58.505 +      9ms [effmode] MaxPerformance (4)
+2026-11-03 12:29:58.505 +      9ms [setup] PowerRegisterSuspendResumeNotification rc 0
+2026-11-03 12:29:58.505 +      9ms [watch] watching for 600 s. Press Ctrl+C once to end early; the check below still runs.
+2026-11-03 12:29:58.505 +     10ms [setup] RegOpenKeyExW(SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes) rc 0
+2026-11-03 12:29:58.505 +     10ms [setup] RegOpenKeyExW(Control Panel\Desktop) rc 0
+2026-11-03 12:31:42.470 + 103969ms [reg-hklm] key changed: sleep.dc 600 -> 900
+2026-11-03 12:31:42.477 + 103977ms [reg-hklm] key changed, no watched value differs
+2026-11-03 12:31:42.903 + 104404ms [poll] sleep.dc 600 -> 900
+2026-11-03 12:31:48.913 + 110411ms [reg-hklm] key changed: sleep.dc 900 -> 600
+2026-11-03 12:31:48.921 + 110421ms [reg-hklm] key changed, no watched value differs
+2026-11-03 12:31:48.957 + 110457ms [poll] sleep.dc 900 -> 600
+2026-11-03 12:32:16.307 + 137807ms [reg-hklm] key changed: energy-saver-threshold.dc 30 -> 0
+2026-11-03 12:32:16.317 + 137816ms [reg-hklm] key changed, no watched value differs
+2026-11-03 12:32:16.682 + 138183ms [poll] energy-saver-threshold.dc 30 -> 0
+2026-11-03 12:32:22.666 + 144165ms [reg-hklm] key changed: energy-saver-threshold.dc 0 -> 30
+2026-11-03 12:32:22.735 + 144237ms [poll] energy-saver-threshold.dc 0 -> 30
+2026-11-03 12:32:29.018 + 150516ms [reg-hklm] key changed: energy-saver-threshold.dc 30 -> 100
+2026-11-03 12:32:29.292 + 150793ms [poll] energy-saver-threshold.dc 30 -> 100
+2026-11-03 12:32:35.338 + 156837ms [reg-hklm] key changed: energy-saver-threshold.dc 100 -> 30
+2026-11-03 12:32:35.349 + 156850ms [poll] energy-saver-threshold.dc 100 -> 30
+2026-11-03 12:32:48.143 + 169645ms [reg-hklm] key changed: lid.dc 1 -> 0
+2026-11-03 12:32:48.154 + 169654ms [reg-hklm] key changed, no watched value differs
+2026-11-03 12:32:48.460 + 169961ms [poll] lid.dc 1 -> 0
+2026-11-03 12:32:54.542 + 176045ms [reg-hklm] key changed: lid.dc 0 -> 1
+2026-11-03 12:32:54.542 + 176048ms [poll] lid.dc 0 -> 1
+2026-11-03 12:32:54.542 + 176048ms [reg-hklm] key changed, no watched value differs
+2026-11-03 12:33:09.977 + 191486ms [effmode] Balanced (2)
+2026-11-03 12:33:09.988 + 191489ms [reg-hklm] key changed: overlay.ac.reg ded574b5-45a0-4f42-8737-46345c09c238 -> 00000000-0000-0000-0000-000000000000; overlay.actual ded574b5-45a0-4f42-8737-46345c09c238 (best performance?) -> 00000000-0000-0000-0000-000000000000 (balanced, no overlay?); overlay.effective ded574b5-45a0-4f42-8737-46345c09c238 (best performance?) -> 00000000-0000-0000-0000-000000000000 (balanced, no overlay?)
+2026-11-03 12:33:10.179 + 191680ms [poll] overlay.ac.reg ded574b5-45a0-4f42-8737-46345c09c238 -> 00000000-0000-0000-0000-000000000000; overlay.actual ded574b5-45a0-4f42-8737-46345c09c238 (best performance?) -> 00000000-0000-0000-0000-000000000000 (balanced, no overlay?); overlay.effective ded574b5-45a0-4f42-8737-46345c09c238 (best performance?) -> 00000000-0000-0000-0000-000000000000 (balanced, no overlay?)
+2026-11-03 12:33:16.347 + 197846ms [effmode] MaxPerformance (4)
+2026-11-03 12:33:16.347 + 197849ms [reg-hklm] key changed: overlay.ac.reg 00000000-0000-0000-0000-000000000000 -> ded574b5-45a0-4f42-8737-46345c09c238; overlay.actual 00000000-0000-0000-0000-000000000000 (balanced, no overlay?) -> ded574b5-45a0-4f42-8737-46345c09c238 (best performance?); overlay.effective 00000000-0000-0000-0000-000000000000 (balanced, no overlay?) -> ded574b5-45a0-4f42-8737-46345c09c238 (best performance?)
+2026-11-03 12:33:16.735 + 198234ms [poll] overlay.ac.reg 00000000-0000-0000-0000-000000000000 -> ded574b5-45a0-4f42-8737-46345c09c238; overlay.actual 00000000-0000-0000-0000-000000000000 (balanced, no overlay?) -> ded574b5-45a0-4f42-8737-46345c09c238 (best performance?); overlay.effective 00000000-0000-0000-0000-000000000000 (balanced, no overlay?) -> ded574b5-45a0-4f42-8737-46345c09c238 (best performance?)
+2026-11-03 12:33:33.346 + 214845ms [notify] display-state = 2
+2026-11-03 12:33:48.337 + 229837ms [notify] display-state = 0
+2026-11-03 12:34:34.686 + 276185ms [notify] active-scheme = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 12:34:34.723 + 276222ms [reg-hklm] key changed: active 42ffeeaa-7cfe-4ee3-bfbf-1866da247eef -> 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 12:34:34.725 + 276224ms [reg-hklm] key changed, no watched value differs
+2026-11-03 12:34:34.892 + 276394ms [poll] active 42ffeeaa-7cfe-4ee3-bfbf-1866da247eef -> 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 12:39:40.436 + 581936ms [notify] display-state = 1
+2026-11-03 12:39:59.046 + 600549ms [watch] STILL CHANGED: active 42ffeeaa-7cfe-4ee3-bfbf-1866da247eef -> 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 12:39:59.046 + 600550ms [end] exit code 0, log C:\Users\haika\code\wakeshot\spikes\power-settings\out\watch-20261103-122958.log

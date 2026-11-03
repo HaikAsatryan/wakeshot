@@ -1,0 +1,28 @@
+[      6 ms] ==== start 2026-11-03 01:36:57 args ["--guid-test"]
+[      9 ms] exe C:\Users\haika\code\wakeshot\spikes\tray\target\x86_64-pc-windows-msvc\release\tray-spike.exe
+[     10 ms] os 26H2 build 26300.9711
+[     10 ms] dpi: per-monitor v2 from manifest=true, system dpi=144
+[     10 ms] monitor RECT { left: 3840, top: 817, right: 5760, bottom: 2017 } effective dpi 120, SM_CXSMICON at that dpi = 20
+[     10 ms] monitor RECT { left: 0, top: 0, right: 3840, bottom: 2160 } effective dpi 144, SM_CXSMICON at that dpi = 24
+[     10 ms] SM_CXSMICON=24 SM_MENUDROPALIGNMENT=0
+[     10 ms] uxtheme: SetPreferredAppMode(135)=true FlushMenuThemes(136)=true RefreshImmersiveColorPolicyState(104)=true ShouldAppsUseDarkMode(132)=true
+[     10 ms] SetPreferredAppMode(AllowDark) returned previous mode Some(0)
+[     10 ms] theme (start): AppsUseLightTheme=Some(false) SystemUsesLightTheme=Some(false) ShouldAppsUseDarkMode=Some(true) high contrast=Some(false)
+[     10 ms] LoadIconMetric(id 101, LIM_SMALL): 24 px
+[     17 ms] GUID icon NOTIFY_ICON_MESSAGE(0): true
+[   3032 ms] GUID icon NOTIFY_ICON_MESSAGE(2): true
+[   3033 ms] message loop ended
+[      0 ms] ==== start 2026-11-03 01:37:00 args ["--guid-test"]
+[      3 ms] exe C:\Users\haika\AppData\Local\Temp\claude\C--Users-haika-code-wakeshot\1828f2de-68d5-4148-9124-8321986ceb05\scratchpad\guidmove\tray-spike.exe
+[      3 ms] os 26H2 build 26300.9711
+[      3 ms] dpi: per-monitor v2 from manifest=true, system dpi=144
+[      3 ms] monitor RECT { left: 3840, top: 817, right: 5760, bottom: 2017 } effective dpi 120, SM_CXSMICON at that dpi = 20
+[      3 ms] monitor RECT { left: 0, top: 0, right: 3840, bottom: 2160 } effective dpi 144, SM_CXSMICON at that dpi = 24
+[      3 ms] SM_CXSMICON=24 SM_MENUDROPALIGNMENT=0
+[      3 ms] uxtheme: SetPreferredAppMode(135)=true FlushMenuThemes(136)=true RefreshImmersiveColorPolicyState(104)=true ShouldAppsUseDarkMode(132)=true
+[      3 ms] SetPreferredAppMode(AllowDark) returned previous mode Some(0)
+[      3 ms] theme (start): AppsUseLightTheme=Some(false) SystemUsesLightTheme=Some(false) ShouldAppsUseDarkMode=Some(true) high contrast=Some(false)
+[      3 ms] LoadIconMetric(id 101, LIM_SMALL): 24 px
+[     10 ms] GUID icon NOTIFY_ICON_MESSAGE(0): true
+[   3009 ms] GUID icon NOTIFY_ICON_MESSAGE(2): true
+[   3009 ms] message loop ended

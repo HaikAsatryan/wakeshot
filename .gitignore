@@ -1,0 +1,19 @@
+# Everything else goes public on purpose (Haik, 2026-11-03). Secrets are caught by the scan before each push.
+
+# Cargo build output, in the workspace and in every spike.
+target/
+
+# Claude Code agent worktrees; its docs say to ignore them, so a left one never gets committed.
+.claude/worktrees/
+
+# Claude Code per-person settings for this project (local permission rules).
+.claude/settings.local.json
+
+# Secret files never belong here; this stops a stray one before the scan has to.
+*.key
+*.pem
+*.pfx
+*.p12
+.env*
+id_rsa*
+id_ed25519*

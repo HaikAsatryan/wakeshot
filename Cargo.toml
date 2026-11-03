@@ -1,0 +1,29 @@
+[workspace]
+members = ["crates/*"]
+# Each spike is its own project; without this, a spike build fails because it sits under this root.
+exclude = ["spikes"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+repository = "https://github.com/HaikAsatryan/wakeshot"
+
+# Declared up front by `p1-contracts`, so the parallel tracks never change `Cargo.lock`; a new crate goes through the
+# orchestrator.
+[workspace.dependencies]
+wakeshot-core = { path = "crates/wakeshot-core" }
+wakeshot-windows = { path = "crates/wakeshot-windows" }
+windows = "0.62.2"
+embed-resource = "3.0.12"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+proptest = "1.12.0"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -1,0 +1,30 @@
+[package]
+name = "wakeshot-cli"
+description = "The wakeshot command: hold the PC awake from a terminal or a script."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "wakeshot"
+path = "src/main.rs"
+
+# Declared before any wiring (`p1-contracts`), so no track changes `Cargo.lock`. The bins call Windows only through
+# `wakeshot-windows`, so no track adds a `windows` feature here; feature unification gives the bins every feature the
+# lib turns on.
+[dependencies]
+wakeshot-core.workspace = true
+wakeshot-windows.workspace = true
+
+[dependencies.windows]
+workspace = true
+features = ["Win32_Foundation"]
+
+[dev-dependencies]
+wakeshot-core = { workspace = true, features = ["test-support"] }
+wakeshot-windows = { workspace = true, features = ["test-support"] }
+
+[build-dependencies]
+embed-resource.workspace = true

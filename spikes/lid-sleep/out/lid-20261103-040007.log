@@ -1,0 +1,18 @@
+2026-11-03 04:00:07.112 +      0ms [start] mode lid, args ["--simulate-close-after", "5", "--work", "5", "--no-lock", "--no-sound", "--max-minutes", "1"], pid 5320, elevated false, integrity Medium (0x2000), on AC true, battery 100%, energy saver on false, idle 7423 s
+2026-11-03 04:00:07.112 +      0ms [setup] SetConsoleCtrlHandler Ok(())
+2026-11-03 04:00:07.114 +      0ms [before] active plan d1c39546-d26f-4ac3-a0a0-b98585980d63 (Wakeshot spike leftover test)
+2026-11-03 04:00:07.114 +      1ms [before] plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 04:00:07.114 +      2ms [before] plan d1c39546-d26f-4ac3-a0a0-b98585980d63 (Wakeshot spike leftover test)
+2026-11-03 04:00:07.116 +      2ms [before] lid: ac 1, dc 1 (Sleep, Sleep)
+2026-11-03 04:00:07.116 +      3ms [before] sleep: ac 10800, dc 600
+2026-11-03 04:00:07.116 +      3ms [before] display-off: ac 300, dc 180
+2026-11-03 04:00:07.116 +      3ms [before] hibernate-after: ac 0, dc 2147483647
+2026-11-03 04:00:07.116 +      4ms [before] wake-timers: ac 0, dc 0
+2026-11-03 04:00:07.118 +      4ms [before] consolelock: ac 1, dc 1
+2026-11-03 04:00:07.118 +      4ms [before] energy-saver-threshold: ac 0, dc 30
+2026-11-03 04:00:07.146 +     35ms [before] powercfg /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 04:00:07.175 +     63ms [before] powercfg /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 04:00:07.203 +     94ms [before] powercfg /q SCHEME_CURRENT SUB_VIDEO VIDEOIDLE rc 0: Current AC Power Setting Index: 0x0000012c | Current DC Power Setting Index: 0x000000b4
+2026-11-03 04:00:07.235 +    123ms [before] powercfg /qh SCHEME_CURRENT SUB_SLEEP RTCWAKE rc 0: Current AC Power Setting Index: 0x00000000 | Current DC Power Setting Index: 0x00000000
+2026-11-03 04:00:07.235 +    124ms [lid] cannot make plan copy: the active plan d1c39546-d26f-4ac3-a0a0-b98585980d63 (Wakeshot spike leftover test) is a spike copy. Run both restores first.
+2026-11-03 04:00:07.235 +    124ms [end] exit code 1, log C:\Users\haika\code\wakeshot\spikes\lid-sleep\out\lid-20261103-040007.log

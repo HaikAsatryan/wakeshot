@@ -1,0 +1,6 @@
+2026-11-03 03:41:58 integrity Medium admin-enabled False terminal console host selftest True chain pwsh.exe/28576 <- cmd.exe/31620 <- explorer.exe/29496 <- svchost.exe/2308
+2026-11-03 03:56:16 integrity Medium admin-enabled False terminal console host selftest True chain pwsh.exe/11236 <- cmd.exe/33020 <- explorer.exe/28472 <- svchost.exe/2308
+2026-11-03 03:56:39 integrity High admin-enabled True terminal Windows Terminal selftest False chain pwsh.exe/11680 <- pwsh.exe/33608 <- cmd.exe/29212 <- claude.exe/20636
+2026-11-03 04:26:19 integrity Medium admin-enabled False console window class PseudoConsoleWindow, window process cmd/31584, owner WindowsTerminal/29564 WT_SESSION False selftest False chain pwsh.exe/15516 <- cmd.exe/31584 <- explorer.exe/8588 <- svchost.exe/2308
+2026-11-03 04:34:04 integrity Medium admin-enabled False console window class PseudoConsoleWindow, window process cmd/8136, owner WindowsTerminal/30348 WT_SESSION False selftest True chain pwsh.exe/29444 <- cmd.exe/8136 <- explorer.exe/34492 <- svchost.exe/2308
+2026-11-03 10:22:40 integrity Medium admin-enabled False console window class PseudoConsoleWindow, window process cmd/6552, owner WindowsTerminal/6172 WT_SESSION False selftest False chain pwsh.exe/23260 <- cmd.exe/6552 <- explorer.exe/10060 <- svchost.exe/2308

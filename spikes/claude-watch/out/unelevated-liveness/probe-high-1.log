@@ -1,0 +1,37 @@
+03:35:11.506 self pid 34804: integrity High (S-1-16-12288), elevation type Full (elevated), logon SID S-1-5-5-0-930782
+03:35:11.506 list C:\Users\haika\.claude\sessions: 4 entries, 2 status files
+03:35:11.514 [20636] status file 20636.json: read ok, 626 bytes: status=busy kind=interactive entrypoint=cli procStart=134381211391959336
+03:35:11.514 [20636] OpenProcess QUERY_LIMITED_INFORMATION: ok
+03:35:11.514 [20636] OpenProcess SYNCHRONIZE: ok
+03:35:11.514 [20636] OpenProcess QUERY_LIMITED_INFORMATION|SYNCHRONIZE: ok
+03:35:11.514 [20636] OpenProcess QUERY_INFORMATION: ok
+03:35:11.514 [20636] OpenProcess VM_READ: ok
+03:35:11.520 [20636] OpenProcess READ_CONTROL: ok
+03:35:11.520 [20636] GetProcessTimes: creation time 134381211391959336, equals procStart
+03:35:11.520 [20636] QueryFullProcessImageNameW: C:\Users\haika\.local\bin\claude.exe
+03:35:11.520 [20636] GetExitCodeProcess: STILL_ACTIVE
+03:35:12.525 [20636] WaitForSingleObject: timed out after 1000 ms (still running)
+03:35:12.525 [20636] target token: integrity High (S-1-16-12288), elevation type Full (elevated), logon SID S-1-5-5-0-930782
+03:35:12.527 [20636] process security descriptor: O:BAD:(A;;0x1fffff;;;BA)(A;;0x1fffff;;;SY)(A;;0x121411;;;S-1-5-5-0-930782)S:AI(ML;;NWNR;;;HI)
+03:35:12.535 [20636] system process list: create time 134381211391959336, equals procStart
+03:35:12.535 [20636] watcher verdict: alive, start time matches
+03:35:12.537 [20636] transcript C:\Users\haika\.claude\projects\C--Users-haika-code-wakeshot\1828f2de-68d5-4148-9124-8321986ceb05.jsonl: read ok, 2036305 bytes, 727 lines
+03:35:12.546 [32332] status file 32332.json: read ok, 626 bytes: status=idle kind=interactive entrypoint=cli procStart=134381298442346173
+03:35:12.546 [32332] OpenProcess QUERY_LIMITED_INFORMATION: ok
+03:35:12.546 [32332] OpenProcess SYNCHRONIZE: ok
+03:35:12.546 [32332] OpenProcess QUERY_LIMITED_INFORMATION|SYNCHRONIZE: ok
+03:35:12.546 [32332] OpenProcess QUERY_INFORMATION: ok
+03:35:12.546 [32332] OpenProcess VM_READ: ok
+03:35:12.546 [32332] OpenProcess READ_CONTROL: ok
+03:35:12.546 [32332] GetProcessTimes: creation time 134381298442346173, equals procStart
+03:35:12.546 [32332] QueryFullProcessImageNameW: C:\Users\haika\.local\bin\claude.exe
+03:35:12.546 [32332] GetExitCodeProcess: STILL_ACTIVE
+03:35:13.546 [32332] WaitForSingleObject: timed out after 1000 ms (still running)
+03:35:13.546 [32332] target token: integrity High (S-1-16-12288), elevation type Full (elevated), logon SID S-1-5-5-0-930782
+03:35:13.547 [32332] process security descriptor: O:BAD:(A;;0x1fffff;;;BA)(A;;0x1fffff;;;SY)(A;;0x121411;;;S-1-5-5-0-930782)S:AI(ML;;NWNR;;;HI)
+03:35:13.553 [32332] system process list: create time 134381298442346173, equals procStart
+03:35:13.553 [32332] watcher verdict: alive, start time matches
+03:35:13.563 [32332] transcript C:\Users\haika\.claude\projects\C--Users-haika-code-wakeshot\632b3b8f-f440-40c9-912d-9ad7a732cc8c.jsonl: read ok, 525267 bytes, 91 lines
+03:35:13.564 change notifications on C:\Users\haika\.claude\sessions for 5000 ms
+03:35:18.571 change notifications: 0 events, 0 on status files
+03:35:18.571 probe done

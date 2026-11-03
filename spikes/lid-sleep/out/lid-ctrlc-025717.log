@@ -1,0 +1,61 @@
+2026-11-03 02:57:17.418 +      0ms [start] mode lid, args ["--allow-elevated", "--no-lock", "--no-sound", "--max-minutes", "3", "--log", "C:\\Users\\haika\\code\\wakeshot\\spikes\\lid-sleep\\out\\lid-ctrlc-025717.log"], pid 16880, elevated true, integrity High (0x3000), on AC true, battery 100%, energy saver on false, idle 3651 s
+2026-11-03 02:57:17.418 +      0ms [setup] SetConsoleCtrlHandler Ok(())
+2026-11-03 02:57:17.419 +      1ms [before] active plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 02:57:17.420 +      2ms [before] plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 02:57:17.423 +      5ms [before] lid: ac 1, dc 1 (Sleep, Sleep)
+2026-11-03 02:57:17.423 +      6ms [before] sleep: ac 10800, dc 600
+2026-11-03 02:57:17.423 +      6ms [before] display-off: ac 300, dc 180
+2026-11-03 02:57:17.423 +      6ms [before] hibernate-after: ac 0, dc 2147483647
+2026-11-03 02:57:17.423 +      7ms [before] wake-timers: ac 0, dc 0
+2026-11-03 02:57:17.423 +      7ms [before] consolelock: ac 1, dc 1
+2026-11-03 02:57:17.423 +      7ms [before] energy-saver-threshold: ac 0, dc 30
+2026-11-03 02:57:17.447 +     38ms [before] powercfg /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 02:57:17.479 +     63ms [before] powercfg /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 02:57:17.495 +     85ms [before] powercfg /q SCHEME_CURRENT SUB_VIDEO VIDEOIDLE rc 0: Current AC Power Setting Index: 0x0000012c | Current DC Power Setting Index: 0x000000b4
+2026-11-03 02:57:17.521 +    107ms [before] powercfg /qh SCHEME_CURRENT SUB_SLEEP RTCWAKE rc 0: Current AC Power Setting Index: 0x00000000 | Current DC Power Setting Index: 0x00000000
+2026-11-03 02:57:17.526 +    110ms [plan] copy d4a47891-ae9a-4f57-a6af-794d053f1455 of 381b4222-f694-41f0-9685-ff5bb260df2e made, named (rc 0)
+2026-11-03 02:57:17.526 +    111ms [plan] copy lid.ac = 0: rc 0
+2026-11-03 02:57:17.526 +    111ms [plan] copy lid.dc = 0: rc 0
+2026-11-03 02:57:17.574 +    157ms [plan] PowerSetActiveScheme(copy) rc 0
+2026-11-03 02:57:17.574 +    158ms [setup] PowerSettingRegisterNotification(lid) rc 0 in 36 us
+2026-11-03 02:57:17.577 +    158ms [setup] PowerSettingRegisterNotification(display) rc 0 in 10 us
+2026-11-03 02:57:17.577 +    158ms [notify] lid = 1 (open)
+2026-11-03 02:57:17.577 +    158ms [setup] PowerSettingRegisterNotification(power-source) rc 0 in 8 us
+2026-11-03 02:57:17.577 +    158ms [notify] display = 0 (off)
+2026-11-03 02:57:17.577 +    159ms [setup] PowerSettingRegisterNotification(battery) rc 0 in 12 us
+2026-11-03 02:57:17.577 +    159ms [notify] power-source = 0 (AC)
+2026-11-03 02:57:17.577 +    159ms [setup] PowerSettingRegisterNotification(active-scheme) rc 0 in 14 us
+2026-11-03 02:57:17.577 +    159ms [notify] battery = 100
+2026-11-03 02:57:17.577 +    159ms [setup] PowerRegisterSuspendResumeNotification rc 0
+2026-11-03 02:57:17.577 +    159ms [notify] active-scheme = d4a47891-ae9a-4f57-a6af-794d053f1455
+2026-11-03 02:57:17.577 +    159ms [hold] PowerSetRequest SystemRequired Ok(()), ExecutionRequired Ok(())
+2026-11-03 02:57:18.306 +    888ms [lid] initial lid closed Some(false). Work lasts 60 s after the lid closes, then end method 'release'. lock false, sound false
+2026-11-03 02:57:18.306 +    888ms [lid] >>> READY: close the lid now <<<
+2026-11-03 02:57:18.317 +    899ms [tick] [wait-close] t 0 s, step wall 609 unbiased 608 interrupt 608 ms, idle 3652 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1, heat \_TZ.THM0 49.1 C limit 100%
+2026-11-03 02:57:19.705 +   2295ms [ctrl] console control event 0: stopping and restoring
+2026-11-03 02:57:19.749 +   2337ms [tick] [wait-close] t 1 s, step wall 1010 unbiased 1013 interrupt 1013 ms, idle 3653 s, AC true, bat 100%, locked, displays int 1 ext 1 other 0 (SM_CMONITORS 2), idle-timer left 0 s, exec-state 0x1
+2026-11-03 02:57:19.749 +   2344ms [lid] stop requested
+2026-11-03 02:57:19.749 +   2345ms [hold] released: clear Ok(()) Ok(()), handle closed
+2026-11-03 02:57:19.765 +   2348ms [notify] active-scheme = 381b4222-f694-41f0-9685-ff5bb260df2e
+2026-11-03 02:57:19.800 +   2384ms [restore] PowerSetActiveScheme(381b4222-f694-41f0-9685-ff5bb260df2e) rc 0
+2026-11-03 02:57:19.800 +   2384ms [restore] PowerDeleteScheme(d4a47891-ae9a-4f57-a6af-794d053f1455) rc 0
+2026-11-03 02:57:19.800 +   2385ms [restore] check: active 381b4222-f694-41f0-9685-ff5bb260df2e, copy left false
+2026-11-03 02:57:19.800 +   2385ms [plan] restored: user's plan active, copy deleted, journal removed
+2026-11-03 02:57:19.800 +   2386ms [result] RESULT: the lid never closed
+2026-11-03 02:57:19.800 +   2386ms [after] active plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 02:57:19.800 +   2387ms [after] plan 381b4222-f694-41f0-9685-ff5bb260df2e (Balanced)
+2026-11-03 02:57:19.800 +   2387ms [after] lid: ac 1, dc 1 (Sleep, Sleep)
+2026-11-03 02:57:19.800 +   2387ms [after] sleep: ac 10800, dc 600
+2026-11-03 02:57:19.800 +   2387ms [after] display-off: ac 300, dc 180
+2026-11-03 02:57:19.800 +   2388ms [after] hibernate-after: ac 0, dc 2147483647
+2026-11-03 02:57:19.800 +   2388ms [after] wake-timers: ac 0, dc 0
+2026-11-03 02:57:19.800 +   2388ms [after] consolelock: ac 1, dc 1
+2026-11-03 02:57:19.800 +   2388ms [after] energy-saver-threshold: ac 0, dc 30
+2026-11-03 02:57:19.813 +   2409ms [after] powercfg /qh SCHEME_CURRENT SUB_BUTTONS LIDACTION rc 0: Current AC Power Setting Index: 0x00000001 | Current DC Power Setting Index: 0x00000001
+2026-11-03 02:57:19.844 +   2429ms [after] powercfg /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE rc 0: Current AC Power Setting Index: 0x00002a30 | Current DC Power Setting Index: 0x00000258
+2026-11-03 02:57:19.860 +   2447ms [after] powercfg /q SCHEME_CURRENT SUB_VIDEO VIDEOIDLE rc 0: Current AC Power Setting Index: 0x0000012c | Current DC Power Setting Index: 0x000000b4
+2026-11-03 02:57:19.882 +   2467ms [after] powercfg /qh SCHEME_CURRENT SUB_SLEEP RTCWAKE rc 0: Current AC Power Setting Index: 0x00000000 | Current DC Power Setting Index: 0x00000000
+2026-11-03 02:57:20.591 +   3180ms [events] none since 2026-11-03 02:57:00 (rc 1)
+2026-11-03 02:57:20.591 +   3180ms [result] gaps: none
+2026-11-03 02:57:20.591 +   3180ms [result] DONE: plan restored. You can close this window.
+2026-11-03 02:57:20.591 +   3180ms [end] exit code 0, log C:\Users\haika\code\wakeshot\spikes\lid-sleep\out\lid-ctrlc-025717.log
