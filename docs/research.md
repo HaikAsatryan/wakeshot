@@ -2905,3 +2905,14 @@ stdlib Python PNG reader in the card's scratchpad (`p5-icon-art\pngread.py`, `me
 - **Same bytes on x64 and ARM64:** the shapes use `+`, `-`, `*`, `/`, `sqrt` and `round` only, all exact in IEEE 754,
   and Rust does not fuse a multiply and an add on its own. So the golden test compares exactly. Tests ran on x64 only;
   ARM64 got clippy and builds, not a test run.
+
+## IO thread checks
+
+Checked 2026-11-04 01:26 for card `docs/tasks/p6-int-io-thread.md` (Windows 11 Pro 10.0.26300, Rust 1.99.1, elevated
+agent shell). Fakes and temp folders only: no power plan, notice or window was touched.
+
+- **A `WaitForSingleObject` timeout can end a few ms early by Rust's clock.** `IoThread::finish(200)` waits on the
+  thread's handle with a 200 ms timeout. With the thread blocked, `Instant` measured 196.5 ms and 198.6 ms in 2 of 5
+  runs of `app::io_thread::tests::finish_gives_up_when_the_executor_blocks`; the other 3 were at or above 200 ms. Why
+  (the wait and `Instant` use different clocks, or the timer tick): not verified. So a test that times a Windows wait
+  checks a looser lower bound (150 ms for 200); 10 of 10 runs passed with it.
