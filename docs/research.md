@@ -3075,3 +3075,23 @@ results to this section.
 - **windows-rs 0.62.2** (read in the crate source): `PROPVARIANT` has no `Drop`, so each `IPropertyStore::GetValue`
   result needs `PropVariantClear` (the lid spike's name read never cleared it; spike only); `WAVEFORMATEX` is
   `repr(C, packed(1))`, so the mix format is read with `read_unaligned`.
+
+## Hook checks
+
+Card `docs/tasks/p6-hooks.md`, 2026-11-04. Tests in `crates/wakeshot-windows/src/hooks.rs` on this laptop (Windows
+11 Pro 26300, `%TEMP%` on NTFS), against a temp data folder and scratch registry keys only.
+
+- **A file deleted while another handle has it open with delete sharing loses its name at once**: the test opens
+  `logs\wakeshot.log` with `LogWriter` (all three share flags), then deletes it with `std::fs::remove_file`
+  (`DeleteFileW`); `RemoveDirectoryW` of `logs` and of the data folder right after both succeed, and later writes
+  through the open handle bring nothing back (`real_delete_all_takes_the_open_log_too`, passed on every run). So the
+  uninstall hook can delete the data folder while its own log is open. That this comes from `DeleteFileW`'s POSIX
+  delete on NTFS (Microsoft, `FILE_DISPOSITION_INFORMATION_EX`) is inferred, not verified; FAT and network folders:
+  not verified.
+- **A file open without delete sharing stops `std::fs::remove_dir_all` of its folder** with code 32
+  (`ERROR_SHARING_VIOLATION`); the folder stays (`real_folder_that_cannot_go_whole_keeps_its_log`, a file in
+  `holds\` opened with `FILE_SHARE_READ` only). Which of the other files in that folder were already gone: not
+  checked.
+- **Updated hook limit: 10 s, not 12 s.** `p6-velopack-facts` (Result, "Design calls") and `architecture.md`
+  section 5, restore step 7, give 10 s; `06-ship.md` "Hooks" still said 12 s (read 2026-11-04 01:50). The code uses
+  10 s.

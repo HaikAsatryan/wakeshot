@@ -52,7 +52,7 @@ sign-off):
 |---|---|---|
 | install (also Setup.exe over an install, which is what `winget upgrade` runs) | 30 s | write the Run value and the Path entry; then the restore routine if a journal exists and its owner is Gone, again every 2 s until 25 s |
 | obsolete (old version, before an update) | 15 s | log only: updates apply only when nothing is overridden, and the updated hook restores anyway |
-| updated (new version) | 15 s | the Path entry (no change when `current` keeps its path); then restore as at install, until 12 s |
+| updated (new version) | 15 s | the Path entry (no change when `current` keeps its path); then restore as at install, until 10 s |
 | uninstall | 30 s | remove the Run value, the RunOnce value and the Path entry; then restore with retries until 25 s; then the data folder (Question 2) |
 
 - Registry first, restore last: a restore call that hangs is killed at the limit, and must not leave a Run value or a
@@ -145,7 +145,7 @@ those one at a time across all tracks.
 | `p6-velopack-facts` | no; real laptop: installs and uninstalls a throwaway app | Haik's sign-off of the track plans; the contracts card (it builds the repo's release exes; review m10) | done (22:12): 11 facts checked; nothing left installed |
 | `p6-login-and-path` | no | the contracts card; `p3-store` (test key helper) | done (committed 01:42): 21 tests; the real Path and Run unchanged by every run |
 | `p6-update-schedule` | no | the contracts card | done (committed 01:42): 17 tests |
-| `p6-hooks` | no (Question 2: the default, Haik 2026-11-03 18:09) | `p6-login-and-path`; `p3-store`, `p3-log`, `p3-process`, `p3-journal`, `p3-power-plan`; core `p2-ownership-restore` (review M1) | in progress |
+| `p6-hooks` | no (Question 2: the default, Haik 2026-11-03 18:09) | `p6-login-and-path`; `p3-store`, `p3-log`, `p3-process`, `p3-journal`, `p3-power-plan`; core `p2-ownership-restore` (review M1) | done (committed 02:05): 17 tests; real Run, RunOnce and Path unchanged |
 | `p6-velopack-dependency` | yes, once: the elevated clang install of its step 0 (Question 4: yes); runs alone on the whole laptop: no other card and no cargo command (review M5) | `p6-hooks`, `p6-update-schedule`, `p6-velopack-facts` | ready |
 | `p6-pack-and-release` | no (Question 5: yes, the first real run is a public pre-release) | `p6-velopack-facts` | in progress |
 | `p6-install-e2e` | no; real laptop: installs, the real Run value and Path, a throwaway plan copy | `p6-velopack-dependency`, `p6-pack-and-release`; `p3-power-plan` (its first test shows a write to an inactive copy leaves the real plan alone) | ready |
@@ -257,3 +257,10 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   `Outcome` doc and `done_update` say "the next UpdateReady tries again", but `UpdateReady` comes at most once per
   version. Optional: `pub use crate::update::FakeUpdateFeed;` in `testing.rs`. `p6-hooks` running.
 - 2026-11-04 02:02: the `p6-pack-and-release` + `p6-winget-manifest` bundle running (packs x64 into its scratch folder only; never a tag, an upload or a winget submit).
+- 2026-11-04 02:05 (orchestrator, session `wakeshot-46` after the handover from `wakeshot-9d` at 02:03): `p6-hooks` done
+  and committed. The updated hook's restore limit is 10 s (matches `p6-velopack-facts` and architecture.md section 5
+  step 7); the Hooks table above now says 10 s. Decided by the worker, for Haik's review (card Result): an owner in
+  state Unknown gets no restore; a journal.json that does not parse stays in place; an owner still running at
+  uninstall keeps journal and logs; the updated hook never writes the Run value. Next for `p6-velopack-dependency`:
+  the four `velo.rs` callbacks (exact lines in the `p6-hooks` card). Docs pass round 3 gains: architecture.md
+  section 6 (old uninstall order) and section 5 ("the hooks are not built yet").
