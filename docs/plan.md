@@ -201,7 +201,13 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   and fails only the 3 hook checks until `p6-velopack-dependency`. Found: the session locks when the display turns off
   (5 minutes on AC), so every screen Part B (`p5-tray-icon`, `p5-menu-view`, `p5-notices`, later `p6-int-tray-mode`)
   needs Haik at the laptop to unlock it. Running: `p6-int-tray-mode` Part A, `p2-6-unread-journal`.
-- Next (orchestrator): when both end, `p6-velopack-dependency` alone on the whole laptop, without clang (ARM64 tray:
-  CI only until Haik installs it; `06-ship.md` 02:30); then `p6-int-update-wiring`; docs pass round 3 (list in the
-  continuation prompt of `wakeshot-9d`, plus `architecture.md` sections 5 and 6 on the hooks). Power: the SYSTEM
-  request of session `wakeshot-46` (pid 28000, 540 minutes from 02:03).
+- 2026-11-04 03:58: since 02:41 (session `wakeshot-46`): done and committed: `p2-6-unread-journal` (power findings 3
+  and 6, the newer `config.json` check), `p6-int-tray-mode` Part A and its smoke test (the whole dry-run tray runs and
+  quits cleanly; the picture waits for Haik), the flaky window timer tests fix, docs pass round 3,
+  `p6-velopack-dependency` (run alone, without clang: ARM64 tray CI only), `p6-int-update-wiring`, `p6-install-e2e`
+  (81 of 81 checks twice; the laptop as before). Pushed d3b8c6e at 03:58. CI green on cd3d498, and its release dry
+  run passed on both CPUs, hooks included. Running: `p6-int-wiring-fixes`.
+- Next (orchestrator): the continuation prompt of session `wakeshot-46` (its scratchpad, `continuation.md`; sent to
+  session `wakeshot-12` at the handover): after `p6-int-wiring-fixes`, rerun `packaging/e2e.ps1` with two small
+  packaging fixes; then `p6-int-dry-run-e2e` as far as a locked session allows. Screen cards and Haik's checks wait
+  for him. Power: start a new SYSTEM request at takeover.
