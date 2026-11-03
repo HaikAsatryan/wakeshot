@@ -2624,3 +2624,28 @@ screen. Code: `crates/wakeshot-windows/src/tray/menu_paint.rs`.
     ellipsis. The status line of two hold groups fits.
   - The width asked is the width wanted less what Windows adds (above), so the menu is as wide as designed.
   - Sizes are scaled from their epx sums per edge, so rounding never adds up across columns.
+
+## Watch thread checks
+
+Checked 2026-11-04 for card `docs/tasks/p4-watch-thread.md`, by the tests in `watch::thread::tests` and
+`watch::agents::tests` (Windows 11 Pro 10.0.26300, NTFS, folders in `%TEMP%`, debug build; test runner elevated,
+High). Times are from one run with the crate's other tests running beside them.
+
+- **Latency through the whole thread** (file call or process end to the event in the fake sink): first round 11 ms
+  after start; a hold file written 12 ms, deleted 2 ms; `config.json` 3 to 7 ms; `restore-request.json` 17 ms; a
+  `holds\` folder made after start, then a hold in it, 15 ms (the data folder notice reopens it at once); a file in a
+  folder a source asked for later 3 ms. A process ended with `TerminateProcess`: its session and its hold posted as
+  `Gone` 4 ms later, through the exit wait alone (the fake liveness had changed 300 ms before and nothing was posted
+  until the process ended). A 200 ms retry fed 213 ms after the first feed. Stop took under 1 ms.
+- **No handle leak.** 50 start and stop cycles (each with two folders, one of them missing, a hold file, and a live
+  session with its exit wait on the test's own process), after 3 warm-up cycles, in a child test process of its own:
+  122 handles before and after (`GetProcessHandleCount`).
+- **A folder whose listing is denied, its files not.** A deny ACE for `FILE_LIST_DIRECTORY` (0x1) for Everyone on the
+  folder only (SDDL `D:(D;;0x1;;;WD)(A;OICI;FA;;;WD)`, set with `SetFileSecurityW`, which changes the folder and not
+  the files in it): `fs::read_dir` fails with error 5 even in this elevated shell, while the files in it can still be
+  read, written and deleted and a new file can be made. The test asserts the denial first, so it cannot pass for the
+  wrong reason under High.
+- **A tool fact for mutation checks.** `Copy-Item` keeps the source's `LastWriteTime`. A file restored from a backup
+  copy after a mutated build therefore looks older than the build, and cargo ran the mutated test binary again until
+  the file was touched (seen 2026-11-04: the restored tests failed exactly as under the mutation). Touch the file, or
+  restore it with a write, after such a check.

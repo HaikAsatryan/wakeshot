@@ -552,34 +552,38 @@ impl Slot {
             Some(planned) => planned,
             None => {
                 state.fresh = false;
-                let listed: BTreeSet<String> = match names(dir, 0, accept) {
-                    Ok(paths) => paths
-                        .iter()
-                        .filter_map(|p| file_name(p))
-                        .map(str::to_owned)
-                        .collect(),
-                    // The last known files stay, so a listing error never reads as every session gone.
+                match names(dir, 0, accept) {
+                    Ok(paths) => {
+                        let listed: BTreeSet<String> = paths
+                            .iter()
+                            .filter_map(|p| file_name(p))
+                            .map(str::to_owned)
+                            .collect();
+                        state.unlisted = None;
+                        state.unread.retain(|name, _| listed.contains(name));
+                        let gone: Vec<String> = state
+                            .known
+                            .keys()
+                            .filter(|name| !listed.contains(*name))
+                            .cloned()
+                            .collect();
+                        for name in gone {
+                            state.known.remove(&name);
+                            self.feed(dir.join(&name), Feed::Gone);
+                            if !wants_folder(&self.wants, dir) {
+                                return false;
+                            }
+                        }
+                        (listed.into_iter().collect(), false)
+                    }
+                    // The known files are read one by one instead (Claude parsing review m3): a listing error never
+                    // reads as every session gone, and a status file that changes or goes still reaches its source.
+                    // A new file waits until the folder lists again.
                     Err(e) => {
                         state.unlisted = Some(e.raw_os_error());
-                        return true;
-                    }
-                };
-                state.unlisted = None;
-                state.unread.retain(|name, _| listed.contains(name));
-                let gone: Vec<String> = state
-                    .known
-                    .keys()
-                    .filter(|name| !listed.contains(*name))
-                    .cloned()
-                    .collect();
-                for name in gone {
-                    state.known.remove(&name);
-                    self.feed(dir.join(&name), Feed::Gone);
-                    if !wants_folder(&self.wants, dir) {
-                        return false;
+                        (state.known.keys().cloned().collect(), false)
                     }
                 }
-                (listed.into_iter().collect(), false)
             }
         };
         for name in targets {
@@ -859,6 +863,14 @@ mod tests {
     use wakeshot_core::sources::{Activity, SessionKey};
     use wakeshot_core::testing::{FakeClock, FakeSource};
     use wakeshot_core::time::Clock;
+    use windows::Win32::Foundation::{HLOCAL, LocalFree};
+    use windows::Win32::Security::Authorization::{
+        ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+    };
+    use windows::Win32::Security::{
+        DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, SetFileSecurityW,
+    };
+    use windows::core::{HSTRING, PCWSTR, w};
 
     use super::*;
     use crate::log::MemoryLog;
@@ -1305,8 +1317,86 @@ mod tests {
         assert_eq!(source.fed(), [gone(&a), present(&b)]);
     }
 
+    /// Denies listing a folder to everyone, on the folder only, so the files in it stay readable. Dropped, the folder
+    /// lists again.
+    struct NoListing(PathBuf);
+
+    impl NoListing {
+        fn on(dir: &Path) -> Self {
+            set_dacl(dir, w!("D:(D;;0x1;;;WD)(A;OICI;FA;;;WD)")).unwrap();
+            Self(dir.to_path_buf())
+        }
+    }
+
+    impl Drop for NoListing {
+        fn drop(&mut self) {
+            // No assert: a panic here, during a failed test's unwind, would abort the run.
+            let _ = set_dacl(&self.0, w!("D:(A;OICI;FA;;;WD)"));
+        }
+    }
+
+    /// `SetFileSecurityW` changes the folder only: the files in it keep the access they had.
+    fn set_dacl(path: &Path, sddl: PCWSTR) -> windows::core::Result<()> {
+        let mut sd = PSECURITY_DESCRIPTOR::default();
+        // SAFETY: a constant string; `sd` is freed below with LocalFree, as the call documents.
+        unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                sddl,
+                SDDL_REVISION_1,
+                &mut sd,
+                None,
+            )
+        }?;
+        let name = HSTRING::from(path);
+        // SAFETY: the name and the descriptor live through the call.
+        let set = unsafe { SetFileSecurityW(&name, DACL_SECURITY_INFORMATION, sd) };
+        // SAFETY: allocated by the conversion above, freed once.
+        unsafe {
+            let _ = LocalFree(Some(HLOCAL(sd.0)));
+        }
+        set.ok()
+    }
+
+    /// Claude parsing review m3: with its listing denied, a folder's known files are still read, so a status file that
+    /// changes or goes reaches its source; a new one waits until the folder lists again.
     #[test]
-    fn a_folder_that_cannot_be_listed_keeps_its_last_files() {
+    fn a_folder_that_cannot_be_listed_reads_its_known_files() {
+        let root = TempDir::new("agents-no-list");
+        let dir = root.path().join("sessions");
+        let one = root.write("sessions/1.json", b"{\"v\":1}");
+        let two = root.write("sessions/2.json", b"{\"v\":2}");
+        let source = Shared::new(SourceId::ClaudeCode);
+        source.set(|f| f.wanted = vec![folder(&dir)]);
+        let (mut agents, log) = agents(&[&source]);
+        agents.on_tick();
+        assert_eq!(source.fed().len(), 2);
+
+        let denied = NoListing::on(&dir);
+        let listing = names(&dir, 0, |_| true).map_err(|e| e.raw_os_error());
+        assert_eq!(listing, Err(Some(5)), "the listing is denied");
+        assert_eq!(
+            fs::read(&one).unwrap(),
+            b"{\"v\":1}",
+            "the files stay readable"
+        );
+        fs::write(&one, b"{\"v\":11}").unwrap();
+        fs::remove_file(&two).unwrap();
+        let three = root.write("sessions/3.json", b"{\"v\":3}");
+        agents.on_tick();
+        assert_eq!(source.fed(), [whole(&one, b"{\"v\":11}"), gone(&two)]);
+        agents.snapshots(&FakeLiveness::default(), START);
+        assert_eq!(
+            lines(&log),
+            ["Claude Code: a folder it reads could not be listed (error 5)"]
+        );
+
+        drop(denied);
+        agents.on_tick();
+        assert_eq!(source.fed(), [whole(&three, b"{\"v\":3}")]);
+    }
+
+    #[test]
+    fn a_folder_replaced_by_a_file_feeds_its_known_files_gone() {
         let root = TempDir::new("agents-unlisted");
         let dir = root.path().join("sessions");
         let file = root.write("sessions/1.json", b"{}");
@@ -1316,11 +1406,11 @@ mod tests {
         agents.on_tick();
         assert_eq!(source.fed(), [whole(&file, b"{}")]);
 
-        // A file where the folder was: listing it fails, which must not read as the session gone.
+        // A file where the folder was: the listing fails, and the known file is not found.
         fs::remove_dir_all(&dir).unwrap();
         fs::write(&dir, b"").unwrap();
         agents.on_tick();
-        assert!(source.fed().is_empty());
+        assert_eq!(source.fed(), [gone(&file)]);
         agents.snapshots(&FakeLiveness::default(), START);
         let logged = lines(&log);
         assert_eq!(logged.len(), 1);
@@ -1331,11 +1421,7 @@ mod tests {
 
         fs::remove_file(&dir).unwrap();
         agents.on_tick();
-        assert_eq!(
-            source.fed(),
-            [gone(&file)],
-            "a folder that is gone has no files"
-        );
+        assert!(source.fed().is_empty(), "a file is gone once");
     }
 
     #[test]
