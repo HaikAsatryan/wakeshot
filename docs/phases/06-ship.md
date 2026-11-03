@@ -143,9 +143,9 @@ those one at a time across all tracks.
 | Card | Needs Haik | Runs after | Status |
 |---|---|---|---|
 | `p6-velopack-facts` | no; real laptop: installs and uninstalls a throwaway app | Haik's sign-off of the track plans; the contracts card (it builds the repo's release exes; review m10) | done (22:12): 11 facts checked; nothing left installed |
-| `p6-login-and-path` | no | the contracts card; `p3-store` (test key helper) | in progress |
-| `p6-update-schedule` | no | the contracts card | in progress (bundle, after `p6-login-and-path`) |
-| `p6-hooks` | no (Question 2: the default, Haik 2026-11-03 18:09) | `p6-login-and-path`; `p3-store`, `p3-log`, `p3-process`, `p3-journal`, `p3-power-plan`; core `p2-ownership-restore` (review M1) | ready |
+| `p6-login-and-path` | no | the contracts card; `p3-store` (test key helper) | done (committed 01:42): 21 tests; the real Path and Run unchanged by every run |
+| `p6-update-schedule` | no | the contracts card | done (committed 01:42): 17 tests |
+| `p6-hooks` | no (Question 2: the default, Haik 2026-11-03 18:09) | `p6-login-and-path`; `p3-store`, `p3-log`, `p3-process`, `p3-journal`, `p3-power-plan`; core `p2-ownership-restore` (review M1) | in progress |
 | `p6-velopack-dependency` | yes, once: the elevated clang install of its step 0 (Question 4: yes); runs alone on the whole laptop: no other card and no cargo command (review M5) | `p6-hooks`, `p6-update-schedule`, `p6-velopack-facts` | ready |
 | `p6-pack-and-release` | no (Question 5: yes, the first real run is a public pre-release) | `p6-velopack-facts` | ready |
 | `p6-install-e2e` | no; real laptop: installs, the real Run value and Path, a throwaway plan copy | `p6-velopack-dependency`, `p6-pack-and-release`; `p3-power-plan` (its first test shows a write to an inactive copy leaves the real plan alone) | ready |
@@ -243,3 +243,16 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
 - 2026-11-04 01:22: Haik's answer, relayed by session `wakeshot-91` (his words at 01:14, "2 no, we go free paths
   only"): no Certum certificate; free paths only for signing and distribution. The next docs pass records it in
   `docs/product.md` (Distribution), `docs/research/launch.md` and `docs/tasks/p8-store.md`.
+- 2026-11-04 01:42: the `p6-login-and-path` + `p6-update-schedule` bundle done and committed. A Windows fact:
+  `RegSetValueExW` also stores a NUL just past the data, so `write` puts a guard unit there (`research.md`, "Path value
+  checks"). Decided by the worker, for Haik's review: Path remove takes out every entry that names our folder, also one
+  typed by hand; an empty Path or one ending in `;` gets `folder;`; the broadcast waits 1 s per window; an add past
+  32,767 characters is refused; a Path of the wrong type or a bad folder is left alone; matching ignores case and
+  trailing backslashes only. Update: the first check after 5 minutes of run time, then every 12 hours of wall or run
+  time, whichever ends first; the clocks are read at least every 60 s; a good apply ends the thread; after a failed
+  apply the same version is not offered again in this run; `stop` waits at most 2 s. APIs: `UserPath` (`add`, `remove`,
+  `PathChange`); `UpdateThread::start(make_feed, clock, sink, log)` gives `UpdateHandle` with `apply()` and `stop()`;
+  when `apply()` is false the caller posts `Outcome::Update(Err)`; pass `velo::feed` as `make_feed`. Outside scope:
+  this file gives the updated hook's restore limit as 12 s, `p6-hooks` says 10 s (`p6-hooks` settles it); the
+  `Outcome` doc and `done_update` say "the next UpdateReady tries again", but `UpdateReady` comes at most once per
+  version. Optional: `pub use crate::update::FakeUpdateFeed;` in `testing.rs`. `p6-hooks` running.
