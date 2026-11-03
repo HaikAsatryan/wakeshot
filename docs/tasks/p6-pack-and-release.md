@@ -163,3 +163,6 @@ Done 2026-11-04 02:19.
   3 checks failed on each, as expected until `p6-velopack-dependency` wires `VelopackApp`: the Run value, the user Path
   entry, the install hook's log line (Velopack logs "Hook exited with non-zero exit code: 2": the tray exe does not
   know the hook arguments yet). Upload and winget jobs skipped. Run it again after `p6-velopack-dependency`.
+- 2026-11-04 03:39, orchestrator (session `wakeshot-46`): second manual dry run of `release.yml`, on cd3d498 (velopack
+  in), run 41739978975: passed. Version, and build, pack and smoke test on x64 and ARM64 all passed, the 3 hook checks
+  too (Run value, user Path entry, install hook log line); upload and winget skipped. CI on cd3d498 green.

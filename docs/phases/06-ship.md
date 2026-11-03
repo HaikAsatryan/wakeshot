@@ -301,3 +301,6 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   Haik's review: no auto apply at startup; no offline fallback to a downloaded package; the feed keeps the last
   downloaded update; no pre-release switch in `feed()`; his user Path is not changed by the clang step. Next:
   `p6-int-update-wiring`, then the release dry run again.
+- 2026-11-04 03:39 (orchestrator, session `wakeshot-46`): CI green on cd3d498. The release dry run on it (run
+  41739978975) passed on both CPUs, all smoke checks included: the real hooks run through Velopack on the runners.
+  Left before the first tag: `actionlint` (Haik), then version `0.1.0-rc.1` and its tag (Question 5).
