@@ -201,7 +201,12 @@ Each with the default the design takes until you answer. None blocks Phase 1.
 | track plan cards `p2-plan-core` to `p6-plan-ship` | yes: Haik signs off all five at once | `p1-contracts`, design final check | done (17:22): 63 cards, about 6.15M tokens |
 | cross-track review (reviewer, no card) | no | the five plans | done (17:43): 2/10/19 (`docs/reviews/p2-6-cross-track.md`) |
 | `p1-track-plan-fixes` | no | cross-track review; `p1-contracts-split`'s card edits | done (18:07); `docs/phases/02-06-signoff.md` has 12 questions with defaults |
-| `p1-ci` | no | `p1-cargo-workspace` | done (16:25); green on GitHub known only after the first push |
+| fixes verify (reviewer, no card) | no | `p1-contracts-split`, `p1-track-plan-fixes`, first push | done (18:30): 0/2/6 (`docs/reviews/p1-fixes-verify.md`) |
+| `p1-close-contracts` | no | fixes verify | done (18:50): `Event::Updated`, `Notice::Updated`, owner lines, `architecture.md`, answers in 16 cards, all 8 verify findings fixed; `Cargo.lock` one line (`proptest` in the CLI) |
+| close verify (reviewer, no card) | no | `p1-close-contracts` | next |
+| `p6-plan-integration` | yes: signs off the plan, two questions | first push | done (18:39): 11 cards, about 1.19M tokens (`docs/phases/06-integration.md`) |
+| `p6-int-skeleton` | no | `p1-close-contracts` | ready; runs alone before the track builds (with the plan's five `architecture.md` proposals) |
+| `p1-ci` | no | `p1-cargo-workspace` | done (16:25); CI green after the first push (18:15) |
 | Phase 1 general review (reviewer, no card) | no | `p1-repo-files`, `p1-ci` | of the repo files, workspace and CI, before the first push |
 | fixes for that review (card written from its findings) | no | Phase 1 general review | not written yet |
 | `p1-privacy-check`, `p1-privacy-fixes` | | | dropped (Haik's answer 1, 15:29): the secret scan in the steps below replaces them |
@@ -334,7 +339,7 @@ scratchpad):
 - [x] Haik signs off the design (2026-11-03 16:44, "signed off" on the sign-off list; Questions 10 to 12 at the
   defaults, as the list asks).
 - [ ] All cards done; reviews (general and domain) done and fixed.
-- [ ] Repo public, CI green on x64 and ARM64.
+- [x] Repo public, CI green on x64 and ARM64 (2026-11-03 18:15, run 41651223828).
 - [ ] Haik signs off Phase 1.
 
 ## Work log
@@ -611,4 +616,52 @@ scratchpad):
   No agent of this session runs now. Orchestrator stops for a clear.
 - 2026-11-03 18:09: New orchestrator session. Haik: "Answer to all questions are default!": all 12 questions in
   `docs/phases/02-06-signoff.md` take their defaults (recorded there). Git steps 4 to 10 start now; no agent runs.
+- 2026-11-03 18:11: Git steps 4 to 9 done. `git init -b main`; identity `HaikAsatryan <haik.asatryan.95@gmail.com>`.
+  The `commit-msg` hook was not written: the Claude Code auto mode classifier denied writing into `.git/hooks`
+  ("unauthorized persistence"); the orchestrator checks each commit message with `git log -1` instead. Step 5: 489
+  files staged; ignored paths only the four `spikes/*/target/`. Scan (scratchpad `secret-scan.sh`,
+  `secret-patterns.txt`): no path hit; content hits all known fine: `spikes/claude-watch/fixtures/live-tests.log`
+  (redacted `<str 28>` and `session_BRIDGE01` to `03`; two long lines read in full: placeholder ids and paths only),
+  `spikes/claude-watch/src/watch.rs:523` (`session_x`), the public Common Controls `publicKeyToken` in
+  `spikes/tray/tray-spike.exe.manifest` and, new, `crates/wakeshot-tray/wakeshot-tray.exe.manifest`. Self-test
+  passed. Commit "Initial commit", author and committer Haik, no trailer. `gh repo create HaikAsatryan/wakeshot
+  --public`; remote `git@github.com:HaikAsatryan/wakeshot.git`. Gate C: tree clean, index equal to the step 5 copy.
+  Pushed `main`. CI run 41651223828 started.
+- 2026-11-03 18:13: Reviewer started on the fixes verify (contracts split against `p1-contracts-domain.md` and
+  `p1-skeleton-general.md`, plan fixes against `p2-6-cross-track.md`). Card `p1-close-contracts` written (Question 7
+  yes needs `Event::Updated` and `Notice::Updated`; it also takes the open items of `p1-track-plan-fixes` and the
+  verify findings). `p4-claude-live-shapes` started early (agent-session lane, no build, own files only).
+- 2026-11-03 18:15: Card `p6-plan-integration` written and started (planning only, no build; owns
+  `docs/phases/06-integration.md` and new `p6-int-*` cards). Its plan goes to Haik for sign-off when done.
+- 2026-11-03 18:15: Git step 10: CI run https://github.com/HaikAsatryan/wakeshot/actions/runs/41651223828 green,
+  all three jobs (`core-linux`; `windows` on `windows-latest` x64 and `windows-11-arm` ARM64). Still not shown: whether
+  a GitHub runner lets `p3-session` create a window in `cargo test` (that code does not exist yet; its first CI run
+  after the card shows it).
+- 2026-11-03 18:30: Fixes verify done: 0 blocker, 2 major, 6 minor. M1: `p4-cli-args` needs `proptest` in the CLI
+  (a `Cargo.lock` change) and `p4-cli-run` needs the `Win32_System_Environment` feature; M2: the two property cards
+  of the core plant mutants in files they do not own while other cards build (fix: a scratch copy). Top minor:
+  `p2-core-lid` 8a still waits on an answer Haik gave. Known open, not counted: M10 (integration plan running), m9
+  (the `Updated` variants). The reviewer ran `git --version` once (no repo operation). `p1-close-contracts` widened
+  to allow the M1 `Cargo` change and started 18:31; `p4-claude-live-shapes` and `p6-plan-integration` (no builds)
+  run beside it.
+- 2026-11-03 18:39: Card `p6-plan-integration` done: `docs/phases/06-integration.md`, 11 cards (`p6-int-*`), about
+  1.19M tokens; Haik about 27 minutes (18 of hands) plus about 15 optional with a dock, one whole-laptop session on a
+  throwaway active plan copy. Critical path 11 cards, about 1.35M tokens, through the core chain (`p2-policy-holds`
+  to `p2-core-lid`), then dispatch, tray mode, update wiring, the three e2e cards and Haik's checks. One contracts
+  change: `p6-int-skeleton` (runs alone; `pub mod app;`, the seams, empty `app/*` files, the tray-mode call; no Cargo
+  change). Orchestrator added to that card the five `architecture.md` proposals and three stale lines from the plan's
+  Result, and runs it right after `p1-close-contracts`, before the track builds. Two questions relayed to Haik (dock;
+  Remote Desktop), neither blocks a card.
+- 2026-11-03 18:47: Card `p4-claude-live-shapes` done (Claude Code 2.1.317, 13 cases, 27 redacted fixtures; resume
+  keeps `sessionId` and transcript, `CronCreate` jobs come back, `ScheduleWakeup` wakeups do not; SDK resume after a
+  kill writes `stopped`, which rule 3 must close on). Its "Found outside scope": older lines of the signals doc that
+  this contradicts (route to `p4-live-claude`); 13 dead trusted-folder entries in `~/.claude.json` and three Phase 0
+  `cctest` folders in `%LOCALAPPDATA%\Temp\claude` (told Haik; left).
+- 2026-11-03 18:50: Card `p1-close-contracts` done: the two `Updated` variants, owner lines in about 35 files,
+  `architecture.md` spots plus 4 stale lines, `product.md` 1 line, Haik's answers in 16 cards and the 02 to 06 phase
+  files (no card waits on a question), clang install as step 0 of `p6-velopack-dependency`, all 8 verify findings
+  fixed. `Cargo.lock`: one line, `"proptest"` in the `wakeshot-cli` entry. Whole-workspace fmt, 4 clippy runs, 36
+  tests, both release builds green with `--locked`. The worker ran `git diff --no-index` once by mistake (usage
+  error, no change). `CLAUDE.md` owner line fixed by the orchestrator (an `Owner:` line in the module doc).
+  Commits: live shapes, the integration plan, then this card with the verify review.
 

@@ -15,7 +15,8 @@ Not tested live until `p4-live-copilot`; the docs mark it so.
 
 ## Read first
 
-- `docs/phases/04-sources.md`: track notes 2, 7, 9, and Question 2 (the default: waiting does not hold).
+- `docs/phases/04-sources.md`: track notes 2, 7, 9, and Question 2 (answered with the default, Haik 2026-11-03
+  18:09: waiting does not hold).
 - `docs/architecture.md` section 7.
 - `docs/research/other-agent-signals.md`: "GitHub Copilot CLI" (all of it), "Design notes", "Fixture sketches".
 - `crates/wakeshot-core/src/sources.rs` (after the contracts card), `sources/cron.rs` (from `p4-cron`).

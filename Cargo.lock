@@ -546,6 +546,7 @@ name = "wakeshot-cli"
 version = "0.1.0"
 dependencies = [
  "embed-resource",
+ "proptest",
  "wakeshot-core",
  "wakeshot-windows",
  "windows",

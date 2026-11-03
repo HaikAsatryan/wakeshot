@@ -1,9 +1,11 @@
 # Recovery: guard mode, the tray's guard control, restore mode
 
-Phase: 3. Status: ready. Needs Haik: Question 12 is open (a failed restore starts the tray); built on its default.
+Phase: 3. Status: ready. Needs Haik: no. Question 12 (a failed restore starts the tray) is answered with the
+default, Haik 2026-11-03 18:09 (`docs/phases/02-06-signoff.md` item 11): build it.
 Real laptop: no (child processes the tests start; a test data folder; no RunOnce). Agent: `wakeshot-worker`. Size:
 about 140K tokens.
-Runs after: `p3-journal`, `p3-process`, `p3-log`, and the core track's `p2-ownership-restore` (the restore routine).
+Runs after: `p3-journal`, `p3-process`, `p3-log`, `p3-power-plan` (`Win32Power`, which `guard.rs` and `restore.rs`
+build; verify review Minor 3), and the core track's `p2-ownership-restore` (the restore routine).
 Parallel with: `p3-power-io`, `p3-stop-points` and any card of tracks 2, 4, 5, 6.
 Build folder: `CARGO_TARGET_DIR=<scratchpad>\p3-recovery\target`.
 
@@ -42,8 +44,7 @@ sign-in. Both run from the real tray exe (`--guard`, `--restore`), so Haik's che
   - `run_restore_mode(deps) -> RestoreModeEnd`: journal missing: done; owner alive: exit (another tray took it);
     Gone: the retry loop; Unknown: a failed run, retried. Never writes RunOnce
     (Windows deleted it before running the command).
-  - The give-up step, one function: start the tray (`wakeshot-tray.exe`, Question 12's default). If Haik picks the
-    other answer, only this function's command line changes.
+  - The give-up step, one function: start the tray (`wakeshot-tray.exe`, Question 12: the default, Haik's answer).
 - `crates/wakeshot-tray/src/guard.rs`, `restore.rs`: thin mode files that build the real parts (`Win32Power`,
   `FileNet` with the real RunOnce value, which the restore routine only ever clears, `NoGuard`, `SystemLiveness`,
   `LogWriter` with `guard` or `restore`) and call the functions above. No logic.
@@ -89,7 +90,7 @@ sign-in. Both run from the real tray exe (`--guard`, `--restore`), so Haik's che
 
 Each with the worker's default.
 
-- Question 12 (phase 1 file) is Haik's and still open. Default built here: start the tray after 2 minutes.
+- Question 12 (phase 1 file) is answered with the default (Haik 2026-11-03 18:09): start the tray after 2 minutes.
 
 ## Found outside scope
 

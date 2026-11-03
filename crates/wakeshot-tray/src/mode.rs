@@ -1,4 +1,6 @@
 //! How the tray exe was started (architecture section 4, "Processes" and "Tray startup").
+//!
+//! Owner: contracts card.
 
 use std::ffi::OsString;
 

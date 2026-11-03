@@ -124,8 +124,8 @@ Wakeshot writes and puts back each time, show in the icon and tooltip only (Haik
 
 The crash gap is accepted (Haik, 2026-11-03): after an OS crash, a power cut or the other cases listed in
 `architecture.md` ("Gap left"), nothing restores before the next sign-in, because that would need admin, or longer
-in the cases of Question 11 (still open, `phases/01-design-skeleton.md`). Until then the lid action stays Do nothing
-and battery sleep Never. The README says so.
+in the cases of Question 11 (`phases/01-design-skeleton.md`; the default, Haik 2026-11-03 18:09). Until then the
+lid action stays Do nothing and battery sleep Never. The README says so.
 
 ### UX
 

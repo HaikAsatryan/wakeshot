@@ -1,4 +1,6 @@
 //! The one error type of the Windows layer (architecture section 8).
+//!
+//! Owner: contracts card.
 
 use wakeshot_core::command::Failure;
 

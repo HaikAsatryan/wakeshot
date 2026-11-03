@@ -1,7 +1,8 @@
 # Pack script and release workflow
 
-Phase: 6. Status: ready. Needs Haik: no for the files; his answer to Question 5 of `p6-plan-ship` before the first
-real run (a public pre-release). Agent: `wakeshot-worker`. Size: about 110K tokens.
+Phase: 6. Status: ready. Needs Haik: no. His answer to Question 5 of `p6-plan-ship` is yes: the first real run is a
+public pre-release, which Phase 8 deletes (`docs/phases/02-06-signoff.md` item 9, default, Haik 2026-11-03 18:09).
+Agent: `wakeshot-worker`. Size: about 110K tokens.
 Real laptop: no. It packs into the scratch folder and never installs; `smoke-test.ps1` first runs on this laptop in
 `p6-install-e2e`, and on the runners after the next push.
 Runs after: `p6-velopack-facts` (names, flags, the upload options). Parallel with: any card that does not own the
@@ -54,7 +55,7 @@ both CPUs when a version tag is pushed.
   release index in the out folder; the same for ARM64 with the ARM64 release exes (if `velopack` is in and this laptop
   has no clang, use the exes of a build from before it, or record ARM64 as CI only). Sizes in the Log.
 - The GitHub run waits for the next push: the orchestrator runs the manual dry run then and records it here; the first
-  tagged run waits for Haik's answer to Question 5.
+  tagged run is the public pre-release Haik said yes to (Question 5).
 
 ## Out of scope
 

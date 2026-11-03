@@ -58,9 +58,9 @@ a reason in its Result. Contract changes behind these notes: `p2-plan-core` Resu
 16. **Keep screen on** is enabled only while Keep awake is on; Keep awake Off clears it. Icon while stepped back:
     Idle, reason in the tooltip. UI defaults; the tray track may change them.
 17. **Expired hold files** stop counting; the core deletes a hold file only when its process is Gone (section 6).
-18. **Notices while locked or off the console** (tray track proposal): if signed off, the core keeps notices raised
-    while the session is locked or another session is on the console and sends them at `Unlocked` or `ConsoleBack`
-    (`p2-core-lid`). Sounds are not held.
+18. **Notices while locked or off the console** (tray track proposal; Haik said yes, sign-off item 4, default, Haik
+    2026-11-03 18:09): the core keeps notices raised while the session is locked or another session is on the console
+    and sends them at `Unlocked` or `ConsoleBack` (`p2-core-lid`). Sounds are not held.
 19. **Tests live inside the crate**: `#[cfg(test)]` modules, with `sim` and `ownership::fake` behind `test-support`,
     so tests see internal state and need no self dev-dependency. CI runs them on Linux and both Windows targets. Each
     property runs in a few seconds at the default case count; each card records one long run.
@@ -83,8 +83,16 @@ a reason in its Result. Contract changes behind these notes: `p2-plan-core` Resu
       crate and of the crates that use it.
     - No card runs `--workspace` or `--all` as a done check; the orchestrator runs the whole-workspace check when it
       closes a wave.
+    - Mutants run only in a scratch copy of the workspace, never in the repo (verify review Major 2): copy
+      `Cargo.toml`, `Cargo.lock`, `.cargo\`, `rust-toolchain.toml`, `assets\` (the exes' build scripts embed the icon)
+      and `crates\` to `<scratchpad>\<card>\mutants\` after the card's own code is final, plant each mutant there, run
+      the tests there with their own `CARGO_TARGET_DIR` (`<scratchpad>\<card>\mutants-target`) and `--locked`, then
+      delete both folders. A mutant in the repo would fail other cards' tests, could reach a real-laptop run, and
+      would stay behind if the session stops mid-mutant.
     - Once `p6-velopack-dependency` is done, ARM64 builds of `wakeshot-tray` need clang (only the tray depends on
-      `velopack`); without clang on this laptop they are CI only (review M5).
+      `velopack`). Haik said yes to the Build Tools clang component (sign-off item 8, Haik 2026-11-03 18:09);
+      `p6-velopack-dependency` step 0 has Haik install it, elevated. Without it the tray's ARM64 builds are CI only
+      (review M5).
     - Delete the card's own target folder when the card is done (review m14).
 
 ## Module layout (after the contracts card)
@@ -123,7 +131,7 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | `p2-ownership-apply` | no | `p2-ownership-restore` | ready |
 | `p2-core-holds` | no | `p2-policy-holds`, `p2-policy-power`, `p2-present`, `p4-hold-files` | ready |
 | `p2-ownership-props` | no | `p2-ownership-apply` | ready |
-| `p2-core-settings` | Question 10 may drop its console part (default built) | `p2-core-holds` | ready |
+| `p2-core-settings` | no (Phase 1 Question 10: default, console part built; Haik 2026-11-03 18:09) | `p2-core-holds` | ready |
 | `p2-core-lid` | no | `p2-core-settings` | ready |
 | `p2-core-props` | no | `p2-core-lid`, `p2-ownership-apply` | ready |
 
@@ -168,7 +176,8 @@ Where each item this track owns is built. "Integration" is planned after the tra
 | The apply, restore routine, ownership check, journal file form and unknown keys (decisions 24, 25, 26; section 5) | `p2-ownership-restore`, `p2-ownership-apply` |
 | Journal property test (`p2-plan-core` acceptance check) | `p2-ownership-props` |
 | Lid-close lock and chime, power source change lock, battery floor, countdown and hibernate, Keep screen on idle lock, closed-lid report (decisions 18, 20, 21, 23) | `p2-policy-power`, `p2-core-lid` |
-| When to apply an update (ship track's contract proposal: `UpdateReady`, `ApplyUpdate`, `Outcome::Update`) | `p2-core-lid` (taken by the contracts card; `Updated` waits for ship Question 3), `p2-core-props` |
+| Notices raised while locked or off the console wait until the session is back (note 18; sign-off item 4: yes) | `p2-core-lid` (item 8a) |
+| When to apply an update (ship track's contract proposal: `UpdateReady`, `ApplyUpdate`, `Outcome::Update`) | `p2-core-lid` (all taken by the contracts cards; `Updated` gives `Notify(Updated)`: ship Question 3 yes, Haik 2026-11-03 18:09), `p2-core-props` |
 | Section 8, the core's part: each failure's fallback, notices once, `Command::Log` | the core card that handles the event |
 | Section 9, the core's part: `Sim`, scenarios, the property tests, decision 0 | `p2-core-holds` (Sim), each core card, `p2-core-props` |
 | Section 9 parser fixtures; hold file parsing; `expires` parse and format | sources track |

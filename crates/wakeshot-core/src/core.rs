@@ -1,5 +1,8 @@
 //! The core's entry point. Its state and rules come with the core track; until then it answers nothing, so the loop
 //! can be wired and tested against the real signatures.
+//!
+//! Owner: core track (`p2-core-holds`, then `p2-core-settings`, then `p2-core-lid`) for the bodies; the
+//! signatures are contract.
 
 use crate::command::Command;
 use crate::event::Event;

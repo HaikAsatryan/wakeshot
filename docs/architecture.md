@@ -1,10 +1,10 @@
 # Architecture
 
 Detailed design, 2026-11-03 (card `p1-detailed-design`; review fixes by `p1-design-review-fixes` and
-`p1-design-verify-fixes`; sections 2 and 3 matched to the code by `p1-contracts-split`). Haik signs it off
-before any product code. Decisions: `product.md`. Facts: `research.md`, cited by section name. "Not tested" marks a
-point that no test on the test laptop backs yet; the phase named next to it tests it. Haik's answers to the eight
-design questions (2026-11-03) are written in where they apply; the questions stay in
+`p1-design-verify-fixes`; sections 2 and 3 matched to the code by `p1-contracts-split` and `p1-close-contracts`).
+Haik signs it off before any product code. Decisions: `product.md`. Facts: `research.md`, cited by section name.
+"Not tested" marks a point that no test on the test laptop backs yet; the phase named next to it tests it. Haik's
+answers to the eight design questions (2026-11-03) are written in where they apply; the questions stay in
 `phases/01-design-skeleton.md`.
 
 ## 1. Shape
@@ -42,7 +42,8 @@ feature turns on the core's. Both exes take their resources (manifest, app icon 
 `crates/build-resources.rs`, pulled into each `build.rs` with `include!`.
 
 Every module below exists from `p1-contracts-split`, so no track edits a module list, a `main.rs` dispatch or a
-`Cargo` file. Each file's first doc line names the card that owns it; the full table is in that card's Result.
+`Cargo` file. Each file's module doc names the card that owns it in its `Owner:` line; the full table is in that
+card's Result.
 
 Two exes because a console exe flashes a window at login and a GUI exe cannot print. Two bin crates, not one package
 with two bins, because their dependencies differ: from Phase 6 only the tray takes `velopack`, and the bins of one
@@ -93,7 +94,7 @@ lists end up the same. macOS and Linux later add an adapter crate next to `wakes
 | `sink` | trait `EventSink`, how off-loop threads post events to the loop; `FakeEventSink`. The real sink comes with the loop (integration) |
 | `tray` | `Anchor`, `IconIdentity`, trait `MenuView`; `icon` (`TrayIcon`, its own hidden window), `menu` (`OwnerDrawnMenu`), `menu_paint`, `theme`, `art` (icon art as code) |
 | `notify`, `sound`, `log` | trait `Notifier` with `BalloonNotifier`; trait `SoundPlayer` with the WASAPI player; trait `Log` with `LogWriter` and `MemoryLog` |
-| `install`, `hooks`, `update` | the Run value and the CLI folder in the user Path; what each Velopack hook does (`HookEnv`); update check, download and apply (`UpdateFeed`) |
+| `install`, `hooks`, `update` | the CLI folder in the user Path (the Run value is `store::AutoStart`'s); what each Velopack hook does (`HookEnv`); update check, download and apply (`UpdateFeed`) |
 | `testing` | the fakes in one place (re-exports) and `FakeMenuView` (test-support) |
 
 ### Boundary traits
@@ -220,6 +221,9 @@ pub enum Event {
     Session(SessionChange),                     // Locked, Unlocked, Ending, EndCancelled, Ended,
                                                 // ConsoleLeft, ConsoleBack (WTS_CONSOLE_DISCONNECT, _CONNECT)
     UpdateReady { version: String },            // an update is downloaded (ship track); once per version per run
+    Updated { version: String },                // Velopack restarted the tray after this update (ship track); at
+                                                // most once, at start, after Started; the core sends
+                                                // Notify(Updated)
     Done(Outcome),                              // result of a command
 }
 
@@ -297,8 +301,8 @@ pub enum ApplyError {
 `Notice` variants: `FirstRun`, `UserChanged(SettingKey)`, `RestoredByUser`, `StepBack { floor_pct }`,
 `RequestsOnly` (settings blocked or a failed apply), `CannotHold`, `RestoreFailed`, `HibernateFailed`, `LockFailed`,
 `ClosedLidReport { ran_ms, held_by }`, `UpdateWakeshot { agent }`, `JournalCorrupt` (a corrupt journal was set aside,
-so an override may be left), `IdleLocked` (Keep screen on locked the PC). The tray track words each one in
-`text::notice`.
+so an override may be left), `IdleLocked` (Keep screen on locked the PC), `Updated { version }` (Wakeshot updated
+itself; Haik's yes, 2026-11-03). The tray track words each one in `text::notice`.
 
 State is one struct owned by the loop thread: `automatic`; holds by source; live `PlanValues`; `ac`, `battery_pct`,
 `floor_pct`, `lid`; `episode: Option<Episode>` (from the first hold to the last: `released: Set<SettingKey>`, on every
@@ -359,7 +363,7 @@ While holding:
   on the console: not verified). Remote Desktop into this session most likely counts as leaving too (Microsoft's text
   names "the console terminal or RemoteFX session"; not tested), so a user working over Remote Desktop gets requests
   only. A restore that fails here warns in this session, not the user at the screen; it is retried on each tick.
-  Session notices: not tested (checklist 11). A default still open for Haik (phase file, "New questions").
+  Session notices: not tested (checklist 11). Phase 1 Question 10: the default, Haik 2026-11-03 18:09.
 - On battery under the floor (energy saver threshold DC; 20 when it is 0 "Never" or 100 "On battery"): step back:
   `Requests` off, `Restore`, notice and `Play(BatteryFloor)`; if the lid is closed, start the countdown (reason Floor).
   No hold starts while stepped back. AC back: hold again.
@@ -462,7 +466,7 @@ Every decision in `product.md`, by section. Phase numbers are from `plan.md`.
   as at a hold start. Creating a `Global\` mutex needs no special privilege (Microsoft, "Kernel object namespaces"); a
   denied open across users: not tested (Phase 3). The owner also applies only while its session is on the console;
   under fast user switching it restores and holds requests only (episode flow). Two users on one PC: v1 assumes one
-  signed-in user at a time (a default still open for Haik, phase file, "New questions").
+  signed-in user at a time (Phase 1 Question 10: the default, Haik 2026-11-03 18:09).
 - Every apply and every restore, in any process, runs under mutex `Local\Wakeshot.Journal`, so two processes never
   change the journal or the plan at the same time (tray and RunOnce restore at sign-in, the CLI, the hooks). A wait
   that returns `WAIT_ABANDONED` (a process ended while holding it) counts as taken: Microsoft grants ownership to the
@@ -609,8 +613,8 @@ check drops the last entry, the clean-up of restore step 6 runs.
   Side effects of that many calls (other apps' setting callbacks, brightness on some devices): not known either way.
   Phase 3 runs about 50 cycles (checklist 15).
 
-Restore routine (`restore_from_journal`), the same in the tray, guard, restore mode, Velopack hooks and the CLI, always
-under `Local\Wakeshot.Journal`:
+Restore routine (`ownership::restore`, always called through `power::journal::restore_locked`), the same in the tray,
+guard, restore mode, Velopack hooks and the CLI, always under `Local\Wakeshot.Journal`:
 
 1. Load `journal.json`. Missing: nothing to do. Any other read error: this run fails. No entries (a stop before the
    clean-up): the clean-up of step 6. Corrupt (read in full, but it does not parse): move it to
@@ -643,7 +647,7 @@ under `Local\Wakeshot.Journal`:
    Restore mode and the guard retry every 10 s for 2 minutes. Each retry reloads the journal and goes on only while
    its owner is still the dead process it started for; another tray took the journal over: exit. In restore mode an
    owner whose liveness is Unknown counts as a failed run, so it is retried. After 2 minutes they start the tray, which
-   keeps retrying and shows the warning (decision 38; a default still open for Haik, phase file, "New questions"). The
+   keeps retrying and shows the warning (decision 38; Phase 1 Question 12: the default, Haik 2026-11-03 18:09). The
    Velopack hooks must not show UI (`research/distribution.md`): they retry within their 30 s limit, log a failure
    and keep the journal.
 
@@ -812,15 +816,17 @@ Journal format:
 Registry values Wakeshot writes, all under HKCU, all removed by uninstall: `...\CurrentVersion\Run\Wakeshot` (start at
 login, set by the install hook); `...\CurrentVersion\RunOnce\WakeshotRestore` (only while overriding). Windows itself
 writes `Control Panel\NotifyIconSettings\<id>` for the icon and a `NotifyIconGeneratedAumid_<id>` key for balloons.
+`store::AutoStart` is the one code that writes or removes the Run and RunOnce values (the hooks and the journal call
+it; review m12); `install` keeps only the Path entry.
 
 Velopack hooks (Phase 6): install and updated run the restore routine if a journal exists and its owner is dead, and
 add the CLI folder to the user Path. Uninstall (30 s limit) restores, retrying within the limit, then removes Run,
 RunOnce and the Path entry; it deletes `journal.json` only after a successful restore (a failure: section 5, "Gap
 left"). RunOnce goes even after a failed restore: the exe it names is being removed, so it could not run. Updates
 apply only when nothing holds and nothing is overridden. Not verified: that the `current` folder keeps its path
-across updates (Run, RunOnce and Path point at it). Open for Phase 6: `winget upgrade` runs Setup.exe silent, which
-does not start the app, and a hook cannot start it (`research/distribution.md`), so after such an upgrade Wakeshot is
-off until the next sign-in or a manual start.
+across updates (Run, RunOnce and Path point at it). Accepted (ship Question 1, Haik 2026-11-03 18:09; the README
+says so): `winget upgrade` runs Setup.exe silent, which does not start the app, and a hook cannot start it
+(`research/distribution.md`), so after such an upgrade Wakeshot is off until the next sign-in or a manual start.
 
 ## 7. Sources
 
@@ -940,8 +946,9 @@ Core (Phase 2):
 
 Windows layer (Phase 3), never on the user's real settings:
 
-- Power plan tests use a throwaway copy that is never made active (`PowerDuplicateScheme`, named "Wakeshot test",
-  deleted at the end; a leftover from a killed run is deleted at the next run). Tests never call
+- Power plan tests use a throwaway copy that is never made active (`PowerDuplicateScheme`, named "Wakeshot test
+  <pid>" with the test process's pid, deleted at the end; a leftover whose pid is not running is deleted at the next
+  run). The install end-to-end test names its copy "Wakeshot test e2e", which no sweep touches. Tests never call
   `PowerSetActiveScheme`. That a write to an inactive plan changes only that plan is not tested yet (the spikes wrote
   to a copy while it was active), so the first Phase 3 test reads the real plan before and after a write to the
   inactive copy.

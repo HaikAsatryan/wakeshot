@@ -1,4 +1,6 @@
 //! Time as the core sees it. The core never reads a clock: each event comes with a `Now`, so tests can use any time.
+//!
+//! Owner: contracts card. Each type's own doc names the track that owns its meaning.
 
 /// Both clocks, read once per event, so every rule in one step sees the same time.
 ///

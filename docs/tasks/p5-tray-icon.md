@@ -6,8 +6,8 @@ usual) and the orchestrator runs Part B as its own card with a fresh worker, whi
 Real laptop: **screen** in Part B (one screen or sound card at a time, across all tracks), and **settings**: the
 Windows mode is switched to light and back through Settings. Build folder:
 `CARGO_TARGET_DIR=<scratchpad>\p5-tray-icon\target`.
-Runs after: `p5-theme`, `p5-icon-art` (Part A can start with the stub art if `p5-icon-art` is late; Part B needs the
-real art). Parallel with (Part A): any card that does not own `tray/icon.rs`; Part B only with cards that use no
+Runs after: `p5-theme`, `p5-icon-art` (`art.rs` has no functions until `p5-icon-art` is done; verify review Minor
+4). Parallel with (Part A): any card that does not own `tray/icon.rs`; Part B only with cards that use no
 screen, sound or power settings.
 
 ## Goal

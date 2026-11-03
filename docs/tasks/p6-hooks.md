@@ -1,7 +1,8 @@
 # What the install, update and uninstall hooks do
 
-Phase: 6. Status: ready. Needs Haik: no; the data folder step follows his answer to Question 2 of `p6-plan-ship` (the
-default if he has not answered). Agent: `wakeshot-worker`. Size: about 100K tokens.
+Phase: 6. Status: ready. Needs Haik: no; the data folder step follows his answer to Question 2 of `p6-plan-ship`: the
+default (`docs/phases/02-06-signoff.md` item 6, Haik 2026-11-03 18:09). Agent: `wakeshot-worker`. Size: about 100K
+tokens.
 Real laptop: no. Tests use fakes, a temp data folder and scratch registry keys
 (`HKCU\Software\Wakeshot-test\<pid>\<test name>`: each test deletes only its own; the leftover sweep at the start
 deletes only keys whose pid is not running: `p3-store`'s `ScratchKey`; review M8); the real hooks run only in
@@ -37,9 +38,9 @@ during a hold puts the user's settings back and leaves no Run value, RunOnce val
   failed; the data folder step; a monotonic now; a wait; a log line.
 - `on_install`, `on_obsolete`, `on_updated`, `on_uninstall`, following the table in the phase file: registry steps
   first, then the restore every 2 s until 25 s (install, uninstall) or 12 s (updated); the obsolete hook only logs.
-- Uninstall's data folder step, by Question 2: default, after a successful restore delete `%LocalAppData%\Wakeshot`
-  whole; after a failed one keep `journal.json` and `logs\` (a reinstall's install hook restores; the log holds the
-  old values) and delete the rest. A data folder this hook cannot delete is a log line.
+- Uninstall's data folder step, by Question 2 (answered: the default): after a successful restore delete
+  `%LocalAppData%\Wakeshot` whole; after a failed one keep `journal.json` and `logs\` (a reinstall's install hook
+  restores; the log holds the old values) and delete the rest. A data folder this hook cannot delete is a log line.
 - Never panic and never show UI: each failure is a log line, and the hook returns.
 - `RealHookEnv`: `install.rs` for the Path entry; `store::AutoStart` for the Run value (one writer of that value,
   review m12); one restore attempt is `power::journal::restore_locked` with `Win32Power` and the hook form of

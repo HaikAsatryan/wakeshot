@@ -25,6 +25,7 @@ file.
 ## Questions, each with the default the cards build
 
 Answered 2026-11-03 18:09: Haik, "Answer to all questions are default!". Every question below takes its default.
+`p1-close-contracts` wrote the answers into the cards and phase files, and added the update notice of item 7.
 
 1. Codex waiting for your approval looks like working, so it holds with no limit while Codex runs. Default: hold, no
    limit. Other: end a silent Codex turn after 1 hour (also ends long silent builds).

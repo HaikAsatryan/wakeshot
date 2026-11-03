@@ -133,10 +133,13 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   steps 4 to 10, then the reviewer check of the plan fixes and the contracts split, then the track builds.
 - 2026-11-03 18:07: `p1-track-plan-fixes` done; no agent runs.
 - 2026-11-03 18:09: Haik answered the 12 questions in `docs/phases/02-06-signoff.md`: all defaults.
-- Next (orchestrator), see the Phase 1 file (card table, work log, git steps): (1) Gate B is given: freeze, then
-  git steps 4 to 10 (`git init`, secret scan with self-test, first commit with only Haik's name, `gh repo create
-  HaikAsatryan/wakeshot --public`, push, CI); (2) a reviewer checks the contracts split against
-  `docs/reviews/p1-contracts-domain.md` and the plan fixes against `docs/reviews/p2-6-cross-track.md`; fix any
-  findings; (3) the Question 7 contracts change (a notice after a self-update), run alone, early; (4) track builds in waves (laptop cards one at a time, at
-  most four building cards at once); (5) an integration plan card. A SYSTEM power request from the orchestrator (pwsh, `away-system-holder.ps1`) runs until about 20:20; Haik's
-  power values are back (checked 16:21).
+- 2026-11-03 18:15: repo public (`HaikAsatryan/wakeshot`, one commit "Initial commit"), CI green on all three jobs.
+  The `commit-msg` hook could not be written (auto mode classifier); the orchestrator checks each commit message.
+- 2026-11-03 18:39: fixes verify done (0/2/6, `docs/reviews/p1-fixes-verify.md`); `p1-close-contracts` running
+  alone (with `p4-claude-live-shapes`, no build). Integration planned (`docs/phases/06-integration.md`, 11 cards,
+  about 1.19M tokens); waits for Haik's sign-off and two answers.
+- Next (orchestrator), see the Phase 1 file (card table, work log): (1) `p1-close-contracts` ends: commit; (2)
+  `p6-int-skeleton` alone once Haik signs off the integration plan; (3) a reviewer checks both cards; (4) track
+  builds in waves (laptop cards one at a time, at most four building cards at once); (5) push after Phase 1 passes
+  review and Haik signs it off. A SYSTEM power request from the old orchestrator session (pwsh,
+  `away-system-holder.ps1`) runs until about 20:20; Haik's power values are back (checked 16:21).

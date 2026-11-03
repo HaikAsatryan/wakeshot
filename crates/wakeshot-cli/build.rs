@@ -1,3 +1,4 @@
+// Owner: contracts card. The shared code is `../build-resources.rs`.
 include!("../build-resources.rs");
 
 fn main() {

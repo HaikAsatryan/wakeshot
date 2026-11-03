@@ -46,6 +46,10 @@ against what it posts, and leave a harness the Codex and Copilot live tests reus
    open" (his steps are in that section; the harness shows the session). Otherwise mark it not tested.
 5. A section "Phase 4 end to end (2026-11-..)" at the end of `docs/research/claude-code-signals.md`, and short lines
    in `docs/research.md`.
+5a. Added by the orchestrator (2026-11-03 18:51): in the older parts of `docs/research/claude-code-signals.md`, fix
+    the lines that `p4-claude-live-shapes` "Found outside scope" lists as contradicted by its live run ("Short
+    answer" third bullet, "Claude Code itself uses two outside methods" item 1, the "Wakeup armed" row, rule 3's
+    closing statuses), using what your own run confirms. Replace the old text; do not append history.
 6. Clean-up: every session and process this card started ended by pid; test transcripts and scratch folders deleted;
    the dry-run data folder left as it was.
 

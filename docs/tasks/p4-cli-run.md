@@ -24,7 +24,8 @@ beside `p6-install-e2e` (review m11).
 ## Deliverables
 
 1. `crates/wakeshot-windows/src/child.rs`:
-   - `command_line() -> OsString` (`GetCommandLineW`).
+   - `command_line() -> OsString` (`GetCommandLineW`; its feature `Win32_System_Environment` is declared by
+     `p1-close-contracts`).
    - `resolve(first_token) -> Resolved { Exe(path), Batch(path), NotRunnable(ext), NotFound }`: a token with a folder
      part is used as given (with `PATHEXT` tried when it has no extension); a bare name is searched in `PATH` only,
      each folder with each `PATHEXT` extension in order (track note 11).

@@ -59,8 +59,10 @@ Run from the repo root with the build folder above. Record each outcome.
   this laptop (record the time).
 - One long run: `PROPTEST_CASES=10000 cargo test --locked -p wakeshot-core scenarios::props --release`: passes (record
   time).
-- Mutants, each made by hand in `core.rs` or `src/core/`, run, then reverted. Each must fail a property (record which,
-  and the shrunk case): `released` keyed by plan; the retry takes the active plan's entries while holding; `Apply`
+- Mutants, each made by hand in `core.rs` or `src/core/` of a scratch copy of the workspace, never in the repo: those
+  files are the core cards' and other cards test against them (verify review Major 2; the copy, its build folder and
+  the clean-up are in `docs/phases/02-core.md` note 20). Each must fail a property (record which, and the shrunk
+  case): `released` keyed by plan; the retry takes the active plan's entries while holding; `Apply`
   after `Session(Ending)`; a lid-close lock with the user's own Do nothing; no lock at AC to battery with the lid
   closed; `UserChanged` without a notice; requests left on after the last hold.
 - `cargo test --locked -p wakeshot-core`: all pass. `rustfmt --edition 2024 --check <owned files>`: no diff. `cargo

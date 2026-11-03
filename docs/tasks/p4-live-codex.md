@@ -15,7 +15,7 @@ the docs tested or not.
 
 ## Read first
 
-- `docs/phases/04-sources.md`: track notes 7, 8, Question 1 and Haik's answer if any.
+- `docs/phases/04-sources.md`: track notes 7, 8, Question 1 and Haik's answer (the default, 2026-11-03 18:09).
 - `docs/research/other-agent-signals.md`: "OpenAI Codex CLI".
 - `crates/wakeshot-core/src/sources/codex.rs`, `crates/wakeshot-windows/src/lockowner.rs`, `watch/agents.rs`,
   `examples/agent-watch.rs` and `docs/tasks/p4-live-claude.md` Result.

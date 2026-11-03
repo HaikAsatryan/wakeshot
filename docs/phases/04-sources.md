@@ -1,7 +1,7 @@
 # Phase 4: Sources (track)
 
-Status: planned 2026-11-03 by card `p4-plan-sources`; waits for Haik's sign-off of all five track plans. No card
-started.
+Status: planned 2026-11-03 by card `p4-plan-sources`; Haik signed off all five track plans 2026-11-03 18:09, every
+question with its default. No card started.
 
 ## Goal
 
@@ -16,7 +16,7 @@ The design is `architecture.md` sections 4 (CLI, watch thread), 6 (hold files, c
 
 ## Track notes
 
-Values this plan sets, each with why. Haik can change any at sign-off.
+Values this plan sets, each with why. Haik signed them off with the plan (2026-11-03 18:09).
 
 1. **No cron or date crate.** Claude's `CronCreate` takes only `*`, numbers, steps, ranges and lists, in local time
    (docs, research "Sources track plan checks"). A small parser and next-time function in `sources::cron` covers it;
@@ -94,7 +94,9 @@ Values this plan sets, each with why. Haik can change any at sign-off.
     - No card runs `--workspace` or `--all` as a done check; the orchestrator runs the whole-workspace check when it
       closes a wave.
     - Once `p6-velopack-dependency` is done, ARM64 builds of `wakeshot-tray` need clang (only the tray depends on
-      `velopack`); without clang on this laptop they are CI only (review M5).
+      `velopack`). Haik said yes to the Build Tools clang component (sign-off item 8, Haik 2026-11-03 18:09);
+      `p6-velopack-dependency` step 0 has Haik install it, elevated. Without it the tray's ARM64 builds are CI only
+      (review M5).
     - Delete the card's own target folder when the card is done (review m14).
 
 ## Cards
@@ -104,7 +106,7 @@ Values this plan sets, each with why. Haik can change any at sign-off.
 | `p4-hold-files` | no | contracts card | ready |
 | `p4-cron` | no | contracts card | ready |
 | `p4-claude-status` | no | contracts card | ready |
-| `p4-claude-live-shapes` | no; runs Claude Code test sessions (Haiku); agent-session lane | contracts card | ready |
+| `p4-claude-live-shapes` | no; runs Claude Code test sessions (Haiku); agent-session lane | contracts card | done (18:47): 27 fixtures; resume and rule 3, 5 changes in the signals doc |
 | `p4-codex-source` | no | contracts card | ready |
 | `p4-watch-folders` | no | contracts card | ready |
 | `p4-watch-reads` | no | contracts card | ready |
@@ -116,7 +118,7 @@ Values this plan sets, each with why. Haik can change any at sign-off.
 | `p4-watch-thread` | no | `p4-watch-folders`, `p4-watch-data`, `p4-watch-agents`, `p3-process` | ready |
 | `p4-cli-run` | no | `p4-cli-args`, `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | ready |
 | `p4-cli-commands` | no; screen once (opens one file in the default app; global lane, review M6) | `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | ready |
-| `p4-cli-restore` | no (Question 12 may add a line) | `p3-journal`, `p3-power-plan`, `p2-ownership-restore`, `p3-store`, `p3-process`, `p3-log` | ready |
+| `p4-cli-restore` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09; nothing to add) | `p3-journal`, `p3-power-plan`, `p2-ownership-restore`, `p3-store`, `p3-process`, `p3-log` | ready |
 | `p4-live-claude` | optional: 3 minutes for the VS Code check; agent-session lane | `p4-watch-thread`, `p4-claude-transcript`, `p4-codex-source`, `p4-copilot-source`, `p4-cli-run`, `p3-process` | ready |
 | `p4-live-codex` | yes: about 20 minutes (install or sign in, then type the steps) | `p4-live-claude` | ready |
 | `p4-live-copilot` | yes: about 20 minutes (install or sign in, then type the steps) | `p4-live-codex` | ready |
@@ -190,7 +192,8 @@ Size: about 1.7M tokens of worker context in all (cards give their own estimates
 
 ## Questions for Haik
 
-Each with the default the cards take until you answer. None blocks a card.
+Answered 2026-11-03 18:09, both with the default (`docs/phases/02-06-signoff.md` items 1 and 2): Codex holds with no
+limit; Copilot waiting does not hold. The cards build these.
 
 1. **Codex waiting for approval looks like working.** Codex does not write its approval prompts to disk, so a Codex
    turn that waits for you looks the same as one that works, and it holds with no time limit while `codex.exe` lives
@@ -204,3 +207,5 @@ Each with the default the cards take until you answer. None blocks a card.
 ## Work log
 
 - 2026-11-03 16:51: phase file and cards written by `p4-plan-sources`.
+- 2026-11-03: Haik signed off with every default (18:09); `p1-close-contracts` wrote the answers into this file and
+  the cards.

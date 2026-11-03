@@ -1,8 +1,8 @@
 # Core state machine, part 2: power settings in the episode
 
-Phase: 2. Status: ready. Needs Haik: no to start. Question 10 (Phase 1 file, "New questions") is open: the default
-(restore and requests only while another session is on the PC's screen) is built; if Haik picks otherwise, the
-console part changes (a few rules and their tests). Agent: `wakeshot-worker`. Size: about 150K tokens. Split trigger
+Phase: 2. Status: ready. Needs Haik: no. Question 10 (Phase 1 file, "New questions") is answered: the default
+(restore and requests only while another session is on the PC's screen), Haik 2026-11-03 18:09
+(`docs/phases/02-06-signoff.md` item 11); build it. Agent: `wakeshot-worker`. Size: about 150K tokens. Split trigger
 (review m13: no margin): if the worker passes about 120K before the session end and console part, it stops at a clean
 point and that part (session end, fast user switching, console left and back) becomes its own card, run before
 `p2-core-lid`.
@@ -63,7 +63,7 @@ submodules. Nothing else.
 12. `Session(Ending)`: `Restore { why: SessionEnd }`; no `Apply` until `EndCancelled` (power verify minor 6).
     `Ended`: nothing more.
 13. `Session(ConsoleLeft)`: `Restore { why: ConsoleLeft }`, the system request only, no display request;
-    `ConsoleBack`: the display request if asked, `Apply` as at a hold start (Question 10 default).
+    `ConsoleBack`: the display request if asked, `Apply` as at a hold start (Question 10: the default, Haik's answer).
 14. `owner: false`: requests only; `SettingsOwner`: apply as at a hold start.
 15. `Log` lines for each release and each requests-only switch.
 16. `scenarios/settings.rs`, written before the code, one named test per item above and these cases: an apply in
@@ -83,7 +83,8 @@ Run from the repo root with the build folder above. Record each outcome.
   --target x86_64-pc-windows-msvc -- -D warnings` and the same with `--target aarch64-pc-windows-msvc`: exit 0.
 - No clock read, no I/O, no new dependency (as in `p2-core-holds`).
 - Mutants, each made by hand, run, then reverted (record the failing test): key `released` by plan; let the retry
-  take the active plan's entries while holding; apply after `Session(Ending)`. Each must fail a test.
+  take the active plan's entries while holding; apply after `Session(Ending)`. Each must fail a test. Mutants run
+  only in a scratch copy of the workspace, never in the repo (`docs/phases/02-core.md` note 20).
 - Check rule: `docs/plan.md` "How we work" step 2 and "Checks while other cards run" in this track's phase file. A
   failure in a file another card owns goes in the Log: wait and run again; if it is still there when this card's own
   work is done, list it under "Found outside scope". Never edit, format or `--fix` that file. Every cargo command takes
@@ -110,5 +111,4 @@ Problems seen but not fixed.
 
 ## Result
 
-What was done, files changed, checks and outcomes, open items. Mark which rules change if Question 10 is answered
-the other way.
+What was done, files changed, checks and outcomes, open items.

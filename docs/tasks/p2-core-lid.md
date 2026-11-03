@@ -46,17 +46,18 @@ Nothing else.
 7. Closed-lid report: at the first `Session(Unlocked)` after a hold that ran with the lid closed:
    `Notify(ClosedLidReport { ran_ms, held_by })`, `ran_ms` from `mono_ms`.
 8. `Suspending` and `Resumed`: the last resume time for the idle clamp.
-8a. Only if Haik signs off the tray track's proposal (`docs/phases/02-core.md` note 18): notices raised while the
-    session is locked or another session is on the console wait and go out at `Unlocked` or `ConsoleBack`, in order;
-    sounds never wait. Not signed off: skip this item and its tests.
+8a. Build it: Haik said yes to the tray track's proposal (`docs/phases/02-06-signoff.md` item 4, default, Haik
+    2026-11-03 18:09; `docs/phases/02-core.md` note 18). Notices raised while the session is locked or another
+    session is on the console wait and go out at `Unlocked` or `ConsoleBack`, in order; sounds never wait.
 9. `Log` lines for each lock, step back, countdown start, cancel and due.
-9a. Updates: the contracts card took the ship track's contract changes 1 to 3 (`p1-contracts-split` Result, 17:56),
-    so build this item. Change 4 (`Event::Updated`, `Notice::Updated`) waits for Haik's answer to ship Question 3 and
-    a later contracts change; until it exists, skip the last sentence. `Event::UpdateReady` gives `Command::ApplyUpdate`
-    only when no hold counts, no hold file names a live process (any kind, also with Automatic off) and no key is owned,
-    at once or as soon as that becomes true;
-    `Done(Outcome::Update(Ok))` gives `Quit`; `Err` waits for the next `UpdateReady`. With Haik's yes to that card's
-    Question 3: `Event::Updated` gives `Notify(Updated)`.
+9a. Updates: the contracts cards took all four ship track contract changes (`p1-contracts-split` Result, 17:56:
+    changes 1 to 3; `p1-close-contracts`: change 4, `Event::Updated` and `Notice::Updated`, after Haik's yes to ship
+    Question 3, sign-off item 7, Haik 2026-11-03 18:09), so build the whole item. `Event::UpdateReady` gives
+    `Command::ApplyUpdate` only when no hold counts, no hold file names a live process (any kind, also with Automatic
+    off) and no key is owned, at once or as soon as that becomes true; `Done(Outcome::Update(Ok))` gives `Quit`; `Err`
+    waits for the next `UpdateReady`. `Event::Updated { version }` gives `Notify(Notice::Updated { version })`, once
+    (it follows 8a like every notice). Tests: `updated_gives_notice`, and an `Updated` before any `Sources` still
+    gives the notice.
 10. `scenarios/lid.rs`, written before the code, one named test per item and these cases: lid closed on AC and on
     battery while holding; docked user with their own Do nothing (no lock, no sound); lid closed then unplugged after
     signing in on an external screen (lock after 5 s on battery; none for a 3 s AC drop) (power verify minor 11);
@@ -75,7 +76,8 @@ Run from the repo root with the build folder above. Record each outcome.
 - No clock read, no I/O, no new dependency (as in `p2-core-holds`).
 - Mutants, each made by hand, run, then reverted (record the failing test): lock at lid close when the user's own
   action is Do nothing; no lock at AC to battery with the lid closed; hibernate without the resume clamp; send
-  `Play(GoingToSleep)` with `Hibernate`. Each must fail a test.
+  `Play(GoingToSleep)` with `Hibernate`. Each must fail a test. Mutants run only in a scratch copy of the workspace,
+  never in the repo (`docs/phases/02-core.md` note 20).
 - Check rule: `docs/plan.md` "How we work" step 2 and "Checks while other cards run" in this track's phase file. A
   failure in a file another card owns goes in the Log: wait and run again; if it is still there when this card's own
   work is done, list it under "Found outside scope". Never edit, format or `--fix` that file. Every cargo command takes

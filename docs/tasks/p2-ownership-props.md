@@ -62,8 +62,10 @@ Run from the repo root with the build folder above. Record each outcome.
   in total on this laptop (record the time).
 - One long run: `PROPTEST_CASES=20000 cargo test --locked -p wakeshot-core ownership::props --release`: passes (record
   time).
-- Mutants, each made by hand in `ownership/` (restore, apply or check), run, then reverted. Each must fail a property
-  (record which, and the shrunk case):
+- Mutants, each made by hand in `ownership/` (restore, apply or check) of a scratch copy of the workspace, never in
+  the repo: those files are other cards' and other cards test against them (verify review Major 2; the copy, its
+  build folder and the clean-up are in `docs/phases/02-core.md` note 20). Each must fail a property (record which,
+  and the shrunk case):
   1. a failed or short plan list counts as "plan deleted" (verify major 1);
   2. the restore writes `original` before it saves the mark (verify minor 3);
   3. the apply's takeover resets the mark or `original` (final check major 1);

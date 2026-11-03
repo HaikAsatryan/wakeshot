@@ -1,5 +1,7 @@
 //! Agent sources: bytes in, facts out, no I/O (architecture sections 2 and 7). The watch thread feeds them; the core
 //! turns their facts into holds, so parsers never decide policy.
+//!
+//! Owner: contracts card. Each type's own doc names the track that owns its meaning.
 
 pub mod claude;
 pub mod codex;

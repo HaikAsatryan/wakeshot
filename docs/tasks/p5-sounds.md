@@ -1,7 +1,7 @@
 # Make the three chimes and the player that plays them
 
-Phase: 5. Status: ready. Needs Haik: his answer to "Do the chimes honor the Windows No sounds scheme?"
-(`p5-plan-tray-ux`, Questions; default yes, taken if no answer has come); his ears in `p5-haik-check`. Agent:
+Phase: 5. Status: ready. Needs Haik: his ears in `p5-haik-check`. "Do the chimes honor the Windows No sounds
+scheme?" (`p5-plan-tray-ux`, Questions) is answered: yes, the default (Haik 2026-11-03 18:09). Agent:
 `wakeshot-worker`. Size: about 120K tokens.
 Real laptop: **sound** in Part B (one screen or sound card at a time, across all tracks). Build folder:
 `CARGO_TARGET_DIR=<scratchpad>\p5-sounds\target`.
@@ -53,7 +53,7 @@ Part A (no laptop):
      picked endpoint in its mix format, plays the chime, and posts `Event::Done(Outcome::Sound(..))` through the sink.
    - `play_and_wait(cue)` blocks until the chime has played out or 3 s have passed (the wait the design leaves to this
      track; the Phase 0 start delay was up to 0.8 s), for the hibernate thread only.
-   - The "No sounds" scheme, per Haik's answer: with the default, read the current scheme name
+   - The "No sounds" scheme, per Haik's answer (honor it): read the current scheme name
      (`HKCU\AppEvents\Schemes`; which value means No sounds is from Microsoft docs, or read on this PC, or "not
      verified"), and when it is No sounds play nothing and report it as skipped (the contracts card's sound outcome
      type), so the log says why.

@@ -1,5 +1,7 @@
 //! Hold files as facts. Parsing the files (and `expires`) is the sources track's work (Phase 4, `file`); the core
 //! track turns these facts and agent sessions into holds.
+//!
+//! Owner: contracts card. Each type's own doc names the track that owns its meaning.
 
 pub mod file;
 

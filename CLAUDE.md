@@ -8,8 +8,9 @@ Status: Phase 1 (detailed design and skeleton); Phase 0 signed off 2026-11-03. C
 (`wakeshot-core`, `wakeshot-windows`, `wakeshot-tray`, `wakeshot-cli`): skeleton only, no product logic yet. Throwaway
 spikes in `spikes/` stay outside the workspace, but now build with the root's pinned toolchain (`rust-toolchain.toml`)
 and static CRT (`.cargo/config.toml`). The contracts between the parts are in code (`p1-contracts`), with fakes
-behind the `test-support` feature. Every module the tracks fill already exists, each file with one owner named in its
-first doc line (`p1-contracts-split`), so no track edits a module list or a `Cargo` file.
+behind the `test-support` feature. Every module the tracks fill already exists, each file naming its one owner card in
+the `Owner:` line of its module doc (`p1-contracts-split`), so no track edits a module list or a `Cargo` file. Repo
+public at `HaikAsatryan/wakeshot` since 2026-11-03.
 
 Checks: `cargo fmt --all --check`; `cargo clippy --workspace --all-targets --locked --target <t> -- -D warnings` and
 the same without `--all-targets` (the libs as they ship, without `test-support`); `cargo test --workspace --locked`;

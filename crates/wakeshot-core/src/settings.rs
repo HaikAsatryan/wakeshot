@@ -1,4 +1,6 @@
 //! The power settings Wakeshot may own, and the journal that says which ones it owns now.
+//!
+//! Owner: contracts card. Each type's own doc names the track that owns its meaning.
 
 use std::fmt;
 use std::str::FromStr;

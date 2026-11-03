@@ -1,4 +1,6 @@
 //! Process identity as plain data. The Windows layer checks it; the core only reads the answer.
+//!
+//! Owner: contracts card. Each type's own doc names the track that owns its meaning.
 
 use std::fmt;
 

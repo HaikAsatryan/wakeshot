@@ -124,11 +124,13 @@ Design calls the design leaves to Phase 5 (worker as principal designer). Each h
 ### 6. Waiting on Haik
 
 - His one look at the menu pictures (`p1-tray-menu-look`): `p5-menu-paint` and `p5-menu-view` follow his answer.
-- Question in `p5-plan-tray-ux`: do the chimes honor the Windows "No sounds" scheme (default: yes).
+- Question in `p5-plan-tray-ux`: do the chimes honor the Windows "No sounds" scheme. Answered: yes, the default
+  (`docs/phases/02-06-signoff.md` item 3, Haik 2026-11-03 18:09).
 - Non-blocking looks, batched for the sign-off or `p5-haik-check`: the icon sheet (`p5-icon-art`), the text list
   (`p5-text`).
 - `p5-haik-check`: about 25 minutes of his eyes, ears and hands.
-- Questions 10 to 12 (`phases/01-design-skeleton.md`): no card of this track depends on them.
+- Questions 10 to 12 (`phases/01-design-skeleton.md`): answered with the defaults (18:09); no card of this track
+  depends on them.
 
 ### 7. Checks while other cards run (every card)
 
@@ -152,15 +154,18 @@ its own package and files:
 - No card runs `--workspace` or `--all` as a done check; the orchestrator runs the whole-workspace check when it closes
   a wave.
 - Once `p6-velopack-dependency` is done, ARM64 builds of `wakeshot-tray` need clang (only the tray depends on
-  `velopack`); without clang on this laptop they are CI only (review M5).
+  `velopack`). Haik said yes to the Build Tools clang component (sign-off item 8, Haik 2026-11-03 18:09);
+  `p6-velopack-dependency` step 0 has Haik install it, elevated. Without it the tray's ARM64 builds are CI only
+  (review M5).
 - Delete the card's own target folder when the card is done (review m14).
 
 ## Where other tracks meet this one
 
 - Contracts change card (before any build): everything in `p5-plan-tray-ux` Result, "Contract changes".
 - Phase 2: `p2-present` calls `text.rs`; until `p5-text` is done, the contracts card's stub wording stands in. This
-  track draws hand-built `TrayView`s until `p2-present` is done. Proposal for the core: notices raised while the
-  session is locked or off the console wait until it is back (`p5-plan-tray-ux` Result).
+  track draws hand-built `TrayView`s until `p2-present` is done. Proposal for the core, signed off (sign-off item 4,
+  Haik 2026-11-03 18:09; `p2-core-lid` item 8a): notices raised while the session is locked or off the console wait
+  until it is back (`p5-plan-tray-ux` Result).
 - Phase 3: the hibernate thread uses `SoundPlayer::play_and_wait` (fake until `p5-sounds`); checklist 16 (chime at a
   real lid close) needs `p5-sounds` done.
 - Phase 4: `shell.rs` (`p4-cli-commands`) opens the log and the Settings page; `p5-haik-check` runs after it.
@@ -181,7 +186,7 @@ own Windows settings switched and put back.
 | `p5-tray-icon` | no | screen, settings (light and dark mode) | `p5-theme`, `p5-icon-art` | ready |
 | `p5-menu-view` | his menu look answer | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | ready |
 | `p5-notices` | no | screen, settings (Do not disturb) | Part A: contracts change card; Part B: `p5-tray-icon`, `p5-text`, `p5-icon-art` | ready |
-| `p5-sounds` | the "No sounds" question (default taken if no answer) | sound | contracts change card | ready |
+| `p5-sounds` | no (the "No sounds" question: honor it, Haik 2026-11-03 18:09) | sound | contracts change card | ready |
 | `p5-haik-check` | yes, about 25 minutes: eyes, ears, hands | screen, sound, settings | every card above, `p4-cli-commands` | ready |
 
 Sizes, one worker's context: `p5-theme` about 40K tokens, `p5-icon-art` 120K, `p5-text` 80K, `p5-menu-paint` 110K,
@@ -220,3 +225,5 @@ Sizes, one worker's context: `p5-theme` about 40K tokens, `p5-icon-art` 120K, `p
 
 - 2026-11-03 17:00: phase file and nine cards written by `p5-plan-tray-ux`. Waiting for the cross-track check, the
   contracts change card and Haik's sign-off of all five plans.
+- 2026-11-03: Haik signed off with every default (18:09); `p1-close-contracts` wrote the answers into this file and
+  the cards, and added `Notice::Updated { version }` for `p5-text` to word.

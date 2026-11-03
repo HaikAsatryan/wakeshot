@@ -25,6 +25,8 @@ features = ["Win32_Foundation"]
 [dev-dependencies]
 wakeshot-core = { workspace = true, features = ["test-support"] }
 wakeshot-windows = { workspace = true, features = ["test-support"] }
+# `p4-cli-args` checks `run_tail` with a property; added by `p1-close-contracts` so the track never moves the lock.
+proptest.workspace = true
 
 [build-dependencies]
 embed-resource.workspace = true

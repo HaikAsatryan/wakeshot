@@ -1,8 +1,10 @@
 //! Wakeshot's Windows layer. Every Windows call lives here, so the core stays free of OS code.
 //!
 //! The traits here are the seams where an implementation is swapped (architecture section 2, "Boundary traits"):
-//! real, dry run, or a fake from the `testing` module (feature `test-support`). Each module's first doc line names
-//! the card that owns the file; this module list is the contracts card's.
+//! real, dry run, or a fake from the `testing` module (feature `test-support`). Each module's doc names the card that
+//! owns the file in its `Owner:` line.
+//!
+//! Owner: contracts card (this module list).
 
 pub mod child;
 pub mod clock;

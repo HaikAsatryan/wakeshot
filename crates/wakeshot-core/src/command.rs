@@ -1,5 +1,7 @@
 //! What the core asks the outside to do, and how it went (architecture section 3). Each command's result comes back
 //! as `Event::Done(Outcome)`, so the core picks every fallback.
+//!
+//! Owner: contracts card. Each type's own doc names the track that owns its meaning.
 
 use crate::files::{Config, HoldFile, StateFile};
 use crate::holds::HoldId;

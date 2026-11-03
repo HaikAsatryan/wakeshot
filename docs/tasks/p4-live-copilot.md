@@ -16,7 +16,7 @@ tested or not.
 
 ## Read first
 
-- `docs/phases/04-sources.md`: track notes 7, 9, Question 2 and Haik's answer if any.
+- `docs/phases/04-sources.md`: track notes 7, 9, Question 2 and Haik's answer (the default, 2026-11-03 18:09).
 - `docs/research/other-agent-signals.md`: "GitHub Copilot CLI" and the Codex live test section.
 - `crates/wakeshot-core/src/sources/copilot.rs`, `crates/wakeshot-windows/src/lockowner.rs`, `watch/agents.rs`,
   `examples/agent-watch.rs`; `docs/tasks/p4-live-codex.md` Result.

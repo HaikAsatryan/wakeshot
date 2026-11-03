@@ -63,7 +63,8 @@ guard and restore modes and the `power_check` harness.
 
 Each with the worker's default.
 
-- Run D and E now (the default: a failure changes the battery design) or at integration? See the plan card's Result.
+- Run D and E now or at integration: answered, now in Phase 3 (the default; `docs/phases/02-06-signoff.md` item 10,
+  Haik 2026-11-03 18:09), because a failure changes the battery design.
 
 ## Steps for Haik
 

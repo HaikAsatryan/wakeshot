@@ -60,16 +60,18 @@ Only what `architecture.md` leaves open. Design changes are proposals in the Res
    - No card runs `--workspace` or `--all` as a done check; the orchestrator runs the whole-workspace check when it
      closes a wave.
    - Once `p6-velopack-dependency` is done, ARM64 builds of `wakeshot-tray` need clang (only the tray depends on
-     `velopack`); without clang on this laptop they are CI only (review M5).
+     `velopack`). Haik said yes to the Build Tools clang component (sign-off item 8, Haik 2026-11-03 18:09);
+     `p6-velopack-dependency` step 0 has Haik install it, elevated. Without it the tray's ARM64 builds are CI only
+     (review M5).
    - Delete the card's own target folder when the card is done (review m14).
 3. **Real-laptop tests.** A test that touches a power plan, locks the screen or needs Haik is `#[ignore]` and its name
    starts with `real_`. Plain `cargo test` and CI never run it. So is a test that needs a lid, an open lid, Explorer
    as the parent or this session on the console (review M9): GitHub runners have no lid, and a closed lid here would
    fail every worker's run. A marked card runs them with its own module filter,
-   `cargo test -p wakeshot-windows -- --ignored --test-threads=1 <module>::`, never with `real_` alone: that also
-   runs other tracks' ignored tests with `real_` in the name (review m15). It records Haik's values before and after
-   (active plan; lid AC and DC; sleep AC and DC; energy saver DC), checks they are equal, and checks no "Wakeshot
-   test" plan is left. Plan tests use a copy that is never made active (section 9); only `p3-real-checks` and
+   `cargo test --locked -p wakeshot-windows -- --ignored --test-threads=1 <module>::`, never with `real_` alone: that
+   also runs other tracks' ignored tests with `real_` in the name (review m15). It records Haik's values before and
+   after (active plan; lid AC and DC; sleep AC and DC; energy saver DC), checks they are equal, and checks no
+   "Wakeshot test" plan is left. Plan tests use a copy that is never made active (section 9); only `p3-real-checks` and
    `p3-haik-checks` make a copy active, as the checklist rule allows. In debug builds `WAKESHOT_DATA_DIR` replaces the
    data folder, so tests and the harness never touch `%LocalAppData%\Wakeshot` unless a check means to.
 4. **Stop points.** The core track walks every stop point against its fake (`FakePlans`). This track runs the same
@@ -96,11 +98,11 @@ Only what `architecture.md` leaves open. Design changes are proposals in the Res
 8. **Dry run.** `DryRunPower` reads the real plans and keeps its writes in memory, logging each one; it never calls a
    Windows write or `PowerSetActiveScheme`. Power requests, lock and hibernate each have a dry-run form that only logs
    (review m6). A dry-run tray starts no guard and sets no RunOnce.
-9. **Values set by this plan** (Haik may change them at sign-off): journal mutex wait 10 s, a timeout fails the run
-   and it is retried; log files `wakeshot.log`, `wakeshot.1.log`, `wakeshot.2.log` (the `.log` extension keeps "Open
-   log" working); `GUID_ACDC_POWER_SOURCE` value 2 (short-term power, a UPS) counts as battery; if Explorer is missing
-   or its open is denied, the guard starts as the tray's own child and the log says so (End task on the group then
-   ends both: "Gap left", third case).
+9. **Values set by this plan** (Haik signed them off with the plan, 2026-11-03 18:09): journal mutex wait 10 s, a
+   timeout fails the run and it is retried; log files `wakeshot.log`, `wakeshot.1.log`, `wakeshot.2.log` (the `.log`
+   extension keeps "Open log" working); `GUID_ACDC_POWER_SOURCE` value 2 (short-term power, a UPS) counts as
+   battery; if Explorer is missing or its open is denied, the guard starts as the tray's own child and the log says
+   so (End task on the group then ends both: "Gap left", third case).
 10. **Ownership check read errors.** The active plan read fails: `Plan(Err)`. One entry's read fails: keep the entry,
     log it, and still post `Plan(Ok)` with the active plan's values.
 11. **Integration, not this track:** the loop and its hidden window (the window's owner calls `session::decode` for
@@ -111,8 +113,9 @@ Only what `architecture.md` leaves open. Design changes are proposals in the Res
 
 ## Task cards
 
-All cards wait for Haik's sign-off of the five track plans and for the contracts card (the orchestrator runs it alone;
-changes listed in the Result of `p3-plan-windows-power`). "Real laptop" cards run one at a time across all tracks.
+Haik signed off the five track plans 2026-11-03 18:09, every question with its default. All cards wait for the
+contracts cards (the orchestrator runs them alone; changes listed in the Result of `p3-plan-windows-power`). "Real
+laptop" cards run one at a time across all tracks.
 
 | Card | Needs Haik | Real laptop | Runs after | Status |
 |---|---|---|---|---|
@@ -126,7 +129,7 @@ changes listed in the Result of `p3-plan-windows-power`). "Real laptop" cards ru
 | `p3-journal` | no | no | `p3-store`, `p3-log` | ready |
 | `p3-hibernate` | no | no (never calls `SetSuspendState`) | `p3-system-events` | ready |
 | `p3-power-io` | no | no | `p3-journal`, `p3-power-plan`, core `p2-ownership-apply` | ready |
-| `p3-recovery` | Question 12 (open; built on its default) | no | `p3-journal`, `p3-process`, `p3-log`, core `p2-ownership-restore` | ready |
+| `p3-recovery` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09) | no | `p3-journal`, `p3-process`, `p3-log`, `p3-power-plan` (verify review Minor 3), core `p2-ownership-restore` | ready |
 | `p3-stop-points` | no | yes: a plan copy, never active | `p3-power-plan`, `p3-journal`, core `p2-ownership-apply` | ready |
 | `p3-harness` | no | yes for the `cleanup` smoke run only (global lane, review M7); other smoke runs touch no setting | `p3-power-io`, `p3-recovery`, `p3-requests`, `p3-session`, `p3-system-events` | ready |
 | `p3-real-checks` | no | yes: an active plan copy, 50 cycles | `p3-harness`, `p3-stop-points` | ready |
@@ -168,3 +171,5 @@ Critical path: store, journal, (core ownership cards), power-io, harness, real-c
 - 2026-11-03 17:20: reworked for the orchestrator's decision (17:05): the routines are the core's; `p3-restore`,
   `p3-apply` and `p3-power-props` dropped; `p3-journal` is the `SafetyNet` implementation; `p3-stop-points` added.
   Waiting for Haik's sign-off of all five track plans and the contracts card.
+- 2026-11-03: Haik signed off with every default (18:09); `p1-close-contracts` wrote the answers into this file and
+  the cards, and added `p3-power-plan` to `p3-recovery`'s Runs after (verify review Minor 3).

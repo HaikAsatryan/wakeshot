@@ -1,5 +1,7 @@
 //! The files in the data folder (architecture section 6), as serde structs. Every file carries `version`.
 //!
+//! Owner: contracts card. Each type's own doc names the track that owns its meaning.
+//!
 //! Version rule: a reader takes its own version and older ones. Every file but the journal is read through [`read`],
 //! which ignores a file with a newer version (the caller logs it), because a newer file may change a field's shape.
 //! The journal is read whole whatever its version: [`JournalFile`] keeps entries with keys it does not know, so a

@@ -95,7 +95,8 @@ Run from the repo root with the build folder above. Record each outcome.
 - `cargo tree -p wakeshot-core -e normal`: no `windows` crate, no new dependency.
 - Mutants, each made by hand in this card's files, run, then reverted (record the failing test for each): treat a
   failed plan list as an empty list; write `original` before the mark; drop marked entries when `set_active` fails;
-  run the clean-up after a failed entry read. Each must fail at least one test.
+  run the clean-up after a failed entry read. Each must fail at least one test. Mutants run only in a scratch copy
+  of the workspace, never in the repo (`docs/phases/02-core.md` note 20).
 - Check rule: `docs/plan.md` "How we work" step 2 and "Checks while other cards run" in this track's phase file. A
   failure in a file another card owns goes in the Log: wait and run again; if it is still there when this card's own
   work is done, list it under "Found outside scope". Never edit, format or `--fix` that file. Every cargo command takes

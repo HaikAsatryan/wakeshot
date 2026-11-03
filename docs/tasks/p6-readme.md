@@ -1,10 +1,11 @@
 # The v1 README
 
-Phase: 6. Status: ready. Needs Haik: yes. The README states his answers to Phase 1 Questions 10 to 12
-(`docs/phases/01-design-skeleton.md`) and to Questions 1 to 3 of `p6-plan-ship`, so it waits for them; he reads the
-result at the Phase 6 sign-off. Agent: `wakeshot-worker`. Size: about 70K tokens.
+Phase: 6. Status: ready. Needs Haik: yes: he reads the result at the Phase 6 sign-off. The README states his answers
+to Phase 1 Questions 10 to 12 (`docs/phases/01-design-skeleton.md`) and to Questions 1 to 3 of `p6-plan-ship`, plus
+sign-off item 12: all answered with the defaults (`docs/phases/02-06-signoff.md`, Haik 2026-11-03 18:09). Agent:
+`wakeshot-worker`. Size: about 70K tokens.
 Real laptop: no.
-Runs after: those answers; `p6-pack-and-release` (install steps) and `p6-install-e2e` (what an uninstall really
+Runs after: `p6-pack-and-release` (install steps) and `p6-install-e2e` (what an uninstall really
 leaves); the sources track's `p4-hold-files` (`docs/hold-files.md`), `p4-cli-args` (the command help), `p4-live-codex`
 and `p4-live-copilot` (which agents are tested live); the tray track's `p5-haik-check` (final menu words and icon)
 (review m2). Parallel with: any card that does not own `README.md`.
@@ -22,7 +23,8 @@ a change can stay behind (decision 41).
 - `docs/product.md` (all of it: it is short); `docs/architecture.md` section 3, "Decisions and where they live", row
   41; section 5, "Gap left"; section 6, "Velopack hooks".
 - `docs/phases/06-ship.md`: "Package and install values", "Hooks", "Updates".
-- The answers named above; `docs/hold-files.md`; `crates/wakeshot-cli/src/args.rs` (the help text).
+- The answers named above (`docs/phases/02-06-signoff.md`); `docs/hold-files.md`; `crates/wakeshot-cli/src/args.rs`
+  (the help text).
 - `README.md` as it is now (`p1-repo-files`).
 
 ## Deliverables
@@ -36,13 +38,14 @@ a change can stay behind (decision 41).
   holding, written at the start and put back after; the saved original values; `wakeshot restore` and the menu item.
 - The menu, Automatic, Keep awake; start at login and how to turn it off (Settings > Apps > Startup).
 - The commands (from the CLI help) and a link to `docs/hold-files.md`.
-- Updates: automatic from GitHub Releases, applied only while nothing holds; GitHub is asked twice a day; no
-  telemetry; the log stays on the PC.
+- Updates: automatic from GitHub Releases, applied only while nothing holds; one notice after an update (Question
+  3: yes); GitHub is asked twice a day; no telemetry; the log stays on the PC.
 - Limits, each as the answers leave it: the crash gap and every path into it (`architecture.md` section 5, "Gap
   left", and Question 11); one signed-in user per PC (Question 10); a failed restore outside the tray (Question 12);
   `winget upgrade` ends a running `wakeshot run` wrapper while its command goes on; after `winget upgrade` Wakeshot is
   off until the next sign-in (Question 1).
-- Uninstall: what it puts back and removes, and what stays (Question 2).
+- Uninstall: what it puts back and removes, and what stays (Question 2), including Windows' own record of the tray
+  icons (`NotifyIconSettings`, sign-off item 12: left in place).
 - A credit line for each port from a rival (none so far: `docs/phases/04-sources.md`, note 16); license.
 
 ## Acceptance checks

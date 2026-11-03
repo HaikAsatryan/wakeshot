@@ -2,7 +2,10 @@
 //!
 //! The public types here are the contracts between the parallel tracks (`docs/plan.md`, Phases). Each type's doc
 //! names the track that owns it and what the other side may rely on. A change to one goes through a contract card and
-//! the orchestrator, never as a side edit in a track. Each module's first doc line names the card that owns the file.
+//! the orchestrator, never as a side edit in a track. Each module's doc names the card that owns the file in its
+//! `Owner:` line.
+//!
+//! Owner: contracts card.
 
 #![forbid(unsafe_code)]
 

@@ -1,9 +1,9 @@
 //! Every user-facing string: menu, status line, tooltip pieces, notices (decision 1: English only, no translation
 //! layer).
 //!
-//! Owner: tray track (`p5-text`) words them; the signatures are contract, because the core's `present` (Phase 2)
-//! calls them. Until `p5-text` is done the bodies are placeholders built from the values, so tests elsewhere must
-//! never assert on the wording.
+//! Owner: tray track (`p5-text`, then `p5-haik-check`) words them; the signatures are contract, because the core's
+//! `present` (Phase 2) calls them. Until `p5-text` is done the bodies are placeholders built from the values, so
+//! tests elsewhere must never assert on the wording.
 
 use crate::holds::HoldKind;
 use crate::view::{IconState, KeepAwake, MenuCommand, Notice};
@@ -28,7 +28,8 @@ pub enum NoticeClick {
     OpenLog,
 }
 
-/// A notice as the balloon shows it. `silent`: the notice comes with a chime, so the balloon makes no sound.
+/// A notice as the balloon shows it. `silent`: the balloon makes no sound, because a chime plays with the notice or
+/// the notice is a quiet one (`Updated`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NoticeText {
     pub title: String,

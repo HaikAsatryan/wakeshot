@@ -40,7 +40,8 @@ one `#[expect(dead_code, ...)]` attribute there (the only edit any track makes t
 Tests first: every command and every error; `--dry-run` before and after the command (after is an error); `run_tail`
 with quoted paths, spaces, `--` inside quotes, `--` as a later argument of the child, backslashes and quotes, tabs,
 non-ASCII text, and a program path with spaces. A `proptest` property: for random argument lists quoted the MSVC way,
-`run_tail` returns exactly the quoted child part.
+`run_tail` returns exactly the quoted child part (`proptest` is already a dev-dependency of `wakeshot-cli`, added by
+`p1-close-contracts`, so no `Cargo` file changes here).
 
 ## Acceptance checks
 

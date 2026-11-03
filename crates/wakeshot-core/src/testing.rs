@@ -1,5 +1,7 @@
 //! Fakes for the core's boundaries, so each track tests its side without the other. Built for this crate's tests and
 //! for other crates through the `test-support` feature (dev-dependencies only).
+//!
+//! Owner: contracts card.
 
 use std::cell::Cell;
 

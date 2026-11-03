@@ -31,8 +31,7 @@ only for his answers: `crates/wakeshot-windows/src/tray/art.rs` and `assets/wake
 becomes the default concept and the `.ico` is written from it; keep the `art` API and the other concepts, so
 `ux_icon`, `ux_menu` and `ux_notices` of done cards keep building; review m16) and `crates/wakeshot-core/src/text.rs`
 (his wording changes). Those cards are done by then, so no other card owns these files. The owner doc lines in
-`art.rs` and `text.rs` name only `p5-icon-art` and `p5-text`; this hand-over is the planned exception (listed for the
-orchestrator in `p1-track-plan-fixes`).
+`art.rs` and `text.rs` name this hand-over (`p1-close-contracts`).
 
 ## Deliverables
 

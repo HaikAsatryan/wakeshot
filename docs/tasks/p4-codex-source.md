@@ -14,7 +14,8 @@ sessions from thread lock files, activity from the last turn event of the rollou
 
 ## Read first
 
-- `docs/phases/04-sources.md`: track notes 7, 8, and Question 1 (the default: an open turn holds).
+- `docs/phases/04-sources.md`: track notes 7, 8, and Question 1 (answered with the default, Haik 2026-11-03 18:09:
+  an open turn holds).
 - `docs/architecture.md` section 7 ("Codex CLI and Copilot CLI").
 - `docs/research/other-agent-signals.md`: "OpenAI Codex CLI" (all of it), "Design notes for Wakeshot", "Fixture
   sketches".

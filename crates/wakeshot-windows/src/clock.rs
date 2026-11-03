@@ -1,4 +1,6 @@
 //! The two clocks the core needs (architecture section 3, "Clocks").
+//!
+//! Owner: power track (`p3-system-events`).
 
 use wakeshot_core::time::{Clock, Now};
 use windows::Win32::System::SystemInformation::GetSystemTimePreciseAsFileTime;

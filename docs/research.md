@@ -78,6 +78,16 @@ settings by hand (and forget to change them back) or use a keep-awake tool that 
       `scheduled_tasks.json`.
     - A hard kill leaves the `.json`; the pid plus start time check drops it at once, and the next Claude Code start
       deletes it. Remote Control off writes `bridgeSessionId: null`.
+  - Live shapes and the resume test 2026-11-03 (Claude Code 2.1.317, card `p4-claude-live-shapes`; details, marks and
+    rule changes in `docs/research/claude-code-signals.md`, "Phase 4 live shapes"; redacted raw lines in
+    `crates/wakeshot-core/tests/fixtures/claude/live/`):
+    - `claude --resume` in a new process: new pid, same `sessionId`, the same transcript grows, and no line marks the
+      resume. `CronCreate` jobs come back and fire (a `*/5` job at resume plus 285 s, not its old `nextFireAt`);
+      `ScheduleWakeup` wakeups do not. Same after a clean exit and a hard kill. Seen live.
+    - The SDK path resumed after a hard kill writes a `<task-notification>` with `<status>stopped</status>` for a
+      background task left open. A subagent's notification can come as an `attachment` `queued_command` instead of a
+      user line. Monitor event notifications have no `<status>`. Seen live, one case each.
+    - On the SDK path, closing stdin does not end the process while a background shell runs. Seen live once.
 - **Hooks.** `UserPromptSubmit`, `PreToolUse`, `Stop`, `SessionEnd` in `~/.claude/settings.json`. Exact, but means
   editing the user's settings. Insomnia does this.
 - **Transcripts.** `~/.claude/projects/**/*.jsonl` grow while a session works. Nightcrew watches their size.
@@ -1293,3 +1303,31 @@ Checked 2026-11-03 by `p1-track-plan-fixes`, for the per-card check rule (cross-
 - **`real_` with `--ignored` runs every ignored test whose name holds `real_`, in any module.** `cargo test --lib
   real_ -- --ignored` ran `alpha::tests::real_alpha` and `beta::tests::real_beta`; `cargo test --lib -- --ignored
   alpha::` ran only the first. So a real-laptop card filters by its own module (review m15).
+
+## Close contracts checks
+
+Checked 2026-11-03 by `p1-close-contracts`, with the pinned toolchain (cargo 1.99.1), its own build folder in the
+session scratchpad and no `RUSTFLAGS`.
+
+- **`GetCommandLineW` needs the feature `Win32_System_Environment`.** In the cached `windows-0.62.2` source,
+  `src/Windows/Win32/System/mod.rs` declares `pub mod Environment;` under `#[cfg(feature =
+  "Win32_System_Environment")]`, and `GetCommandLineW` in `Environment/mod.rs` has no other `cfg`. Microsoft's
+  `windows-docs-rs` page for 0.62.2 puts it in `windows::Win32::System::Environment`. docs.rs has no page for that
+  version of the crate (404). A feature of `windows` does not change `Cargo.lock` (checked: the lock gained no line for
+  it).
+- **`proptest` 1.12.0 is the newest and not yanked.** crates.io API (`/api/v1/crates/proptest`): max version 1.12.0,
+  `yanked: false`. It was already locked for the core, so adding `proptest.workspace = true` to the CLI's
+  dev-dependencies downloaded nothing: `cargo metadata --offline` wrote one line to `Cargo.lock`, ` "proptest",` in
+  the `wakeshot-cli` entry, and nothing else (diff against a copy taken first).
+- **No `match` in `crates/` lists every `Event` or `Notice` variant** (grep for `Event::` and `Notice::`), so the two
+  new variants compile everywhere without other edits. `text::notice` takes any `Notice` and formats it with
+  `{notice:?}` until `p5-text` words it.
+- **A scratch copy of the workspace builds and tests alone.** `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`,
+  `.cargo\`, `assets\` and `crates\` copied to the scratchpad: `cargo test --locked -p wakeshot-core` there passed
+  (24 tests) with its own `CARGO_TARGET_DIR`. A mutant planted in the copy's `files.rs` (the newer-version check
+  moved by 100) failed `files::tests::read_ignores_newer_files`, and the repo's `files.rs` hash stayed the same. The
+  exes' build scripts read `assets\wakeshot.ico` through `..\..\assets`, so a copy without `assets\` cannot build
+  the bins. This is the rule in `docs/phases/02-core.md` note 20 (verify review Major 2).
+- **Whole-workspace checks after the changes** (x64 and ARM64): `cargo fmt --all --check`, both clippy runs per
+  target, `cargo test --workspace --locked` (36 tests: core 24, windows 10, cli 1, tray 1) and both release builds:
+  all exit 0.

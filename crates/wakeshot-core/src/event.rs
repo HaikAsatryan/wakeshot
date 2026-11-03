@@ -1,4 +1,6 @@
 //! Everything the core reacts to (architecture section 3). Every event comes with a `Now`.
+//!
+//! Owner: contracts card. Each type's own doc names the track that owns its meaning.
 
 use crate::command::{Command, Failure, Outcome};
 use crate::files::Config;
@@ -28,7 +30,7 @@ pub enum SessionChange {
 /// Owner: core track (Phase 2) for the meaning; each producer owns its variants: power track (Phase 3) `Started`,
 /// `SettingsOwner`, `Lid`, `Power`, `Plan`, `ActivePlan`, `UserChanged`, `JournalCorrupt`, `InputIdle`,
 /// `Suspending`, `Resumed`, `Session` and most `Done`; sources track (Phase 4) `Sources`, `Holds`, `ConfigChanged`;
-/// tray track (Phase 5) `Menu`; ship track (Phase 6) `UpdateReady`; the loop `Tick`. The core may rely on:
+/// tray track (Phase 5) `Menu`; ship track (Phase 6) `UpdateReady`, `Updated`; the loop `Tick`. The core may rely on:
 ///
 /// - `Started` comes first and once. Its `config` wins over the one `Core::new` got. `journal`: the entries this
 ///   version knows, `None` when there are none. `owner`: this tray holds the settings mutex. `on_console`: this
@@ -42,6 +44,8 @@ pub enum SessionChange {
 /// - `JournalCorrupt`: a corrupt journal was set aside, once per corrupt file (at start for one left by restore mode,
 ///   the guard or a hook; at once for the tray's own restore).
 /// - `UpdateReady`: an update is downloaded, at most once per version per run.
+/// - `Updated`: Velopack restarted the tray after it installed `version`. At most once per run, at start, after
+///   `Started` (and after `JournalCorrupt` when both come); the core answers with `Notify(Notice::Updated)`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Event {
     Started {
@@ -79,6 +83,9 @@ pub enum Event {
     Resumed,
     Session(SessionChange),
     UpdateReady {
+        version: String,
+    },
+    Updated {
         version: String,
     },
     Done(Outcome),

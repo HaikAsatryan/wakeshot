@@ -1,7 +1,7 @@
 # CLI: `wakeshot restore`
 
-Phase: 4. Status: ready. Needs Haik: no (see Questions: Question 12 of Phase 1 may add one line). Agent:
-`wakeshot-worker`. Size: about 60K tokens.
+Phase: 4. Status: ready. Needs Haik: no (Phase 1 Question 12 is answered with the default, Haik 2026-11-03 18:09; it
+adds nothing here). Agent: `wakeshot-worker`. Size: about 60K tokens.
 Runs after: `p3-journal` (`restore_locked`, `FileNet`), `p3-power-plan` (`Win32Power`, `DryRunPower`), the core's
 `p2-ownership-restore` (`ownership::restore`, `FakePlans`), `p3-store`, `p3-process`, `p3-log` (review M1: these
 replace the power track's restore card, dropped at 17:17). Parallel with: every other card of this track and every card
@@ -71,9 +71,9 @@ message).
 
 Each with the worker's default.
 
-- Phase 1 Question 12 (a failed restore starts the tray) covers the guard and the sign-in restore. Default here: the
-  CLI does not start the tray after its own failed restore; the person who typed the command sees the failure at
-  once. If Haik's answer to Question 12 should cover the CLI too, add that one step.
+- Phase 1 Question 12 (a failed restore starts the tray) is answered: the default, Haik 2026-11-03 18:09. It covers
+  the guard and the sign-in restore only. Build: the CLI does not start the tray after its own failed restore; the
+  person who typed the command sees the failure at once.
 
 ## Found outside scope
 

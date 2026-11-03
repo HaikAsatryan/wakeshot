@@ -1,6 +1,8 @@
 //! What the user sees and hears, as data. The core builds it (`present`); the Windows layer draws and plays it. Every
 //! user-facing word comes from `text` (decision 1: English only, no translation layer), so wording changes stay
 //! there.
+//!
+//! Owner: contracts card. Each type's own doc names the track that owns its meaning.
 
 use crate::settings::SettingKey;
 
@@ -85,6 +87,8 @@ pub enum MenuCommand {
 /// `StepBack` carries the battery floor it stepped back at; `ClosedLidReport` how long the PC ran with the lid closed
 /// (`mono_ms`) and the labels of what held it; `UpdateWakeshot` the agent label. `JournalCorrupt`: a corrupt journal
 /// was set aside, so an override may be left. `IdleLocked`: Keep screen on locked the PC after the user's idle time.
+/// `Updated`: Wakeshot updated itself to `version` (ship Question 3, Haik 2026-11-03: yes); the answer to
+/// `Event::Updated`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Notice {
     FirstRun,
@@ -100,6 +104,7 @@ pub enum Notice {
     UpdateWakeshot { agent: &'static str },
     JournalCorrupt,
     IdleLocked,
+    Updated { version: String },
 }
 
 /// The three sounds (decision 19). Each is one of Wakeshot's own chimes, built into the exe.

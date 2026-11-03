@@ -40,9 +40,9 @@ user what happened to their laptop and what, if anything, to do.
    tooltip for holding, idle, off, stepped back and requests only, and the dry-run mark. User-given text (hold
    reasons) has `&` doubled so the menu shows it as is. No clock times: the core has no UTC offset (Phase 2 note 14);
    use "25 min left".
-3. Notices: for every `Notice` variant the contracts card leaves (today's eleven plus the corrupt-journal and idle-lock
-   ones Phase 2 adds): title, body, `warning`, `silent`, `click`, through one exhaustive `match` so a new variant does
-   not compile until it has words.
+3. Notices: for every `Notice` variant in `view.rs` (fourteen: the first eleven, `JournalCorrupt`, `IdleLocked`, and
+   `Updated` from `p1-close-contracts`): title, body, `warning`, `silent`, `click`, through one exhaustive `match` so
+   a new variant does not compile until it has words.
    - `silent` is true when a chime plays with the notice (the battery floor step back), so two sounds never overlap.
    - `click`: first run opens the taskbar settings page; a failed restore and a corrupt journal open the log (it
      holds the old values); the rest do nothing.
@@ -50,6 +50,9 @@ user what happened to their laptop and what, if anything, to do.
      icons" (track note 3.6).
    - "Update Wakeshot" names the agent; the closed-lid report says how long the PC ran with the lid closed and what
      held it; a user change names the setting in the user's words (lid action, sleep on battery).
+   - `Updated { version }`: Wakeshot updated itself, with the version, as in ship Question 3's sample "Wakeshot
+     updated to 1.1.0" (Haik's yes, 2026-11-03 18:09). No sound, so `silent` is true (the `NoticeText` doc says so);
+     not a warning; the click does nothing.
 4. Limits, checked by tests: balloon title at most 63 UTF-16 units and body at most 255 (`szInfoTitle[64]`,
    `szInfo[256]`); every tooltip piece short enough that `p2-present` can fit holding, two groups and "and N more" in
    127 units (`szTip[128]`). Where Microsoft documents the sizes, cite the page in research; else mark "not verified".

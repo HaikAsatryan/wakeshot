@@ -98,9 +98,9 @@ Run from the repo root with the build folder above. Record each outcome.
 ## Out of scope
 
 - The wording (`p5-text`; a text that reads badly on the banner goes to its owner or into the Result). When a notice
-  is raised and holding notices while the session is locked (core track; this track's proposal is in
-  `p5-plan-tray-ux`). Opening the click target (Phase 4 `shell.rs`, integration). Registered toasts (only on the
-  trigger above). The lock-screen check (`p5-haik-check`).
+  is raised and holding notices while the session is locked (core track, `p2-core-lid` item 8a; this track's
+  proposal, signed off 2026-11-03 18:09). Opening the click target (Phase 4 `shell.rs`, integration). Registered
+  toasts (only on the trigger above). The lock-screen check (`p5-haik-check`).
 
 ## Questions for Haik
 
