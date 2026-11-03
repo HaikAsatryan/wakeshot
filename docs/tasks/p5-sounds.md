@@ -111,6 +111,8 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03: card written by `p5-plan-tray-ux`.
+- 2026-11-03 21:26, orchestrator, from `p3-hibernate`'s Result: keep the "going to sleep" sound short; a lid opened
+  while it plays still hibernates (the hibernate checks now run before the sound).
 
 ## Result
 

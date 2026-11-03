@@ -106,7 +106,7 @@ Notes 7, 8 and 9 apply after v1: Codex and Copilot moved there (Haik, 2026-11-03
 | Card | Needs Haik | Runs after | Status |
 |---|---|---|---|
 | `p4-hold-files` | no | contracts card | done (20:03): 21 tests, `docs/hold-files.md` |
-| `p4-cron` | no | contracts card | ready |
+| `p4-cron` | no | contracts card | running (21:21) |
 | `p4-claude-status` | no | contracts card | running (21:13) |
 | `p4-claude-live-shapes` | no; runs Claude Code test sessions (Haiku); agent-session lane | contracts card | done (18:47): 27 fixtures; resume and rule 3, 5 changes in the signals doc |
 | `p4-codex-source` | no | contracts card | later (after v1, Haik 2026-11-03) |
