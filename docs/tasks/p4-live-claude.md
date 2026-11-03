@@ -88,6 +88,11 @@ Problems seen but not fixed.
   better divider than `startedAt`; check it in the live resume test. (3) `CLAUDE_CONFIG_DIR` moves the whole Claude
   folder per Claude Code's docs; whether `sessions\` follows it is not verified. Check it once if cheap, else list it
   as not tested.
+- 2026-11-03 23:55, orchestrator, from the Claude parsing review (`docs/reviews/p4-claude-parsing.md`): m6 (no
+  Claude signal at all under `CLAUDE_CONFIG_DIR`) is yours: check it; if `sessions\` moves, say what the tray must
+  read. Also check live, if cheap: a background task stopped with `TaskStop` and a Monitor that hits its timeout
+  (B1 and M1, fixed in the core before this card), and whether a stop from the UI writes its `killed` notice before
+  the user's next prompt (M1, not verified).
 
 ## Result
 

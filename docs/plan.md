@@ -174,6 +174,11 @@ tests, Haik's checklist) starts when the tracks it needs are done.
 - 2026-11-03 23:36: Haik answered both 21:52 questions with the defaults and approved the power safety review's lock
   fix (failed lid-close lock: one retry, then step back and countdown). Recorded in `product.md`, `architecture.md`
   and the `02-core.md` work log; the code goes to the power review fix round.
+- 2026-11-03 23:45: Haik is away overnight (laptop lid open, sound is fine). His words: do the maximum, even without
+  his approval; he reviews such cases later. So the orchestrator answers open questions with its default, records
+  each one as "orchestrator decision, for Haik's review" in the phase work log, and lists them for him. Cards that
+  need his hands still wait. His rule for open calls: with no work going on, the laptop behaves as if Wakeshot were
+  not there (`product.md`). Handover when the context is big: a continuation prompt to the idle Claude Code session.
 - Next (orchestrator): the continuation prompt of session `wakeshot-91` (its scratchpad, `continuation.md`) lists the
   running cards and their files, the ready cards, both reviews and the open items. Ready now: `p2-core-props`,
   `p4-watch-agents`, `p4-watch-folders`, `p6-int-window`, `p6-int-startup`, the CLI bundles, the tray cards,
