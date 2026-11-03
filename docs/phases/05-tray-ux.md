@@ -66,9 +66,9 @@ Design calls the design leaves to Phase 5 (worker as principal designer). Each h
    no resource weight (the spike's four icons were 180 KB of its 519 KB). Change it when `p5-tray-icon` Part B shows
    the shell blurs or drops run-time icons.
 2. **App icon** `assets/wakeshot.ico`, frames 16, 20, 24, 32, 40, 48 and 64, made by the same art code and checked by
-   a golden test; embedded by both exes and used by the installer. No 256 frame: a small one needs a deflate encoder,
-   which means a crate. Change it when the installer or Explorer's large view looks blurry: add `png` as a dev
-   dependency through the contracts card.
+   a golden test; embedded by both exes and used by the installer. No 256 frame yet. `art::png` compresses since
+   `p5-icon-art`, so a 256 frame needs no crate; its size in the exe is not measured. Change it when the installer or
+   Explorer's large view looks blurry: add the frame in `art.rs` and the golden test.
 3. **Glyphs are monochrome** like Windows' own tray glyphs (white on a dark taskbar, near black on a light one, the
    contrast text colour in high contrast), and the three states differ in shape, not only in colour.
 4. **Left click, right click and keyboard select all open the same menu.** There is no window to open, and a left
