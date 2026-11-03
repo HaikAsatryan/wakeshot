@@ -2419,3 +2419,21 @@ Checked 2026-11-04 for card `docs/tasks/p6-int-window.md`, by the tests in `app:
   end-to-end check).
 - **A `WM_QUIT` from `PostThreadMessageW`** ends `GetMessageW` on the loop thread as the window's own would, so the
   window treats one it did not post as Quit from the menu.
+
+## Power review fix checks
+
+Card `p2-core-lid`, section "Power review fixes (2026-11-03)". Pure core code; nothing here touched the laptop.
+
+- **Tests written first fail first.** 15 new scenarios against the unchanged core: 12 failed, 3 passed by design (a
+  failed lock with nothing to retry, the finding 4 pin, and finding 7's second path, which the lid rule already
+  covered). After the fix all pass; one more scenario came from a surviving mutant.
+- **The strict property forms hold now.** `a_released_key_is_never_ours_in_force_again_in_its_episode` and
+  `a_closed_laptop_is_locked_also_before_the_first_plan_read`, ignored by `p2-core-props`, pass with the default case
+  count and in three release runs of `PROPTEST_CASES=10000`, the last two on the final code (2026-11-04, about 16 to
+  19 s each for the test run).
+- **Mutants by hand, 21 of 21 killed** (scratch copy of the workspace, own build folder, each reverted): the four of
+  the card and 17 for the lock watch, the lock step back, the floor rule, the guess before the first plan read, the
+  release that asks for a new apply, and the restore after a failed write. One, "the core applies during the lock
+  step back", survived the first run and is killed by a test added for it.
+- **The 5 s lock check rests on one reading, not verified beyond it:** in the lid spike the session read locked 1 s
+  after `LockWorkStation` ("Lock" above). How long `WTS_SESSION_LOCK` takes on a slow or busy PC: not verified.
