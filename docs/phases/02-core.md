@@ -125,9 +125,9 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | Card | Needs Haik | Runs after | Status |
 |---|---|---|---|
 | `p2-ownership-restore` | no | contracts card | done (19:13): 45 tests, 4 mutants caught |
-| `p2-policy-holds` | no | contracts card | ready |
-| `p2-policy-power` | no | contracts card | ready |
-| `p2-present` | no | contracts card | ready |
+| `p2-policy-holds` | no | contracts card | ready (started 19:29, stopped by Haik about 19:45, no code) |
+| `p2-policy-power` | no | contracts card | ready (started 19:29, stopped by Haik about 19:45, no code) |
+| `p2-present` | no | contracts card | ready (started 19:29, stopped by Haik about 19:45, no code) |
 | `p2-ownership-apply` | no | `p2-ownership-restore` | ready |
 | `p2-core-holds` | no | `p2-policy-holds`, `p2-policy-power`, `p2-present`, `p4-hold-files` | ready |
 | `p2-ownership-props` | no | `p2-ownership-apply` | ready |

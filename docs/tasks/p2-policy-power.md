@@ -1,6 +1,6 @@
 # Power rules: requests, lid, lock, battery floor, countdown
 
-Phase: 2. Status: ready. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 90K tokens.
+Phase: 2. Status: ready (stopped by Haik about 19:45 before any code). Needs Haik: no. Agent: `wakeshot-worker`. Size: about 90K tokens.
 Real laptop: no (pure core code and tests). Build folder: `CARGO_TARGET_DIR=<scratchpad>\p2-policy-power\target`.
 Runs after: the contracts card. Parallel with: `p2-ownership-restore`, `p2-policy-holds`, `p2-present`, and any card
 of another track.
@@ -84,6 +84,7 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03: card written by `p2-plan-core`.
+- 2026-11-03: worker started; reading the card's sources.
 
 ## Result
 

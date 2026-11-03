@@ -103,7 +103,7 @@ Values this plan sets, each with why. Haik signed them off with the plan (2026-1
 
 | Card | Needs Haik | Runs after | Status |
 |---|---|---|---|
-| `p4-hold-files` | no | contracts card | ready |
+| `p4-hold-files` | no | contracts card | ready (started 19:29, stopped by Haik about 19:45, no code) |
 | `p4-cron` | no | contracts card | ready |
 | `p4-claude-status` | no | contracts card | ready |
 | `p4-claude-live-shapes` | no; runs Claude Code test sessions (Haiku); agent-session lane | contracts card | done (18:47): 27 fixtures; resume and rule 3, 5 changes in the signals doc |

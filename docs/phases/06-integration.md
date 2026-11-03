@@ -193,7 +193,7 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 
 | Card | Needs Haik | Laptop | Runs after | Status |
 |---|---|---|---|---|
-| `p6-int-skeleton` | no | no; runs alone (edits a contract module list) | `p1-close-contracts` | ready |
+| `p6-int-skeleton` | no | no; runs alone (edits a contract module list) | `p1-close-contracts` | done (19:28): whole-workspace checks green, closes wave 1 |
 | `p6-int-io-thread` | no | no | `p6-int-skeleton`, `p3-power-io`, `p3-store`, `p3-log`, `p4-cli-commands` | ready |
 | `p6-int-window` | no | no (hidden windows only) | `p6-int-skeleton`, `p3-session` | ready |
 | `p6-int-dispatch` | no | no | `p6-int-skeleton`, `p2-core-lid`, `p3-power-io` | ready |
@@ -262,3 +262,7 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
 - 2026-11-03 18:58: Haik signed off the plan. His dock with an external screen is always plugged in, so block 6 of
   `p6-int-haik-checks` is in (about 42 minutes in all). Remote Desktop: not tested before v1 (default kept).
   `p6-int-skeleton` runs alone once wave 1 of the track builds ends.
+- 2026-11-03 19:28: `p6-int-skeleton` done alone: `app` module and seams, five stub files, the tray-mode call, owner
+  and design lines (deliverables 7 to 10). Whole-workspace fmt, 4 clippy runs, tests (core 63, windows 55 plus 3
+  ignored, cli 1, tray 1) and the x64 release build green; `Cargo.lock` unchanged. Its note on a re-entered end of
+  session went to `p6-int-dispatch` item 5. Wave 2 of the track builds started 19:29.

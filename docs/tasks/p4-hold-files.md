@@ -1,6 +1,6 @@
 # Parse hold files and write the user doc for them
 
-Phase: 4. Status: ready. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 70K tokens.
+Phase: 4. Status: ready (stopped by Haik about 19:45 before any code). Needs Haik: no. Agent: `wakeshot-worker`. Size: about 70K tokens.
 Runs after: the contracts card (it creates `holds/file.rs` with the signatures of `parse_expires` and
 `format_expires` as stubs, so the core track compiles against them before this card is done). Parallel with: every other card of this track
 (`docs/phases/04-sources.md`, "Files each card owns") and every card of tracks 2, 3, 5, 6. The core track's Keep awake
@@ -85,6 +85,7 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03 16:51: card written by `p4-plan-sources`.
+- 2026-11-03: worker started; status in progress. Reading phase notes, architecture sections 5 and 6, core modules.
 
 ## Result
 

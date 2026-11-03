@@ -1,6 +1,6 @@
 # Tray view, menu model and state file from the core's state
 
-Phase: 2. Status: ready. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 80K tokens.
+Phase: 2. Status: ready (stopped by Haik about 19:45 before any code). Needs Haik: no. Agent: `wakeshot-worker`. Size: about 80K tokens.
 Real laptop: no (pure core code and tests). Build folder: `CARGO_TARGET_DIR=<scratchpad>\p2-present\target`.
 Runs after: the contracts card (it creates `text.rs` with the string signatures). Parallel with:
 `p2-ownership-restore`, `p2-policy-holds`, `p2-policy-power`, and any card of another track, including the tray
@@ -81,6 +81,7 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03: card written by `p2-plan-core`.
+- 2026-11-03: worker started; reading the card's sources.
 
 ## Result
 
