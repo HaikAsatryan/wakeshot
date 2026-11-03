@@ -1978,3 +1978,62 @@ by the four `real_stop_points_*` tests in `crates/wakeshot-windows/src/power/sto
 - **Model, not verified.** A user's change in Settings is modelled as the value stored and the whole plan in force at
   once (as `CopyAsActive` notes say a test must model it). That Settings applies every stored value of the plan at
   once is inferred, not tested.
+
+## Cron checks
+
+Checked 2026-11-03 between 21:20 and 21:55 for card `docs/tasks/p4-cron.md`. Reads only: Claude Code's binary and
+Windows zone data; no setting, zone or clock changed.
+
+- **Claude Code's own cron code.** Read in `C:\Users\haika\.local\bin\claude.exe` (2.1.317, 338,187,936 bytes) by a
+  byte search for `recurringFrac` (bundled code near offset 292,466,000): field parser `F`, parser `d5`, search
+  `FYt`, next fire `Zkn` (recurring) and `W7o` (one-shot); `wRt` calls `Zkn` from `lastFiredAt ?? createdAt` or
+  `W7o` from `createdAt`. Built-in constants `jJ`: `recurringFrac` 0.5, `recurringCapMs` 1,800,000, `oneShotMaxMs`
+  90,000, `oneShotFloorMs` 0, `oneShotMinuteMod` 30, `recurringMaxAgeMs` 604,800,000, `cacheLeadMs` 15,000.
+  **Verified** (code read).
+- **Parser.** Five fields after a JS `trim` and a split on JS white space; each field a comma list matching
+  `^\*(?:\/(\d+))?$`, `^(\d+)-(\d+)(?:\/(\d+))?$` or `^\d+$`. Step 0 and a range with a > b are errors (no wrap);
+  day of week takes 7, as 0, in single values and ranges; a step on a range (`1-30/5`, open in "Sources track plan
+  checks") works. For the both-day-fields rule a field counts as restricted when its value set is not full, so `1-31`
+  counts as `*` and `*/2` as restricted; vixie cron looks at a literal `*` instead. **Verified** (code, and the
+  differential check below).
+- **Search (`FYt`).** Starts at the next UTC minute after `from`; walks with JS `Date` setters on local time (next
+  month, next day, next hour, next minute); at most 527,040 steps (366 days of minutes), no time bound. Recurring jobs
+  skip the second pass of a repeated local time (its test: `setMinutes(getMinutes())` moves the time); one-shots take
+  it and walk a matching day minute by minute. A local time skipped by a change never matches. **Verified** (code,
+  differential check).
+- **Next fire.** Recurring (`Zkn`): `i` = the next run after `from`, `n` = the gap from `i` to the run after it. When
+  the raw text matches `^\*\/\d+ \* \* \* \*$` and `15,000 < n`, `n >= 300,000`, `n - 15,000 < 300,000` (only a 5
+  minute gap), the fire is `from + n - 15,000`: 285 s after the last fire or the creation, wherever that falls on the
+  clock. So "`*/5` runs 15 s early" holds only when `from` is on a 5 minute mark. Otherwise the fire is `i + min(frac
+  * 0.5 * n, 30 min)`, with `frac = parseInt(id.slice(0, 8), 16) / 2^32` (0 when NaN). One-shot (`W7o`): the run, or
+  when its local minute is divisible by 30, `max(run - frac * 90,000, createdAt)`. The tick fires when `Date.now()`
+  (whole ms) reaches the float time, and after a fire computes the next one from that tick's `Date.now()`. **Verified**
+  (code; the live fixtures 03, 06, 09, 10, 11 and Phase 0 tests 3, 5, 14 match to the ms: tests in `sources/cron.rs`).
+- **The constants can change without a release.** The scheduler takes them from `getJitterConfig`, which reads the
+  remote flag `tengu_kairos_cron_config` (`AY(name, jJ, 60000)`) and keeps `jJ` only when the flag value fails its
+  schema: `recurringFrac` 0 to 1; `recurringCapMs`, `oneShotMaxMs`, `oneShotFloorMs` 0 to 30 min; `oneShotMinuteMod` 1
+  to 60; `recurringMaxAgeMs` 0 to 30 days; `cacheLeadMs` 0 to 60 s. So a recurring job is never more than 30 minutes
+  late, whatever the flag holds. What the flag holds today: not verified (the live fires match `jJ`). **Verified**
+  (code).
+- **After a resume (inference).** The live `*/5` jobs fired first at resume start plus 285 s, and the daily and
+  one-shot jobs kept their times. That fits a restored job whose `from` is the resume time. The restore code was not
+  read: not verified.
+- **Differential check.** Those functions copied byte for byte out of `claude.exe` into a scratch `claude.js`, run in
+  Node 26.13 with `TZ` set to 10 zones (Los Angeles, Sydney, Lord Howe, Santiago, Yerevan, London, Havana, Kathmandu,
+  Casablanca, Sao Paulo), against `sources/cron.rs` built into a scratch program with the same offsets (each zone's
+  changes to the minute, taken from Node). Per zone 20,000 random parse texts and 20,000 random searches (half within
+  2 days of a change; each checks the recurring next run, the recurring fire and the one-shot fire): 0 mismatches in
+  400,000. Claude Code runs on Bun (JavaScriptCore), not Node (V8); that both engines resolve skipped and repeated
+  local times the same way (ECMAScript `UTC(t)`): not verified. The scratch files were deleted.
+- **Windows zone data.** `GetTimeZoneInformationForYear(2026)` for "Pacific Standard Time" (found with
+  `EnumDynamicTimeZoneInformation`): the rules give 2026-03-08 02:00 and 2026-11-01 02:00 local, so 10:00 UTC and
+  09:00 UTC. `SystemTimeToTzSpecificLocalTimeEx` gives -480 one ms before and -420 at the spring change, and -420 then
+  -480 at the fall change; 2006 still uses the old rule (first Sunday of April). **Verified** (tests
+  `localtime::tests`, 2026-11-03). This PC's zone: "Caucasus Standard Time", +240, no daylight saving.
+- **Cost of the zone calls.** PowerShell P/Invoke loops of 20,000 calls: `GetDynamicTimeZoneInformation` 0.3 us;
+  `SystemTimeToTzSpecificLocalTimeEx` 0.24 to 0.86 us within one year, about 23 us when each call names another year
+  (Windows seems to keep one year's rules: inferred). A daily job's next fire through `SystemZone::current()` took 3.8
+  ms in a debug build. **Verified** (measured 2026-11-03).
+- **Not verified.** What `GetDynamicTimeZoneInformation` returns with "Adjust for daylight saving time automatically"
+  off (expected: `TIME_ZONE_ID_UNKNOWN` and no change dates); whether a running Claude Code follows a PC zone change;
+  where Windows zone data and the IANA data Bun uses differ for a zone.
