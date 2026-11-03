@@ -87,6 +87,9 @@ Problems seen but not fixed.
 
 - 2026-11-03 17:17: card written by `p3-plan-windows-power` (orchestrator decision 17:05: this track runs the
   stop-point test against the real implementations).
+- 2026-11-03 20:39, orchestrator, from `p2-ownership-apply`'s "Found outside scope" item 8: keep at least one start
+  with E1 as the only entry on its plan. With E2 or E3 beside it, the next restore's `set_active` for them hides a
+  dropped E1.
 
 ## Result
 

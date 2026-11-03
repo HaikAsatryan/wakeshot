@@ -112,6 +112,13 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03: card written by `p2-plan-core`.
+- 2026-11-03 20:39, orchestrator, from `p2-ownership-apply`'s "Found outside scope" items 3 and 4:
+  - An apply or check whose journal load fails or finds a corrupt file also reports `journal: []` (same rule as the
+    restore above). Never read it as "nothing owned"; `p3-journal`'s lock timeout is the same case.
+  - Orchestrator decision: after an apply fails with `SafetyNet(JOURNAL_CORRUPT)`, the core sends one
+    `Restore { plan: None }`, so the routine sets the file aside and `JournalCorrupt` reaches the user, instead of
+    every later apply failing. Once per corrupt file, not per apply. The power safety review checks it; the
+    `architecture.md` line comes with the docs pass.
 
 ## Result
 

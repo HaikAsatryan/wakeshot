@@ -129,8 +129,8 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | `p2-policy-holds` | no | contracts card | done (20:13): 79 tests, 21 of 22 mutants caught (the survivor was dead code, removed) |
 | `p2-policy-power` | no | contracts card | done (20:05): 59 tests; settle time question to Haik |
 | `p2-present` | no | contracts card | done (20:02): 24 tests |
-| `p2-ownership-apply` | no | `p2-ownership-restore` | running (20:03) |
-| `p2-core-holds` | no | `p2-policy-holds`, `p2-policy-power`, `p2-present`, `p4-hold-files` | running (20:15) |
+| `p2-ownership-apply` | no | `p2-ownership-restore` | done (20:36): 46 tests, 10 of 11 mutants caught (the survivor cannot be caught) |
+| `p2-core-holds` | no | `p2-policy-holds`, `p2-policy-power`, `p2-present`, `p4-hold-files` | running (20:12) |
 | `p2-ownership-props` | no | `p2-ownership-apply` | ready |
 | `p2-core-settings` | no (Phase 1 Question 10: default, console part built; Haik 2026-11-03 18:09) | `p2-core-holds` | ready |
 | `p2-core-lid` | no | `p2-core-settings` | ready |
@@ -193,6 +193,10 @@ Where each item this track owns is built. "Integration" is planned after the tra
   owns the apply, restore and check routines was decided at 17:05: the core.
 - 2026-11-03 19:55: wave 2 restarted after the lighter plan (`02-06-lighter.md`): `p2-policy-holds`,
   `p2-policy-power`, `p2-present` running, with `p4-hold-files`. Next free slot: `p2-ownership-apply`.
-- 2026-11-03 20:15: the four policy and view cards done and committed; `p2-ownership-apply` (20:03) and
-  `p2-core-holds` (20:15) running. Open, for a docs pass: `architecture.md` section 7 "Waiting limit" lacks the
+- 2026-11-03 20:13: the four policy and view cards done and committed; `p2-ownership-apply` (20:03) and
+  `p2-core-holds` (20:12) running. Open, for a docs pass: `architecture.md` section 7 "Waiting limit" lacks the
   run-time cap from `p2-policy-holds` (its Result, decision 3).
+- 2026-11-03 20:39: `p2-ownership-apply` done and committed. Orchestrator decision (in `p2-core-settings`'s Log):
+  after an apply fails with `JOURNAL_CORRUPT`, the core sends one `Restore { plan: None }`. Open, for the docs pass:
+  `architecture.md` section 5 Apply steps 3 and 4 and the accepted cases under "Ownership" (`p2-ownership-apply`'s
+  Found outside scope 1, 2, 6). Later, low priority: a `user_changed` field in `Outcome::Applied` (item 5).

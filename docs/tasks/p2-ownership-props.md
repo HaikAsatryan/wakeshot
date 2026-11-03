@@ -102,6 +102,10 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03: card written by `p2-plan-core`.
+- 2026-11-03 20:39, orchestrator, from `p2-ownership-apply`'s "Found outside scope" item 8: keep at least one start
+  with E1 as the only entry on its plan. With E2 or E3 beside it, the next restore's `set_active` for them hides a
+  dropped E1. Read `p2-ownership-apply`'s Result for the apply's take-over rule (an entry is taken over only while
+  it is still ours).
 
 ## Result
 
