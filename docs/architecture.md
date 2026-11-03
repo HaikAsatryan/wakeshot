@@ -564,9 +564,13 @@ How they talk: files only. No pipes, no sockets.
 
 Commands: `product.md`, UX (Haik, 2026-11-03). `wakeshot run -- <command>`: starts the child with the same console,
 then writes `holds\run-<pid>.json` with the child's pid and start time, waits, deletes the file, exits with the child's
-code. It ignores Ctrl+C itself; the child gets it from the console. Keep awake and Automatic write their files;
-`restore` is in the table above; `status` reads `state.json` and says "not running" when the tray's pid and start time
-are not alive.
+code, whole (also above 255, such as `0xC000013A` after Ctrl+C). Its own exit codes are the ones GNU `env` and
+`timeout` use, so a script can tell them from the child's: 127, the command is not found; 126, it cannot start (a
+file kind it does not start, such as `.ps1`, or a failed start); in both cases no hold file is written. 125, it lost
+the child (the wait failed; the hold file stays, and the tray deletes it once the process is gone). From
+`wakeshot-cli/src/run.rs`. It ignores Ctrl+C itself; the child gets it from the console. Keep awake and Automatic
+write their files; `restore` is in the table above; `status` reads `state.json` and says "not running" when the tray's
+pid and start time are not alive.
 
 ## 5. Windows layer
 
@@ -781,7 +785,7 @@ aside with a warning; the log holds the old values.
 | Lock, unlock; console left and back | `WTSRegisterSessionNotification`, `WM_WTSSESSION_CHANGE` (`WTS_SESSION_LOCK`, `_UNLOCK`, `WTS_CONSOLE_DISCONNECT`, `_CONNECT`); `WTSGetActiveConsoleSessionId` at start | no (Phase 3) |
 | Sign-out, shutdown | `WM_QUERYENDSESSION`, `WM_ENDSESSION` on the hidden top-level window | no (Phase 3) |
 | Input idle | `GetLastInputInfo` on each tick | yes |
-| Folder changes | `ReadDirectoryChangesW`, overlapped | yes, one folder (`spikes/claude-watch`, `watch_dir`); several folders on one thread not tested |
+| Folder changes | `ReadDirectoryChangesW`, overlapped | yes: one folder (`spikes/claude-watch`, `watch_dir`); several folders on one thread, the data folder, `holds\` and each agent folder (`watch/thread.rs` tests, card `p4-watch-thread`; at most 60 folders, `watch/dir.rs` `MAX_FOLDERS`) |
 | Process exit | `RegisterWaitForSingleObject` on a process handle, registered by the watch thread | the wait itself yes; the pool wait not tested |
 | Theme | `WM_SETTINGCHANGE` "ImmersiveColorSet"; compare registry values after the broadcasts settle | yes |
 | Taskbar restart | `TaskbarCreated` | yes |
@@ -896,8 +900,8 @@ pub struct SessionFacts {
     pub activity: Activity,       // Working | Waiting { since_wall_ms: Option<i64>, remote } | Idle
                                   // since_wall_ms None: no statusUpdatedAt in the file; the parser has no
                                   // clock, so the core keeps the time it first saw waiting
-    pub timers: Vec<i64>,         // next due times, wall ms
-    pub open_tasks: u32,          // background tasks seen open in the transcript
+    pub timers: Vec<i64>,         // next due times, wall ms: jobs, wakeups, Monitor timeouts
+    pub open_tasks: u32,          // background tasks with no known end, seen open in the transcript
     pub label: &'static str,      // "Claude Code"
     pub format: FormatHealth,     // Ok | Unreadable(&'static str) | UnknownValue(field, value)
                                   // Unreadable takes a fixed text, so file content cannot reach the log

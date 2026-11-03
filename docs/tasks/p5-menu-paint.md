@@ -82,7 +82,7 @@ Run from the repo root with the build folder above. Record each outcome.
 ## Out of scope
 
 - The menu loop, `TrackPopupMenuEx`, the owner window, `MSAAMENUINFO`, `WM_MENUCHAR`, the DWM corner call, the menu
-  theme flush (`p5-menu-view`). Theme reads (`p5-theme`). Wording (`p5-text`). Icons in items (product call).
+  theme flush (`p5-menu-view`). Theme reads (`p5-theme`). Wording (`p5-text`).
 
 ## Questions for Haik
 

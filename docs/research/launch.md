@@ -455,11 +455,13 @@ users), then on the EXE path only, never MSIX.** Reasons, in order:
 If Haik wants the Store sooner, the cheapest real path is a Certum Open Source certificate (about EUR 25 to 69 a year,
 not verified at checkout; Store acceptance not verified): it would also sign the GitHub release, though SmartScreen
 reputation for a new certificate still has to build up (not verified how fast). That is money, so it is his call.
+Haik's answer (2026-11-04 01:14): no; free paths only for signing and distribution. So the Store waits for SignPath
+Foundation.
 
 ### What this means for Wakeshot
 
 - `p8-store` stays blocked, with the reason "signing is not free yet"; it re-opens when SignPath Foundation approves
-  Wakeshot (or Haik buys a certificate).
+  Wakeshot (no paid certificate: Haik, 2026-11-04 01:14).
 - When it re-opens: EXE path; the hidden-listing test of uninstall during a hold; the two-source winget test; the
   first submission by hand (Haik: account, ID check, age rating); then the release workflow sets the package URLs
   and submits with the four secrets.

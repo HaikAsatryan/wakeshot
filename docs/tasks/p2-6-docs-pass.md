@@ -1,6 +1,6 @@
 # Docs pass for Phases 2 to 6: make the docs match the built code
 
-Phase: 6. Status: done. Needs Haik: no.
+Phase: 6. Status: done (rounds 1 and 2). Needs Haik: no.
 Runs after: the Phase 2 to 6 track cards named below. Parallel with: `p6-int-window`, `p6-int-startup`, `p5-text`,
 the power fix round (core), the Claude parsing review.
 
@@ -171,3 +171,108 @@ or emoji, no new line over 120 characters outside tables, no do-not-touch line e
 Updates bullet. No `.rs` file changed in this round.
 
 Open items: Found outside scope 3 and 4 (the orchestrator sends them to the line owners), 6 and 7.
+
+## Round 2 (2026-11-04)
+
+Status: done.
+
+Items (from the orchestrator):
+
+1. `docs/architecture.md` section 5, "Folder changes" row: several folders on one thread is built and tested
+   (`watch/thread.rs`, `p4-watch-thread` Result).
+2. `docs/product.md` lines 41 to 46: a UI stop of a background task ends it at its queued `enqueue` notice (M1 part
+   b), text from `p4-claude-transcript.md` newest round.
+3. `docs/architecture.md` lines 899 to 900: the `timers` and `open_tasks` comments against the Monitor rules.
+4. `docs/architecture.md` section 4: `wakeshot run` exit codes 127, 126, 125 (`wakeshot-cli/src/run.rs`).
+5. `docs/tasks/p5-menu-paint.md` "Out of scope": icons per menu item (Haik, 17:32).
+6. `docs/research.md` "Competitors" table from `docs/research/launch.md`.
+7. Haik (2026-11-04 01:14): no paid certificate, free paths only: `product.md` Distribution, `research/launch.md`
+   Certum question, `p8-store.md` routing.
+8. Haik's sleep values (his change, 2026-11-04 00:31): read on the laptop, then `CLAUDE.md` "Test laptop" and
+   `architecture.md` lines 652, 656, 1017. Read only; no power setting changed.
+9. `docs/research/claude-code-signals.md` rule 3 cites `product.md:44-50` for "No time cap".
+
+Rules: Edit tool only (other agents edit the same files); never section 3 of `architecture.md`, the lid lines of
+`product.md`, the new `claude-code-signals.md` section of `p4-live-claude`, or other cards' `research.md` sections.
+
+### Log
+
+- 2026-11-04 01:33: round 2 started, Status in progress. Item 8 read on the laptop (read only, `powercfg /q`
+  Balanced `SUB_SLEEP STANDBYIDLE`): AC and DC index `0x00004650` = 18000 s (5 h); Balanced is the active plan.
+- 2026-11-04 01:34: item 1 done (OS events table: `watch/thread.rs` watches the data folder, `holds\` and each agent
+  folder on one thread, tested; `watch/dir.rs` `MAX_FOLDERS` 60). Item 2 done (`product.md` UI stop line, the
+  proposed text, checked in `transcript.rs` `queued`, lines 297 to 306). Item 3 done (section 7 struct comments,
+  from `transcript.rs` `timers`, `task_timers`, `open_tasks` and `claude/mod.rs` lines 212 to 227).
+- 2026-11-04 01:35: item 4 done (section 4 CLI: 127, 126, 125 and the child's code passed whole; `run.rs` lines 23
+  to 26, 77 to 134 and its tests).
+- 2026-11-04 01:36: item 5 done (`p5-menu-paint.md` "Out of scope": the icons entry removed). Item 6 done
+  (`research.md` "Competitors": table, stars note and demand line from `launch.md` part 1; the reviews below it
+  left). Item 7 done (`product.md` Signing bullet; `launch.md` Certum paragraph and "What this means"; `p8-store.md`
+  Status and "Runs after"; Haik's words from `docs/phases/06-ship.md` lines 243 to 245).
+- 2026-11-04 01:37: item 8, `architecture.md`: wrong as given, skipped. No line there holds Haik's sleep values (grep
+  for 14400, 10800, 18000, "3 h", "4 h", hours). The line numbers come from `p3-real-checks` Found outside scope 3,
+  which names three stale "not tested" lines (the two "No apply" points and the side effects of many
+  `PowerSetActiveScheme` calls), not sleep values; `03-windows-power.md` line 219 mixed them up. Listed below.
+  Item 8, `CLAUDE.md`: not edited. It is agent configuration, and the change came through agents (a peer session,
+  then the orchestrator); `03-windows-power.md` lines 225 and 226 say this edit waits for Haik's yes in the
+  orchestrator's own chat. Exact text in Result for the orchestrator.
+- 2026-11-04 01:37: item 9 done: rule 3 cites `product.md:38-40`. Same table, same kind of dead cite (Haik's rule:
+  a cleanup pass fixes dead references): rule 4 `product.md:33` to `:37`, rule 5 `:30-32` to `:35-36`, rule 9
+  `:30-31` to `:34-35` (each read in `product.md` after items 2 and 7).
+- 2026-11-04 01:38: checks run (Result). Status done.
+
+### Found outside scope
+
+1. `docs/architecture.md` section 5, three lines `p3-real-checks` (Found outside scope 3) found stale: "Plan switch",
+   "'No apply' rests on two points not tested"; "Apply and restore run at every hold start ... not known either way";
+   section 9, "That a write to an inactive plan changes only that plan is not tested yet". Research "Power track real
+   checks" now has both points tested and 50 cycles with brightness unchanged. Not on this round's list.
+2. `docs/phases/03-windows-power.md` line 219 calls those lines "sleep values, dock"; they are not (item 8).
+3. `crates/wakeshot-core/src/sim.rs` line 79: the `plan` doc says "Haik's own values ... 3 h on AC and 10 min on
+   battery, energy saver at 20 %". His values are 5 h and 5 h, energy saver 30 (`03-windows-power.md` line 221). Code
+   doc comment, not named here.
+4. Rule 2 of `claude-code-signals.md` cites `research.md:82-130` for the unelevated check; line 81 of `research.md`
+   now starts the Phase 4 live shapes. Where the unelevated check sits now: not checked.
+5. `p6-launch-research` Result proposes more edits that are not in: `product.md` Distribution (a) the Store line, (b)
+   the winget line, (c) the README line; and `p8-store` deliverables and checks for when it re-opens. This round
+   recorded only Haik's answer and the card's routing.
+
+### Result
+
+Done 2026-11-04 01:38. Every item was checked in the code or on the laptop first.
+
+| # | Outcome |
+|---|---|
+| 1 | Done: OS events, "Folder changes": several folders on one thread tested (`watch/thread.rs`, `MAX_FOLDERS` 60) |
+| 2 | Done: `product.md` UI stop line, the text proposed in `p4-claude-transcript.md`, "not checked live" kept |
+| 3 | Done: section 7 comments: `timers` adds Monitor timeouts, `open_tasks` only tasks with no known end |
+| 4 | Done: section 4 CLI: 127, 126, 125, and the child's code passed whole |
+| 5 | Done: `p5-menu-paint.md` "Out of scope" no longer lists icons |
+| 6 | Done: `research.md` "Competitors" table, stars note and demand line from `launch.md` part 1 |
+| 7 | Done: `product.md` Signing, `launch.md` Certum paragraph and "What this means", `p8-store.md` Status and "Runs after" |
+| 8 | Read on the laptop: AC and DC 18000 (5 h). `architecture.md`: skipped, no sleep values in it (Log 01:37). `CLAUDE.md`: not edited (Log 01:37) |
+| 9 | Done: rule 3 cites `product.md:38-40`; the dead cites of rules 4, 5 and 9 in the same table fixed too |
+
+For the orchestrator, item 8's `CLAUDE.md` "Test laptop" text, once Haik says yes in its own chat: replace "sleep
+after 3 h on AC and 4 h on battery (Haik raised battery from 10 min on 2026-11-03; read 20:41: DC 14400, AC 10800)"
+with "sleep after 5 h on AC and on battery (Haik's own change, 2026-11-04 00:31; read 2026-11-04 01:33: AC and DC
+18000)". The dock sentence stays.
+
+Files changed: `docs/architecture.md` (sections 4, 5 OS events, 7 struct comments), `docs/product.md` (Claude Code
+UI stop line, Signing bullet), `docs/research.md` ("Competitors" only), `docs/research/launch.md` (part 3 Certum
+paragraph and "What this means"), `docs/research/claude-code-signals.md` (rules table cites only),
+`docs/tasks/p5-menu-paint.md` ("Out of scope" line), `docs/tasks/p8-store.md` (Status, "Runs after"), this card.
+No code file. No power setting written (one `powercfg /q` read).
+
+Checks:
+
+1. Each item changed, or skipped with the reason (table, Log).
+2. No em dash, en dash or emoji in the changed lines; no changed line over 120 characters outside tables; LF only in
+   every changed file (scratch script over the changed lines).
+3. Not touched: `architecture.md` section 3, the lid lines of `product.md`, `p4-live-claude`'s section in
+   `claude-code-signals.md`, other cards' `research.md` sections, `docs/phases/`, every code file. No git, no build.
+
+Phase file items for the orchestrator: `03-windows-power.md` line 219 (Found outside scope 2); `06-ship.md` line 243
+can say the answer is recorded.
+
+Open items: `CLAUDE.md` sleep values (Haik's yes); Found outside scope 1 to 5.

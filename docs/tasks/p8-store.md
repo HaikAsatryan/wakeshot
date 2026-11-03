@@ -1,13 +1,16 @@
 # Microsoft Store listing and automated submission
 
-Phase: 8. Status: blocked: on `p6-launch-research` and Haik's rule (`product.md`, Distribution): the Store only if
-adding it and signing are free and the submission runs in our release flow without hands, and uninstall still
-restores. If the research says a condition fails, this card stays blocked with the reason, and Haik decides.
+Phase: 8. Status: blocked: signing is not free yet (`docs/research/launch.md` part 3, "Recommendation"). Haik's rule
+(`product.md`, Distribution): the Store only if adding it and signing are free and the submission runs in our release
+flow without hands, and uninstall still restores. Haik (2026-11-04 01:14): no paid certificate, free paths only for
+signing and distribution. So the card re-opens only when SignPath Foundation approves Wakeshot; then the EXE path
+only, never MSIX (uninstall must restore).
 Needs Haik: yes: creates the Store developer account and the app name reservation (his identity), and reads the
 listing before the first submission. Agent: `wakeshot-worker`. Size: about 80K tokens, to set again after the
 research.
 Real laptop: unknown until the research; installing the Store build to check the uninstall restore would be yes.
-Runs after: `p6-launch-research`; `p6-media` (screenshots, video); `p6-readme` (the words); the winget submission.
+Runs after: SignPath Foundation approves Wakeshot (free signing); `p6-launch-research` (done); `p6-media`
+(screenshots, video); `p6-readme` (the words); the winget submission.
 Parallel with: any card that does not own the files below.
 
 ## Goal

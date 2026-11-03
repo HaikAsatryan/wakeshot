@@ -40,10 +40,9 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
     that never ends holds until it or the session ends; the tooltip says what holds.
   - Some ends of a background task write no notification to the transcript (Claude Code 2.1.317 code; not checked
     live). A task stopped with `TaskStop` ends at that call's result. A Monitor that is not persistent holds only
-    until its own timeout (at most 1 hour). A task stopped from the app's UI may hold until Claude Code writes the
-    stop to the transcript, which may be only at the next prompt, or until the session ends (decided by the worker,
-    2026-11-04, for Haik's review: reading the task's output file, the only other trace, is a new file kind and is
-    not built).
+    until its own timeout (at most 1 hour). A task stopped from the app's UI ends when Claude Code queues its stop
+    notice, which it writes to the transcript at once (2.1.317 code; not checked live; decided by the worker,
+    2026-11-04, for Haik's review).
 - **Other agents** after v1 (Haik, 2026-11-03: v1 ships Claude Code only, to keep v1 small; the cards are ready and
   marked `later`): Codex CLI and Copilot CLI first (`research/other-agent-signals.md`). OpenCode next (reliable
   signal, free to test). No reliable signal yet: Gemini CLI, Cursor CLI, Aider, Amp, Kiro. Logic may be ported from
@@ -209,7 +208,8 @@ lid action stays Do nothing and battery sleep Never. The README says so.
   no uninstall hook, so a hold active during uninstall would leave the lid set to Do nothing). winget, the Store and
   the app's own updates must never fight over one install (`p6-launch-research`).
 - Signing: v1 ships unsigned. Apply to SignPath Foundation once the project has users; signed builds then show
-  "SignPath Foundation" as publisher.
+  "SignPath Foundation" as publisher. No paid certificate (such as Certum Open Source): free paths only for signing
+  and distribution (Haik, 2026-11-04 01:14).
 
 ### Answers to the track plan questions (Haik, 2026-11-03 18:09: all defaults)
 

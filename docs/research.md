@@ -146,18 +146,23 @@ Checked 2026-11-03 (card `p0-unelevated-liveness`, Claude Code 2.1.316) with `sp
 
 | Tool | Platform | Tech | Agent aware | Blocks idle sleep on Modern Standby | Lid close | Stars |
 |---|---|---|---|---|---|---|
+| PowerToys Awake (microsoft/PowerToys) | Windows | C#, .NET 10, part of PowerToys | No: manual, timer or process id | Not checked | No | 140,491 (all of PowerToys) |
+| LidGuard (airtaxi/LidGuard) | Windows, Linux, macOS | C#, .NET 10 NativeAOT, a `dotnet tool` | Codex, Claude Code, Copilot CLI, OpenCode (hooks; officially tested: Codex on Windows) | Not checked | Yes, optional | 13 |
+| Agents Don't Sleep (itsmbaqer/agents-dont-sleep) | macOS, Windows, Linux | Rust, Tauri 2, web UI | 8 agents through hooks, others by process name (tested: Claude Code) | Not checked | Yes | 10 |
 | Nightcrew (leikauskas/nightcrew) | Windows | C#, .NET Framework 4.8, WPF | Claude Code, Codex | Yes | Yes | 9 |
 | Insomnia (stanley-projects/Insomnia) | Windows | Electron | Claude Code, Codex (hooks); apps by process | No (see Electron above) | No | 7 |
-| LidGuard (airtaxi/LidGuard) | Windows, Linux, macOS | C#, `dotnet tool` CLI | Codex, Claude Code, Copilot CLI, OpenCode | Not checked | Yes | 13 |
-| PowerToys Awake | Windows | Microsoft | No: manual, timer or process id | Not checked | No | n/a |
-| Insomnia (krishhgg/Insomnia) | macOS | | | | Yes | 1,894 |
+| Insomnia (krishhgg/Insomnia) | macOS | | | | Yes | 1,894 (2026-11-02) |
 
-Stars as of 2026-11-02. Many more tiny tools exist (0 to 30 stars): LidAwake, lidwake, LidGuard (macOS),
-wakekeeper (Windows and macOS), StayLit, WideAwake, Caffeinator, DozeGuard, a claude-kit keep-awake plugin, the
-claudfeine wrapper.
+Stars read with `gh api` on 2026-11-04 (`docs/research/launch.md`, part 1, which has the facts and links per tool),
+except the macOS Insomnia (2026-11-02). Rivals for the README: PowerToys Awake, LidGuard and Agents Don't Sleep;
+Nightcrew is the reserve, one star behind (same file, "Pick: three rivals"; decided by the worker, for Haik's review).
+Many more tiny tools exist (0 to 30 stars): LidKeeper (a PowerShell script, no release), LidAwake, lidwake, LidGuard
+(macOS), wakekeeper (Windows and macOS), StayLit, WideAwake, Caffeinator, DozeGuard, a claude-kit keep-awake plugin,
+the claudfeine wrapper.
 
-**Demand:** real on macOS (1.9k stars for a lid keep-awake app). On Windows every tool found is small and young.
-The space is busy with small projects. Simple, native and correct on Modern Standby is the open spot.
+**Demand:** real on macOS (1.9k stars for a lid keep-awake app). On Windows every agent-aware tool found is small (7 to
+13 stars) and young. The space is busy with small projects. Simple, native and correct on Modern Standby is the open
+spot.
 
 ### Nightcrew review (code read 2026-11-02, v0.3.1 installed and tested on this laptop)
 
