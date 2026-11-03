@@ -2477,6 +2477,29 @@ depends on elevation (the Medium case is in "Reading elevated Claude Code sessio
   read nobody took, every 20th with one taken and queued again), in a child test process of its own: 122 handles
   before and after (`GetProcessHandleCount`).
 
+## Tray UX: theme reads
+
+Card `p5-theme`, 2026-11-04, on this laptop (Windows 11 build 26300). Reads only; no setting was switched.
+
+- **This PC now.** `tray::theme::read()` gave `Theme { light: false, contrast: None }` (test `reads_this_pc`,
+  00:21). PowerShell `Get-ItemProperty` of `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize` agrees:
+  `SystemUsesLightTheme` 0, `AppsUseLightTheme` 0.
+- **The mode Windows 11 installs with is light.** `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes` holds
+  `InstallTheme` = `C:\Windows\resources\Themes\aero.theme`, `InstallThemeLight` = the same file and
+  `InstallThemeDark` = `dark.theme`. `aero.theme` has `SystemMode=Light` and `AppMode=Light`; `dark.theme` has both
+  `Dark` (registry and file reads, 2026-11-04). So Wakeshot takes light when `SystemUsesLightTheme` or its key is
+  missing (`ERROR_FILE_NOT_FOUND` or `ERROR_PATH_NOT_FOUND`); any other read failure, a value of another type
+  included, is an error.
+- **What Explorer does with a missing value: not verified.** No Microsoft page says (web search 2026-11-04). A Wine
+  bug (55771, `test_ShouldSystemUseDarkMode`) reports the value present on Windows 11 21H2 and absent on older
+  Windows 10 builds; a Stack Overflow answer ("detect dark windows taskbar") treats a missing value as dark, the
+  pre-1903 Windows 10 taskbar. Neither checked here: deleting the value would change Haik's settings.
+- **`HKU\.DEFAULT`** (the LocalSystem profile, sign-in screen) has no `Personalize` values on this PC.
+- **High contrast colours** come from `GetSysColor` only while `SPI_GETHIGHCONTRAST` has `HCF_HIGHCONTRASTON`:
+  `COLOR_WINDOW`, `COLOR_WINDOWTEXT`, `COLOR_HIGHLIGHT`, `COLOR_HIGHLIGHTTEXT`, `COLOR_GRAYTEXT`, `COLOR_BTNFACE`,
+  `COLOR_BTNTEXT`, `COLOR_HOTLIGHT`. Outside high contrast they are the classic theme's colours and are not used. A
+  real high contrast switch was not tested (Haik's theme stays; track note 3.10).
+
 ## CLI command checks
 
 Checked 2026-11-04 for card `docs/tasks/p4-cli-commands.md` (Windows 11 Pro 10.0.26300, elevated agent shell).
@@ -2549,3 +2572,55 @@ runs the stops.
   `from + 5 min` for a `*/5` job). The unit test `a_computed_recurring_time_covers_every_flag_value` checks five crons
   against 60 flag settings (frac 0 to 1, cap 0 to 30 minutes, lead 0 to 60 s): every real fire falls in the core's
   window of one of the two reported times.
+
+## Tray UX: menu painting
+
+Card `p5-menu-paint`, 2026-11-04, on this laptop (Windows 11 build 26300). Offscreen drawing only: no window, no
+screen. Code: `crates/wakeshot-windows/src/tray/menu_paint.rs`.
+
+- **WinUI template, read again** (`gh api`, microsoft-ui-xaml
+  `controls/dev/CommonStyles/MenuFlyout_themeresources.xaml`, last commit 2026-05-30;
+  `RadioMenuFlyoutItem_themeresources.xaml`): an item icon is a 16 x 16 epx `Viewbox`; a mark or an icon each take
+  one 28 epx column (`MenuFlyoutItemPlaceholderThemeThickness`), both take 56 (`...DoublePlaceholder...`), and a menu
+  that has any toggle or icon item reserves the columns for every item (inferred from the visual state names
+  `CheckPlaceholder`, `IconPlaceholder`, `CheckAndIconPlaceholder`; the presenter code that picks them was not read).
+  Check `E73E` and radio bullet `E915` are
+  12 epx with 16 epx after them (15 in the radio sub-item template); chevron `E974` 12 epx, 24 epx after the text.
+  Marks at rest and the chevron use `TextFillColorSecondary` (light `#9E000000`, dark `#C5FFFFFF`); a hot mark turns
+  `TextFillColorPrimary`. High contrast: fill `Window`, text, marks and chevron `ButtonText`, hover `Highlight` with
+  `HighlightText`, disabled `GrayText`, separator and border `WindowText` (the border is 2 px there). No maximum width.
+- **Icons, Microsoft's rule** (learn.microsoft.com/windows/apps/design/controls/menus, updated 2026-10-14): icons for
+  the most used items, standard pictures and pictures that show the command; "Don't feel obligated to provide icons
+  for commands that don't have a standard visualization." The menu icon is 16 x 16 px.
+- **Fonts on this PC** (WPF `GlyphTypeface` reads, 2026-11-04): Segoe UI Variable (`SegUIVar.ttf` 2.03) has Latin,
+  Cyrillic (U+0410, U+0436, U+0491, U+04D9) and U+2014, but no Armenian (U+0531, U+0561, U+0570), Hebrew or Arabic;
+  Segoe UI has all of those; neither has U+4E2D. Segoe Fluent Icons (`SegoeIcons.ttf` 1.54) has every glyph used here;
+  Segoe MDL2 Assets has them too. In GDI, `GetGlyphIndicesW` with `GGI_MARK_NONEXISTING_GLYPHS` on Segoe UI Variable
+  Text marked all 13 Armenian letters of a test label missing, and Segoe UI none (test
+  `non_latin_labels_get_a_font_that_has_them`).
+- **What Windows adds to an owner-drawn item's width.** Wine's `dlls/win32u/menu.c` (`calc_menu_item_size`): "Tests
+  reveal that Windows ( Win95 through WinXP) adds twice the average width of a menufont character", the average being
+  `(width of a..zA..Z / 26 + 1) / 2`. With the menu font from `SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS)`
+  this gives 14 px at 96 dpi, 16 at 120 and 20 at 144 here (test `measure_asks_less_what_windows_adds`); Phase 1
+  measured 16 px at 120 dpi on screen. 96 and 144 dpi not checked on screen (`p5-menu-view` Part B).
+- **Renders match the Phase 1 pick.** `docs/research/img/ux/menu-render-<96|120|144>-<light|dark|contrast>.png`
+  (from the ignored test `renders_for_review` as BMP, made PNG by a stdlib Python script; `art::png` was not there
+  yet). Rows 33, 41 and 50 px, text 14, 18 and 21 px, marks and chevron 12, 15 and 18 px. The fill, hover and
+  separator colours are the same pixels as `tray-look-render-96dpi-dark.png` and `-light.png` (`2c2c2c`, `383838`,
+  `3d3d3d`; `f9f9f9`, `f0f0f0`, `eaeaea`), and the hover band is 27 rows at 96 dpi and 42 at 144 in both (pixel
+  counts with a stdlib script). The contrast render uses this PC's system colours, as Phase 1's did (`ffffff`,
+  `0078d7`, `000000`).
+- **What changed from the spike, and why:**
+  - Icons on Automatic (eye `E890`), Keep awake (cup `EC32`), Restore (`E777`), Open log (`E8A5`) and Quit (cross
+    `E711`), Haik's ask (2026-11-03 17:32). The Keep awake lengths and Keep screen on get none (Microsoft's rule
+    above); the status line gets none. With a mark and an icon column, the main menu's text starts at 71 epx instead
+    of 43.
+  - Marks and the chevron in the secondary text colour, as WinUI draws them; the spike drew them in the text colour.
+  - The status line in the secondary text colour (about 6:1 in light, 9:1 in dark) instead of the disabled grey
+    (2.5 to 2.7:1, research "Dark menus"), and never highlighted; a disabled item is never highlighted either.
+  - A label with characters the text font lacks is measured and drawn with Segoe UI (then the Windows UI font of
+    each script group); the spike had one font.
+  - Text never runs past its column: an item asks for at most 480 epx of text, and a longer status line ends in an
+    ellipsis. The status line of two hold groups fits.
+  - The width asked is the width wanted less what Windows adds (above), so the menu is as wide as designed.
+  - Sizes are scaled from their epx sums per edge, so rounding never adds up across columns.
