@@ -1,4 +1,5 @@
 #Requires -Version 7
+
 <#
 .SYNOPSIS
 Installs a Wakeshot Setup.exe silently, checks what the install left, uninstalls it silently and checks that

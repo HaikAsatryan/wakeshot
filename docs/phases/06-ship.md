@@ -154,7 +154,7 @@ those one at a time across all tracks.
 | `p6-hooks` | no (Question 2: the default, Haik 2026-11-03 18:09) | `p6-login-and-path`; `p3-store`, `p3-log`, `p3-process`, `p3-journal`, `p3-power-plan`; core `p2-ownership-restore` (review M1) | done (committed 02:05): 17 tests; real Run, RunOnce and Path unchanged |
 | `p6-velopack-dependency` | yes, once: the elevated clang install of its step 0 (Question 4: yes); runs alone on the whole laptop: no other card and no cargo command (review M5) | `p6-hooks`, `p6-update-schedule`, `p6-velopack-facts` | done (committed 03:32): velopack 1.2.161; x64 checks and 1,260 tests pass; step 0 (clang) left for Haik, ARM64 tray: CI only |
 | `p6-pack-and-release` | no (Question 5: yes, the first real run is a public pre-release) | `p6-velopack-facts` | done (committed 02:25): x64 and ARM64 packed for real into the scratch folder; nothing installed |
-| `p6-install-e2e` | no; real laptop: installs, the real Run value and Path, a throwaway plan copy | `p6-velopack-dependency`, `p6-pack-and-release`; `p3-power-plan` (its first test shows a write to an inactive copy leaves the real plan alone) | in progress (started 03:34; the only real-laptop card) |
+| `p6-install-e2e` | no; real laptop: installs, the real Run value and Path, a throwaway plan copy | `p6-velopack-dependency`, `p6-pack-and-release`; `p3-power-plan` (its first test shows a write to an inactive copy leaves the real plan alone) | done (committed 03:57): `packaging/e2e.ps1`, 81 of 81 checks twice at Medium; AFTER equals BEFORE |
 | `p6-launch-research` | yes: reads its Result (rival pick, Store recommendation) before the README, winget and Store cards are rewritten; no installs | none | done: its Result waits for Haik's read |
 | `p6-winget-manifest` | no | `p6-pack-and-release`; `p6-launch-research` (the winget rules for an app that updates itself) | done (committed 02:25): templates and `fill.ps1`; `winget validate` passed on the local packs |
 | `p6-readme` | yes: a read at the Phase 6 sign-off; the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3, sign-off item 12) are in, all defaults | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-claude`; the tray track's `p5-haik-check` (review m2); `p6-launch-research` (its scope grows from that Result, Haik 2026-11-04); `p6-media` | ready |
@@ -304,3 +304,18 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
 - 2026-11-04 03:39 (orchestrator, session `wakeshot-46`): CI green on cd3d498. The release dry run on it (run
   41739978975) passed on both CPUs, all smoke checks included: the real hooks run through Velopack on the runners.
   Left before the first tag: `actionlint` (Haik), then version `0.1.0-rc.1` and its tag (Question 5).
+- 2026-11-04 03:57 (orchestrator, session `wakeshot-46`): `p6-install-e2e` done and committed. `packaging/e2e.ps1`
+  ran the whole card twice at Medium (03:48 and 03:52), 81 of 81 checks each: silent install, Setup over the install
+  (the install hook put the plan copy's lid value back and removed the journal), the update hooks (restored; `current`
+  kept its path), uninstall during a hold (restored; Run, RunOnce, Path entry, data and install folders, uninstall key,
+  shortcut and temp folder gone). AFTER equals BEFORE by the script and by an elevated read: Run (7 values) and RunOnce
+  bytes, Path (REG_EXPAND_SZ, same bytes), Balanced the only and active plan, lid 1/1, sleep 18000/18000, energy saver
+  DC 30, the full `powercfg /qh` text. The hooks wrote only the never-active copy. Sizes: `Setup.exe` 11.3 MB, full
+  package 3.8 MB, delta 9 KB; install 3.8 s, update 1 to 1.5 s, uninstall 0.4 s. Packs built from cd3d498, so the
+  update wiring is not covered: run `e2e.ps1` again after `p6-int-wiring-fixes` (build, then about 40 s). Decided by
+  the worker, for Haik's review: the script packs both versions itself; it refuses to run elevated unless
+  `-AllowElevated`; its end puts BEFORE values back if they differ (never fired); the log shows Run and Path only as
+  short hashes (the card is public); the journal owner is an ended `PING.EXE` it started. Small items for the rerun:
+  `pack.ps1` help needs a blank line under `#Requires`; `packaging/README.md` should list `e2e.ps1`. Velopack's own
+  logs stay in `%LocalAppData%\velopack` (deleting them is optional, Haik's call). The worker's note that `CLAUDE.md`
+  still says 3 h and 4 h is wrong: it says 5 h (checked 03:57).

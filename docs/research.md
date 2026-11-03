@@ -3473,3 +3473,56 @@ Checked 2026-11-04 03:36 to 03:50 for card `docs/tasks/p6-int-update-wiring.md`.
 - **Not verified:** that the tray Update.exe restarts gets the old tray's environment, so a `WAKESHOT_UPDATE_FEED` or
   `WAKESHOT_DATA_DIR` set for the old debug tray reaches the new one. Update.exe is a child of the tray
   (`wait_exit_then_apply_updates` spawns it), so it likely inherits it; `p6-int-update-e2e` should check.
+
+## Install end to end checks
+
+Checked 2026-11-04 between 03:38 and 03:53 for card `docs/tasks/p6-install-e2e.md`, on this laptop, with
+`packaging/e2e.ps1`: two full runs (03:48:41 and 03:52:16), 81 checks each, all passed. The exes were the repo's x64
+release build of commit cd3d498 (velopack 1.2.161 with the four hook callbacks), packed as 0.1.0 and 0.1.1 by
+`pack.ps1`. Every journal named only a throwaway copy of the active plan, "Wakeshot test e2e", never made active.
+"Test" means seen on this laptop; "source" means read in Velopack at tag `1.2.161` through `gh api`.
+
+- **Installs at Medium.** A `.cmd` opened with `explorer.exe` ran the script: `whoami /groups` "Mandatory
+  Label\Medium Mandatory Level", the script "elevated False". Setup.exe's manifest asks for `asInvoker` (the first
+  such string in the file), so Setup, Update.exe and the hooks they start keep that token. Per-user installs,
+  updates and uninstalls all worked at Medium with no prompt. **Verified** (test).
+- **Nothing starts the tray.** Velopack starts the app after an install only when Setup is not silent (source
+  `src/bins/src/commands/install.rs`, `if !dialogs::get_silent()` before `start_package`), and after an apply only
+  without `--norestart` (`commands/apply.rs`; the log says "Restart: false"). After each Setup, apply and uninstall,
+  no process ran from the install folder (WMI `ExecutablePath`, 2 s after the exit). **Verified** (test and source).
+- **The real hooks restore a journaled value at install, update and uninstall.** Each time: the copy's DC lid action
+  set to 0 with `powercfg`, then `journal.json` with that entry (`original` 1, `written` 0) and an owner that had
+  ended (a `PING.EXE` the script started). Setup.exe `--silent` over the install, `Update.exe apply --silent
+  --norestart --package <0.1.1 full nupkg in packages\>` and `Update.exe --uninstall --silent` each put the copy back
+  to 1 and deleted the journal. Hook log: `journal saved ... restored`, `power: wrote lidDc on plan <copy>: 0 to 1`,
+  `journal deleted`, `restore: the journal's values are back`, and no `set_active` line (`Win32Power` logs every
+  one): an entry on an inactive plan is dropped after its write (restore step 5). The active plan's id, its lid,
+  sleep and energy saver values and the SHA256 of all of its `powercfg /qh` text stayed the same through every step.
+  **Verified** (test).
+- **Registry and Path.** Install wrote `Run\Wakeshot` = `"<root>\current\wakeshot-tray.exe"` and one Path entry
+  `<root>\current`; Setup over the install and the update kept both as they were (the updated hook logs "CLI folder
+  already in the user Path"). The uninstall removed Run, a test `RunOnce\WakeshotRestore` = `"<root>\current\
+  wakeshot-tray.exe" --restore` and the Path entry; the Path value then had its old type (REG_EXPAND_SZ) and bytes
+  (read with `RegQueryValueExW`), and both keys had all their other values unchanged. **Verified** (test).
+- **Uninstall clean-up.** After a good restore the data folder `%LocalAppData%\Wakeshot` went whole (Question 2),
+  with the hook's own log in it, so the uninstall hook's lines cannot be read afterwards: the copy's value and the
+  missing folder are the proof. The install folder went 3.1 s after Update.exe exited (both runs), the uninstall key,
+  the Start menu shortcut and `%TEMP%\velopack_HaikAsatryan.Wakeshot` at once. The `choice` of Velopack's delete timer
+  printed `Y` into the script's output, which it inherited. **Verified** (test).
+- **`current` after an apply.** Same path, new folder (creation time 23:48:58Z before, 23:49:04Z after, UTC);
+  `current\sq.version` and the uninstall key's DisplayVersion said 0.1.1. **Verified** (test).
+- **Times** (script stopwatch around each exe): first install 3.8 s, of which the hook 1.57 s (a new Setup.exe and a
+  just-extracted exe); the second run's install 0.6 s. Setup over the install 0.4 and 0.5 s, apply 1.5 and 1.0 s,
+  uninstall 0.4 s. Hook times from Velopack's log (run 1): install 236 ms over an install, obsolete 17 ms, updated
+  197 ms, uninstall 128 ms. **Verified** (test).
+- **Sizes** (x64): `Setup.exe` 11,347,640 bytes, full nupkg 3,790,008, the 0.1.1 delta of the same exes 8,975,
+  portable zip 3,782,532. Tray exe 2,026,496, CLI 667,648. **Verified** (test).
+- **Velopack log quirks.** Apply and uninstall log `WARN Skipping killing self: <root>\Update.exe (<pid>)`: its check
+  for processes in the install folder finds Update.exe itself. Harmless. Setup over an install renamed the old folder
+  to `HaikAsatryan.i5WplhHtuq0JjQPq` and removed it at the end. **Verified** (test).
+- **Two tool facts.** In a `.cmd`, `echo %ERRORLEVEL%> file` writes nothing when the code is a single digit: cmd
+  reads `0>` as a redirect of handle 0 (seen: an empty file after an exit 0); `(echo %ERRORLEVEL%)> file` works (seen:
+  `0`). In pwsh 7.6.9, a comment help block right under `#Requires -Version 7` is not read by `Get-Help` (it shows
+  only the syntax); a blank line between them fixes it, a comment line between them does not. **Verified** (test).
+- **This laptop's `powercfg /q` hides the lid action and the energy saver threshold**: `/q <plan> SUB_BUTTONS
+  LIDACTION` prints only the plan header; `/qh` prints the setting and its values. **Verified** (test).
