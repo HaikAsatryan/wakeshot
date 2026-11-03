@@ -337,3 +337,83 @@ adopted in a stricter form: both readers are dropped for v1 (rules 7 and 10 abov
   copy (not redacted, outside the repo) in `~/.claude/wakeshot-keep/2026-11-03-live-tests/live/watch.log`; redacted
   extract in `spikes/claude-watch/fixtures/`. Method and tools in `spikes/claude-watch/`; step log in
   `docs/tasks/p0-claude-live-tests.md`.
+
+## Phase 4 live shapes (2026-11-03)
+
+Card `docs/tasks/p4-claude-live-shapes.md`, 18:18 to 18:40. Claude Code 2.1.317 (Phase 0 had 2.1.316). Thirteen cases
+(17 Claude Code processes with the resumed ones), model Haiku, one scratch folder each. Terminal sessions ran in a
+pseudo console (`spikes/claude-watch/ccdrive.py`, `--permission-mode auto`); SDK sessions ran over stream-json as in
+test 10. A small poller logged every status file write of these pids only, the lock file of each test folder and the
+transcript sizes. Redacted raw lines and status writes: `crates/wakeshot-core/tests/fixtures/claude/live/` (its
+`README.md` names the line of each shape). The test transcripts and folders were deleted afterwards.
+
+Marks as above: **verified** means seen live in these sessions; **not verified** means inferred or not run.
+
+### What was run
+
+| Fixture | Case | Observed | Mark |
+|---|---|---|---|
+| `01` | Background shell | As Phase 0 test 1: `busy`, `shell`, notification `completed`, `busy`, `idle` | verified |
+| `02` | Shell Monitor | The model's first two Monitors failed (Monitor runs its command through Bash, which expanded `$_`): each gave a notification with `<status>failed</status>`. Event notifications carry `<task-id>`, `<summary>` and `<event>`, but no `<status>` and no `<tool-use-id>`. The last one has `<status>completed</status>` | verified |
+| `03` | `/loop 1m` | `nextFireAt` = next minute plus `frac(id) * 30 s` (exact, as Phase 0). Fires 0.05 s after it, then every 60 s. `CronDelete` `{id}` | verified |
+| `04` | Dynamic `/loop` | First `ScheduleWakeup` had `noop: true`. Fire: `taskKind: "loop"`, `cron` like `21 18 * * *`, a new `taskId`. Stop: input `{stop: true}`, result `{scheduledFor: 0, clampedDelaySeconds: 0, wasClamped: false, stopped: true, cancelledWakeups: 0}` | verified |
+| `05` | One-shot reminder | "Remind me in 2 minutes" became a background Bash sleep: a reminder can also be a background shell. Asked for `CronCreate`: `recurring: false`, cron `23 18 3 11 *`, `humanSchedule` equals the cron string, `nextFireAt` on the whole minute; fired 0.85 s after it | verified |
+| `06` | `/clear` during a loop | As Phase 0 test 9 (`session_cron_carry`, the next fire in the new transcript). New: `CronList` result `{jobs: [{id, cron, humanSchedule, prompt, recurring, durable, nextFireAt}]}`; the lock file kept the old `sessionId` and was not removed at the clean exit, so a lock with a dead pid stays | verified (one case) |
+| `07` | Background subagent | Result `{isAsync: true, status: "async_launched", agentId, ...}`. The first notification came as a user line. The second came while the main thread was busy: a `queue-operation` `remove`, then an `attachment` of type `queued_command` whose `prompt` starts with `<task-notification>`, and no user line for it | verified (one case each) |
+| `08` | SDK path, background shell | As Phase 0 test 10. No `turn_duration` lines at all on this path (three SDK sessions) | verified |
+| `12` | SDK path, stdin closed while a 150 s shell ran | The process did not exit: it lived until the shell ended, ran the notification turn (`busy` 1.7 s), then exited and removed its status file | verified (one case) |
+| `13` | SDK path, hard kill while a shell ran, then `--resume` | The shell's `pwsh` outlived Claude Code (killed by pid afterwards). See the resume findings | verified |
+
+Other facts seen:
+
+- `/exit` with armed jobs opens a dialog "Background work is running" (Exit and stop tasks, Move to background and
+  exit, Stay); the status is `waiting` / `dialog open` while it shows. **Verified**.
+- `*/5` job: `nextFireAt` = creation plus 285 s (created 18:23:26.767, next 18:28:11.763), not the next 5 minute
+  mark. That is the "4 min 45 s gap" in "Timers". **Verified** (two jobs).
+- The folder trust dialog now has "No, exit" selected; a driver must press Down first. The PowerShell tool refuses a
+  standalone `Start-Sleep 40` ("use Monitor with an until-loop"). **Verified**.
+- Pid 8784 was used by one test session and, two minutes after it ended, by another (different `procStart`).
+  **Verified**. Rule 2 already covers it.
+- A hard-killed session's status file was removed at the same millisecond as another test session's clean exit
+  (once) and at the resumed process's start (once). Whether Claude Code sweeps at exit too: **not verified**.
+
+### Resume findings
+
+Three terminal resumes (fixtures `09` to `11`; `claude --resume <sessionId>` in a new process, same folder): after `/exit` with a `*/5` job
+and a 240 s `ScheduleWakeup`; the same after `Stop-Process -Force`; after `/exit` with a one-shot `CronCreate` and a
+daily job. One SDK resume after a hard kill with a background shell running (`13`).
+
+| Question | Answer | Mark |
+|---|---|---|
+| New status file | New pid, new `startedAt` and `procStart`, the same `sessionId`. Its first write has no `status` and no `updatedAt`, as at a fresh start | verified (4 resumes) |
+| Which transcript grows | The same `<sessionId>.jsonl`; no new file | verified (4) |
+| A line that marks the resume or lists restored jobs | None. At start the resumed process writes only metadata lines (`atis-latch`, `bridge-session`, `tools-used`); a clean exit writes `cost-state`, `last-prompt`, `ai-title`, `mode`, `permission-mode`, `session-owner` and the like. These lines also follow turns, so they mark nothing. The only exception: the SDK resume after a hard kill wrote, at start and before any prompt, a user line `<task-notification>` with `<status>stopped</status>` (and `queueTranscriptOnly: true`) for the background task the dead process left open | verified |
+| Do the jobs fire | `CronCreate` jobs come back and fire, after a clean exit and after a hard kill. The `*/5` jobs fired first at resume start plus 285 s (18:29:41; the old `nextFireAt` 18:28:11 was dropped), then every 5 minutes; `CronList` showed the new time. The one-shot (18:34) and the daily job (09:30 with jitter) kept their old times; the one-shot fired. The `ScheduleWakeup` (18:28:00) never fired and `CronList` did not show it | verified |
+| Lock file | The resumed process took `scheduled_tasks.lock` at start, before any fire, also over the dead pid's lock after the hard kill | verified |
+| Would old lines wrongly count as armed in a replay from the start | `CronCreate` lines: no, the jobs are restored; but a recurring job's old `nextFireAt` can be wrong. `ScheduleWakeup` lines: yes, a replay holds the dead wakeup until `scheduledFor` plus the margin (here from 18:24:56 to 18:30:00). Background tasks (SDK path): the `stopped` line closes them if the rule accepts that status; rule 3 as written (`completed`, `failed`, `killed`) would keep the task open forever | verified |
+
+Not run: `claude --continue`, `/resume` inside a running session, a resume after a job's time passed while no
+process ran (docs: missed runs do not fire), a terminal resume with a background shell left open, and the VS Code
+extension's own resume.
+
+### Rule changes
+
+Proposed exact text for "Recommended detection rules". **Verified** where the table above says so; the "never open
+a task" guard is an inference (the SDK resume closed the task anyway).
+
+- Rule 5, add at the end: "Resume: a status file whose `sessionId` names a transcript that already has lines older
+  than the file's `startedAt` is a resumed session (`--resume` in a new process; no line marks it). Read that
+  transcript from its start as usual, then apply this at `startedAt`: keep `CronCreate` jobs that were not deleted
+  (recurring ones under 7 days old, one-shots not yet fired); for a recurring job ignore the old `nextFireAt` and use
+  rule 6; drop every `ScheduleWakeup` wakeup and every open background task from lines older than `startedAt`
+  (Claude Code does not restore wakeups, and a task does not outlive its process)."
+- Rule 3, replace "with `completed`, `failed` or `killed`" by: "with any `<status>` value (seen: `completed`,
+  `failed`, `stopped`)". Add: "Match `<task-notification>` at the start of a user line's text and at the start of
+  the `prompt` of an `attachment` of type `queued_command`. A notification with no `<status>` (a Monitor event)
+  closes nothing."
+- Rule 5, reminders: "A reminder may also be a background shell that sleeps (handled by rule 3)."
+
+Parts of this file that the resume test contradicts, left for the parser card or a docs pass: "Short answer" and
+"Claude Code itself uses two outside methods" say Claude Code rebuilds pending jobs on `--resume`: true for
+`CronCreate` jobs, not for `ScheduleWakeup` wakeups. The "Wakeup armed" row says "resume re-arms from
+`scheduledFor`": not seen live for a resume in a new process.
