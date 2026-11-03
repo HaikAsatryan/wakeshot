@@ -85,6 +85,14 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03 16:53: card written by `p4-plan-sources`.
+- 2026-11-03 21:39, orchestrator, from `p4-claude-status`' Result (Found outside scope 1): track note 6 sends`
+  `UnknownValue` from transcripts, but the core counts any `UnknownValue` as working while the process lives, so one
+  dropped transcript field would keep every idle Claude session holding for its whole life. Orchestrator decision: an
+  unknown transcript shape must never make a session hold; the status file alone decides, and the user still sees
+  "update Wakeshot". Build it without a contract change if you can (for example: a transcript you cannot read adds no
+  open task and raises the notice). If it needs a contract change, stop at that point, write the proposal in your
+  Result and say so in your final reply; the orchestrator runs contract changes alone. Also (item 2): the resume rule
+  uses `startedAt`, which `p4-claude-status` does not keep; `procStart` is a better divider (0.4 to 21 s earlier).
 
 ## Result
 

@@ -84,6 +84,10 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03 16:53: card written by `p4-plan-sources`.
+- 2026-11-03 21:39, orchestrator, from `p4-claude-status`' Result: (2) for the resume rule, `procStart` is a
+  better divider than `startedAt`; check it in the live resume test. (3) `CLAUDE_CONFIG_DIR` moves the whole Claude
+  folder per Claude Code's docs; whether `sessions\` follows it is not verified. Check it once if cheap, else list it
+  as not tested.
 
 ## Result
 
