@@ -113,7 +113,7 @@ Notes 7, 8 and 9 apply after v1: Codex and Copilot moved there (Haik, 2026-11-03
 | `p4-watch-folders` | no | contracts card | ready |
 | `p4-watch-reads` | no | contracts card | done (21:12): 18 tests; `names` returns `io::Result` |
 | `p4-cli-args` | no | contracts card | ready |
-| `p4-claude-transcript` | no | `p4-claude-status`, `p4-cron`, `p4-claude-live-shapes` | running (21:54) |
+| `p4-claude-transcript` | no | `p4-claude-status`, `p4-cron`, `p4-claude-live-shapes` | done (22:35): 46 tests; no contract change |
 | `p4-copilot-source` | no | `p4-cron` | later (after v1, Haik 2026-11-03) |
 | `p4-watch-data` | no | `p4-hold-files`, `p4-watch-reads` | done (21:12): 19 tests |
 | `p4-watch-agents` | no | `p4-watch-reads` | running (22:22) |
@@ -226,3 +226,7 @@ limit; Copilot waiting does not hold. The cards build these.
 - 2026-11-03 21:55: `p4-cron` done and committed; `p4-claude-transcript` running. For the Claude parsing review:
   the jitter constants come from a remote flag (`tengu_kairos_cron_config`). For a docs pass:
   `docs/research/claude-code-signals.md` says "15 s early" for `*/5`; `p4-cron` found 285 s after the last fire.
+- 2026-11-03 22:36: `p4-claude-transcript` done and committed. A transcript problem reports `UnknownValue` only while
+  the session already holds, else `Ok` (so an idle session never shows "update Wakeshot"; a notice-only variant is
+  proposed in its card). For the Claude parsing review: an SDK session's task stopped by a Monitor timeout or the UI
+  writes no transcript line, so it holds until the session ends; transcript times use `holds::file::parse_expires`.
