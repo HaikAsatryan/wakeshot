@@ -85,7 +85,7 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03 16:53: card written by `p4-plan-sources`.
-- 2026-11-03 21:39, orchestrator, from `p4-claude-status`' Result (Found outside scope 1): track note 6 sends`
+- 2026-11-03 21:39, orchestrator, from `p4-claude-status`' Result (Found outside scope 1): track note 6 sends
   `UnknownValue` from transcripts, but the core counts any `UnknownValue` as working while the process lives, so one
   dropped transcript field would keep every idle Claude session holding for its whole life. Orchestrator decision: an
   unknown transcript shape must never make a session hold; the status file alone decides, and the user still sees
