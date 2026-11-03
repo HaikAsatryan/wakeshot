@@ -288,3 +288,9 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   `open_log.rs` drop their own copies of "wakeshot.log". Outside scope: `OpenLog` can hold the IO thread up to 10 s if
   the shell hangs, which delays a restore queued behind it (weigh at `p6-int-tray-mode`). The laptop is on battery
   (73% at 01:32): the heavy `p6-pack-and-release` bundle waits for AC; a docs pass (round 2) runs.
+- 2026-11-04 01:41: docs pass round 2 done and committed (card `p2-6-docs-pass`, "Round 2"): the folder row, the UI
+  stop line in `product.md`, the `timers` and `open_tasks` comments, the run exit codes, `p5-menu-paint`'s out of scope
+  line, the Competitors table, free paths only (`product.md` Signing, `launch.md`, `p8-store`), the dead `product.md`
+  cites in `claude-code-signals.md`. Left for the next docs pass: `architecture.md` 652, 656, 1017 (now tested by
+  `p3-real-checks`), `sim.rs:79` old values, rule 2's `research.md:82-130` cite, the rest of the launch research
+  proposals (with `p6-readme`), track note 3.2 of `05-tray-ux.md` (a 256 px frame no longer needs a crate).

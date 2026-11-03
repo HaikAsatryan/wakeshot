@@ -224,3 +224,7 @@ Critical path: store, journal, (core ownership cards), power-io, harness, real-c
   real-checks worker already took the 00:32 values, which are the same). The Test laptop lines in `CLAUDE.md` and
   `architecture.md` (652, 656, 1017) go to the next docs pass; the `CLAUDE.md` edit waits for Haik's yes in the
   orchestrator's own chat, since the answer came through a peer session.
+- 2026-11-04 01:41: docs pass round 2 done. `CLAUDE.md` Test laptop now says sleep 5 h on AC and on battery (read
+  01:39: AC and DC 18000; the orchestrator made that edit after Haik's direct message, with the values read on the
+  laptop). The earlier "architecture.md 652, 656 and 1017" note was wrong: those lines hold no sleep values; they are
+  "not tested" lines that `p3-real-checks` has now tested (next docs pass). Also stale: the old values in `sim.rs:79`.
