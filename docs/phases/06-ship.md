@@ -136,7 +136,7 @@ those one at a time across all tracks.
 
 | Card | Needs Haik | Runs after | Status |
 |---|---|---|---|
-| `p6-velopack-facts` | no; real laptop: installs and uninstalls a throwaway app | Haik's sign-off of the track plans; the contracts card (it builds the repo's release exes; review m10) | ready |
+| `p6-velopack-facts` | no; real laptop: installs and uninstalls a throwaway app | Haik's sign-off of the track plans; the contracts card (it builds the repo's release exes; review m10) | running (21:51; holds the laptop lane) |
 | `p6-login-and-path` | no | the contracts card; `p3-store` (test key helper) | ready |
 | `p6-update-schedule` | no | the contracts card | ready |
 | `p6-hooks` | no (Question 2: the default, Haik 2026-11-03 18:09) | `p6-login-and-path`; `p3-store`, `p3-log`, `p3-process`, `p3-journal`, `p3-power-plan`; core `p2-ownership-restore` (review M1) | ready |
