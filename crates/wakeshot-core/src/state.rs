@@ -9,7 +9,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::command::{CountdownReason, RestoreWhy};
 use crate::files::{Config, StateFile};
 use crate::holds::{HoldFacts, HoldId, HoldKind};
-use crate::policy::floor;
 use crate::policy::lid::SourceLock;
 use crate::policy::requests::Requests;
 use crate::policy::sessions::SessionMemory;
@@ -87,36 +86,50 @@ pub(crate) struct State {
     /// `Menu(Quit)` went out: nothing more.
     pub quit: bool,
     /// `None` until the first `Lid` event.
-    #[expect(dead_code, reason = "p2-core-lid fills it")]
     pub lid_closed: Option<bool>,
     /// `None` until the first `Power` event; the first one is no source change (`policy::lid::source_change`).
-    #[expect(dead_code, reason = "p2-core-lid fills it")]
     pub ac: Option<bool>,
-    #[expect(dead_code, reason = "p2-core-lid fills it")]
     pub battery_pct: Option<u8>,
-    /// From the plan's energy saver threshold (`policy::floor::floor_pct`).
-    #[expect(dead_code, reason = "p2-core-lid fills it")]
-    pub floor_pct: u8,
+    /// When the current power source began (run time); `None` before the first change.
+    pub source_since_mono: Option<u64>,
     /// On battery under the floor: no requests, no apply, until AC.
     pub stepped_back: bool,
+    /// The step back's notice and sound went out in this step back: once, at the first moment a hold counts in it.
+    pub step_back_shown: bool,
     /// A lock waiting for a new power source to last (`policy::lid::settle`).
-    #[expect(dead_code, reason = "p2-core-lid fills it")]
     pub source_lock: Option<SourceLock>,
-    /// The countdown to hibernate.
-    #[expect(dead_code, reason = "p2-core-lid fills it")]
+    /// Work ended with the lid closed and the countdown started; kept while the lid stays closed and no hold starts.
+    pub work_end: Option<WorkEnd>,
+    /// A step back with the lid closed wants the countdown (`CountdownReason::Floor`) until AC, the lid opens or
+    /// holding starts again.
+    pub floor_countdown: bool,
+    /// The countdown to hibernate that runs now: derived from `work_end` and `floor_countdown` in each settle pass.
     pub countdown: Option<Countdown>,
+    /// A `Hibernate` went out and its `Done` has not come back: never a second one at the same time.
+    pub hibernating: bool,
+    /// The hibernate thread found the battery above the floor: no second `Floor` hibernate before a new battery
+    /// reading, or each input reading would send one more while the two readings disagree.
+    pub above_floor_skipped: bool,
+    /// The last `InputIdle` reading.
+    pub idle: Option<IdleReading>,
     /// For the idle clamp at resume (`policy::ending::clamped_idle_ms`).
-    #[expect(dead_code, reason = "p2-core-lid fills it")]
     pub last_resume_mono: Option<u64>,
     /// `Session(Locked)` came and no `Unlocked` yet.
-    #[expect(dead_code, reason = "p2-core-lid fills it")]
     pub session_locked: bool,
     /// When the Keep screen on idle lock last locked (`policy::lock::idle_lock`).
-    #[expect(dead_code, reason = "p2-core-lid fills it")]
     pub idle_locked_at_mono: Option<u64>,
+    /// When the idle lock is due if no input comes.
+    pub idle_lock_check: Option<Deadline>,
     /// Notices raised while locked or off the console, sent at `Unlocked` or `ConsoleBack` (track note 18).
-    #[expect(dead_code, reason = "p2-core-lid fills it")]
     pub held_notices: Vec<Notice>,
+    /// The PC ran with the lid closed on our Do nothing while holding, not reported yet.
+    pub closed_lid: Option<ClosedLid>,
+    /// `UpdateReady`'s version, until `ApplyUpdate` goes out for it.
+    pub update_ready: Option<String>,
+    /// `ApplyUpdate` went out and its `Done` has not come back.
+    pub updating: bool,
+    /// `Notice::Updated` went out in this run.
+    pub updated_shown: bool,
 
     /// The tray as last sent.
     pub view: Option<TrayView>,
@@ -164,14 +177,25 @@ impl State {
             lid_closed: None,
             ac: None,
             battery_pct: None,
-            floor_pct: floor::DEFAULT_PCT,
+            source_since_mono: None,
             stepped_back: false,
+            step_back_shown: false,
             source_lock: None,
+            work_end: None,
+            floor_countdown: false,
             countdown: None,
+            hibernating: false,
+            above_floor_skipped: false,
+            idle: None,
             last_resume_mono: None,
             session_locked: false,
             idle_locked_at_mono: None,
+            idle_lock_check: None,
             held_notices: Vec::new(),
+            closed_lid: None,
+            update_ready: None,
+            updating: false,
+            updated_shown: false,
             view: None,
             state_file: None,
             state_written_mono: None,
@@ -226,9 +250,6 @@ pub(crate) struct Episode {
     pub requests_only: bool,
     /// Where this episode's apply stands.
     pub apply: ApplyStep,
-    /// When the lid closed while holding (run time), for the closed-lid report.
-    #[expect(dead_code, reason = "p2-core-lid fills it")]
-    pub lid_closed_since_mono: Option<u64>,
 }
 
 /// Where an episode's apply stands (architecture section 3, "Holding starts", step 2).
@@ -245,8 +266,40 @@ pub(crate) enum ApplyStep {
 }
 
 /// A countdown to hibernate (`policy::ending`).
-#[derive(Clone, Copy, Debug)]
-#[expect(dead_code, reason = "p2-core-lid fills it")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Countdown {
     pub reason: CountdownReason,
+    /// When the next input reading decides, so the loop reads it on time; `None`: at the next reading, whenever it
+    /// comes (a timer fired without one, or the last one was used).
+    pub check: Option<Deadline>,
+}
+
+/// The user's own lid actions when work ended with the lid closed, read before the restore landed (the journal's
+/// `original` while ours), so a later power source change finds the user's own action for the new source even while
+/// the plan copy still shows what Wakeshot wrote.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct WorkEnd {
+    pub own_lid_ac: u32,
+    pub own_lid_dc: u32,
+    /// A power source change onto the user's own Do nothing stopped the countdown; it starts again only once a source
+    /// whose own action is not Do nothing has lasted `policy::lid::SOURCE_SETTLE_MS`.
+    pub paused: bool,
+}
+
+/// One input idle reading: `ms` at run time `at_mono`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct IdleReading {
+    pub ms: u64,
+    pub at_mono: u64,
+}
+
+/// How long the PC ran with the lid closed on our Do nothing while holding, and what held it (the closed-lid report).
+/// It outlives the episode: after work ends with the lid closed the PC still runs until the hibernate.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ClosedLid {
+    /// Run time of the stretches that ended (the lid opened).
+    pub ran_ms: u64,
+    /// When the stretch that runs now began (run time).
+    pub since_mono: Option<u64>,
+    pub held_by: BTreeSet<Held>,
 }

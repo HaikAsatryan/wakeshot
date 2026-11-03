@@ -12,6 +12,11 @@
 //!
 //! The hold folder is a small world: [`Sim::put_hold`] and [`Sim::remove_hold`] change it as a script would, and
 //! [`Sim::watch`] runs the core's own `WriteHold` and `DeleteHold` on it, the way the IO and watch threads do.
+//!
+//! So is the user's input: after the first [`Sim::input`], each loop timer posts `InputIdle` right before its `Tick`,
+//! as the loop does (`docs/phases/06-integration.md`, "one timer"). Its idle grows with run time and with suspended
+//! time, as `GetLastInputInfo` does (research, "Clock"). Before it, no `InputIdle` is posted, so scenarios that do not
+//! care about input see only ticks.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -235,6 +240,15 @@ pub struct Sim {
     folder: BTreeMap<HoldId, HoldFacts>,
     /// Steps whose hold commands `watch` already ran on the folder.
     watched: usize,
+    /// Input idle at a run time; `None` until the first [`Sim::input`].
+    input: Option<InputIdle>,
+}
+
+/// Input idle as `GetLastInputInfo` gives it: `ms` at run time `at_mono`, growing from there.
+#[derive(Clone, Copy, Debug)]
+struct InputIdle {
+    ms: u64,
+    at_mono: u64,
 }
 
 impl Default for Sim {
@@ -260,6 +274,7 @@ impl Sim {
             next_safety_mono: start.mono_ms + SAFETY_TICK_MS,
             folder: BTreeMap::new(),
             watched: 0,
+            input: None,
         }
     }
 
@@ -326,6 +341,9 @@ impl Sim {
             while self.next_safety_mono <= due {
                 self.next_safety_mono += SAFETY_TICK_MS;
             }
+            if let Some(ms) = self.idle_ms() {
+                out.extend(self.send(Event::InputIdle { ms }));
+            }
             out.extend(self.send(Event::Tick));
         }
         if ms > 0 {
@@ -338,9 +356,30 @@ impl Sim {
     pub fn suspend(&mut self, ms: u64) -> Vec<Command> {
         let mut out = self.send(Event::Suspending);
         self.clock.suspend(ms);
+        // Input idle counts suspended time; run time does not.
+        if let Some(input) = self.input.as_mut() {
+            input.ms = input.ms.saturating_add(ms);
+        }
         self.line(format!("slept {}", seconds(ms)));
         out.extend(self.send(Event::Resumed));
         out
+    }
+
+    /// The user touches the keyboard or mouse now. From the first call on, every loop timer posts `InputIdle` before
+    /// its `Tick`. No event now: the loop reads input only when a timer fires.
+    pub fn input(&mut self) {
+        self.input = Some(InputIdle {
+            ms: 0,
+            at_mono: self.clock.now().mono_ms,
+        });
+        self.line("input".to_owned());
+    }
+
+    /// Input idle now, as the loop would read it; `None` before the first [`Sim::input`].
+    pub fn idle_ms(&self) -> Option<u64> {
+        let now = self.clock.now().mono_ms;
+        self.input
+            .map(|i| i.ms.saturating_add(now.saturating_sub(i.at_mono)))
     }
 
     /// Someone sets the clock. No event: the loop learns of it only from the times of later events.

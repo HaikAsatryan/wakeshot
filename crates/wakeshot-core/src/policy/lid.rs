@@ -16,8 +16,10 @@ pub const DO_NOTHING: u32 = 0;
 
 /// How long a new power source must last before a closed laptop is locked for it, so a dock's short AC drop does not
 /// lock someone who types on an external screen (product, "Never lower security"). The two drops seen on the test
-/// laptop lasted 5.3 s and 6.3 s (research, "Power rules checks"), longer than this.
-pub const SOURCE_SETTLE_MS: u64 = 5_000;
+/// laptop lasted 5.3 s and 6.3 s (research, "Power rules checks"), so 5 s was too short; Haik picked a longer wait
+/// ("15 or even more ... can be even a minute") and the orchestrator set 30 s (2026-11-03 21:23). The cost: an
+/// unplugged, closed laptop stays unlocked up to 30 s.
+pub const SOURCE_SETTLE_MS: u64 = 30_000;
 
 /// The lid key for a power source (`ac`: on AC).
 pub fn key(ac: bool) -> SettingKey {

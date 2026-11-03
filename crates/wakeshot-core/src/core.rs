@@ -11,17 +11,19 @@
 //! Power settings live in `settings`: the apply goes out from the settle pass after the requests, whenever the
 //! episode wants one and the core applies now; restores go out at the edges and as retries on the tick.
 //!
-//! Seams for `p2-core-lid`: `Core::notify` (notices held while locked), `Core::want_apply` (apply as at a hold
-//! start, for the end of a step back), `Core::restore_all` (for the step back), `Core::applies`, and the event and
-//! outcome arms that name their card.
+//! The closed-lid and battery side lives in `lid`: the battery floor goes into the settle pass before the requests
+//! (stepped back takes none), the step back's actions, the countdown and the source lock after the episode edges.
+//! Every notice goes through `Core::notify`, which keeps it while the user is away. Updates live in `update`.
 
 mod holds;
+mod lid;
 mod settings;
+mod update;
 mod view;
 
 use std::collections::BTreeSet;
 
-use crate::command::{Command, FileKind, Outcome, RestoreWhy};
+use crate::command::{Command, FileKind, HibernateEnd, Outcome, RestoreWhy};
 use crate::event::Event;
 use crate::files::{Config, HoldFile};
 use crate::holds::file::{format_expires, parse_expires};
@@ -55,11 +57,16 @@ impl Core {
         if self.state.quit || (!self.state.started && !matches!(event, Event::Started { .. })) {
             return out;
         }
-        let resumed = event == Event::Resumed;
+        // A hibernate that resumed is a resume too: the requests need taking again (decision 16).
+        let resumed = matches!(
+            event,
+            Event::Resumed | Event::Done(Outcome::Hibernate(HibernateEnd::Resumed))
+        );
+        let tick = event == Event::Tick;
         self.take(now, event, &mut out);
         // Quit's commands are the last: a settle would take the requests again.
         if !self.state.quit {
-            self.settle(now, resumed, &mut out);
+            self.settle(now, resumed, tick, &mut out);
         }
         out
     }
@@ -107,8 +114,10 @@ impl Core {
             Event::Holds(files) => holds::take_files(&mut self.state, now, files, out),
             Event::Done(outcome) => self.done(now, outcome, out),
             Event::Tick => self.tick(now, out),
-            // The settle pass does all of its work.
-            Event::Resumed => {}
+            // The idle clamp counts from here; the settle pass takes the requests again.
+            Event::Resumed => self.take_resumed(now),
+            // Only the resume matters to the idle clamp; run time stops by itself during the sleep.
+            Event::Suspending => {}
             Event::SettingsOwner => {
                 self.state.owner = true;
                 self.want_apply();
@@ -117,15 +126,12 @@ impl Core {
             Event::ActivePlan(id) => self.take_active_plan(id, now, out),
             Event::UserChanged(changed) => self.take_user_changed(changed, out),
             Event::JournalCorrupt => self.take_journal_corrupt(out),
-            // `Locked` and `Unlocked` are p2-core-lid's.
-            Event::Session(change) => self.take_session(change, out),
-            // p2-core-lid.
-            Event::Lid { .. }
-            | Event::Power { .. }
-            | Event::InputIdle { .. }
-            | Event::Suspending
-            | Event::UpdateReady { .. }
-            | Event::Updated { .. } => {}
+            Event::Session(change) => self.take_session(change, now, out),
+            Event::Lid { closed } => self.take_lid(closed, now, out),
+            Event::Power { ac, battery_pct } => self.take_power(ac, battery_pct, now, out),
+            Event::InputIdle { ms } => self.take_input_idle(ms, now, out),
+            Event::UpdateReady { version } => self.take_update_ready(version, out),
+            Event::Updated { version } => self.take_updated(version, out),
         }
     }
 
@@ -254,8 +260,9 @@ impl Core {
                 result,
                 journal,
             } => self.done_restored(plan, why, result, journal, out),
-            // p2-core-lid.
-            Outcome::Locked(_) | Outcome::Hibernate(_) | Outcome::Update(_) => {}
+            Outcome::Locked(result) => self.done_locked(result, out),
+            Outcome::Hibernate(end) => self.done_hibernate(end, now, out),
+            Outcome::Update(result) => self.done_update(result, out),
             // Their runners log them.
             Outcome::Sound(_) | Outcome::Notified(_) => {}
         }
@@ -263,13 +270,14 @@ impl Core {
 
     /// Everything that follows from the facts at `now`, in the order the runners need: requests before the apply
     /// at a hold start, and before the restore at a hold end (architecture section 3, "Episode flow").
-    fn settle(&mut self, now: Now, resumed: bool, out: &mut Vec<Command>) {
+    fn settle(&mut self, now: Now, resumed: bool, tick: bool, out: &mut Vec<Command>) {
         let found = holds::evaluate(&mut self.state, now);
         for &agent in &found.update {
             if self.state.update_shown.insert(agent) {
                 self.notify(Notice::UpdateWakeshot { agent }, out);
             }
         }
+        self.settle_floor(out);
 
         let wanted = requests::wanted(RequestFacts {
             holding: !found.holders.is_empty(),
@@ -299,11 +307,14 @@ impl Core {
             }
             _ => {}
         }
+        let lid_due = self.settle_lid(now, tick, out);
         self.send_apply(now, out);
+        self.send_update(out);
 
         let state_due = view::show(&mut self.state, &found, now, out);
         let plan_due = self.plan_read_due(now);
-        self.state.next = nearest(nearest(found.next, state_due, now), plan_due, now);
+        let next = nearest(nearest(found.next, state_due, now), plan_due, now);
+        self.state.next = nearest(next, lid_due, now);
     }
 
     /// The first hold counts; the settle pass sends its apply after the requests (section 3, "Holding starts").
@@ -321,6 +332,7 @@ impl Core {
     }
 
     /// The last hold stopped counting: every entry back at once, behind the requests (section 3, "Holding ends").
+    /// With the lid closed the countdown starts, read before this restore lands.
     fn holding_ends(&mut self, out: &mut Vec<Command>) {
         if let Some(episode) = self.state.episode.take() {
             out.push(Command::Log(format!(
@@ -328,12 +340,21 @@ impl Core {
                 labels(&episode.held_by)
             )));
         }
+        self.work_ended();
         self.restore_all(RestoreWhy::WorkEnded, out);
     }
 
-    /// Every notice goes out here, so p2-core-lid can hold them while the session is locked (track note 18).
+    /// Every notice goes out here. One raised while the session is locked or another session has the PC's screen
+    /// waits for the user, in order (track note 18): a balloon shown to nobody is lost. The same notice twice in one
+    /// absence says nothing new, so it waits once. Sounds never wait.
     fn notify(&mut self, notice: Notice, out: &mut Vec<Command>) {
-        out.push(Command::Notify(notice));
+        if self.state.session_locked || !self.state.on_console {
+            if !self.state.held_notices.contains(&notice) {
+                self.state.held_notices.push(notice);
+            }
+        } else {
+            out.push(Command::Notify(notice));
+        }
     }
 }
 
@@ -360,18 +381,20 @@ fn log_changes(before: &BTreeSet<Held>, after: &BTreeSet<Held>, out: &mut Vec<Co
     }
 }
 
-/// Log words, not tray words: the log is for whoever reads why the PC stayed awake.
 fn labels(holds: &BTreeSet<Held>) -> String {
-    let names: Vec<&str> = holds
-        .iter()
-        .map(|held| match (held.kind, held.label.as_deref()) {
-            (HoldKind::KeepAwake, _) => "Keep awake",
-            (_, Some(label)) => label,
-            (HoldKind::Run, None) => "wakeshot run",
-            (HoldKind::Agent | HoldKind::Script, None) => "a hold file",
-        })
-        .collect();
+    let names: Vec<&str> = holds.iter().map(label).collect();
     names.join(", ")
+}
+
+/// What held, for the log and the closed-lid report: the agent's label or the file's reason, else a name for the
+/// kind. Log words, not tray words: `text` words the notice around these names.
+fn label(held: &Held) -> &str {
+    match (held.kind, held.label.as_deref()) {
+        (HoldKind::KeepAwake, _) => "Keep awake",
+        (_, Some(label)) => label,
+        (HoldKind::Run, None) => "wakeshot run",
+        (HoldKind::Agent | HoldKind::Script, None) => "a hold file",
+    }
 }
 
 /// The nearer of two deadlines as seen from `now`, each on its own clock; on a tie the wall one, which a sleep past

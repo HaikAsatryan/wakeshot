@@ -1,6 +1,6 @@
 # Core state machine, part 3: lid, battery floor, countdown, locks
 
-Phase: 2. Status: ready. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 130K tokens.
+Phase: 2. Status: done. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 130K tokens.
 Real laptop: no (pure core code and tests). Build folder: `CARGO_TARGET_DIR=<scratchpad>\p2-core-lid\target`.
 Runs after: `p2-core-settings`. Parallel with: any card of another track.
 
@@ -97,9 +97,32 @@ Run from the repo root with the build folder above. Record each outcome.
 
 Each with the worker's default.
 
+None. Both questions the orchestrator carried were answered (Haik 2026-11-03 21:23; Log).
+
 ## Found outside scope
 
 Problems seen but not fixed.
+
+1. Docs that still say 5 s for the power source settle (`architecture.md` and `product.md` already say 30 s):
+   `docs/tasks/p2-core-props.md` line 48 (the property "unlocked for more than 5 s");
+   `docs/tasks/p6-int-haik-checks.md` lines 84 and 88 ("Hear after about 5 seconds"); `docs/phases/01-design-skeleton.md`
+   lines 21, 68 and 108 (the signed-off phase text). History, to leave: `docs/tasks/p2-policy-power.md`,
+   `docs/research.md` line 1532.
+2. For the power track (`p3-hibernate`): the hibernate thread's last check does not see holds or the work-end source
+   rule. A hold that starts, or a dock that brings back AC onto the user's own Do nothing, during its few seconds of
+   checks and sound does not stop the hibernate; the core cancels its countdown at once but cannot stop a thread
+   already started. A fix would be a cancel the core can raise (a contract change). Not this card's.
+3. `crates/wakeshot-core/src/policy/lid.rs` module doc (this card may edit that file only for the settle): "Each rule
+   reads the last plan read and the core's journal mirror as they are at that event" no longer holds; the core passes
+   what is in force (`Core::in_force`). Proposed: "Each rule reads the plan and journal as in force at that event: the
+   core sets each journal entry's key to `written`, since the last read can be up to 10 s old."
+4. `docs/architecture.md` section 3, for the docs pass: the in-force view; the closed-lid report goes out at the first
+   unlock with the lid open, or when the lid opens while signed in; a countdown pauses while another session has the
+   PC's screen; a lid close on our Do nothing with nothing holding starts the countdown; `ApplyUpdate` also waits for a
+   countdown and does not wait for an expired Keep awake file; `Update(Ok)` takes the Quit path; held notices keep one
+   of each duplicate; the countdown restarts after a source change pause only once the source lasted 30 s.
+5. `sources::cron::tests::times_outside_the_js_range_give_none` (`p4-cron`'s file) failed once at about 21:43 and
+   passed at 21:45. Nothing left.
 
 ## Log
 
@@ -108,7 +131,256 @@ Problems seen but not fixed.
   source change, `lid::ours` after a failed restore, a second `Lock` after the lid-close lock, the first `Power`
   event has no source before). Item 1 went to Haik as a question; until he answers, keep the architecture's rule (not
   cancelled). The 5 s settle (`policy::lid::SOURCE_SETTLE_MS`) also waits for Haik (recommended 15 s).
+- 2026-11-03 21:08: started by `wakeshot-worker`. Status: running. Reading the card's sources.
+- 2026-11-03, between 21:08 and 21:42 (clock not read): sources read. Finding: the core's plan copy is the last read, up to 10 s old after an apply, so
+  `policy::lid::ours` on it says "not ours" for a lid close in the first seconds of a hold (live 1, written 0): no
+  lock. Fix in the core: the lid and lock rules get an "in force" view (journal entries on the active plan set their
+  key to `written`; an apply in flight counts as written). Design: new `core/lid.rs` (lid, power, floor, countdown,
+  idle lock, closed-lid report, held notices) and `core/update.rs` (9a); `Sim` gets an input world (`InputIdle`
+  before each `Tick`, as the loop sends it, only after `Sim::input`). Next: `scenarios/lid.rs` first.
+- 2026-11-03, between 21:23 and 21:42 (clock not read), orchestrator messages (21:22, 21:23): (1) Haik: the settle is 30 s; this card now also owns
+  `policy/lid.rs` for that change only. Done: `SOURCE_SETTLE_MS = 30_000` and its doc; the file's tests use the
+  constant, so none needed a change. (2) Orchestrator decision, confirmed by Haik: at a power source change during a
+  running `WorkEnded` countdown, the user's own lid action for the new source decides: Do nothing cancels (only
+  release), anything else keeps it; a flip back to a source whose own action is not Do nothing, lid still closed and
+  work still ended, starts it again. Built as a derived rule: "work ended with the lid closed" is kept (with the user's
+  own lid actions read at the work end, before the restore lands) and the countdown runs while the own action for the
+  current source is not Do nothing.
+- 2026-11-03, before 21:42 (clock not read): `scenarios/lid.rs` written first: 53 named tests and one proptest (`lid_events_in_any_order`),
+  plus the `Sim` input world. Against the current core: 44 fail, 10 pass (nine "nothing happens" cases and the
+  proptest, which only checks no panic and no unexplained lock there). Counts corrected at 21:47 from the run's
+  output: first written here as 52 and 43. A flip back onto a source whose own action is
+  not Do nothing restarts the countdown only once that source has lasted `SOURCE_SETTLE_MS`: else a dock's 3 s AC
+  drop would hibernate a docked laptop left idle. Next: the code.
+- 2026-11-03, before 21:42 (clock not read): code written: `core/lid.rs`, `core/update.rs`, wiring in `core.rs` and `core/settings.rs`
+  (`take_session` gets `now`, `Locked`/`Unlocked` arms, `ConsoleBack` sends held notices), fields in `state.rs`. All
+  54 lid tests pass, 445 in the crate. Traces read by eye (lid-close lock, unplug lock at +30 s, countdown due at
+  300 s idle, report 391 s; docked cancel and restart; floor countdown). Added from the floor trace: after an
+  `AboveFloor` skip the next `Floor` hibernate waits for a new battery reading (test added, 55). rustfmt on the owned
+  files; clippy four runs plus `test-support`: exit 0. Next: review pass, mutants in a scratch copy.
+- 2026-11-03 21:42 (clock read): the four times above were written without reading the clock; corrected to what is
+  known. Review pass added: a lid close on our Do nothing with nothing holding (a failed restore) starts the work-end
+  countdown, and during a step back the `Floor` one (our battery sleep Never would keep it running for good); held
+  notices keep one of each exact duplicate; a failed lock while the session is already locked logs only. Tests added
+  for the countdowns, two existing tests extended for the other two (57 in `scenarios::lid`). Mutant run started in `<scratchpad>\p2-core-lid\mutants\` (copy taken before
+  the failed-lock change); results file `mutants-results.txt` beside it.
+- 2026-11-03 21:46 (clock read): mutants: batch 1 (whole crate) 16 of 17 killed, one with a pattern that did not
+  compile; batch 2 on the final code (`-- scenarios::`, see below) 3 of 3, the fixed one among them: 19 of 19. Copy
+  and its build folder deleted. A full `cargo test -p wakeshot-core` at about 21:43 failed once in
+  `sources::cron::tests::times_outside_the_js_range_give_none` (`p4-cron`'s file, building now); the rerun at 21:45
+  passed (475). Long property run passed. `docs/research.md` "Core lid checks" added. Result written. Status: done.
 
 ## Result
 
-What was done, files changed, checks and outcomes, open items.
+Status: done 2026-11-03. The closed-lid and battery side of the episode is built test-first in a new private module
+`core/lid.rs`, updates in `core/update.rs`: 56 named scenarios plus one property test. The first 53 and the
+property were written before the code: 44 failed against the core then, 10 passed (nine "nothing happens" cases and
+the property). Three tests came with the review additions; two others were extended.
+
+### Files changed
+
+- `crates/wakeshot-core/src/core.rs`: `mod lid; mod update;`; every event and outcome arm that named this card; the
+  settle pass gets `tick`, runs the floor before the requests and the lid part after the episode edges, sends the
+  update; `holding_ends` starts the countdown; `notify` keeps notices while the user is away; `label` shared by the
+  log and the report. Public signatures unchanged.
+- `crates/wakeshot-core/src/core/lid.rs` (new), `crates/wakeshot-core/src/core/update.rs` (new): the rules below.
+- `crates/wakeshot-core/src/core/settings.rs`: `KEYS`, `TARGET` visible to `core`; `take_session(change, now, out)`
+  with the `Locked` and `Unlocked` arms; `ConsoleBack` sends the held notices.
+- `crates/wakeshot-core/src/state.rs`: the lid fields filled (every `expect(dead_code)` gone), new ones
+  (`source_since_mono`, `step_back_shown`, `work_end`, `floor_countdown`, `hibernating`, `above_floor_skipped`,
+  `idle`, `idle_lock_check`, `closed_lid`, `update_ready`, `updating`, `updated_shown`; types `WorkEnd`,
+  `IdleReading`, `ClosedLid`; `Countdown { reason, check }`). Removed: `floor_pct` (read from the plan) and
+  `Episode.lid_closed_since_mono` (the report must outlive the episode: after work ends the closed laptop still runs
+  until the hibernate).
+- `crates/wakeshot-core/src/sim.rs`: the input world (`Sim::input`, `Sim::idle_ms`).
+- `crates/wakeshot-core/src/scenarios/lid.rs`: the tests.
+- `crates/wakeshot-core/src/policy/lid.rs`: `SOURCE_SETTLE_MS = 30_000` and its doc only (Haik 21:23, orchestrator
+  grant); its tests use the constant, so none changed.
+- `docs/research.md`: "Core lid checks" (addition only). This card.
+
+### How it works
+
+- **What the lid rules see.** The plan copy is the last read, and after an apply it shows the user's values for up to
+  10 s, so `policy::lid::ours` on it said "not ours" for a lid close in the first seconds of a hold: no lock (found
+  here, fixed). `Core::in_force` gives the policy the plan with each journal entry on the active plan set to
+  `written`, and an apply not answered yet counted as written. The lid rules, the source lock, the idle lock timeout
+  and the work-end countdown all read it.
+- **Lid closes** (a change from open, not the first reading) while our Do nothing is in force on the current source
+  (either source before the first `Power`): `Log`, `Lock`, `Play(LidClosedHolding)`, the lock first. The user's own Do
+  nothing: nothing. While holding, the closed-lid stretch starts. With nothing holding (a failed restore left our Do
+  nothing and battery sleep Never), the work-end countdown starts too; during a step back, the `Floor` one.
+- **Power source changes** (not the first reading): `policy::lid::source_change` with the lid closed, kept in place of
+  an earlier one; `policy::lid::settle` at each later step: `Lock` and the chime once the new source lasted 30 s
+  (`Deadline::Mono`), dropped by a change back, a lid open, a release or a plan switch. AC back cancels a `Floor`
+  countdown.
+- **Battery floor** (`policy::floor`, the floor from the plan's energy saver threshold), in the settle pass before the
+  requests. Stepping back logs; its actions come once per step back, at the first moment a hold counts in it: requests
+  off (settle), `Restore { plan: None, why: Floor }` when anything may be owned, `Notify(StepBack)`,
+  `Play(BatteryFloor)`, and the `Floor` countdown if the lid is closed. No hold holds while stepped back. AC back: log,
+  `want_apply`, so requests and the apply come as at a hold start.
+- **Countdown**, derived in each settle pass from two wants. Work ended with the lid closed (set at the hold end when
+  the user's own lid action is not Do nothing, read before the restore lands; both sources' own actions kept) and a
+  step back with the lid closed. Reason `WorkEnded` wins. Orchestrator decision (21:22, Haik's yes 21:23): at a source
+  change the user's own action for the new source decides: Do nothing pauses it (only the release), anything else
+  keeps it; it starts again once a source whose own action is not Do nothing lasted 30 s. Paused while another
+  session has the PC's screen. Cancelled by holding again (`Cancel::HoldingStarts`), the lid opening, AC back for
+  `Floor`. Due only at a fresh `InputIdle` (clamped at the last resume): `Hibernate { reason, floor_pct,
+  last_resume_mono_ms }`, no `Play`, one at a time; `Floor` also needs the core's own percent under the floor.
+- **`Done(Hibernate(..))`, the rule asked for in item 5:** `Resumed`: a resume (idle clamp, `Retake` if any request
+  is on), the countdown is done. `NotAllowed`, `Failed`, `Skipped(LidUnknown)`: log, `Notify(HibernateFailed)`, the
+  countdown ends (section 8 names the unknown lid). `Skipped(LidOpen)`: it ends. `Skipped(InputSeen)`: it goes on, the
+  next reading decides. `Skipped(OnAc)`: ends `Floor` only. `Skipped(AboveFloor)`: goes on, but no second `Floor`
+  hibernate before a new battery reading (else one per reading while the two readings disagree).
+- **Keep screen on idle lock**: at each `InputIdle`, `policy::lock::idle_lock` with the user's own timeout (the
+  shorter of the two before the first `Power`): `Log`, `Lock`, `Notify(IdleLocked)`, once per idle period; its next
+  check is a deadline. `Done(Locked(Err))`: log and `Notify(LockFailed)`, but only log while the session is locked.
+- **Closed-lid report**: a stretch runs from a lock that leaves the closed laptop running on our Do nothing while
+  holding (lid close or source lock) to the lid opening; run time only, so a hibernate in it does not count. It goes
+  out at the first `Unlocked` with the lid open, or when the lid opens while signed in:
+  `ClosedLidReport { ran_ms, held_by }`, `held_by` the names of everything that held in the stretch. An unlock with
+  the lid still closed (a sign-in on the external screen) sends none: the stretch goes on.
+- **Notices while away**: raised while the session is locked or off the console, they wait and go out in order at
+  `Unlocked` or `ConsoleBack` (whichever makes both true); one of each exact duplicate. Sounds never wait.
+- **Updates**: `UpdateReady` waits until nothing holds, no hold file names a live or Unknown process (any kind, also
+  with Automatic off), nothing may be owned (`may_own`), no countdown, work end or hibernate is on, and the session
+  is not ending; then `ApplyUpdate`, one at a time. `Update(Ok)`: the menu's Quit path (requests off,
+  `Restore { why: Quit }`, Keep awake file deleted, `Quit`). `Update(Err)`: log, wait for the next `UpdateReady`.
+  `Updated`: `Notify(Updated)` once.
+- **`Suspending`**: nothing (run time stops by itself). **`Resumed`**: the last resume time.
+
+### Design choices (mine), each with when to change it
+
+1. The in-force view errs toward a lock: an entry the user changed in the last 10 s, or an apply in flight that
+   fails, still counts as ours. Change it when a plan read reports the value in force right after each apply.
+2. The first `Lid` and `Power` readings are states, not changes: a tray that starts with the lid closed locks
+   nothing. Change it when a tray start with the lid closed and no lock is seen to matter.
+3. Before the first `Power` event: lock if ours on either source, the shorter idle timeout, the countdown if either
+   own action is not Do nothing. Change it when `Started` carries the power source.
+4. A lid close on our Do nothing locks and chimes with no hold too (a failed restore), and starts the countdown (work
+   end, or `Floor` while stepped back): our Do nothing with battery sleep Never would keep a closed laptop running for
+   good. Change it when a failed restore can no longer leave our values in force.
+5. `Lock` goes also into a session already locked (a lost `Unlocked` must never skip a lock); what `LockWorkStation`
+   returns then is not verified, so a failure while locked is logged only. Change it when the power track shows the
+   return value.
+6. Order `Lock` then `Play`: both orders were heard to work; this one never leaves the session unlocked behind a slow
+   sound start.
+7. Step back actions once per step back, at the first moment a hold counts; a step back with nothing held only logs.
+   Change it when Haik wants a notice whenever the floor is reached.
+8. The `Floor` countdown follows the architecture literally (the lid closed at the step back), with no exception for a
+   user whose own battery lid action is Do nothing, unlike the work-end rule. Change it when Haik wants the same
+   exception there.
+9. The restart after a source change pause waits 30 s (`SOURCE_SETTLE_MS`): without it a dock's 3 s AC drop would
+   hibernate a docked laptop left idle after work ended. Change it with the settle value.
+10. The countdown pauses while another session has the PC's screen: input idle is this session's, so the other
+    user's typing would not count and their PC would hibernate. Change it never for safety.
+11. Only a fresh `InputIdle` can make the countdown due; a timer that fires without one waits for the next reading,
+    at the latest the safety tick. The loop sends `InputIdle` before every `Tick` (`06-integration.md`).
+12. `IdleLocked` goes out at once (it is raised before the lock), not held to the unlock. Change it when the Phase 5
+    or 6 checks show that balloon is lost behind the lock screen: then push it to the held list.
+13. The closed-lid report waits for the lid to open (or goes out when it opens while signed in), so a docked user who
+    signs in on the external screen gets no report at each lid close. Change it when Haik wants it at every sign-in.
+14. `held_by` names are the log's (agent label, hold reason, "Keep awake", "wakeshot run", "a hold file"); the tray's
+    `text` words the notice around them. Change it when the notice needs the kinds (a contract change).
+15. An expired Keep awake file does not hold an update back: it always names this tray, which quits for the update,
+    and Keep awake ends with the tray anyway (decision 32). Change it when other processes write that file.
+16. Known limit: after a restore the plan copy may show our values until the next read (up to 30 s once nothing is
+    owned), so a work end in that window after an earlier restore (say "Restore my power settings" while docked with
+    the lid closed) reads the user's own action as Do nothing and starts no countdown. Change it when a restore's
+    outcome carries the values it put back, or the core reads the plan after each restore.
+17. Known limit: `Notify(FirstRun)` from `Started` goes out before a start-time `Session(Locked)` can arrive (the
+    holds scenarios pin it to `Started`).
+
+### Seams for `p2-core-props` and `p6-int-dispatch`
+
+- `Sim::input()` (input now; from then on every loop timer posts `InputIdle` before its `Tick`), `Sim::idle_ms()`;
+  `Sim::suspend` adds the sleep to input idle, as `GetLastInputInfo` does. Without `input()`, no `InputIdle`.
+- The core decides the countdown only on an `InputIdle` at the same `now`, so the loop must keep "`InputIdle`, then
+  `Tick`" at each fire. `Done(Hibernate(Resumed))` counts as a resume, like `Resumed`.
+- `p2-core-props`: the property "never on battery on our Do nothing unlocked for more than 5 s" is now 30 s
+  (`policy::lid::SOURCE_SETTLE_MS`).
+
+### Acceptance checks (final run 2026-11-03 21:45, own build folder, every cargo command `--locked`)
+
+- `cargo test -p wakeshot-core scenarios::lid`: 57 passed. Tests: `a_failed_lock_shows_a_notice`,
+  `a_failed_update_waits_for_the_next_update_ready`, `a_hibernate_that_resumed_counts_as_a_resume`,
+  `a_new_hold_cancels_the_countdown`,
+  `a_power_source_change_onto_the_users_own_do_nothing_cancels_the_countdown_and_back_starts_it`,
+  `a_power_source_change_onto_the_users_own_sleep_keeps_the_countdown`,
+  `a_resume_during_the_countdown_restarts_the_idle_count`, `a_short_ac_drop_with_the_lid_closed_gives_no_lock`
+  (3 s and 6.3 s), `a_start_time_restore_failure_waits_for_the_unlock`,
+  `a_tray_started_while_locked_holds_the_updated_notice_until_unlock`,
+  `ac_back_cancels_the_floor_countdown_and_holds_again`, `an_expired_keep_awake_file_does_not_hold_the_update_back`,
+  `another_session_on_the_console_holds_the_countdown_back`,
+  `battery_floor_with_the_lid_closed_hibernates_after_5_minutes_idle`,
+  `battery_floor_with_the_lid_open_steps_back_then_ac_back_holds_again`,
+  `closed_lid_report_once_with_the_right_time_across_a_suspend`,
+  `closed_then_unplugged_after_signing_in_on_an_external_screen_locks_once_battery_lasted`,
+  `docked_user_with_their_own_do_nothing_gets_no_lock_and_no_sound`,
+  `docked_with_their_own_ac_do_nothing_then_unplugged_locks_once_battery_lasted`,
+  `hibernate_not_allowed_shows_a_notice_and_ends_the_countdown` (not allowed, failed, lid unknown),
+  `hibernate_skipped_above_the_floor_waits_for_a_new_battery_reading`, `hibernate_skipped_for_input_goes_on`,
+  `hibernate_skipped_on_ac_ends_only_the_floor_countdown`, `hibernate_skipped_with_the_lid_open_ends_the_countdown`,
+  `keep_screen_on_locks_once_per_idle_period`, `keep_screen_on_with_sleep_timeout_never_never_locks`,
+  `lid_closed_after_a_failed_restore_still_locks_and_chimes`,
+  `lid_closed_during_a_step_back_with_our_do_nothing_left_counts_down`,
+  `lid_closed_in_the_first_seconds_of_a_hold_locks`, `lid_closed_on_a_failed_restore_after_work_ended_counts_down`,
+  `lid_closed_on_ac_while_holding_locks_and_chimes`, `lid_closed_on_battery_while_holding_locks_and_chimes`,
+  `lid_closed_while_the_apply_is_in_flight_locks`, `lid_closed_with_nothing_of_ours_gives_nothing`,
+  `lid_events_in_any_order` (proptest), `no_closed_lid_report_for_the_users_own_do_nothing`,
+  `no_closed_lid_report_while_the_lid_stays_closed_then_one_when_it_opens`, `no_hold_starts_while_stepped_back`,
+  `notices_raised_off_the_console_go_out_when_it_comes_back`,
+  `notices_raised_while_locked_go_out_at_unlock_in_order`, `opening_the_lid_cancels_the_countdown`,
+  `sounds_never_wait`, `the_closed_lid_report_names_everything_that_held`, `the_first_lid_reading_is_no_close`,
+  `the_first_power_reading_is_no_source_change`, `the_floor_follows_the_energy_saver_threshold`,
+  `update_ready_applies_when_nothing_holds_and_ok_quits`,
+  `update_ready_waits_for_the_hold_to_end_and_the_settings_to_come_back`,
+  `update_waits_for_a_live_hold_file_even_with_automatic_off` (alive and Unknown), `update_waits_for_the_countdown`,
+  `update_waits_while_a_key_is_owned`, `updated_before_any_sources_gives_the_notice`, `updated_gives_notice`,
+  `work_ended_after_a_long_idle_hibernates_at_once`, `work_ended_with_the_lid_closed_does_not_hibernate_while_typing`,
+  `work_ends_with_the_lid_closed_hibernates_after_5_minutes_idle`,
+  `work_ends_with_the_users_own_do_nothing_gives_no_countdown`. Timing tests check times off the 30 s safety tick.
+- `cargo test -p wakeshot-core`: 475 passed, 0 failed (`scenarios::holds` and `scenarios::settings` unchanged and
+  passing; `policy::lid` with the 30 s settle passing).
+- `lid_events_in_any_order` (no panic, no deadline behind a `Tick`, every `Lock` with a chime or `IdleLocked` in its
+  step, no `Hibernate` within 5 minutes of input or a resume, never `Play(GoingToSleep)`, nothing after `Quit`):
+  `PROPTEST_CASES=10000`, 27.4 s, passed. No regression file (`failure_persistence: None`).
+- `rustfmt --edition 2024 --check` on `core.rs` (and its children `core/holds.rs`, `core/lid.rs`,
+  `core/settings.rs`, `core/update.rs`, `core/view.rs`), `state.rs`, `sim.rs`, `scenarios/lid.rs`, `policy/lid.rs`:
+  exit 0.
+- `cargo clippy -p wakeshot-core --target <t> -- -D warnings`, with and without `--all-targets`, for
+  `x86_64-pc-windows-msvc` and `aarch64-pc-windows-msvc`: all four exit 0. Also `--features test-support` (x64): 0.
+- No clock read, no I/O, no new dependency: `cargo tree -p wakeshot-core -e normal --depth 1` shows serde and
+  serde_json only; a grep of the owned files for `std::time`, `std::fs`, `std::env`, `std::net`, `std::process`,
+  `std::thread`: none.
+- Mutants, in a scratch copy (`<scratchpad>\p2-core-lid\mutants\`, own build folder), each reverted; 19 of 19 killed.
+  The card's four: a lock at a lid close on the user's own Do nothing (lock when the action in force is Do nothing,
+  whoever wrote it): `docked_user_with_their_own_do_nothing_gets_no_lock_and_no_sound` and 2 more; no lock at AC to
+  battery with the lid closed: `closed_then_unplugged_after_signing_in_on_an_external_screen_locks_once_battery_lasted`,
+  `docked_with_their_own_ac_do_nothing_then_unplugged_locks_once_battery_lasted`; a hibernate without the resume
+  clamp: `a_resume_during_the_countdown_restarts_the_idle_count`, `lid_events_in_any_order`; `Play(GoingToSleep)` with
+  `Hibernate`: `work_ends_with_the_lid_closed_hibernates_after_5_minutes_idle`,
+  `battery_floor_with_the_lid_closed_hibernates_after_5_minutes_idle`, `lid_events_in_any_order`. Extra: the plain
+  plan read instead of the in-force view (14 tests, among them `lid_closed_in_the_first_seconds_of_a_hold_locks`); an
+  apply in flight not counted (`lid_closed_while_the_apply_is_in_flight_locks`); notices never wait (6); the first lid
+  reading as a close (`the_first_lid_reading_is_no_close`); the report at an unlock with the lid closed (2); the
+  orchestrator rule removed and the restart with no settle (both
+  `a_power_source_change_onto_the_users_own_do_nothing_cancels_the_countdown_and_back_starts_it`); the countdown off
+  the console (`another_session_on_the_console_holds_the_countdown_back`); a fired timer keeping an old check and a
+  stale reading making it due (`lid_events_in_any_order`, the second also `a_hibernate_that_resumed_counts_as_a_resume`);
+  the update ignoring owned keys (2); no `AboveFloor` gate (1); no countdown at a lid close on a failed restore (1); a
+  failed lock while locked notifying (1); held duplicates (1). Batch 2 ran `-- scenarios::` because another card's
+  test failed at the time (Log 21:46).
+- Only the owned files changed (from my own edit record; git not run), plus this card and the `research.md`
+  addition. Build folder, mutant copy and scratch scripts deleted.
+
+### Contract proposals
+
+None needed. Optional, for design choice 16: `Outcome::Restored` could carry the values it put back on the active
+plan, so the plan copy is right at once.
+
+### Open items
+
+- For Haik, none blocking. Design choices 8 and 13 are product-near readings he may want to see.
+- Found outside scope 1 to 5.
+- This card's code is in the power safety review scope (`docs/phases/02-06-lighter.md`, "Reviews"): the in-force view,
+  design choices 4, 5, 9, 10, 11, 16, and the `Done(Hibernate)` rules.

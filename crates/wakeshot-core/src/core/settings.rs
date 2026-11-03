@@ -6,7 +6,7 @@
 //!
 //! An apply is sent from the settle pass, after the requests, whenever the episode's apply is `Wanted` and the core
 //! applies now. Every edge that may make the core apply sets `Wanted`: a hold start, `SettingsOwner`, `ConsoleBack`,
-//! `EndCancelled`, a plan switch (and, in `p2-core-lid`, the end of a step back). A failed restore is kept as
+//! `EndCancelled`, a plan switch, the end of a step back (`core::lid`). A failed restore is kept as
 //! `retry` and sent again at each tick, scoped so it never takes an entry a running hold uses.
 
 use std::collections::BTreeSet;
@@ -21,10 +21,11 @@ use crate::time::{Deadline, Now};
 use crate::view::Notice;
 
 /// The keys an apply writes, less the released ones (decision 17).
-const KEYS: [SettingKey; 3] = [SettingKey::LidAc, SettingKey::LidDc, SettingKey::SleepDc];
+pub(super) const KEYS: [SettingKey; 3] =
+    [SettingKey::LidAc, SettingKey::LidDc, SettingKey::SleepDc];
 
 /// Do nothing for the lid and Never for sleep are both 0 (section 5, "Power settings").
-const TARGET: u32 = 0;
+pub(super) const TARGET: u32 = 0;
 
 /// How often the plan is read while anything is owned (section 5, "Ownership"). Ticks read it no more often, so a
 /// burst of short deadlines (the 1 s `state.json` wait) sends no burst of reads.
@@ -260,10 +261,10 @@ impl Core {
         out.push(Command::Quit);
     }
 
-    pub(super) fn take_session(&mut self, change: SessionChange, out: &mut Vec<Command>) {
+    pub(super) fn take_session(&mut self, change: SessionChange, now: Now, out: &mut Vec<Command>) {
         match change {
-            // p2-core-lid.
-            SessionChange::Locked | SessionChange::Unlocked => {}
+            SessionChange::Locked => self.take_locked(),
+            SessionChange::Unlocked => self.take_unlocked(now, out),
             // The last chance before Windows ends the process, so it goes out whatever the copy says.
             SessionChange::Ending => {
                 self.state.session_ending = true;
@@ -298,6 +299,7 @@ impl Core {
             SessionChange::ConsoleBack => {
                 self.state.on_console = true;
                 self.want_apply();
+                self.send_held(out);
             }
         }
     }
