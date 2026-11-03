@@ -136,7 +136,7 @@ laptop" cards run one at a time across all tracks.
 | `p3-recovery` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09) | no | `p3-journal`, `p3-process`, `p3-log`, `p3-power-plan` (verify review Minor 3), core `p2-ownership-restore` | done (21:22): 23 unit and 5 exe tests; real guard parent test passed |
 | `p3-stop-points` | no | yes: a plan copy, never active | `p3-power-plan`, `p3-journal`, core `p2-ownership-apply` | done (21:48): 3142 real cases passed, Haik's values same; no routine bug |
 | `p3-harness` | no | yes for the `cleanup` smoke run only (global lane, review M7); other smoke runs touch no setting | `p3-power-io`, `p3-recovery`, `p3-requests`, `p3-session`, `p3-system-events` | done (22:56): 22 tests, smoke runs done; Haik's values same |
-| `p3-real-checks` | no | yes: an active plan copy, 50 cycles | `p3-harness`, `p3-stop-points` | ready |
+| `p3-real-checks` | no | yes: an active plan copy, 50 cycles | `p3-harness`, `p3-stop-points` | in progress |
 | `p3-haik-checks` | yes: about 60 min elapsed, about 15 min of hands | yes, whole laptop: battery, lid, sign-out, sleep, lock; no other agent or cargo command runs (review B2) | `p3-real-checks` | ready |
 
 Size estimates (one worker's context): store 90K, log 80K, process 110K, power-plan 110K, requests 60K,
@@ -202,3 +202,4 @@ Critical path: store, journal, (core ownership cards), power-io, harness, real-c
 - 2026-11-03 22:57: `p3-harness` done and committed; laptop lane free. The power safety review is done (0, 1, 9;
   `docs/reviews/p2-6-power-safety.md`). Open, docs: `TestPlan::sweep`'s doc in `power/plan.rs` misses that `cleanup` calls it.
 - 2026-11-04 00:04: the docs pass is done and committed (`docs/tasks/p2-6-docs-pass.md`): track note 4 above and the `TestPlan::sweep` doc (log lines 199 to 203) are fixed; section 5 hibernate order, Guard line, 10 s reads in `architecture.md`.
+- 2026-11-04 00:30: the `p3-real-checks` + `p3-haik-checks` bundle started (laptop lane; the power safety review and its verify passed). Part 2 waits for Haik and runs alone on the whole laptop: the orchestrator records its state and stops spawning before its steps B and D.
