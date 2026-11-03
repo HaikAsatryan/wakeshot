@@ -196,7 +196,7 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | `p6-int-skeleton` | no | no; runs alone (edits a contract module list) | `p1-close-contracts` | done (19:28): whole-workspace checks green, closes wave 1 |
 | `p6-int-io-thread` | no | no | `p6-int-skeleton`, `p3-power-io`, `p3-store`, `p3-log`, `p4-cli-commands` | ready |
 | `p6-int-window` | no | no (hidden windows only) | `p6-int-skeleton`, `p3-session` | ready |
-| `p6-int-dispatch` | no | no | `p6-int-skeleton`, `p2-core-lid`, `p3-power-io` | running (21:49) |
+| `p6-int-dispatch` | no | no | `p6-int-skeleton`, `p2-core-lid`, `p3-power-io` | done (22:18): 21 tests, 22 of 22 mutants caught |
 | `p6-int-startup` | no | no | `p6-int-skeleton`, `p3-store`, `p3-log`, `p3-process`, `p3-session`, `p3-journal`, `p3-power-io` | ready |
 | `p6-int-tray-mode` | no | Part B: screen, about 10 min (a dry-run icon) | `p6-int-io-thread`, `p6-int-window`, `p6-int-dispatch`, `p6-int-startup`, `p3-requests`, `p3-system-events`, `p3-hibernate`, `p3-recovery`, `p4-watch-thread`, `p4-claude-transcript`, `p4-cron`, `p5-tray-icon`, `p5-menu-view`, `p5-notices`, `p5-sounds` | ready |
 | `p6-int-update-wiring` | no | no | `p6-int-tray-mode`, `p6-velopack-dependency`, `p6-update-schedule` | ready |
@@ -268,3 +268,8 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   and design lines (deliverables 7 to 10). Whole-workspace fmt, 4 clippy runs, tests (core 63, windows 55 plus 3
   ignored, cli 1, tray 1) and the x64 release build green; `Cargo.lock` unchanged. Its note on a re-entered end of
   session went to `p6-int-dispatch` item 5. Wave 2 of the track builds started 19:29.
+- 2026-11-03 22:20: `p6-int-dispatch` done and committed. Before `p6-int-window` starts: a contract change, run
+  alone (no card building `wakeshot-windows`): `LoopHandler::event`, `session` and `timer` in `app.rs` take `&self`, and
+  the window takes `&dyn LoopHandler` (with `&mut self` a re-entered call is undefined behavior; `p6-int-dispatch`'s
+  Result). Only the dispatcher's three forwarding methods change. Added for `p6-int-tray-mode`:
+  `LoopRunners::lost_events()` on each safety tick, `Dispatcher::into_runners()` for the shutdown order.
