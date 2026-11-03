@@ -84,6 +84,13 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03: card written by `p6-plan-integration`.
+- 2026-11-04 00:05, orchestrator, from the Results of `p6-int-window` and `p6-int-startup`: the window does not call
+  `session::register`; this card calls it with `hwnd()` and owns the retry for error 1702, then calls `started` and
+  `locked_at_start`. After the handler returns Quit, the window drops waiting events and every later post fails with
+  `PostMessageW` 1400, so the IO thread's answers during `finish` each log a failed post (keep that quiet or expected).
+  `try_settings` gives `None` both when another session holds the mutex and when the open is denied, and logs
+  neither: log which one it was. From `p6-int-dispatch`: call `LoopRunners::lost_events()` on each safety tick and use
+  `Dispatcher::into_runners()` for the shutdown order. `LoopHandler` methods take `&self` (contract change 23:41).
 
 ## Result
 

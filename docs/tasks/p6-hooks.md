@@ -37,7 +37,7 @@ during a hold puts the user's settings back and leaves no Run value, RunOnce val
   attempt "if a journal exists and its owner is Gone", answering done, nothing to do, owner alive or Unknown, or
   failed; the data folder step; a monotonic now; a wait; a log line.
 - `on_install`, `on_obsolete`, `on_updated`, `on_uninstall`, following the table in the phase file: registry steps
-  first, then the restore every 2 s until 25 s (install, uninstall) or 12 s (updated); the obsolete hook only logs.
+  first, then the restore every 2 s until 25 s (install, uninstall) or 10 s (updated; Velopack kills it at 15 s, `p6-velopack-facts` Result); the obsolete hook only logs.
 - Uninstall's data folder step, by Question 2 (answered: the default): after a successful restore delete
   `%LocalAppData%\Wakeshot` whole; after a failed one keep `journal.json` and `logs\` (a reinstall's install hook
   restores; the log holds the old values) and delete the rest. A data folder this hook cannot delete is a log line.

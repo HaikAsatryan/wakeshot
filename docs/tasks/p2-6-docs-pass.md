@@ -77,6 +77,8 @@ None.
    the documented one, not the measured one.
 6. `docs/phases/03-windows-power.md` work log lines 199 to 203 still list the track note 4 text and the
    `TestPlan::sweep` doc as open; both are done here. Orchestrator lines, so left.
+7. `docs/tasks/p6-hooks.md` line 40 gives the updated hook's inner limit as 12 s; `p6-velopack-facts` set 10 s, which
+   section 5 now states. The card should follow before `p6-hooks` runs.
 
 ## Log
 
@@ -123,6 +125,12 @@ None.
   methods" item 1 and the "Wakeup armed" row now say a resume rebuilds `CronCreate` jobs, and wakeups only for `bg`
   sessions (research "Claude transcript checks"); the "Resume findings" note says so. m8's third bullet left alone.
 - 2026-11-04 00:02: acceptance checks run (Result); long lines I made rewrapped. Status done.
+- 2026-11-04 00:08: orchestrator round 2, Found outside scope 1, 2 and 5. (1) Section 11 "cron next time" row: our
+  own scheduler (`sources/cron.rs` module doc; no `croner` or `jiff` in any `Cargo.toml`). (2) `06-ship.md`
+  Updates, the `ApplyUpdate` bullet, from `core/update.rs` `update_may_run` and `done_update`; rewrapped. (5)
+  Section 5 restore step 7: measured hook limits (research "Velopack checks for Wakeshot", point 6) and the inner
+  limits from `p6-velopack-facts`, marked not built (`hooks.rs` is still a stub). For consistency, the 30 s in the
+  "Gap left" uninstall line, section 6's hook paragraph and the section 8 "Restore fails" row now read 25 s.
 
 ## Result
 
@@ -158,4 +166,8 @@ Checks:
    report lines, section 8's "Lock fails" row, `core.rs`, `core/`, `scenarios/`, `sim.rs`, `text.rs`, `app/`;
    `docs/phases/` only in item 11's two sections. No build run.
 
-Open items: "Found outside scope" 1 to 6.
+Round 2 (2026-11-04 00:08, orchestrator): Found outside scope 1, 2 and 5 fixed (Log 00:08). Same checks: no em dash
+or emoji, no new line over 120 characters outside tables, no do-not-touch line edited, `06-ship.md` only in the
+Updates bullet. No `.rs` file changed in this round.
+
+Open items: Found outside scope 3 and 4 (the orchestrator sends them to the line owners), 6 and 7.

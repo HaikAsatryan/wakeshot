@@ -357,7 +357,8 @@ While holding:
 - Plan switch (a `Plan` with a new active id, handled first in that event): `Restore { plan: Some(old) }`, then
   `Apply` to the new plan.
 - Lid closes while the lid action in force is our Do nothing: `Lock` and `Play(LidClosedHolding)` at once, side by
-  side; note `lid_closed_since`. The lock does not wait for the sound. Tested: the Windows alias sound played in full
+  side; note `lid_closed_since`. Also with nothing holding, when a restore that failed or has not landed left our Do
+  nothing in force (the countdown below starts too). The lock does not wait for the sound. Tested: the Windows alias sound played in full
   with the lock 0.2 ms after its call, and our chime was heard both in a session already locked and with its stream
   running before the lock (research, "Lid-close sound", "Lid-close results"). Not tested: our chime with the lock
   landing during its stream start, which is the v1 order (checklist 16). Change it when a test shows the lock cuts a
@@ -693,8 +694,11 @@ guard, restore mode, Velopack hooks and the CLI, always under `Local\Wakeshot.Jo
    its owner is still the dead process it started for; another tray took the journal over: exit. In restore mode an
    owner whose liveness is Unknown counts as a failed run, so it is retried. After 2 minutes they start the tray, which
    keeps retrying and shows the warning (decision 38; Phase 1 Question 12: the default, Haik 2026-11-03 18:09). The
-   Velopack hooks must not show UI (`research/distribution.md`): they retry within their 30 s limit, log a failure
-   and keep the journal.
+   Velopack hooks must not show UI (`research/distribution.md`): they retry within an inner limit, log a failure and
+   keep the journal. Velopack kills a hook that runs past its own limit; measured: install 30 s, updated 15 s,
+   uninstall 60 s, where the Velopack docs say 30 s (research "Velopack checks for Wakeshot", point 6). The inner
+   limits (`p6-velopack-facts`; the hooks are not built yet): 25 s for install and uninstall, 10 s for updated, since
+   the updated hook always runs a just-extracted exe, which took up to 1.7 s to start.
 
 Liveness, one mapping for hold files, the journal owner, the guard's tray and agent sessions: open the process with
 exactly `SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION` and compare its creation time. On `0x80070057` (no such
@@ -743,7 +747,7 @@ deleted the RunOnce value before restore mode ran:
 - restore mode fails for 2 minutes at sign-in and the tray it starts fails to start;
 - restore mode panics (it aborts, with no retry and no tray start).
 
-Until a reinstall, with no warning: an uninstall during a hold whose restore fails for the hook's whole 30 s. The exe
+Until a reinstall, with no warning: an uninstall during a hold whose restore fails for the hook's whole 25 s. The exe
 is gone, hooks show no UI, and the uninstall removes the RunOnce value; the journal stays, so a reinstall's install
 hook restores.
 
@@ -873,9 +877,9 @@ writes `Control Panel\NotifyIconSettings\<id>` for the icon and a `NotifyIconGen
 it; review m12); `install` keeps only the Path entry.
 
 Velopack hooks (Phase 6): install and updated run the restore routine if a journal exists and its owner is dead, and
-add the CLI folder to the user Path. Uninstall (30 s limit) restores, retrying within the limit, then removes Run,
-RunOnce and the Path entry; it deletes `journal.json` only after a successful restore (a failure: section 5, "Gap
-left"). RunOnce goes even after a failed restore: the exe it names is being removed, so it could not run. Updates
+add the CLI folder to the user Path. Uninstall restores, retrying for up to 25 s (its limit is 30 s in the Velopack
+docs, 60 s measured; section 5, restore step 7), then removes Run, RunOnce and the Path entry; it deletes
+`journal.json` only after a successful restore (a failure: section 5, "Gap left"). RunOnce goes even after a failed restore: the exe it names is being removed, so it could not run. Updates
 apply only when nothing holds and nothing is overridden. The `current` folder keeps its path across updates, though
 the folder itself is new each time, so Run, RunOnce and Path can point at it (tested, research "Velopack checks for
 Wakeshot", point 3). Accepted (ship Question 1, Haik 2026-11-03 18:09; the README
@@ -955,12 +959,12 @@ fallback. The one exception is `watch::read` (the watch thread's file reads, std
 | Write, read-back or `PowerSetActiveScheme` fails in an apply | the restore routine on this plan's entries (they stay until it succeeds), requests only for the episode, notice |
 | Active plan read fails at the start of an apply | nothing written; requests only for the episode, notice |
 | Plan read fails | nothing released; log; retried at the next read |
-| Restore fails | journal kept; the tray retries at a tick, at most once per 10 s, while the restore is still wanted and warns once; restore mode and the guard retry for 2 minutes while the journal's owner is still the dead process, then start the tray; the uninstall hook retries within 30 s |
+| Restore fails | journal kept; the tray retries at a tick, at most once per 10 s, while the restore is still wanted and warns once; restore mode and the guard retry for 2 minutes while the journal's owner is still the dead process, then start the tray; the uninstall hook retries for up to 25 s |
 | Journal corrupt | moved aside; warning notice; values left as they are until the user sets them by hand (section 5, "Gap left") |
 | Liveness Unknown | last state kept, retried on the next tick; no file deleted, no restore started |
 | Settings mutex held by another session | requests only; retried on each tick |
 | Hibernate not allowed, fails, or lid state unknown | notice; settings were already restored |
-| Lock fails | log, notice; with the lid closed on our Do nothing: `Lock` once more at the next tick; if that fails too, step back as at the floor (`Requests` off, `restore_all`) and start the countdown (Haik, 2026-11-03; power safety review finding 1) |
+| Lock fails | log, notice; a closed-lid lock also counts as failed when no `Session(Locked)` comes within 5 s (`LockWorkStation` only starts the lock); with the lid closed on our Do nothing: `Lock` once more at the next tick; if that fails too, step back as at the floor (`Requests` off, `restore_all`) and start the work-end countdown, until the session locks or the lid opens (Haik, 2026-11-03; power safety review finding 1) |
 | Sound fails | log only |
 | Agent file format unknown | "update Wakeshot" notice |
 | Tray icon add fails at sign-in | retry with backoff; re-add on `TaskbarCreated` |
@@ -1080,7 +1084,7 @@ Checked 2026-11-03 on crates.io (research, "Phase 1 design checks").
 | `embed-resource` | 3.0.12 | both exes' `build.rs` | manifest, icons, version info |
 | `proptest` | 1.12.0 | core, declared as a dev-dependency | property tests |
 | `velopack` | 1.2.161 | tray only, Phase 6; not declared yet (113 packages, research "Contracts build") | installer and updates; 1.3.39-g8d2844f is a pre-release |
-| cron next time | open | core, Phase 4 | candidates `croner` 4.0.2 and `jiff` 0.2.39; Phase 4 picks or writes its own |
+| cron next time | none: our own code | core (`sources::cron`) | `sources/cron.rs` (`p4-cron`) copies Claude Code's own scheduler (parser, search, jitter; research "Cron checks"), so a due time is the one Claude Code picks; no `croner` or `jiff` |
 
 - `windows`: windows-rs moved its smaller crates to 0.100.0 on 2026-09-03 but has not published `windows` or
   `windows-sys` at that version, and says they may come later with changed API shapes (research). 0.62.2 is the
