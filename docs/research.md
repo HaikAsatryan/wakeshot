@@ -2290,3 +2290,35 @@ build's minified ones). The live checks use `crates/wakeshot-core/tests/fixtures
   30 min)` after its cron run, so the first fire after a time t is on the chain of fires that starts 30 minutes
   before t. Fixture 06 `.2` read alone gives 14:22:28.955 UTC; the job fired 282 ms later. A `*/5` job's chain hangs
   on its real fire times, so for it the guess is off by up to one 285 s step (not tested live).
+
+## Harness checks
+
+Checked 2026-11-03 22:47 to 22:52 for card `docs/tasks/p3-harness.md` on this laptop (Windows 11 Pro 10.0.26300, on
+AC, lid open, session locked by Windows at screen off, agent elevated: High), with the debug build of
+`crates/wakeshot-windows/examples/power_check.rs` and its own harness folder in the card's scratch folder. Haik's
+values read by `powercfg` before (22:47:36, 22:49:42) and after (22:49:43): Balanced active and the only plan, lid
+AC 1 and DC 1, sleep AC 10800 and DC 14400, energy saver DC 30; no `WakeshotRestore` RunOnce value; no
+`%LocalAppData%\Wakeshot` and no `%LocalAppData%\Wakeshot-harness` folder.
+
+- **Windows shows our request reason.** While `power_check hold --for 10` held its requests, `powercfg /requests`
+  (elevated) listed `power_check.exe` under SYSTEM and EXECUTION with the text "Wakeshot: keeping the PC awake for
+  running work"; 6 s after the run's clear both were gone, and the orchestrator's own SYSTEM request stayed.
+- **First values of the notifications, in order.** `Subscriptions::start` gave, within 1 ms of the call: power AC
+  with no battery reading, lid open, power AC with battery 100%, then the active plan. Two runs, the same order.
+- **Ticks through `MsgWaitForMultipleObjects`.** 5 s ticks on the wall clock came 4996 to 5018 ms apart, wall and
+  unbiased steps within 11 ms of each other, over 6 ticks in three runs; no gap.
+- **A console window names its client as owner.** For a window started as `conhost.exe "<exe>" ...` from the
+  elevated shell, `GetWindowThreadProcessId` on the `ConsoleWindowClass` window gave the harness pid, not the
+  conhost pid; conhost's own windows were of class `IME` and `MSCTFIME UI`. `Process.MainWindowHandle` of that
+  conhost read 0 (the session was locked; why: not verified).
+- **The close of a console window reaches the harness's handler, which finishes first.** `WM_CLOSE` posted to that
+  window: the run logged "stopping: the console window closed" 1.3 s after its last tick, then every line through
+  "power_check hold ended" within 2 ms, and the process was gone 10 ms after the post (`CTRL_CLOSE_EVENT`, handler
+  waiting on the clean exit, as in "Spike launch and stop checks").
+- **Session notices register from an elevated console process.** A hidden top-level window (class registered by
+  the harness, `WS_OVERLAPPED`, never shown) took `WTSRegisterSessionNotification` with no error and unregistered
+  with no error after 5 s; no notice came in those 5 s. `locked_now()` read locked, `on_console()` true.
+- **`Global\` mutex from High.** `NamedMutex::open("Global\Wakeshot.Probe.<pid>")` and `take(0)` worked at High
+  integrity. At Medium: not tested here (`p3-real-checks`).
+- **pwsh and exit codes.** `& exe bad-args 2>&1 | Select-Object -First 2` then `$LASTEXITCODE` read 0 though the
+  exe exits 2; without the pipe it read 2. Read exit codes without a pipe.
