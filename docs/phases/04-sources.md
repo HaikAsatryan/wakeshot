@@ -121,7 +121,7 @@ Notes 7, 8 and 9 apply after v1: Codex and Copilot moved there (Haik, 2026-11-03
 | `p4-cli-run` | no | `p4-cli-args`, `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | done (committed 01:14): `child.rs`, `run.rs`, core `holds::file::render`; 75 CLI tests, 3 exe, 5 run, 14 child, 24 holds file |
 | `p4-cli-commands` | no; screen once (opens one file in the default app; global lane, review M6) | `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 30 tests; screen step ran once |
 | `p4-cli-restore` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09; nothing to add) | `p3-journal`, `p3-power-plan`, `p2-ownership-restore`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 10 tests |
-| `p4-live-claude` | optional: 3 minutes for the VS Code check; agent-session lane | `p4-watch-thread`, `p4-claude-transcript`, `p4-cli-run`, `p3-process`, the Claude parsing review (`docs/phases/02-06-lighter.md`) | ready |
+| `p4-live-claude` | optional: 3 minutes for the VS Code check; agent-session lane | `p4-watch-thread`, `p4-claude-transcript`, `p4-cli-run`, `p3-process`, the Claude parsing review (`docs/phases/02-06-lighter.md`) | in progress |
 | `p4-live-codex` | yes: about 20 minutes (install or sign in, then type the steps) | `p4-live-claude` | later (after v1, Haik 2026-11-03) |
 | `p4-live-copilot` | yes: about 20 minutes (install or sign in, then type the steps) | `p4-live-codex` | later (after v1, Haik 2026-11-03) |
 
@@ -272,3 +272,9 @@ limit; Copilot waiting does not hold. The cards build these.
   `WAKESHOT_DATA_DIR` (debug builds only). Outside scope: `keep_awake.rs` writes its hold file by hand and could use
   `render`; architecture section 4 does not name the exit codes (next docs pass). Session `wakeshot-91` has no agent
   left; this orchestrator runs every card from here.
+- 2026-11-04 01:20: the second Claude verify is committed (`docs/reviews/p4-claude-parsing-verify2.md`): M1 part b
+  Fixed in code for background shells and shell Monitors (the panel stop itself not yet run live); 0 blockers, 0 majors,
+  3 minors (an MCP or WebSocket Monitor's UI stop writes no `<status>`, so it holds until its timeout, unverified; the
+  stale `product.md` and `architecture.md` lines already tracked; rule 3 cites `product.md:44-50` for "No time cap",
+  which is at 38-40). The Claude parsing review has passed. Pushed main at 01:19 (16 commits, push scan clean), which
+  carries the `watch::data` test fix. `p4-live-claude` running (agent-session lane).
