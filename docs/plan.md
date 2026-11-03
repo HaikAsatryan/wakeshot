@@ -194,7 +194,14 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   sound slot, after 15 minutes with no input). Blocked for Haik: `p3-haik-checks`. Haik's answers: his sleep values
   are now 5 h on AC and battery (`CLAUDE.md`); free paths only, no paid certificate. Running: `p6-hooks`, `p5-notices`
   Part A, core round B, the `p6-pack-and-release` + `p6-winget-manifest` bundle. Haik is away until about 10:00.
-- Next (orchestrator): the continuation prompt of session `wakeshot-9d` (its scratchpad, `continuation.md`; sent to
-  session `wakeshot-46` at the handover) lists the running cards and their files, the ready queue in order, the screen
-  lane plan, the decisions for Haik's review and the open doc items. Power: start a new SYSTEM request at takeover
-  (pid 25748 runs until about 08:26).
+- 2026-11-04 02:41: since 02:03 (session `wakeshot-46`, after the handover from `wakeshot-9d`): done and committed:
+  `p6-hooks`, the `p6-pack-and-release` + `p6-winget-manifest` bundle, core round B (power findings 8, 9, 10),
+  `p5-sounds` (Part B in the locked session), the CLI restore test fix, Part A of `p5-notices` and `p5-menu-view`.
+  Pushed 8ff7fa5 at 02:30: CI green on all three jobs; the release dry run passes build, pack, install and uninstall,
+  and fails only the 3 hook checks until `p6-velopack-dependency`. Found: the session locks when the display turns off
+  (5 minutes on AC), so every screen Part B (`p5-tray-icon`, `p5-menu-view`, `p5-notices`, later `p6-int-tray-mode`)
+  needs Haik at the laptop to unlock it. Running: `p6-int-tray-mode` Part A, `p2-6-unread-journal`.
+- Next (orchestrator): when both end, `p6-velopack-dependency` alone on the whole laptop, without clang (ARM64 tray:
+  CI only until Haik installs it; `06-ship.md` 02:30); then `p6-int-update-wiring`; docs pass round 3 (list in the
+  continuation prompt of `wakeshot-9d`, plus `architecture.md` sections 5 and 6 on the hooks). Power: the SYSTEM
+  request of session `wakeshot-46` (pid 28000, 540 minutes from 02:03).
