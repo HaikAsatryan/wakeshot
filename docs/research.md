@@ -1532,3 +1532,77 @@ Checked 2026-11-03 for card `docs/tasks/p2-policy-power.md`.
   battery period lasted 86 s or more. So the 5 s settle in `policy::lid` (product, "Never lower security") does not
   cover the drops seen. Not verified: whether Wakeshot's `GUID_ACDC_POWER_SOURCE` callbacks come at the same times
   as these events, and what caused the drops.
+
+## Journal seam checks
+
+Checked 2026-11-03 for card `docs/tasks/p3-journal.md`, by the tests in `power::journal::tests` (Windows 11 Pro
+10.0.26300, NTFS, files in `%TEMP%`, test keys under `HKCU\Software\Wakeshot-test`, test runner elevated, High),
+unless a line names another source.
+
+- **A folder in place of `journal.json` is a failed read, not a missing file.** `store::read_whole` on it failed in
+  `CreateFileW` with 5 (`ERROR_ACCESS_DENIED`), so `FileNet::load_journal` gives `Failed` and the restore routine
+  fails the run rather than taking the journal as gone (`load_tells_missing_corrupt_failed`, printed). A folder open
+  needs `FILE_FLAG_BACKUP_SEMANTICS`, which `read_whole` does not pass; that this 5 is the same under a Medium token:
+  not tested.
+- **`std::fs::rename` replaces a target a reader has open.** `journal.json` renamed over an older
+  `journal.json.corrupt` that another handle held open with read, write and delete sharing: `Ok`, and the target then
+  held the new bytes (`set_aside_keeps_bytes`). This matches the std source read for `p3-store` ("Store checks":
+  `MoveFileExW`, then on 5 a rename by handle with POSIX semantics). A rename with no source gave 2
+  (`ERROR_FILE_NOT_FOUND`).
+- **The journal mutex excludes a second caller of the entry point.** A first `restore_locked` (inner form with the
+  wait as an argument) held `Local\Wakeshot.Test...Journal` inside the routine; a second caller on another thread with
+  a 100 ms wait gave up after 112 ms with `WaitForSingleObject` 258 and ran no step of the routine; once the first
+  finished, a third caller with a 0 ms wait took it (`lock_excludes_second_caller`).
+- **An abandoned journal mutex is taken through the entry point.** A thread took the test mutex and ended without a
+  release; the next `restore_locked` got it (`WAIT_ABANDONED`), ran the routine and logged the abandon; the run after
+  that took it plainly (`lock_abandoned_counts_as_taken`). The same Windows behavior through `store` alone is in
+  "Store checks".
+- **Not tested: an elevated and a Medium process on one `Local\` mutex.** Every test here ran High. A mutex created
+  by an elevated process (a `wakeshot restore` from an admin terminal) may refuse a Medium tray's open while that
+  process holds a handle; the tray's apply then fails at its safety net step for that one try. Belongs to
+  `p3-real-checks`.
+
+## Power plan checks
+
+Checked 2026-11-03 for card `docs/tasks/p3-power-plan.md`. The real run was 20:27:02 to 20:27:06, on AC with the
+dock, from an elevated (High) agent shell, with `cargo test --locked -p wakeshot-windows -- --ignored
+--test-threads=1 --nocapture power::plan::` (four `real_` tests in `crates/wakeshot-windows/src/power/plan.rs`).
+
+- **A write to an inactive plan copy changes only that copy** (architecture section 9, the first Phase 3 test).
+  `real_write_to_inactive_copy_changes_only_the_copy`: a `PowerDuplicateScheme` copy of the active Balanced plan,
+  named "Wakeshot test <pid>", never made active. `PowerWriteACValueIndex` lid 1 to 0, `PowerWriteDCValueIndex` lid
+  1 to 0 and sleep after 600 to 0, each on the copy, each returned 0. Our read and `powercfg /qh <copy>` showed each
+  new value on the copy. Balanced stayed active (`PowerGetActiveScheme`) and its five values (lid AC 1, DC 1, sleep
+  AC 10800, DC 600, energy saver DC 30) were the same before and after, by our read and by `powercfg /qh` in the
+  test and from a shell after it. This covers stored values. That such a write leaves the values in force alone
+  follows from "Stored at once, applied only on `PowerSetActiveScheme`" above; not measured here. Still not tested:
+  that activating a plan later applies its stored values (the second point under architecture "Plan switch").
+- **The plan list ends with 259 here.** `PowerEnumerate` with `ACCESS_SCHEME` and a 16-byte buffer: index 0 gave
+  Balanced, index 1 returned 259 (`ERROR_NO_MORE_ITEMS`); with a copy present the list had two plans and ended at
+  index 2; after the copy's delete, one plan again. Each successful call left the size at 16. Microsoft's page
+  (updated 2024-02-22, read 2026-11-03) says what `BufferSize` holds only for `ERROR_MORE_DATA`, not after success.
+- **`PowerSettingAccessCheckEx` with `KEY_WRITE`** returned 0 for lid AC, lid DC (setting
+  `5ca83367-...`) and sleep after DC (`29f6c1db-...`). Elevated only; the Medium result for the same keys is in
+  "Power settings spike" above.
+- **A copy's delete leaves nothing.** Each of the three copies (`50df20c5-...`, `15920ad3-...`, `09f0c480-...`) was
+  gone from `PowerEnumerate` right after `PowerDeleteScheme`, gone from `powercfg /list`, and its key under
+  `HKLM\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes` did not exist (`Test-Path`).
+- **Memory the calls return.** Microsoft Learn: `PowerGetActiveScheme` (updated 2025-07-01) "Use the LocalFree
+  function to free this memory"; `PowerDuplicateScheme` (updated 2025-11-25) "If the pointer contains NULL, the
+  function allocates memory for a new GUID ... The caller can free this memory using LocalFree", and lists 183
+  `ERROR_ALREADY_EXISTS` when the destination names an existing plan; `PowerDeleteScheme` (updated 2024-02-22) names
+  no code for the active plan (the spike saw 50, "Plan copy" above). All read 2026-11-03.
+- **GUID names in the `windows` crate 0.62.2** (`Win32::System::SystemServices`, read in the local registry source):
+  the lid action is `GUID_LIDCLOSE_ACTION` (`5ca83367-...`), sleep after is `GUID_STANDBY_TIMEOUT`, their subgroups
+  `GUID_SYSTEM_BUTTON_SUBGROUP` and `GUID_SLEEP_SUBGROUP`, the energy saver threshold
+  `GUID_ENERGY_SAVER_BATTERY_THRESHOLD` in `GUID_ENERGY_SAVER_SUBGROUP`. Each equals the spike's literal
+  (`setting_guids_match_the_spike`).
+- **`powercfg /q` with the aliases LIDACTION and ESBATTTHRESHOLD prints no value here** (only the plan line);
+  `powercfg /qh` with the subgroup and setting GUIDs prints both indexes. Why: not checked (likely hidden settings,
+  not verified).
+- **`cargo clippy -p wakeshot-windows -- -D warnings` also fails on warnings in `wakeshot-core`.** At 20:26 another
+  card's `wakeshot-core/src/state.rs` had unfulfilled `#[expect(dead_code)]` attributes: `cargo test -p
+  wakeshot-windows` printed them as warnings and passed, while the clippy run stopped with "could not compile
+  `wakeshot-core` (lib) due to 25 previous errors". So `-D warnings` reaches every workspace crate the build lints,
+  not only the `-p` package (cargo's clippy wrapper is a workspace wrapper; that reason is from memory, not
+  verified in the cargo docs). A card's own clippy check can therefore fail on a half-done file in another crate.
