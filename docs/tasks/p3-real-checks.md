@@ -65,6 +65,9 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03 17:00: card written by `p3-plan-windows-power`.
+- 2026-11-03 20:27, orchestrator, from `p3-journal`'s "Found outside scope" item 3: add a check that a Medium tray
+  can open the journal lock while an elevated process (for example `wakeshot restore` from an admin terminal) holds
+  it, and the reverse. Not tested by `p3-journal`.
 
 ## Result
 

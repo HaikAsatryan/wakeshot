@@ -24,7 +24,7 @@ down in order, so `wakeshot-tray.exe` and `wakeshot-tray.exe --dry-run` run the 
   `NotifyIconSettings` clean-up).
 - The Results of `p6-int-io-thread`, `p6-int-window`, `p6-int-dispatch`, `p6-int-startup`, `p3-requests`,
   `p3-session` (`Locker`, `register`), `p3-system-events` (`Subscriptions`), `p3-hibernate` (`run_hibernate`,
-  `HibernateDeps`), `p3-recovery` (`TrayGuard`, `NoGuard`), `p3-power-io`, `p3-power-plan`, `p4-watch-thread`
+  `HibernateDeps`), `p3-recovery` (`TrayGuard`), `p3-journal` (`FileNet`, `NoGuard`), `p3-power-io`, `p3-power-plan`, `p4-watch-thread`
   (`WatchThread::start`), the three source cards and `p4-cron` (`SystemZone`), `p5-tray-icon` (`TrayIcon`,
   `IconKind`), `p5-menu-view`, `p5-notices` (`BalloonNotifier`, `take_click`), `p5-sounds` (`WasapiPlayer`),
   `p4-cli-commands` (`shell`).

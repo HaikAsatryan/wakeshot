@@ -124,11 +124,11 @@ laptop" cards run one at a time across all tracks.
 | `p3-store` | no | no (temp folders, a test registry key) | contracts card | done (19:15): 15 tests, five runs; `HeldMutex` not `Send` |
 | `p3-log` | no | no | contracts card | done (19:10): no line mix over 7 runs; roll fails only while another app holds a log file (open item) |
 | `p3-process` | no | no (child processes it starts and ends by its own handles) | contracts card | done (19:13): 22 tests; Explorer as parent works from High and Medium |
-| `p3-power-plan` | no | yes: a plan copy, never active; reads Haik's plan | contracts card | running (20:06; holds the laptop lane) |
-| `p3-requests` | no | no (a power request held under 1 s) | contracts card | ready |
-| `p3-system-events` | no | no (notifications only) | contracts card | ready |
-| `p3-session` | no | no (the lock test is ignored here) | contracts card | ready |
-| `p3-journal` | no | no | `p3-store`, `p3-log` | running (20:04) |
+| `p3-power-plan` | no | yes: a plan copy, never active; reads Haik's plan | contracts card | done (20:28): 13 tests; Haik's values same before and after; a write to an inactive copy changes only that copy |
+| `p3-requests` | no | no (a power request held under 1 s) | contracts card | running (20:29, bundle with `p3-session`) |
+| `p3-system-events` | no | no (notifications only) | contracts card | running (20:26) |
+| `p3-session` | no | no (the lock test is ignored here) | contracts card | running (20:29, bundle with `p3-requests`) |
+| `p3-journal` | no | no | `p3-store`, `p3-log` | done (20:26): 16 tests |
 | `p3-hibernate` | no | no (never calls `SetSuspendState`) | `p3-system-events` | ready |
 | `p3-power-io` | no | no | `p3-journal`, `p3-power-plan`, core `p2-ownership-apply` | ready |
 | `p3-recovery` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09) | no | `p3-journal`, `p3-process`, `p3-log`, `p3-power-plan` (verify review Minor 3), core `p2-ownership-restore` | ready |
@@ -181,3 +181,7 @@ Critical path: store, journal, (core ownership cards), power-io, harness, real-c
 - 2026-11-03: Haik signed off with every default (18:09); `p1-close-contracts` wrote the answers into this file and
   the cards, and added `p3-power-plan` to `p3-recovery`'s Runs after (verify review Minor 3).
 - 2026-11-03 20:06: `p3-journal` (20:04) and `p3-power-plan` (20:06, the laptop lane) running, beside core cards.
+- 2026-11-03 20:30: `p3-journal` and `p3-power-plan` done and committed. `p3-system-events` (20:26) and the
+  `p3-requests` + `p3-session` bundle (20:29) running. Laptop lane free. Note for track note 2:
+  `cargo clippy -p wakeshot-windows -- -D warnings` also fails on warnings inside `wakeshot-core` while a core card
+  is mid-edit (`p3-power-plan`, 20:26): wait and retry, as for any other card's file.
