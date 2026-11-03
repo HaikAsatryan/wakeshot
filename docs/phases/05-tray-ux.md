@@ -284,9 +284,9 @@ Bundle (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p5-th
   Windows' warning icon; Windows' quiet-time flag is not set (with it a new user's first hour drops notices); a notice
   that comes during another balloon still shows, later; a click on an older banner may open the newer notice's action
   (Part B's `--pair` run settles it). `p5-menu-view` Part A started 02:05.
-- 2026-11-04 02:21 (orchestrator, session `wakeshot-46`): `p5-tray-icon` Part B ran in a locked session: the session
-  locked at 02:12:59, 301 s after Haik's last input (on AC the display turns off at 300 s, and `DelayLockInterval` 0
-  locks the session with it). No agent can unlock it. Passed without the screen: the demo starts at Medium and adds
+- 2026-11-04 02:20 (orchestrator, session `wakeshot-46`): `p5-tray-icon` Part B ran in a locked session: the session
+  locked at 02:00:38 (seen at 02:12:59), 301 s after Haik's last input at 01:55:37 (on AC the display turns off
+  at 300 s, and `DelayLockInterval` 0 locks the session with it). No agent can unlock it. Passed without the screen: the demo starts at Medium and adds
   its icon, a posted `TaskbarCreated` re-adds it, `taskkill /PID` without `/F` removes it, both leftovers removed and
   checked. Not run: pictures, the light/dark switch (mode never switched; reads 02:14 and 02:18 both Dark), tooltip,
   clicks, keyboard. The taskbar is on the DELL screen at 150% (24 px icon), so `--pattern` is checked at 150%, not
