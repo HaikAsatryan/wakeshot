@@ -1,6 +1,6 @@
 # Docs pass for Phases 2 to 6: make the docs match the built code
 
-Phase: 6. Status: done (rounds 1 and 2). Needs Haik: no.
+Phase: 6. Status: done (rounds 1, 2 and 3). Needs Haik: no.
 Runs after: the Phase 2 to 6 track cards named below. Parallel with: `p6-int-window`, `p6-int-startup`, `p5-text`,
 the power fix round (core), the Claude parsing review.
 
@@ -276,3 +276,114 @@ Phase file items for the orchestrator: `03-windows-power.md` line 219 (Found out
 can say the answer is recorded.
 
 Open items: `CLAUDE.md` sleep values (Haik's yes); Found outside scope 1 to 5.
+
+## Round 3 (2026-11-04)
+
+Status: done.
+
+Items (from the orchestrator):
+
+1. `docs/architecture.md`: the lines `p3-real-checks` Found outside scope 3 lists as stale (the two "No apply"
+   points, the side effects of many `PowerSetActiveScheme` calls): tested on the laptop, as that card's Result says.
+2. Section 6 uninstall order as built in `hooks.rs` (`p6-hooks` Result); section 5 still says the hooks are not built.
+3. `sim.rs` `plan` doc comment: describe the test values as they are, not as Haik's.
+4. `claude-code-signals.md` rule 2: cite the `research.md` section by heading, not `research.md:82-130`.
+5. `command.rs` `Outcome::Update` doc and `core/update.rs`: "the next `UpdateReady` tries again" is wrong
+   (`p6-update-schedule` Result).
+6. Docs pass items in the Results of the cards finished since round 2.
+
+### Log
+
+- 2026-11-04 02:52: round 3 started, Status in progress.
+- 2026-11-04 02:55: item 1 done: section 5 "Plan switch" (both "No apply" points tested) and the many-calls bullet
+  (50 cycles: brightness unchanged, no error or warning, one event 12 per call; flicker, callbacks and AC not
+  verified); section 9 names `real_write_to_inactive_copy_changes_only_the_copy` (`power/plan.rs` line 1235);
+  section 4 gets the `Global\` create at Medium and the journal lock across High and Medium (all from research "Power
+  track real checks"). Item 2 done from `hooks.rs` (`on_install`, `on_updated`, `on_uninstall`, `restore`, limits):
+  section 6 hook paragraph rewritten in the built order; section 5 step 7 says `hooks.rs` is built and `velo.rs` does
+  not call it yet (`velo.rs` is still a stub); section 4 restore row no longer names the hooks as a starter of
+  `--restore`; section 8 "Restore fails" row names every hook's limit. Item 3 done (`sim.rs` `plan` doc). Item 4 done
+  (rule 2 cites the `research.md` heading "Reading elevated Claude Code sessions from an unelevated process", where
+  the Medium reader check is). Item 5 done from `update.rs` `run` (`posted`) and `apply`, and `event.rs` line 50.
+- 2026-11-04 02:57: item 6, the ten cards' Results and "Found outside scope" read. Fixed in `architecture.md`:
+  section 4 "Tray startup" step 6 names the unread journal (`p2-6-unread-journal` Found outside scope 4, checked in
+  `app/startup.rs` `JOURNAL_RETRY_MS` and `power/executor.rs` `Startup::unread`); section 10 gets the release
+  workflow (`p6-pack-and-release` Result, checked in `release.yml`); section 2 `SoundPlayer` gets the built device
+  rule with no default device, the chimes made in code and the "No sounds" skip (`p5-sounds` Result, checked in
+  `sound/device.rs` `pick`). Already done by others: `command.rs` `WriteConfig` line and section 6 "never written
+  over" (`p2-core-settings` round B, Needs another card 1). Nothing for these files in `p6-winget-manifest`,
+  `p5-notices`, `p5-menu-view`, `p5-tray-icon`, `p4-cli-restore` CI fix. Three paragraphs in sections 2, 6 and 7 that
+  my edits or older edits left over 120 characters rewrapped (a scratch script, words unchanged).
+- 2026-11-04 02:58: checks run (Result); build folder deleted. Status done.
+
+### Found outside scope
+
+1. Test fixtures in other files still call their plan values "Haik's values", some citing `CLAUDE.md` "Test laptop":
+   `fn haiks` or such comments in `wakeshot-windows` `hooks.rs` (10800, 14400, 20), `app/startup.rs`,
+   `app/io_thread.rs`, `power/executor.rs`, `power/plan.rs`, `recovery.rs`, `app/dispatch.rs`,
+   `examples/power_check.rs`; `wakeshot-cli` `restore.rs`; `wakeshot-core` `ownership/apply.rs`, `check.rs`,
+   `fake.rs`, `restore.rs`, `scenarios/lid.rs`, `policy/lid.rs`. Which of them hold old numbers: not checked one by
+   one. A code card can rename them the way item 3 did.
+2. `docs/architecture.md` lines 387 and 406 (section 3, the AC drop and floor lines) are over 120 characters; left,
+   since round 1 kept those section 3 lines for their owner. `docs/research/claude-code-signals.md` has six lines over
+   120 characters (78, 331, 393, 487, 491, 496); left, older text of other cards.
+3. Round 1 Found outside scope 4 (`claude-code-signals.md` rule 5 lacks the resume and reminder texts) is still open;
+   not on this round's list.
+
+### Result
+
+Done 2026-11-04 02:58. Every item was checked in the code or the source card's Result first.
+
+| # | Outcome |
+|---|---|
+| 1 | Done: section 5 "Plan switch" (both "No apply" points tested) and the many-calls bullet (50 cycles; flicker, other apps' callbacks and AC not verified); section 9's inactive plan line names the real test; section 4 gets the `Global\` create at Medium and the journal lock across High and Medium (tested with probe names, not the Rust exes) |
+| 2 | Done: section 6 hook paragraph in the built order (registry first, restore, then the uninstall's data folder step; tries every 2 s up to 25 s or 10 s; which answers end the tries); section 5 step 7: `hooks.rs` built and tested with fakes, `velo.rs` does not call it yet; section 8 "Restore fails" row; section 4 restore row no longer names the hooks |
+| 3 | Done: `sim.rs` `plan` doc describes test values, not Haik's; no value changed |
+| 4 | Done: rule 2 cites `research.md` "Reading elevated Claude Code sessions from an unelevated process" |
+| 5 | Done: `command.rs` `Outcome` doc and `core/update.rs` `done_update` doc: after `Update(Err)` the core waits for the next `UpdateReady`, which comes once per version per run, so the failed version waits for a newer one or a tray restart |
+| 6 | Done for these files: section 4 step 6 unread journal, section 10 releases, section 2 sound rule; `WriteConfig` lines already in. Rest listed below |
+
+Files changed: `docs/architecture.md` (sections 2, 4, 5, 6, 7 rewrap only, 8, 9, 10),
+`docs/research/claude-code-signals.md` (rule 2 cite), `crates/wakeshot-core/src/sim.rs`, `command.rs`,
+`core/update.rs` (doc comments only), this card.
+
+Checks:
+
+1. Each item changed, with the code read first (table, Log).
+2. `cargo fmt --all --check`: exit 0, no diff. `rustfmt --check --edition 2024` on `sim.rs`, `command.rs`,
+   `core/update.rs`: exit 0.
+3. `cargo clippy --locked -p wakeshot-core --all-targets --target x86_64-pc-windows-msvc -- -D warnings`: exit 0
+   (own build folder, deleted after).
+4. Every changed file: no CR byte, no em dash, en dash or emoji; no line of mine over 120 characters outside tables
+   (scratch script).
+5. Not touched: phase files, `docs/plan.md`, other cards' files, `research.md`, any code outside the three doc
+   comments. No git.
+
+Decided by the worker, for Haik's review:
+
+1. Section 4's process table no longer lists the Velopack hooks as starters of `--restore`: `hooks.rs` calls
+   `restore_locked` in the hook's own process. Change it when a hook starts restore mode instead.
+2. Item 6 fixes went beyond lines a card named (section 10 releases, section 2 sound rule), under the audit rule: stale
+   docs found in a docs pass are fixed in the same pass. Change it when the orchestrator wants such lines listed only.
+
+For the orchestrator (phase files and `docs/plan.md`, not edited):
+
+1. `docs/phases/03-windows-power.md` line 219: the architecture lines it names (652, 656 and 1017) are now fixed by
+   item 1; they hold no sleep values (round 2 Found outside scope 2), so the line can close.
+2. `docs/phases/06-ship.md` "Not in this track": could point at `packaging/winget/README.md` for the Phase 8 steps
+   (`p6-winget-manifest` Result). The "Hooks" 10 s, the "Release" pre-release and winget rules and the `05-tray-ux.md`
+   track note 5 fixes are already in.
+
+For code cards (not done):
+
+1. `velo.rs` (`p6-velopack-dependency`): the four hook callbacks (`p6-hooks` "Needs another card"), `GithubSource`
+   with `prerelease: false` (`p6-pack-and-release`). Optional: `log.rs` `LOG_FILE` public; a `restore_locked` form
+   with the caller's lock wait (`p6-hooks`).
+2. `tray/icon.rs`: one shared `taskbar_dpi` (`p5-notices` Found outside scope 2).
+3. `core/lid.rs`: treat an unread journal as "may be ours" before the first read (`p2-6-unread-journal` Found
+   outside scope 3); its item 5 (retry with an empty copy at the 30 s tick) was left as it is by that card.
+4. `wakeshot-cli/src/run.rs` `held_while_running`: child lifetime on a slow runner (`p4-cli-restore` CI fix, not seen
+   failing).
+5. Test fixture names, Found outside scope 1.
+
+Open items: Found outside scope 1 to 3; the lists above.

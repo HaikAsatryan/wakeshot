@@ -76,8 +76,8 @@ pub const OTHER_PLAN: Guid = Guid(0x8c5e7fda_e8bf_4a96_9a85_a6e23a8c635c);
 /// The three keys an apply writes, in the order the core sends them.
 pub const KEYS: [SettingKey; 3] = [SettingKey::LidAc, SettingKey::LidDc, SettingKey::SleepDc];
 
-/// A plan read of `active` holding Haik's own values: lid Sleep on AC and battery, sleep after 3 h on AC and 10 min
-/// on battery, energy saver at 20 %.
+/// A plan read of `active` holding the test's user values: lid Sleep on AC and battery, sleep after 3 h on AC and
+/// 10 min on battery, energy saver at 20 %. Test values only, not read from any laptop.
 pub fn plan(active: Guid) -> PlanValues {
     PlanValues {
         active,

@@ -1,4 +1,4 @@
-# Wiring fixes: a lost first-run notice, a stuck hibernate flag, zone errors, one log file name
+# Wiring fixes: a lost first-run notice, a stuck hibernate flag, zone errors, one log file name, the unread lid guess
 
 Phase: 6. Status: ready. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 70K tokens. Written by the orchestrator
 (session `wakeshot-46`, 2026-11-04) from `p6-int-tray-mode` "Found outside scope" items 1 to 3 and its "Needs another
@@ -32,6 +32,10 @@ Close four small gaps the tray wiring found, each with the leanest fix and a tes
    per new error, not per read) without a contract change if you can; if not, describe the change and stop.
 4. `log::log_file(logs_dir) -> PathBuf` in `log.rs`, used by `io_thread.rs`, `hooks.rs` and `tray_mode.rs` instead of
    their own copies of "wakeshot.log". Remove the copies and `hooks.rs`'s agreement test if it becomes moot.
+
+5. Added after docs pass round 3: `core/lid.rs` treats an unread startup journal as "may be ours" until the first
+   read lands, so a lid close in the first seconds after a start with an unread journal still gets the lid lock
+   rules (`p2-6-unread-journal` "Found outside scope" 3). Test in the core scenarios.
 
 ## Acceptance checks
 

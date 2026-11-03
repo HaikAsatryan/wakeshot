@@ -53,7 +53,8 @@ impl Core {
     }
 
     /// `Update(Ok)`: the updater waits for this process to exit, so the tray quits as at the menu's Quit, which also
-    /// covers a hold that started since. `Err`: the next `UpdateReady` tries again.
+    /// covers a hold that started since. `Err`: wait for the next `UpdateReady`, which comes only for a newer version
+    /// in this run (at most one per version), so the failed one is tried again only after the tray starts again.
     pub(super) fn done_update(&mut self, result: Result<(), Failure>, out: &mut Vec<Command>) {
         self.state.updating = false;
         match result {

@@ -228,3 +228,6 @@ Critical path: store, journal, (core ownership cards), power-io, harness, real-c
   01:39: AC and DC 18000; the orchestrator made that edit after Haik's direct message, with the values read on the
   laptop). The earlier "architecture.md 652, 656 and 1017" note was wrong: those lines hold no sleep values; they are
   "not tested" lines that `p3-real-checks` has now tested (next docs pass). Also stale: the old values in `sim.rs:79`.
+- 2026-11-04 03:00 (orchestrator, session `wakeshot-46`): docs pass round 3 closed the stale `architecture.md` lines
+  of the 01:11 and 01:22 entries (sleep values and dock; now tested by `p3-real-checks`); `CLAUDE.md` already had
+  Haik's values (01:39). `p3-haik-checks` still waits for Haik.

@@ -172,8 +172,9 @@ pub enum SoundEnd {
 /// Owner: whoever runs the command (see `Command`). In `Applied` and `Restored`, `journal` is every entry left after
 /// the command, so the core's mirror is a copy of it, never its own guess. A failed `Restored` kept the journal; the
 /// core retries on the tick while a restore is still wanted. `Update(Ok)`: Velopack's updater now waits (at most
-/// 60 s) for this process to exit, so the core issues `Quit`; `Update(Err)`: nothing changed, the next `UpdateReady`
-/// tries again.
+/// 60 s) for this process to exit, so the core issues `Quit`; `Update(Err)`: nothing changed, and the core waits for
+/// the next `UpdateReady`. That comes at most once per version per run, so the failed version is not tried again
+/// until a newer one is found or the tray starts again.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Outcome {
     Requests(Result<(), Failure>),

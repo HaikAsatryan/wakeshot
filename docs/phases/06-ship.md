@@ -133,7 +133,8 @@ its own package and files:
 
 ### Not in this track
 
-- The winget submission, the first public release and the repo cleanup: Phase 8. scoop: later (an own bucket; its
+- The winget submission (steps in `packaging/winget/README.md`), the first public release and the repo cleanup:
+  Phase 8. scoop: later (an own bucket; its
   uninstall runs no Velopack hook, so it needs a `pre_uninstall` restore). Microsoft Store: Phase 8, if adding it and
   signing are free and the submission is automated (`product.md`; facts from `p6-launch-research`, card `p8-store`).
 - Integration: start the update thread in tray mode and run `ApplyUpdate` and `Quit` in the loop; the update path end

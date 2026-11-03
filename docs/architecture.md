@@ -164,10 +164,12 @@ later pick needs a XAML flyout, its thread and runtime stay inside the `MenuView
 `SoundPlayer`, picked by `p1-lid-sound` (research, "Lid-close sound"): Wakeshot's own short chimes, built into the exe,
 played through WASAPI shared mode on a thread of their own. Device rule for every Wakeshot sound: the default render
 device, unless its form factor is display audio (HDMI or DisplayPort, `DigitalAudioDisplayDevice`); then the active
-endpoint with form factor Speakers, or the default if there is none. Headphones and headsets stay as they are.
-`PlaySound` with `SND_SYSTEM` is not used: it plays on the default device, which in Phase 0 run D was a screen with no
-speakers. A sound starts about 0.3 to 0.8 s after the call here (stream start-up); nothing waits for it. Which moments
-get a sound: `product.md` (Phase 5 builds them).
+endpoint with form factor Speakers, or the default if there is none. Headphones and headsets stay as they are. With no
+default device: the first active Speakers endpoint, else the first active one (`sound/device.rs` `pick`). The three
+chimes are made in code (`sound/chime.rs`); the sound scheme "No sounds" (`.None`) skips the sound, which ends as
+`SoundEnd::Skipped` (research "Tray UX: chimes"). `PlaySound` with `SND_SYSTEM` is not used: it plays on the default
+device, which in Phase 0 run D was a screen with no speakers. A sound starts about 0.3 to 0.8 s after the call here
+(stream start-up); nothing waits for it. Which moments get a sound: `product.md` (Phase 5 builds them).
 
 ### Ported from the spikes
 
@@ -510,20 +512,23 @@ Every decision in `product.md`, by section. Phase numbers are from `plan.md`.
 |---|---|---|---|
 | Tray: `wakeshot-tray.exe` | Run value at sign-in; Start menu; restore mode or guard after a failed restore | the user session | everything |
 | Guard: `wakeshot-tray.exe --guard <pid> <start> <stop event>` | the tray, before its first settings write, outside the tray's process tree (section 5) | while settings are overridden; the tray starts a new one if it ends | wait on the tray; restore if it dies |
-| Restore: `wakeshot-tray.exe --restore` | RunOnce at the next sign-in; Velopack hooks | seconds; up to 2 minutes when the restore fails | restore if a journal exists and its owner is dead |
+| Restore: `wakeshot-tray.exe --restore` | RunOnce at the next sign-in (the Velopack hooks run the restore routine in their own process, section 6) | seconds; up to 2 minutes when the restore fails | restore if a journal exists and its owner is dead |
 | CLI: `wakeshot.exe` | the user | one command | run, Keep awake, Automatic, status, restore, open log |
 
 - One tray per session: mutex `Local\Wakeshot.Tray`. One settings owner per machine, because power plans are
   machine-wide: mutex `Global\Wakeshot.Settings`. A tray that cannot take it (another session owns it, or the open is
   denied) holds requests only and tries again on each safety tick; when it gets it, `SettingsOwner` lets the core apply
-  as at a hold start. Creating a `Global\` mutex needs no special privilege (Microsoft, "Kernel object namespaces"); a
-  denied open across users: not tested (Phase 3). The owner also applies only while its session is on the console;
+  as at a hold start. Creating a `Global\` mutex needs no special privilege (Microsoft, "Kernel object namespaces"; a
+  Medium process created one, tested, research "Power track real checks"); a denied open across users: not tested
+  (no second account). The owner also applies only while its session is on the console;
   under fast user switching it restores and holds requests only (episode flow). Two users on one PC: v1 assumes one
   signed-in user at a time (Phase 1 Question 10: the default, Haik 2026-11-03 18:09).
 - Every apply and every restore, in any process, runs under mutex `Local\Wakeshot.Journal`, so two processes never
   change the journal or the plan at the same time (tray and RunOnce restore at sign-in, the CLI, the hooks). A wait
   that returns `WAIT_ABANDONED` (a process ended while holding it) counts as taken: Microsoft grants ownership to the
-  caller then, and the journal is whole because every write of it is atomic.
+  caller then, and the journal is whole because every write of it is atomic. A Medium process and an elevated one
+  (an admin `wakeshot restore`) open and wait on each other's lock, both ways: tested with the same call on probe
+  names, not with the Rust exes (research "Power track real checks").
 
 How they talk: files only. No pipes, no sockets.
 
@@ -573,8 +578,10 @@ How they talk: files only. No pipes, no sockets.
    it would run beside the IO thread, which may be mid-apply. The guard restores when the tray dies; the next start
    covers the rest.
 6. Restore if a journal exists and its owner (pid and start time) is Gone (section 5, "Liveness"). Unknown: retry on
-   each tick. A tray that writes the journal makes itself the owner and keeps the entries already in it (section 5,
-   Apply step 3).
+   each tick. A journal that does not read (a read error, not a parse error) is read once more after 500 ms; still
+   unread, `Started` carries `journal_unread`, and the core retries it on each tick as a leftover restore
+   (`app/startup.rs`, `p2-6-unread-journal`). A tray that writes the journal makes itself the owner and keeps the
+   entries already in it (section 5, Apply step 3).
 7. Try `Global\Wakeshot.Settings`.
 8. Window, icon (retry until the taskbar exists; re-add on `TaskbarCreated`, tested), notifications, watchers, first
    reads, then `Started`, then `Session(Locked)` when the session was locked at start, then `JournalCorrupt` when a
@@ -684,12 +691,13 @@ between them) is overwritten by `original` (research, "The restore routine overw
   more, so on each safety tick (docked use and the Keep screen on lock need the user's values). No registry watch: its
   key path is not a documented API.
 - Plan switch (`GUID_ACTIVE_POWERSCHEME`, 4 ms, tested, or a read with a new active id): restore the old plan's keys
-  (an inactive plan needs no apply), then apply to the new plan. "No apply" rests on two points not tested: that a
-  write to an inactive plan changes only that plan (section 9), and that activating the plan later applies its stored
-  values (inferred from research, "Stored at once, applied only on `PowerSetActiveScheme`").
+  (an inactive plan needs no apply), then apply to the new plan. "No apply" rests on two points, both tested on the
+  laptop (research "Power track real checks"): a write to an inactive plan changes only that plan (section 9), and
+  activating the plan later applies its stored values.
 - Apply and restore run at every hold start and end, which is each agent turn, each with a `PowerSetActiveScheme`.
-  Side effects of that many calls (other apps' setting callbacks, brightness on some devices): not known either way.
-  Phase 3 runs about 50 cycles (checklist 15).
+  Side effects of that many calls, from 50 cycles on the laptop (checklist 15, research "Power track real checks"):
+  brightness unchanged, no error or warning in the System and Application logs, one System log event 12 per call. Not
+  verified: a visible flicker and other apps' setting callbacks; the cycles ran on battery only.
 
 Restore routine (`ownership::restore`, always called through `power::journal::restore_locked`), the same in the tray,
 guard, restore mode, Velopack hooks and the CLI, always under `Local\Wakeshot.Journal`:
@@ -732,8 +740,10 @@ guard, restore mode, Velopack hooks and the CLI, always under `Local\Wakeshot.Jo
    Velopack hooks must not show UI (`research/distribution.md`): they retry within an inner limit, log a failure and
    keep the journal. Velopack kills a hook that runs past its own limit; measured: install 30 s, updated 15 s,
    uninstall 60 s, where the Velopack docs say 30 s (research "Velopack checks for Wakeshot", point 6). The inner
-   limits (`p6-velopack-facts`; the hooks are not built yet): 25 s for install and uninstall, 10 s for updated, since
-   the updated hook always runs a just-extracted exe, which took up to 1.7 s to start.
+   limits (`hooks.rs`, from `p6-velopack-facts`): 25 s for install and uninstall, 10 s for updated, since the updated
+   hook always runs a just-extracted exe, which took up to 1.7 s to start. Each limit counts from the hook's start, so
+   the registry steps' time comes out of it; a failed run is tried again every 2 s while another try fits, and one try
+   always runs (section 6). `hooks.rs` is built and tested with fakes; `velo.rs` does not call it yet.
 
 Liveness, one mapping for hold files, the journal owner, the guard's tray and agent sessions: open the process with
 exactly `SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION` and compare its creation time. On `0x80070057` (no such
@@ -854,14 +864,14 @@ over an install deletes with no hook (research, "Distribution"). The pack id can
 Velopack accepts the dot: pack, install, updates, Setup.exe over an install and uninstall all worked with it (tested,
 research "Velopack checks for Wakeshot", point 1).
 
-Every file is UTF-8 JSON with `"version": 1`. A reader takes its own version and older ones. A file with a newer
-version is ignored and logged, and never written over (the tray's menu then changes Automatic for this run only, and
-`wakeshot automatic` refuses with a message); the journal is the one exception (below). The reader reads `VersionProbe` first, so a
-newer file whose fields changed shape is still recognized as newer. Writes go to a temp file, flush, then
+Every file is UTF-8 JSON with `"version": 1`. A reader takes its own version and older ones. A file with a newer version
+is ignored and logged, and never written over (the tray's menu then changes Automatic for this run only, and `wakeshot
+automatic` refuses with a message); the journal is the one exception (below). The reader reads `VersionProbe` first, so
+a newer file whose fields changed shape is still recognized as newer. Writes go to a temp file, flush, then
 `MoveFileExW(REPLACE_EXISTING | WRITE_THROUGH)` (Nightcrew's way). That gives 5 while a reader has the target open, so
 `store::write_atomic` then renames by handle with POSIX semantics (`SetFileInformationByHandle(FileRenameInfoEx)`), as
-Rust's `std::fs::rename` does; that works while the reader shares delete (tested, research "Store checks"). What a
-power cut right after the move leaves: not tested.
+Rust's `std::fs::rename` does; that works while the reader shares delete (tested, research "Store checks"). What a power
+cut right after the move leaves: not tested.
 
 | File | Written by | Content |
 |---|---|---|
@@ -915,14 +925,20 @@ writes `Control Panel\NotifyIconSettings\<id>` for the icon and a `NotifyIconGen
 `store::AutoStart` is the one code that writes or removes the Run and RunOnce values (the hooks and the journal call
 it; review m12); `install` keeps only the Path entry.
 
-Velopack hooks (Phase 6): install and updated run the restore routine if a journal exists and its owner is dead, and
-add the CLI folder to the user Path. Uninstall restores, retrying for up to 25 s (its limit is 30 s in the Velopack
-docs, 60 s measured; section 5, restore step 7), then removes Run, RunOnce and the Path entry; it deletes
-`journal.json` only after a successful restore (a failure: section 5, "Gap left"). RunOnce goes even after a failed restore: the exe it names is being removed, so it could not run. Updates
-apply only when nothing holds and nothing is overridden. The `current` folder keeps its path across updates, though
-the folder itself is new each time, so Run, RunOnce and Path can point at it (tested, research "Velopack checks for
-Wakeshot", point 3). Accepted (ship Question 1, Haik 2026-11-03 18:09; the README
-says so): `winget upgrade` runs Setup.exe silent, which does not start the app, and a hook cannot start it
+Velopack hooks (Phase 6, `hooks.rs`): the registry steps come first and the restore last, so a restore that hangs until
+Velopack's kill never leaves a Run value or a Path entry that names a deleted folder. Install (also Setup.exe over an
+install) writes the Run value and adds the CLI folder to the user Path; updated adds only the Path entry, so a Run value
+the user removed stays removed. Both then run the restore routine if a journal exists and its owner is dead. Uninstall
+removes the Run value, the RunOnce value and the Path entry first (the exe they name is being removed, so RunOnce goes
+even when the restore then fails), then restores, then cleans the data folder: after a restore that worked or found no
+journal, `%LocalAppData%\Wakeshot` goes whole; otherwise `journal.json` and `logs\` stay (section 5, "Gap left"). A
+failed restore is tried again every 2 s until the hook's inner limit, counted from its start: 25 s for install and
+uninstall, 10 s for updated (section 5, restore step 7). An owner that is alive or Unknown, or a journal that does not
+parse or holds only a newer version's entries, ends the tries at once with one log line; the journal stays as it is. The
+obsolete hook only logs. Updates apply only when nothing holds and nothing is overridden. The `current` folder keeps its
+path across updates, though the folder itself is new each time, so Run, RunOnce and Path can point at it (tested,
+research "Velopack checks for Wakeshot", point 3). Accepted (ship Question 1, Haik 2026-11-03 18:09; the README says
+so): `winget upgrade` runs Setup.exe silent, which does not start the app, and a hook cannot start it
 (`research/distribution.md`), so after such an upgrade Wakeshot is off until the next sign-in or a manual start.
 
 ## 7. Sources
@@ -972,13 +988,13 @@ rulings:
   time: `CronCreate` jobs come back (a recurring one counts its next fire from the resume and is dropped at 7 days
   old; a one-shot whose time passed is dropped), while wakeups and background tasks from before it are dropped.
 
-Codex CLI and Copilot CLI (after v1, Haik 2026-11-03; their cards are `later` in Phase 4): the same trait. Liveness comes from `research/other-agent-signals.md` (Codex
-files hold no pid: "a `codex.exe` is alive and the thread lock file exists"). That Codex rule can outlive its session:
-a crash leaves the lock file until the next Codex start, and a shared `codex app-server` can live for days. Phase 4
-maps the lock file to the process that holds it open (for example Restart Manager `RmGetList`; not verified for this
-lock) and checks that pid and start time; until then the Codex rule is marked "can outlive its session". Each agent
-gets one live test (product). `wakeshot run` and hold files are not a source; the watch thread parses them into
-`Event::Holds`.
+Codex CLI and Copilot CLI (after v1, Haik 2026-11-03; their cards are `later` in Phase 4): the same trait. Liveness
+comes from `research/other-agent-signals.md` (Codex files hold no pid: "a `codex.exe` is alive and the thread lock file
+exists"). That Codex rule can outlive its session: a crash leaves the lock file until the next Codex start, and a shared
+`codex app-server` can live for days. Phase 4 maps the lock file to the process that holds it open (for example Restart
+Manager `RmGetList`; not verified for this lock) and checks that pid and start time; until then the Codex rule is marked
+"can outlive its session". Each agent gets one live test (product). `wakeshot run` and hold files are not a source; the
+watch thread parses them into `Event::Holds`.
 
 ## 8. Errors and logging
 
@@ -998,7 +1014,7 @@ fallback. The one exception is `watch::read` (the watch thread's file reads, std
 | Write, read-back or `PowerSetActiveScheme` fails in an apply | the restore routine on this plan's entries (they stay until it succeeds), requests only for the episode, notice |
 | Active plan read fails at the start of an apply | nothing written; requests only for the episode, notice |
 | Plan read fails | nothing released; log; retried at the next read |
-| Restore fails | journal kept; the tray retries at a tick, at most once per 10 s, while the restore is still wanted and warns once; restore mode and the guard retry for 2 minutes while the journal's owner is still the dead process, then start the tray; the uninstall hook retries for up to 25 s |
+| Restore fails | journal kept; the tray retries at a tick, at most once per 10 s, while the restore is still wanted and warns once; restore mode and the guard retry for 2 minutes while the journal's owner is still the dead process, then start the tray; the Velopack hooks retry every 2 s for up to 25 s (updated: 10 s) |
 | Journal corrupt | moved aside; warning notice; values left as they are until the user sets them by hand (section 5, "Gap left") |
 | Liveness Unknown | last state kept, retried on the next tick; no file deleted, no restore started |
 | Settings mutex held by another session | requests only; retried on each tick |
@@ -1053,9 +1069,9 @@ Windows layer (Phase 3), never on the user's real settings:
 - Power plan tests use a throwaway copy that is never made active (`PowerDuplicateScheme`, named "Wakeshot test
   <pid>" with the test process's pid, deleted at the end; a leftover whose pid is not running is deleted at the next
   run). The install end-to-end test names its copy "Wakeshot test e2e", which no sweep touches. Tests never call
-  `PowerSetActiveScheme`. That a write to an inactive plan changes only that plan is not tested yet (the spikes wrote
-  to a copy while it was active), so the first Phase 3 test reads the real plan before and after a write to the
-  inactive copy.
+  `PowerSetActiveScheme`. That a write to an inactive plan changes only that plan is tested:
+  `real_write_to_inactive_copy_changes_only_the_copy` (`power/plan.rs`) reads the real plan before and after a write
+  to the inactive copy, and the values in force stayed the same (research "Power track real checks").
 - Liveness with child processes the test starts; folder watch, atomic writes and file formats in a temp folder; the
   restore routine against the copy.
 - `--dry-run`: `DryRunPower` logs each request and write instead of making it; lock and hibernate are only logged; its
@@ -1109,7 +1125,12 @@ and after, and change nothing by hand during the test.
   `ubuntu-latest` job tests `wakeshot-core` alone, which proves it has no OS code, and fails if `cargo tree` for every
   target lists a `windows` crate under it. Read-only token. Actions from `actions/` by major tag; any other action
   pinned by commit SHA.
-- Velopack packing and releases: Phase 6.
+- Releases (Phase 6): `release.yml` on a `v*` tag, or by hand as a dry run (`workflow_dispatch`). It checks the tag
+  against `[workspace.package] version`; per CPU it tests, builds, checks the imports as `ci.yml` does, packs with
+  `vpk` 1.2.161 (`packaging/pack.ps1`) and runs `packaging/smoke-test.ps1` (silent install, checks, uninstall). One
+  upload job (`contents: write`) puts both CPUs in one GitHub release; a version with `-` is a pre-release. The
+  winget job runs only for a stable version and when the repository variable `WINGET_SUBMIT` is `true`. How to cut a
+  release: `packaging/README.md`.
 
 ## 11. Dependencies
 
