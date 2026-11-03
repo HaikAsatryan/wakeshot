@@ -112,15 +112,15 @@ Notes 7, 8 and 9 apply after v1: Codex and Copilot moved there (Haik, 2026-11-03
 | `p4-codex-source` | no | contracts card | later (after v1, Haik 2026-11-03) |
 | `p4-watch-folders` | no | contracts card | done (00:26): 20 tests, no handle leak in 1,000 cycles |
 | `p4-watch-reads` | no | contracts card | done (21:12): 18 tests; `names` returns `io::Result` |
-| `p4-cli-args` | no | contracts card | ready |
+| `p4-cli-args` | no | contracts card | in progress |
 | `p4-claude-transcript` | no | `p4-claude-status`, `p4-cron`, `p4-claude-live-shapes` | done (22:35): 46 tests; no contract change |
 | `p4-copilot-source` | no | `p4-cron` | later (after v1, Haik 2026-11-03) |
 | `p4-watch-data` | no | `p4-hold-files`, `p4-watch-reads` | done (21:12): 19 tests |
 | `p4-watch-agents` | no | `p4-watch-reads` | done (22:43): 19 tests; API changes for `p4-watch-thread` in its Result |
 | `p4-watch-thread` | no | `p4-watch-folders`, `p4-watch-data`, `p4-watch-agents`, `p3-process` | in progress |
-| `p4-cli-run` | no | `p4-cli-args`, `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | ready |
-| `p4-cli-commands` | no; screen once (opens one file in the default app; global lane, review M6) | `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | in progress |
-| `p4-cli-restore` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09; nothing to add) | `p3-journal`, `p3-power-plan`, `p2-ownership-restore`, `p3-store`, `p3-process`, `p3-log` | in progress |
+| `p4-cli-run` | no | `p4-cli-args`, `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | in progress |
+| `p4-cli-commands` | no; screen once (opens one file in the default app; global lane, review M6) | `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 30 tests; screen step ran once |
+| `p4-cli-restore` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09; nothing to add) | `p3-journal`, `p3-power-plan`, `p2-ownership-restore`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 10 tests |
 | `p4-live-claude` | optional: 3 minutes for the VS Code check; agent-session lane | `p4-watch-thread`, `p4-claude-transcript`, `p4-cli-run`, `p3-process`, the Claude parsing review (`docs/phases/02-06-lighter.md`) | ready |
 | `p4-live-codex` | yes: about 20 minutes (install or sign in, then type the steps) | `p4-live-claude` | later (after v1, Haik 2026-11-03) |
 | `p4-live-copilot` | yes: about 20 minutes (install or sign in, then type the steps) | `p4-live-codex` | later (after v1, Haik 2026-11-03) |
@@ -236,3 +236,4 @@ limit; Copilot waiting does not hold. The cards build these.
 - 2026-11-04 00:06: `p4-watch-folders` and the `p4-cli-commands` + `p4-cli-restore` bundle running (the bundle holds the screen lane for its one file open).
 - 2026-11-04 00:26: `p4-watch-folders` done and committed; `p4-watch-thread` starts. Decided by the worker, for Haik's review: watches stay open all the time, so renaming a watched folder's parent (for example `~/.claude`) fails with Access denied while the tray runs; deleting still works. For the next docs pass: `architecture.md` section 5 "Folder changes" row still says several folders on one thread are not tested; this card tested it.
 - 2026-11-04 00:30: Claude fixes done and committed (Log in `p4-claude-transcript`): B1, M1, m1, m2, m4, m5, m7, rules 3 and 5, product.md lines. Decided by the worker, for Haik's review: a computed recurring cron time is reported twice (built-in and the latest the flag allows); the 7-day end stays; a UI stop holds until its `killed` notice lands or the session ends (the output file's `[killed]` trailer is not read); a Monitor of unknown shape ends after 1 hour. m3 moved to `watch/agents.rs` and went to `p4-watch-thread`. The verify of B1 and M1 runs (`docs/reviews/p4-claude-parsing-verify.md`). Open: the README should mention the UI-stop case (`p6-readme`).
+- 2026-11-04 00:36: the `p4-cli-commands` + `p4-cli-restore` bundle done and committed (40 CLI tests). Decided by the worker, for Haik's review: `keep-awake off` works with or without the tray; `status` exits 0 for "not running"; `wakeshot log` with no log exits 0; the CLI sets a corrupt journal aside, and a newer journal restores the keys this version knows and exits 1; the CLI does not start the tray after its own failed restore. For `p6-int-io-thread`: `shell::open_with_default_app(target: &OsStr)` is the opener (own COM thread, at most 10 s); `log.rs` has no public log path yet. The `p4-cli-args` + `p4-cli-run` bundle started: orchestrator decision, no `serde_json` in the CLI (a Cargo change runs alone); the bundle adds a public hold file writer to the core's `holds/file.rs`, which owns the format.
