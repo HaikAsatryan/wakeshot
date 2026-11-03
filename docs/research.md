@@ -2372,3 +2372,50 @@ Checked 2026-11-03 for card `docs/tasks/p5-text.md`.
 - **"Other system tray icons".** The first-run notice names this section of Settings > Personalization > Taskbar, the
   page `ms-settings:taskbar` opens. The label on Windows 11 build 26300: not verified (no screen use in this card);
   `p5-haik-check` and `p6-int-haik-checks` look at it.
+
+## Tray startup checks
+
+Checked 2026-11-03 for card `docs/tasks/p6-int-startup.md`, with `app::startup::tests` (22 tests, all pass).
+
+- **The panic hook's exit code.** A child run of the test binary that installs the hook and panics ends with
+  0xC0000409 (`STATUS_STACK_BUFFER_OVERRUN`, the fast fail of `std::process::abort()`), not 101 (a test that panics
+  with the default hook), and its log holds one `ERROR panic:` line with the place and the message cut to 200
+  characters (`panic_hook_logs_then_aborts`). The whole test run took 0.18 s, so this console child had no 3 s WER
+  wait. After the run, no new entry in `ReportArchive` or `ReportQueue` (machine and user WER folders) and no
+  Application event 1000 or 1001 since the run (`Get-ChildItem`, `Get-WinEvent`). Why the Velopack hook's panic
+  above went through WER and this child did not: not verified (a GUI exe started by Velopack against a console test
+  exe started by the test runner).
+- **Mutex tests need a second thread.** The thread that holds a mutex takes it again at once (`store::NamedMutex`
+  doc), so the second tray and the second settings owner in the tests are other threads; then `take(0)` gives `None`
+  while the first holds it, and `Some` after it is dropped. A thread that ends while holding the tray mutex leaves
+  it abandoned, and the next take reports `abandoned()` (`a_tray_lock_left_by_an_ended_tray_counts_as_taken`).
+- **A failed journal read, for the tests.** A folder named `journal.json` makes `store::read_whole` fail, so
+  `FileNet::load_journal` gives `JournalRead::Failed` (code 5 in `p3-journal`'s test; the code is not checked here).
+  The startup retry tests swap the folder for the file between the two tries.
+- **An unknown lock state at start.** Read in the code, not tested: `core/lid.rs` `lock_and_chime` watches a lock
+  only when the core thinks the session is unlocked. So `None` from `session::locked_now()` counted as unlocked makes
+  a lid close on a session that was locked after all look like a failed lock (lock once more, then the step back
+  toward sleep); counted as locked, a lock that really failed would go unseen.
+
+## Loop window checks
+
+Checked 2026-11-04 for card `docs/tasks/p6-int-window.md`, by the tests in `app::window::tests` (Windows 11 Pro
+10.0.26300, debug test build, elevated agent shell with a desktop session; every test window hidden, of a test class
+`Wakeshot.Loop.Test*`). Ten runs in a row, all passed.
+
+- **The posted-message limit.** A loop window whose thread did not pump took 9,999 `PostMessageW` calls; the
+  10,000th failed with 1816 (`ERROR_NOT_ENOUGH_QUOTA`), the same count in all ten runs. Microsoft documents 10,000
+  per queue; why one fewer here (one other message in the queue, or the limit counted as "fewer than"): not verified.
+- **`FindWindowW` when nothing matches.** It returned NULL and left the thread's last error at 0, for a class never
+  registered and for a registered class with no window left. It found the hidden (never shown) top-level window by
+  class name.
+- **`PostMessageW` to a destroyed window** fails with 1400 (`ERROR_INVALID_WINDOW_HANDLE`).
+- **`SetTimer` accuracy** (ten runs, under the load of other builds): asked 150 ms, fired after 138 to 166 ms; 300 ms
+  after 300 to 316 ms; 80 ms after 93 to 97 ms; a timer re-armed to 200 ms by `SetTimer` with the same id fired 190 to
+  204 ms after the re-arm. So a fire can come up to about 12 ms early.
+- **A sent `WM_ENDSESSION` waits for the window procedure.** `SendMessageTimeoutW` from another thread, with a handler
+  that slept 300 ms, came back after 300 to 302 ms, and never before the handler returned. `WM_QUERYENDSESSION`
+  answered 1. Whether Windows itself sends these to this hidden window at a real sign-out: not verified here (an
+  end-to-end check).
+- **A `WM_QUIT` from `PostThreadMessageW`** ends `GetMessageW` on the loop thread as the window's own would, so the
+  window treats one it did not post as Quit from the menu.
