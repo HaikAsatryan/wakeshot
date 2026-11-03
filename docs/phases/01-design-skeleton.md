@@ -698,4 +698,8 @@ scratchpad):
   load goes to `p2-core-settings`; the stop after the journal delete goes to `p3-stop-points`. `cargo` is not on
   `PATH` in agent shells (checked): `CLAUDE.md` names its full path. Wave 1 waits only for `p3-store`.
   Later work is tracked in the phase files 02 to 06 and `06-integration.md`.
+- 2026-11-03 19:15: `p3-store` done (15 tests, five runs; `write_atomic` falls back to a rename by handle on error 5;
+  `HeldMutex` not `Send`). Wave 1 committed (3 commits, tree clean). `p6-int-skeleton` started alone. New SYSTEM
+  request from this session (pwsh PID 12276) until about 00:15, so agents keep working past 20:20. Last line of this
+  file's log: from now on each track's phase file has its own.
 

@@ -1,6 +1,6 @@
 //! `wakeshot restore`: ask the tray to restore, or restore here when its owner is dead.
 //!
-//! Owner: sources track (`p4-cli-restore`).
+//! Owner: sources track (`p4-cli-restore`); fixes by `p6-int-dry-run-e2e`.
 
 use std::io::Write;
 use std::process::ExitCode;

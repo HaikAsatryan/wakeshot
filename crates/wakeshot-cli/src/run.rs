@@ -1,6 +1,6 @@
 //! `wakeshot run -- <command>`: hold the PC awake while a command runs.
 //!
-//! Owner: sources track (`p4-cli-run`).
+//! Owner: sources track (`p4-cli-run`); fixes by `p6-int-dry-run-e2e`.
 
 use std::io::Write;
 use std::process::ExitCode;

@@ -4,8 +4,9 @@ Smart keep-awake for Windows 11: the PC stays awake only while something needs i
 from the menu), then sleeps as usual. Optional: keep working with the lid closed. Personal project of Haik Asatryan,
 free, MIT. Rust with `windows-rs`.
 
-Status: Phase 1 (detailed design and skeleton); Phase 0 signed off 2026-11-03. Cargo workspace in `crates/`
-(`wakeshot-core`, `wakeshot-windows`, `wakeshot-tray`, `wakeshot-cli`): skeleton only, no product logic yet. Throwaway
+Status: Phases 0 and 1 signed off 2026-11-03; Phases 2 to 6 build as parallel tracks (state in each phase file's card
+table). Cargo workspace in `crates/` (`wakeshot-core`, `wakeshot-windows`, `wakeshot-tray`, `wakeshot-cli`): each
+track card fills its own modules; the rest are still stubs. Throwaway
 spikes in `spikes/` stay outside the workspace, but now build with the root's pinned toolchain (`rust-toolchain.toml`)
 and static CRT (`.cargo/config.toml`). The contracts between the parts are in code (`p1-contracts`), with fakes
 behind the `test-support` feature. Every module the tracks fill already exists, each file naming its one owner card in

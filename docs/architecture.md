@@ -32,7 +32,7 @@ fails because it sits under the workspace root).
 |---|---|---|---|
 | `wakeshot-core` | lib | events, state, policies, holds, settings ownership, file formats, source parsers, view models | `serde`, `serde_json` |
 | `wakeshot-windows` | lib | every Windows call: power requests and settings, OS events, processes, folder watch, files and registry, tray, notices, sounds | `wakeshot-core`, `windows`, `serde_json` (the IO thread reads and writes the files) |
-| `wakeshot-tray` | bin `wakeshot-tray.exe`, GUI subsystem | the mode dispatch (`main`, `mode`), guard mode (`guard`), restore mode (`restore`), the Velopack wiring (`velo`, the only file that names `velopack`); message loop and wiring only | both libs, `windows`; `velopack` in Phase 6 |
+| `wakeshot-tray` | bin `wakeshot-tray.exe`, GUI subsystem | the mode dispatch (`main`, `mode`), guard mode (`guard`), restore mode (`restore`), the Velopack wiring (`velo`, the only file that names `velopack`), and the tray-mode call into `wakeshot_windows::app::tray_mode::run`; no wiring logic | both libs, `windows`; `velopack` in Phase 6 |
 | `wakeshot-cli` | bin `wakeshot.exe`, console | the `wakeshot` command: the dispatch (`main`, `command`), argument parsing (`args`), one file per command (`run`, `keep_awake`, `automatic`, `status`, `restore`, `open_log`) | both libs, `windows` |
 
 Both bins depend on both libs and on `windows` from `p1-contracts`, so no track changes `Cargo.lock`; `velopack`
@@ -41,9 +41,9 @@ Both libs have a `test-support` feature with the fakes; only dev-dependencies tu
 feature turns on the core's. Both exes take their resources (manifest, app icon `assets/wakeshot.ico`, version) from
 `crates/build-resources.rs`, pulled into each `build.rs` with `include!`.
 
-Every module below exists from `p1-contracts-split`, so no track edits a module list, a `main.rs` dispatch or a
-`Cargo` file. Each file's module doc names the card that owns it in its `Owner:` line; the full table is in that
-card's Result.
+Every module below exists from `p1-contracts-split` (`app` and its files from `p6-int-skeleton`), so no track edits a
+module list, a `main.rs` dispatch or a `Cargo` file. Each file's module doc names the card that owns it in its
+`Owner:` line; the full table is in that card's Result.
 
 Two exes because a console exe flashes a window at login and a GUI exe cannot print. Two bin crates, not one package
 with two bins, because their dependencies differ: from Phase 6 only the tray takes `velopack`, and the bins of one
@@ -91,10 +91,11 @@ lists end up the same. macOS and Linux later add an adapter crate next to `wakes
 | `watch` | `dir` (folder notices), `read` (whole reads, tails, finds, names), `data` (holds, config, restore request), `agents` (sources and their liveness), `thread` |
 | `lockowner`, `localtime`, `child`, `shell` | which process holds a file open (Restart Manager); `SystemZone` for cron times; `wakeshot run`'s child and Ctrl+C handler; open a file or `ms-settings:` URI with the default app |
 | `store` | `DataDir` and `DataFile` (data folder paths), `write_atomic`, `read_whole`, `remove`, `Names` and `NamedMutex` (the three mutexes), `AutoStart` (Run and RunOnce values) |
-| `sink` | trait `EventSink`, how off-loop threads post events to the loop; `FakeEventSink`. The real sink comes with the loop (integration) |
+| `sink` | trait `EventSink`, how off-loop threads post events to the loop; `FakeEventSink`. The real sink is `app::window::WindowSink` |
 | `tray` | `Anchor`, `IconIdentity`, trait `MenuView`; `icon` (`TrayIcon`, its own hidden window), `menu` (`OwnerDrawnMenu`), `menu_paint`, `theme`, `art` (icon art as code) |
 | `notify`, `sound`, `log` | trait `Notifier` with `BalloonNotifier`; trait `SoundPlayer` with the WASAPI player; trait `Log` with `LogWriter` and `MemoryLog` |
 | `install`, `hooks`, `update` | the CLI folder in the user Path (the Run value is `store::AutoStart`'s); what each Velopack hook does (`HookEnv`); update check, download and apply (`UpdateFeed`) |
+| `app` | the tray mode's wiring: `window` (the loop's hidden top-level window, the pump, its one timer, `WindowSink`), `dispatch` (`Dispatcher`: the core in the loop, the runner for each command, the tick, end of session, quit), `io_thread` (the IO thread loop over `IoQueue`), `startup` (startup steps 3 to 7 and `Started`), `tray_mode` (the composition root) |
 | `testing` | the fakes in one place (re-exports) and `FakeMenuView` (test-support) |
 
 ### Boundary traits
@@ -495,6 +496,9 @@ How they talk: files only. No pipes, no sockets.
 - Other threads post boxed events to the loop window (`PostMessage(hwnd, WM_APP, ...)`), never to the thread: thread
   messages are lost while a modal loop runs, and a menu runs one (Microsoft, `PostThreadMessage` Remarks). A failed
   post (10,000 message limit) is logged; the next tick recovers.
+- The loop window handles `WM_CLOSE` (also `taskkill` without `/F`) as Quit from the menu. A handler call that
+  re-enters (a runner that pumps messages, such as the modal menu) queues its event; the outer call feeds it to the
+  core after its own batch.
 - Power events come through `DEVICE_NOTIFY_CALLBACK` callbacks (tested in the spikes), not `WM_POWERBROADCAST`
   (window registration not tested).
 - At `WM_ENDSESSION` the loop puts the restore at the front of the IO queue; the IO thread runs it next and drops
@@ -521,7 +525,10 @@ How they talk: files only. No pipes, no sockets.
    Apply step 3).
 7. Try `Global\Wakeshot.Settings`.
 8. Window, icon (retry until the taskbar exists; re-add on `TaskbarCreated`, tested), notifications, watchers, first
-   reads, then `Started`.
+   reads, then `Started`, then `Session(Locked)` when the session was locked at start, then `JournalCorrupt` when a
+   corrupt journal was left by another process, then `Updated` when Velopack restarted the tray. After Quit: the IO
+   thread runs what is queued (up to 10 s), the update and watch threads stop, the icon and the requests go, the
+   mutexes are released.
 
 ### CLI
 
@@ -637,10 +644,10 @@ guard, restore mode, Velopack hooks and the CLI, always under `Local\Wakeshot.Jo
 4. Write ahead: mark every entry to restore `restored` and rewrite the journal (write-through); that write fails: this
    run fails, nothing written. Then write `original` for each; a write fails: keep the entry, this run fails. So a stop
    between the write and the mark cannot happen, and a stop after the mark is caught by step 3.
-5. Entries marked `restored` on an inactive plan need no apply (the two points under "Plan switch"): drop them. If any
-   are on the active plan, read the active plan id again right before the call. The read fails: keep them, this run
-   fails. Still the same: `PowerSetActiveScheme` with it; success: drop them; failure: keep them, this run fails.
-   Changed: the plan is now inactive, so drop them.
+5. If any entry is marked `restored` with its `original` stored, read the active plan id again right before the call.
+   The read fails: keep them, this run fails. Entries on any other plan need no apply (the two points under "Plan
+   switch"): drop them. Entries on that plan: `PowerSetActiveScheme` with it; success: drop them; failure: keep them,
+   this run fails.
 6. Whenever the last entry is dropped, on any path (this routine or the ownership check, each only after a successful
    read): delete the file and the RunOnce value, set the current guard's stop event.
 7. A failed run keeps the journal and reports. The tray retries on each safety tick (episode flow) and warns once.
@@ -661,9 +668,9 @@ Guard:
 
 - A separate process outside the tray's process tree, so Task Manager does not list it under the tray and End task on
   the Wakeshot group does not end it: the tray starts it with `PROC_THREAD_ATTRIBUTE_PARENT_PROCESS` set to the shell's
-  Explorer (the process of `GetShellWindow`). Not verified: that a Medium process gets the right to use Explorer as the
-  parent, and how Task Manager then groups the guard (checklist 4). If it fails: a short-lived launcher that starts the
-  guard and exits; if End task still ends both, the gap list below covers it.
+  Explorer (the process of `GetShellWindow`). A Medium process may use Explorer as the parent (tested, research
+  "Process module checks"). Not verified: how Task Manager then groups the guard (checklist 4). If it fails: a
+  short-lived launcher that starts the guard and exits; if End task still ends both, the gap list below covers it.
 - The tray keeps the guard's handle from `CreateProcess`, waits on it, and starts a new guard if it ends while anything
   is owned.
 - Each guard gets its own stop event, `Local\Wakeshot.GuardStop.<tray pid>.<n>`, named on its command line, so an
@@ -765,7 +772,10 @@ Whether Velopack accepts a dot in it: not verified; Phase 6 checks before the fi
 Every file is UTF-8 JSON with `"version": 1`. A reader takes its own version and older ones. A file with a newer
 version is ignored and logged; the journal is the one exception (below). The reader reads `VersionProbe` first, so a
 newer file whose fields changed shape is still recognized as newer. Writes go to a temp file, flush, then
-`MoveFileExW(REPLACE_EXISTING | WRITE_THROUGH)` (Nightcrew's way; not tested by us).
+`MoveFileExW(REPLACE_EXISTING | WRITE_THROUGH)` (Nightcrew's way). That gives 5 while a reader has the target open, so
+`store::write_atomic` then renames by handle with POSIX semantics (`SetFileInformationByHandle(FileRenameInfoEx)`), as
+Rust's `std::fs::rename` does; that works while the reader shares delete (tested, research "Store checks"). What a
+power cut right after the move leaves: not tested.
 
 | File | Written by | Content |
 |---|---|---|
@@ -913,7 +923,8 @@ Log:
   read for every line, never derived from a start time plus a counter: the tray spike's millisecond counter drifted
   16 s from the wall clock (research, "The spike's log clock drifted 16 s").
 - The tray rolls it at start when it is over 1 MB and keeps three files. Every process appends one `WriteFile` per
-  line to a handle opened for append; that such lines never mix: not verified (Phase 3).
+  line to a handle opened for append; such lines never mix, tested on a local NTFS disk with four writers (research,
+  "Log writer checks"). Network shares, FAT and ReFS: not verified.
 - Logged: each hold start and end with its label, each request change, each settings write and restore with old and
   new values, each user change, lock, each hibernate check, each notice and sound, each format problem (at most once
   a minute per source). Never logged: prompts, transcript text, full command lines, `.key` file names.
@@ -958,6 +969,10 @@ Windows layer (Phase 3), never on the user's real settings:
   own data folder (section 4).
 - All automated tests run in CI. Whether hosted runners have power plans: not verified (the CI card finds out).
 
+Integration (Phase 6): wiring tests with fakes and the real core in CI; process tests of the real exes in dry run; the
+real tray on active plan copies; the update path on a real install with a local feed (debug builds only,
+`WAKESHOT_UPDATE_FEED`); Haik's checklist on an active plan copy.
+
 Manual checklist for Haik on the test laptop. Rule for any test that uses a plan copy: Settings and the Control Panel
 write some battery values to the user's real plan even while a copy is active (research), so read the real plan before
 and after, and change nothing by hand during the test.
@@ -970,16 +985,16 @@ and after, and change nothing by hand during the test.
 | 4 | End task on the tray in Task Manager, then on its group: the guard (Explorer as parent) lives on and restores | 3 |
 | 5 | Tray and guard killed, start at login off, sign out and in: RunOnce restores | 3 |
 | 6 | Sign out during a hold: restored before the session ends | 3 |
-| 7 | Work ends with the lid closed: hibernates after 5 minutes; not while typing on an external screen | 3 |
-| 8 | Battery floor with a short AC drop on the dock; the lid closed on the dock with the user's own AC lid action Do nothing, then unplugged: lock and sound, and what Windows does with the user's own values; the lid closed on the dock while holding, signed in on the external screen, then unplugged: lock and sound after 5 s on battery, none for a short AC drop | 3 |
-| 9 | Plan switch during a hold | 3 |
-| 10 | Unlock after a closed-lid hold: the report notice | 3 |
-| 11 | `Global\` mutex as a normal user; a second session (optional): fast user switching during a hold gives `WTS_CONSOLE_DISCONNECT` and the restore, coming back gives `WTS_CONSOLE_CONNECT` and the apply; the same for Remote Desktop into the session | 3 |
+| 7 | Work ends with the lid closed: hibernates after 5 minutes; not while typing on an external screen | 6 (integration) |
+| 8 | Battery floor with a short AC drop on the dock; the lid closed on the dock with the user's own AC lid action Do nothing, then unplugged: lock and sound, and what Windows does with the user's own values; the lid closed on the dock while holding, signed in on the external screen, then unplugged: lock and sound after 5 s on battery, none for a short AC drop | 6 (integration) |
+| 9 | Plan switch during a hold | 6 (integration) |
+| 10 | Unlock after a closed-lid hold: the report notice | 6 (integration) |
+| 11 | `Global\` mutex as a normal user; a second session (optional): fast user switching during a hold gives `WTS_CONSOLE_DISCONNECT` and the restore, coming back gives `WTS_CONSOLE_CONNECT` and the apply; the same for Remote Desktop into the session | 3; console part 6 |
 | 12 | A sign-in delay other than "Every Time", and which stored value means Never (needs an account without Windows Hello; none on the test laptop) | later |
 | 13 | Theme switch, high contrast, display scales, sounds by ear, toast icon colours if toasts are used | 5 |
 | 14 | `winget upgrade` and uninstall during a hold | 6 |
 | 15 | About 50 apply and restore cycles on the active plan: display brightness, other apps, the System log | 3 |
-| 16 | Lid close while holding, no loopback capture running: the chime is heard and the session locks (the lock lands during the chime's stream start) | 3 |
+| 16 | Lid close while holding, no loopback capture running: the chime is heard and the session locks (the lock lands during the chime's stream start) | 6 (integration) |
 
 ## 10. CI and build targets
 

@@ -1,6 +1,6 @@
 //! `wakeshot keep-awake`: Keep awake from a terminal, through the tray's hold file.
 //!
-//! Owner: sources track (`p4-cli-commands`).
+//! Owner: sources track (`p4-cli-commands`); fixes by `p6-int-dry-run-e2e`.
 
 use std::io::Write;
 use std::process::ExitCode;

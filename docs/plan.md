@@ -76,11 +76,11 @@ Facts with how they were checked: `docs/research.md`. Longer research: `docs/res
 |---|---|---|---|
 | 0 | Facts | Spikes on the test laptop, rival and agent research, final decisions | Done (signed off 2026-11-03) |
 | 1 | Detailed design and skeleton | Detailed `architecture.md`, public GitHub repo, Cargo workspace, the contracts between the parts (`p1-contracts`), CI (fmt, clippy, tests, x64 and ARM64 builds), tray menu look that matches Windows 11 (`p1-tray-menu-look`), audible lid-close sound (`p1-lid-sound`) | Done (signed off 2026-11-03 19:13; `docs/phases/01-design-skeleton.md`) |
-| 2 | Core (track) | State machine, policies, settings ownership rules, file formats, full tests | |
-| 3 | Windows power layer (track) | Power requests and settings, journal and restore, guard process, OS events | |
-| 4 | Sources (track) | Claude Code (with timers), Codex and Copilot CLI, `wakeshot run` and hold files, Keep awake | |
-| 5 | Tray UX (track) | Icons (design, light and dark, high contrast, every scale), menu, notifications, sounds, first run, log | |
-| 6 | Ship (track, then integration) | Velopack installer and updates, start at login, uninstall restore, signing, winget manifest, README, GitHub Pages; then wiring all tracks into the two exes, end-to-end tests, Haik's manual checklist | |
+| 2 | Core (track) | State machine, policies, settings ownership rules, file formats, full tests | Building (`docs/phases/02-core.md`) |
+| 3 | Windows power layer (track) | Power requests and settings, journal and restore, guard process, OS events | Building (`docs/phases/03-windows-power.md`) |
+| 4 | Sources (track) | Claude Code (with timers), Codex and Copilot CLI, `wakeshot run` and hold files, Keep awake | Building (`docs/phases/04-sources.md`) |
+| 5 | Tray UX (track) | Icons (design, light and dark, high contrast, every scale), menu, notifications, sounds, first run, log | Planned (`docs/phases/05-tray-ux.md`) |
+| 6 | Ship (track, then integration) | Velopack installer and updates, start at login, uninstall restore, signing, winget manifest, README, GitHub Pages; then wiring all tracks into the two exes, end-to-end tests, Haik's manual checklist | Planned (`docs/phases/06-ship.md`, `docs/phases/06-integration.md`; `p6-int-skeleton` running) |
 | 7 | Field test | A week of real use on the test laptop, fixes, v1.0 | |
 | 8 | Launch cleanup | A clean public repo (Haik, 2026-11-03): short `CLAUDE.md` and README, maybe one Claude skill if it matters; internal planning, reviews and junk removed; history squashed into one commit (Haik's go right before the force push); then the winget submission | |
 
@@ -141,8 +141,12 @@ tests, Haik's checklist) starts when the tracks it needs are done.
 - 2026-11-03 19:08: `p1-close-contracts` done and verified (0/1/5, major routed into not-started cards). Haik
   signed off the integration plan (18:58); his dock is always plugged in. Wave 1 of the track builds runs since
   18:52: `p3-store`, `p3-log`, `p3-process`, `p2-ownership-restore`.
-- Next (orchestrator), see the Phase 1 file (card table, work log): (1) push the Phase 1 commits; (2) Haik signs off
-  Phase 1; (3) when wave 1 ends, `p6-int-skeleton` alone; (4) then the track builds in waves (laptop cards one at a
-  time, at most four building cards at once), starting with `p4-hold-files`, `p4-watch-reads`, `p3-journal`,
-  `p2-ownership-apply`. A SYSTEM power request from the old orchestrator session (pwsh,
-  `away-system-holder.ps1`) runs until about 20:20; Haik's power values are back (checked 16:21).
+- 2026-11-03 19:15: Phase 1 pushed (CI green) and signed off by Haik (19:13). Wave 1 done and committed.
+  `p6-int-skeleton` runs alone (it also runs the whole-workspace checks that close wave 1).
+- Next (orchestrator): the card tables in the phase files 02 to 06 and `06-integration.md` hold the build state from
+  now on. (1) `p6-int-skeleton` ends: commit; (2) wave 2, the core chain first (the integration critical path):
+  `p2-policy-holds`, `p2-policy-power`, `p2-present`, `p4-hold-files`; then fill free slots from `p2-core-holds`,
+  `p2-ownership-apply`, `p3-journal`, `p4-watch-reads`, and the rest in each track's order (laptop cards one at a
+  time, at most four building cards at once); (3) push after each track phase passes review. Power: a SYSTEM request
+  from this session (pwsh PID 12276, scratchpad `away-system-holder.ps1`) runs until about 00:15 (the old one ends
+  about 20:20); Haik's power values are untouched.

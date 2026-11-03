@@ -36,6 +36,8 @@ pub enum SessionChange {
 ///   version knows, `None` when there are none. `owner`: this tray holds the settings mutex. `on_console`: this
 ///   session is on the PC's own screen. `tray`: this tray's own process, for `state.json` and the Keep awake hold.
 ///   `first_run`: `config.json` was missing at start, so the core shows `Notice::FirstRun` and writes the config.
+/// - A tray that starts while the session is locked gets `Session(Locked)` right after `Started`, before
+///   `JournalCorrupt` and `Updated`: the only way the core learns of a lock that began before the tray.
 /// - `Sources` pairs each session with the adapter's liveness answer; the parser never checks liveness.
 /// - `Plan(Err)` is a failed read: never values, and it releases nothing.
 /// - `ActivePlan`: the active plan changed (`GUID_ACTIVE_POWERSCHEME`). The core sends `ReadPlan` when it differs

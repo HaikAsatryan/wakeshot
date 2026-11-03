@@ -1,6 +1,6 @@
 # Review the design against the Phase 0 facts
 
-Phase: 0. Status: ready. Needs Haik: no. Agent: `wakeshot-reviewer`.
+Phase: 0. Status: done. Needs Haik: no. Agent: `wakeshot-reviewer`.
 Runs after: all other Phase 0 cards. Parallel with: none.
 
 ## Goal

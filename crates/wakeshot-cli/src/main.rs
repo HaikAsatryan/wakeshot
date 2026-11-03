@@ -1,5 +1,7 @@
 //! The `wakeshot` command (architecture section 4, "CLI"). This dispatch is the contracts card's and stays as it is;
 //! each command's file has its own owner.
+//!
+//! Owner: contracts card.
 
 mod args;
 mod automatic;

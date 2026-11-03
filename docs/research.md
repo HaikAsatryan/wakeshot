@@ -1176,10 +1176,11 @@ run.
 - **The process list needs one more `windows` feature.** `NtQuerySystemInformation` and the class value
   `SystemProcessInformation` are in `Wdk::System::SystemInformation` (feature `Wdk_System_SystemInformation`, which
   pulls in `Wdk_System`, `Wdk` and `Win32_Foundation` by the crate's own feature table). The record type
-  `SYSTEM_PROCESS_INFORMATION` is in `Win32::System::WindowsProgramming`. `wakeshot-windows` declares
+  `SYSTEM_PROCESS_INFORMATION` is in `Win32::System::WindowsProgramming`. At 16:45 `wakeshot-windows` declared
   `Win32_System_WindowsProgramming` but no `Wdk_*` feature, so the liveness fallback (the system process list, research
-  "Reading elevated Claude Code sessions") does not compile without a contract change. The spike that used it
-  (`spikes/claude-watch/Cargo.toml`) declared `Wdk_System_SystemInformation`.
+  "Reading elevated Claude Code sessions") did not compile without a contract change. The spike that used it
+  (`spikes/claude-watch/Cargo.toml`) declared `Wdk_System_SystemInformation`. Out of date since `p1-contracts-split`
+  added that feature ("Contracts split checks"); `p3-process` builds the list with it ("Process module checks").
 - **Every other call the power track needs is behind a declared feature.** A script over the crate source found the
   module of 50 functions: power requests, plan reads, writes, copies and access checks, suspend and setting
   notifications, `SetSuspendState`, `IsPwrHibernateAllowed`, `GetSystemPowerStatus` (`Win32_System_Power`); process
@@ -1192,7 +1193,7 @@ run.
   take types from other modules); the spikes built these calls with the same feature list.
 - **Local time for log lines.** `FileTimeToLocalFileTime` (declared) gives local time from UTC with the current time
   zone rules, enough for a line stamped "now"; its offset is local minus UTC. `GetDynamicTimeZoneInformation` and
-  `SystemTimeToTzSpecificLocalTime` are in `Win32_System_Time`, which is not declared. That
+  `SystemTimeToTzSpecificLocalTime` are in `Win32_System_Time` (declared since then; see "Log writer checks"). That
   `FileTimeToLocalFileTime` uses the current time zone and daylight saving settings: not verified (Microsoft's page
   not re-read; the log card checks it).
 

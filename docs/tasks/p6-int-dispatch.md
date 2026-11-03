@@ -41,7 +41,10 @@ quit, so the tray's behavior is the core's, tested here without Windows.
    `now.mono_ms`) and the next 30 s safety tick, at least 10 ms; on each fire `InputIdle`, then `Tick`; on a safety
    tick also the settings retry first and `watch_tick` last.
 5. Re-entry (note 4): a depth count; a re-entered call queues its event and returns `Flow::Go`; the outer call drains
-   the queue, in order, before it returns.
+   the queue, in order, before it returns. Exception (`p6-int-skeleton` Found outside scope 4; the `LoopHandler::session`
+   doc): a re-entered end of session cannot wait for the outer call, or Windows may end the process before the
+   restore runs. It pushes the restore itself (`IoQueue::push_front` plus `session_ending`, as the `io_queue.rs` doc
+   says), queues the change for the core and still waits on the `Ack`, with a test.
 6. End of session (note 4): the end change from `p3-session`: `IoQueue::session_ending()`, feed it, run the commands,
    `Ack::wait(4_000)`, log whether the restore finished in time; `EndCancelled`: `session_resumed()`, `Ack::reset()`,
    feed it. Other session changes are plain events.

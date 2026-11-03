@@ -1,5 +1,7 @@
-//! The tray exe: tray, guard and restore modes (architecture section 4). This dispatch is the contracts card's and
-//! stays as it is; each mode's file has its own owner.
+//! The tray exe: tray, guard and restore modes (architecture section 4). Each mode's file has its own owner.
+//!
+//! Owner: the integration cards from now on (`p6-int-skeleton`, then `p6-int-update-wiring`); first version from the
+//! contracts card.
 
 // A console exe would flash a window at every login.
 #![windows_subsystem = "windows"]
@@ -20,8 +22,11 @@ fn main() -> ExitCode {
     match mode::parse(&args) {
         Some(Mode::Guard) => guard::run(&args[1..]),
         Some(Mode::Restore) => restore::run(&args[1..]),
-        // The tray loop is the integration step's.
-        Some(Mode::Tray | Mode::DryRun) => ExitCode::SUCCESS,
+        // The wiring lives in the lib, where it tests with the fakes; the integration cards own this arm from now on
+        // (`p6-int-skeleton`, then `p6-int-update-wiring`).
+        Some(m @ (Mode::Tray | Mode::DryRun)) => {
+            wakeshot_windows::app::tray_mode::run(matches!(m, Mode::DryRun))
+        }
         // A GUI exe has no console to print to, so a bad command line shows only in the exit code.
         None => ExitCode::from(2),
     }

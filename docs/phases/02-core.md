@@ -182,7 +182,7 @@ Where each item this track owns is built. "Integration" is planned after the tra
 | Section 9, the core's part: `Sim`, scenarios, the property tests, decision 0 | `p2-core-holds` (Sim), each core card, `p2-core-props` |
 | Section 9 parser fixtures; hold file parsing; `expires` parse and format | sources track |
 | Strings (decision 1), notice wording | tray track (`text.rs`) |
-| The loop, the 30 s safety tick timer, the IO queue, the end-of-session restore at the queue front, the command runner | integration |
+| The loop, the 30 s safety tick timer, the end-of-session restore at the queue front, the command runner (the IO queue is `p3-power-io`'s; integration only uses it) | integration |
 
 ## Work log
 

@@ -81,7 +81,9 @@ Only what `architecture.md` leaves open. Design changes are proposals in the Res
    - after the stop: every value Wakeshot wrote that is still stored or in force has a journal entry with the user's
      original; while any known entry exists, RunOnce is set and a guard was started and not told to stop;
    - after the next restore succeeds: every key, stored and in force, equals the user's original (or the user's own
-     later change); no known entry is left; RunOnce is gone; the guard is told to stop;
+     later change); no known entry is left; for stops before the clean-up's journal delete, RunOnce is gone and the
+     guard is told to stop (a stop between that delete and the RunOnce clear or the guard's stop leaves them, and the
+     next restore finds no journal: walk R6, harmless; `p2-ownership-restore` Found outside scope 2);
    - when the next restore fails (scripted), the first point still holds.
    `p3-power-io` and `p3-recovery` run the same checks for startup, the guard and restore mode against `FakePlans`.
 5. **Correction 12, unknown journal keys** (decided in this plan's Result; the logic is the core's): an entry whose

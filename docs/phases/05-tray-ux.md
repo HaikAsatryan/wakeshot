@@ -218,7 +218,7 @@ Sizes, one worker's context: `p5-theme` about 40K tokens, `p5-icon-art` 120K, `p
 | How long the hibernate thread waits for its sound (section 5) | `p5-sounds` (`play_and_wait`) |
 | Manual checklist 13: theme switch, high contrast, scales, sounds by ear (section 9) | `p5-haik-check` |
 | Open log (section 8; product "the log stays on the PC") | Phase 4 `shell.rs`; integration wires `Command::OpenLog` |
-| Checklist 16 (chime at a real lid close with the lock) | Phase 3 or integration, after `p5-sounds` |
+| Checklist 16 (chime at a real lid close with the lock) | integration: `p6-int-haik-checks` block 2, after `p5-sounds` |
 | Toast icon colours, toast `DisplayName` (section 5) | none in v1: balloons only; only if a notice ever needs buttons |
 | Wiring into the tray exe; real-exe checks (balloon header, exe icon) | integration |
 

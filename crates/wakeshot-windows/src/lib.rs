@@ -6,6 +6,7 @@
 //!
 //! Owner: contracts card (this module list).
 
+pub mod app;
 pub mod child;
 pub mod clock;
 pub mod error;

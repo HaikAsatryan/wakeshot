@@ -1,6 +1,6 @@
 //! `wakeshot log`: open the log with the default app.
 //!
-//! Owner: sources track (`p4-cli-commands`).
+//! Owner: sources track (`p4-cli-commands`); fixes by `p6-int-dry-run-e2e`.
 
 use std::io::Write;
 use std::process::ExitCode;
