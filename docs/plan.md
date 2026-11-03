@@ -186,7 +186,15 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   `wakeshot-12`'s launch planning (Haik's launch request: `p6-launch-research`, `p6-media`, `p8-store`). Pushed at
   00:37. Running: `p4-watch-thread`, `p5-theme` + `p5-menu-paint`, `p3-real-checks` (Part 1; `p3-haik-checks` waits
   for Haik), `p4-cli-args` + `p4-cli-run`, the Claude fixes verify, `p6-launch-research`.
-- Next (orchestrator): the continuation prompt of session `wakeshot-91` (its scratchpad, `continuation.md`; sent to
-  session `wakeshot-9d` at the handover) lists the running cards and their files, the ready queue in order, the
-  routing of the open review findings, the decisions for Haik's review and the open doc items. Power: the SYSTEM
-  request (pwsh PID 35152) runs until about 06:36; start a new one before then if work goes on.
+- 2026-11-04 02:02: since 00:45 (session `wakeshot-9d`, after the handover from `wakeshot-91`): done and committed:
+  the CI fix (`watch::data` tests used pid 4) and the Claude M1 part b fix with its verify (the Claude parsing review
+  has passed), `p5-theme` + `p5-menu-paint`, `p4-watch-thread`, `p3-real-checks`, `p6-launch-research`, `p4-cli-args`
+  + `p4-cli-run`, `p5-icon-art`, `p6-int-io-thread`, `p6-login-and-path` + `p6-update-schedule`, docs pass round 2,
+  core lid round A, `p4-live-claude`, Part A of `p5-tray-icon` and `p5-sounds` (their Part B waits for the screen and
+  sound slot, after 15 minutes with no input). Blocked for Haik: `p3-haik-checks`. Haik's answers: his sleep values
+  are now 5 h on AC and battery (`CLAUDE.md`); free paths only, no paid certificate. Running: `p6-hooks`, `p5-notices`
+  Part A, core round B, the `p6-pack-and-release` + `p6-winget-manifest` bundle. Haik is away until about 10:00.
+- Next (orchestrator): the continuation prompt of session `wakeshot-9d` (its scratchpad, `continuation.md`; sent to
+  session `wakeshot-46` at the handover) lists the running cards and their files, the ready queue in order, the screen
+  lane plan, the decisions for Haik's review and the open doc items. Power: start a new SYSTEM request at takeover
+  (pid 25748 runs until about 08:26).
