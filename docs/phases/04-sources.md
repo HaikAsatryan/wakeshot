@@ -107,15 +107,15 @@ Notes 7, 8 and 9 apply after v1: Codex and Copilot moved there (Haik, 2026-11-03
 |---|---|---|---|
 | `p4-hold-files` | no | contracts card | done (20:03): 21 tests, `docs/hold-files.md` |
 | `p4-cron` | no | contracts card | ready |
-| `p4-claude-status` | no | contracts card | ready |
+| `p4-claude-status` | no | contracts card | running (21:13) |
 | `p4-claude-live-shapes` | no; runs Claude Code test sessions (Haiku); agent-session lane | contracts card | done (18:47): 27 fixtures; resume and rule 3, 5 changes in the signals doc |
 | `p4-codex-source` | no | contracts card | later (after v1, Haik 2026-11-03) |
 | `p4-watch-folders` | no | contracts card | ready |
-| `p4-watch-reads` | no | contracts card | running (20:49, bundle with `p4-watch-data`) |
+| `p4-watch-reads` | no | contracts card | done (21:12): 18 tests; `names` returns `io::Result` |
 | `p4-cli-args` | no | contracts card | ready |
 | `p4-claude-transcript` | no | `p4-claude-status`, `p4-cron`, `p4-claude-live-shapes` | ready |
 | `p4-copilot-source` | no | `p4-cron` | later (after v1, Haik 2026-11-03) |
-| `p4-watch-data` | no | `p4-hold-files`, `p4-watch-reads` | running (20:49, bundle with `p4-watch-reads`) |
+| `p4-watch-data` | no | `p4-hold-files`, `p4-watch-reads` | done (21:12): 19 tests |
 | `p4-watch-agents` | no | `p4-watch-reads` | ready |
 | `p4-watch-thread` | no | `p4-watch-folders`, `p4-watch-data`, `p4-watch-agents`, `p3-process` | ready |
 | `p4-cli-run` | no | `p4-cli-args`, `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | ready |
@@ -220,3 +220,6 @@ limit; Copilot waiting does not hold. The cards build these.
 - 2026-11-03 20:12: `p4-hold-files` done and committed. Open, for whoever next edits these files: two stale lines in
   `architecture.md` section 6 ("before" should be "at or before"; the old `jiff` option) and an old pointer in the
   `files.rs` module doc (from its Result).
+- 2026-11-03 21:14: the `p4-watch-reads` + `p4-watch-data` bundle done and committed; `p4-claude-status` running.
+  Open, for the docs pass: `architecture.md` section 8 says this crate returns `WinError`, but `watch/read.rs` returns
+  `io::Result` as its card says. For `p4-watch-agents`: on `restarted`, feed `Gone` and then `Appended`.
