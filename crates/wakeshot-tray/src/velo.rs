@@ -3,9 +3,18 @@
 //! Owner: ship track (`p6-velopack-dependency`), which keeps this signature; then `p6-int-update-wiring`; fixes by the
 //! e2e cards.
 
-use velopack::sources::GithubSource;
+use std::ffi::OsString;
+#[cfg(debug_assertions)]
+use std::path::PathBuf;
+use std::sync::OnceLock;
+
+use velopack::locator::{self, LocationContext};
+#[cfg(debug_assertions)]
+use velopack::sources::FileSource;
+use velopack::sources::{GithubSource, UpdateSource};
 use velopack::{UpdateCheck, UpdateManager, VelopackApp, VelopackAsset};
 use wakeshot_core::command::Failure;
+use wakeshot_windows::app::tray_mode::{MakeFeed, Updates};
 use wakeshot_windows::hooks::{self, RealHookEnv};
 use wakeshot_windows::update::{FeedError, UpdateFeed};
 
@@ -17,12 +26,26 @@ const REPO_URL: &str = "https://github.com/HaikAsatryan/wakeshot";
 /// (`docs/phases/06-ship.md`, "Release").
 const PRERELEASES: bool = false;
 
+/// Debug builds only: a folder that stands in for GitHub, for the update path test
+/// (`docs/phases/06-integration.md` note 8). A release build holds neither this name nor the code that reads it, so a
+/// shipped exe updates from GitHub alone.
+#[cfg(debug_assertions)]
+const LOCAL_FEED: &str = "WAKESHOT_UPDATE_FEED";
+
+/// The version Velopack restarted the tray with after it applied an update. Set inside `startup`, since `run()`
+/// removes `VELOPACK_RESTART` before it returns, so nothing later can tell.
+static RESTARTED: OnceLock<String> = OnceLock::new();
+
 /// Runs `VelopackApp` with the hook callbacks; for a hook, Velopack runs it and exits the process here.
 pub fn startup() {
     VelopackApp::build()
         // A staged update applied here would skip the core's apply rules and kill every process started from the
         // install folder, a `wakeshot run` wrapper too; the update thread finds it again and lets the core decide.
         .set_auto_apply_on_startup(false)
+        .on_restarted(|v| {
+            // `run()` calls it at most once, so the set cannot fail.
+            let _ = RESTARTED.set(v.to_string());
+        })
         .on_after_install_fast_callback(|v| {
             hooks::on_install(&mut RealHookEnv::installed(), &v.to_string())
         })
@@ -38,21 +61,67 @@ pub fn startup() {
         .run();
 }
 
-/// The update feed for tray mode. Pass it to `UpdateThread::start` as it is: the thread calls it there, so the
-/// manager is made on the update thread and its file reads never slow the tray's start.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "integration: `p6-int-update-wiring` starts the update thread with it"
+/// What tray mode gets, after `startup`: the feed when this exe is an install, and the version Velopack restarted it
+/// with. Tray mode only: a dry run must never update a real install.
+pub fn updates() -> Updates {
+    let feed: Option<MakeFeed> = installed().then(|| {
+        let make: MakeFeed = Box::new(|| -> Box<dyn UpdateFeed> { Box::new(feed()) });
+        make
+    });
+    Updates {
+        feed,
+        restarted: RESTARTED.get().cloned(),
+    }
+}
+
+/// Velopack finds an install around this exe: `Update.exe` in the parent folder and the manifest in `current`. Only
+/// `NotInstalled` means none; any other error is a broken install, whose update checks then log that error.
+fn installed() -> bool {
+    !matches!(
+        locator::auto_locate_app_manifest(LocationContext::FromCurrentExe),
+        Err(velopack::Error::NotInstalled(_))
     )
-)]
+}
+
+/// The update feed. Called on the update thread, so the manager is made there and its file reads never slow the
+/// tray's start.
 pub fn feed() -> impl UpdateFeed {
-    let source = GithubSource::new(REPO_URL, None, PRERELEASES);
+    let source = Source::pick(|name| std::env::var_os(name));
     VeloFeed {
-        manager: UpdateManager::new(source, None, None)
+        manager: UpdateManager::new_boxed(source.boxed(), None, None)
             .map_err(|e| feed_error("UpdateManager::new", &e)),
         kept: None,
+    }
+}
+
+/// Where the feed reads releases from.
+#[derive(Debug, PartialEq, Eq)]
+enum Source {
+    Github,
+    /// `WAKESHOT_UPDATE_FEED`: a folder with `releases.<channel>.json` and the packages (velopack `FileSource`).
+    #[cfg(debug_assertions)]
+    Folder(PathBuf),
+}
+
+impl Source {
+    /// `env` reads a variable. A release build never calls it; an empty value counts as unset, since it would name
+    /// the working folder.
+    fn pick(env: impl Fn(&str) -> Option<OsString>) -> Self {
+        #[cfg(debug_assertions)]
+        if let Some(folder) = env(LOCAL_FEED).filter(|v| !v.is_empty()) {
+            return Self::Folder(PathBuf::from(folder));
+        }
+        #[cfg(not(debug_assertions))]
+        let _ = env;
+        Self::Github
+    }
+
+    fn boxed(self) -> Box<dyn UpdateSource> {
+        match self {
+            Self::Github => Box::new(GithubSource::new(REPO_URL, None, PRERELEASES)),
+            #[cfg(debug_assertions)]
+            Self::Folder(folder) => Box::new(FileSource::new(folder)),
+        }
     }
 }
 
@@ -135,6 +204,14 @@ mod tests {
     }
 
     #[test]
+    fn a_build_folder_exe_gets_no_update_thread_and_no_updated_notice() {
+        assert!(!installed());
+        let updates = updates();
+        assert!(updates.feed.is_none());
+        assert_eq!(updates.restarted, None);
+    }
+
+    #[test]
     fn startup_returns_when_not_installed() {
         // A hook argument would run a real hook, which writes the real Run value and Path.
         assert!(
@@ -142,6 +219,28 @@ mod tests {
             "never run with a hook argument"
         );
         startup();
+        assert_eq!(RESTARTED.get(), None, "no install, so no restart");
+    }
+
+    // The variable is read through `pick`'s reader, not set with `std::env::set_var`: that is `unsafe` in edition
+    // 2024, because other test threads read the environment at the same time (`feed()` does).
+    fn local_feed(value: &'static str) -> impl Fn(&str) -> Option<OsString> {
+        move |name| (name == "WAKESHOT_UPDATE_FEED").then(|| OsString::from(value))
+    }
+
+    #[test]
+    fn with_the_local_feed_set_a_debug_build_reads_that_folder() {
+        let picked = Source::pick(local_feed(r"C:\feed"));
+        #[cfg(debug_assertions)]
+        assert_eq!(picked, Source::Folder(PathBuf::from(r"C:\feed")));
+        #[cfg(not(debug_assertions))]
+        assert_eq!(picked, Source::Github, "a release build never reads it");
+    }
+
+    #[test]
+    fn without_the_local_feed_the_feed_is_github() {
+        assert_eq!(Source::pick(|_| None), Source::Github);
+        assert_eq!(Source::pick(local_feed("")), Source::Github, "empty");
     }
 
     fn failure(e: FeedError) -> Failure {

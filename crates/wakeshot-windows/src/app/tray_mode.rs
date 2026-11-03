@@ -2,12 +2,15 @@
 //!
 //! Owner: `p6-int-tray-mode`, then `p6-int-update-wiring`; fixes by the e2e cards.
 //!
-//! `run` follows `docs/phases/06-integration.md` note 6, steps 3 to 9, with three changes of order inside step 8, each
+//! `run` follows `docs/phases/06-integration.md` note 6, steps 3 to 9, with four changes of order inside step 8, each
 //! for a reason the note did not know:
 //!
 //! - The watch thread starts before `Dispatcher::new`, so its handle can go into `RealRunners`. Its first posts wait
 //!   in the loop window's queue until the pump runs, and `Dispatcher::new` feeds `Started` to the core directly, so
 //!   the core still sees `Started` first.
+//! - The update thread starts right after the watch thread, for the same reason: `RealRunners` owns its handle, so
+//!   `ApplyUpdate` reaches it without a slot shared with `serve`. It posts nothing for its first 5 minutes, and the
+//!   core asks for no apply before the thread's own `UpdateReady`. It still stops right after the IO thread finishes.
 //! - The IO thread starts right after `Dispatcher::new`. The core gives the first-run `Notify` before the first `Tray`
 //!   in the `Started` batch; the loop runs that `Tray` (the icon's add) inside `Dispatcher::new`, so the notice only
 //!   reaches the shell once the icon exists. A running IO thread could show it first, and it would fail for good.
@@ -58,6 +61,7 @@ use crate::sound::{SoundPlayer, WasapiPlayer};
 use crate::store::{AutoStart, HeldMutex, NamedMutex};
 use crate::tray::icon::{self, IconKind, TrayIcon};
 use crate::tray::menu::{self, OwnerDrawnMenu};
+use crate::update::{FeedError, UpdateFeed, UpdateHandle, UpdateThread};
 use crate::watch::thread::{WatchHandle, WatchThread};
 
 const AREA: &str = "tray";
@@ -78,15 +82,29 @@ const CLAUDE_CONFIG_DIR: &str = "CLAUDE_CONFIG_DIR";
 /// test (research, "Lid notification"), and a PC with no lid answers nothing, so the wait must stay short.
 const LID_READ_MS: u64 = 200;
 
-/// The answer to `ApplyUpdate` until `p6-int-update-wiring` starts the update thread. 50 is `ERROR_NOT_SUPPORTED`.
-const UPDATE_NOT_WIRED: Failure = Failure {
+/// The answer to `ApplyUpdate` when no update thread runs: not installed, a thread that did not start, or one that
+/// ended. 50 is `ERROR_NOT_SUPPORTED`.
+const NO_UPDATE_THREAD: Failure = Failure {
     call: "no update thread",
     code: ERROR_NOT_SUPPORTED.0,
 };
 
+/// Makes the update feed. It runs on the update thread, so a feed that is not `Send` (Velopack's) still works.
+pub type MakeFeed = Box<dyn FnOnce() -> Box<dyn UpdateFeed> + Send>;
+
+/// What tray mode gets from Velopack: `velo.rs` in the tray bin, the only crate that has `velopack`. The dry run gets
+/// `Updates::default()`.
+#[derive(Default)]
+pub struct Updates {
+    /// Makes the feed. `None`: this exe is not an install (a build run from `target\`), so no update thread runs.
+    pub feed: Option<MakeFeed>,
+    /// The version Velopack restarted the tray with after it applied an update: the core gets `Event::Updated`.
+    pub restarted: Option<String>,
+}
+
 /// Runs tray mode, or dry-run mode when `dry_run`, until Quit: tray startup steps 3 to 9
 /// (`docs/phases/06-integration.md` note 6). Steps 1 and 2, Velopack and the mode, are the tray `main`'s.
-pub fn run(dry_run: bool) -> ExitCode {
+pub fn run(dry_run: bool, updates: Updates) -> ExitCode {
     // Step 3. Without a data folder there is no log to tell.
     let Ok(boot) = Boot::new(dry_run) else {
         return ExitCode::from(EXIT_FAILED);
@@ -125,10 +143,12 @@ pub fn run(dry_run: bool) -> ExitCode {
     }
     startup::install_panic_hook(Arc::clone(&log));
     let liveness: Arc<dyn Liveness> = Arc::new(SystemLiveness);
+    // The dry run drops `updates` even if given: run from an installed copy, an apply would end that copy's real tray
+    // and run its hooks, which write the real Run value and Path.
     let code = if dry_run {
         dry_run_tray(&boot, &log, liveness)
     } else {
-        real_tray(&boot, &log, liveness)
+        real_tray(&boot, &log, liveness, updates)
     };
     log.line(
         Level::Info,
@@ -168,8 +188,8 @@ impl Picks {
     }
 }
 
-/// The real executor: plan writes, RunOnce and a guard.
-fn real_tray(boot: &Boot, log: &Arc<dyn Log>, liveness: Arc<dyn Liveness>) -> u8 {
+/// The real executor: plan writes, RunOnce and a guard; updates when installed.
+fn real_tray(boot: &Boot, log: &Arc<dyn Log>, liveness: Arc<dyn Liveness>, updates: Updates) -> u8 {
     let exe = match std::env::current_exe() {
         Ok(exe) => exe,
         Err(e) => {
@@ -197,7 +217,14 @@ fn real_tray(boot: &Boot, log: &Arc<dyn Log>, liveness: Arc<dyn Liveness>) -> u8
         Arc::clone(&liveness),
         Arc::clone(log),
     );
-    serve(boot, log, liveness, executor, Picks::real())
+    if updates.feed.is_none() {
+        log.line(
+            Level::Info,
+            AREA,
+            "Wakeshot is not installed, so it does not check for updates",
+        );
+    }
+    serve(boot, log, liveness, executor, Picks::real(), updates)
 }
 
 /// The dry run: real reads, logged writes, its own journal, no RunOnce and no guard.
@@ -211,7 +238,14 @@ fn dry_run_tray(boot: &Boot, log: &Arc<dyn Log>, liveness: Arc<dyn Liveness>) ->
         Arc::clone(&liveness),
         Arc::clone(log),
     );
-    serve(boot, log, liveness, executor, Picks::dry_run(log))
+    serve(
+        boot,
+        log,
+        liveness,
+        executor,
+        Picks::dry_run(log),
+        Updates::default(),
+    )
 }
 
 /// Steps 6 to 9 for either executor. Returns the exit code.
@@ -221,6 +255,7 @@ fn serve<P, G>(
     liveness: Arc<dyn Liveness>,
     mut executor: PowerExecutor<P, FileNet<G>>,
     picks: Picks,
+    updates: Updates,
 ) -> u8
 where
     P: PlanIo + Send + 'static,
@@ -283,21 +318,20 @@ where
         Ok(watch) => watch,
         Err(e) => return fatal(&**log, "the watch thread", e),
     };
+    // Not fatal: without updates the tray still does all its work.
+    let updater = Updater::start(updates.feed, Arc::clone(&sink), log, Arc::clone(&loop_log));
+    if let Some(version) = &updates.restarted {
+        let text = format!("Velopack restarted the tray after the update to {version}");
+        log.line(Level::Info, AREA, &text);
+    }
     let owner = settings.held();
-    let mut first = vec![startup::started(
-        boot,
-        config.clone(),
-        first_run,
-        &restored,
-        owner,
-        &**log,
-    )];
-    if startup::locked_at_start(&**log) {
-        first.push(Event::Session(SessionChange::Locked));
-    }
-    if restored.corrupt {
-        first.push(Event::JournalCorrupt);
-    }
+    let started = startup::started(boot, config.clone(), first_run, &restored, owner, &**log);
+    let first = first_events(
+        started,
+        startup::locked_at_start(&**log),
+        restored.corrupt,
+        updates.restarted,
+    );
     let ack = Ack::new();
     let runners = RealRunners {
         requests: picks.requests,
@@ -312,6 +346,7 @@ where
         },
         settings,
         watch,
+        updater,
         subscriptions,
         lost: LostPosts::default(),
         session: Rc::clone(&session),
@@ -364,10 +399,30 @@ where
         code = EXIT_FAILED;
     }
 
-    // Step 9. `finish` logs a time-out itself; the guard covers a restore it left.
+    // Step 9. `finish` logs a time-out itself; the guard covers a restore it left. `shut_down` stops the update thread
+    // first.
     io_thread.finish(FINISH_MS);
     dispatcher.into_runners().shut_down();
     code
+}
+
+/// The events `Dispatcher::new` feeds before any other, in the order `event.rs` promises the core: `Started`, then
+/// `Session(Locked)`, `JournalCorrupt` and `Updated`, each only when it applies. The dispatcher sorts them again.
+fn first_events(
+    started: Event,
+    locked: bool,
+    corrupt: bool,
+    updated: Option<String>,
+) -> Vec<Event> {
+    let mut first = vec![started];
+    if locked {
+        first.push(Event::Session(SessionChange::Locked));
+    }
+    if corrupt {
+        first.push(Event::JournalCorrupt);
+    }
+    first.extend(updated.map(|version| Event::Updated { version }));
+    first
 }
 
 /// A start failure that leaves the tray useless: one line, then the caller drops what it built and exits.
@@ -731,19 +786,98 @@ fn idle_or_input(read: Result<u64, WinError>, failed: &mut bool, log: &dyn Log) 
     }
 }
 
-/// `apply_update` until the update thread is wired: the core logs the failure and waits for the next update.
-fn answer_update(sink: &dyn EventSink, log: &dyn Log) {
-    log.line(
-        Level::Warn,
-        AREA,
-        "update not applied: this build has no update thread yet",
-    );
-    if let Err(e) = sink.post(Event::Done(Outcome::Update(Err(UPDATE_NOT_WIRED)))) {
-        let text = format!(
-            "update answer not posted: {} failed with {}",
-            e.call, e.code
+/// The update thread's handle when one runs (installed tray mode only), and the answer to `ApplyUpdate` when none
+/// does. On the loop thread.
+struct Updater {
+    handle: Option<UpdateHandle>,
+    sink: Arc<dyn EventSink>,
+    /// Lines from the loop thread (`QueuedLog`); the thread itself writes the log file.
+    log: Arc<dyn Log>,
+}
+
+impl Updater {
+    /// Starts the update thread when a feed is given. `log` goes to the thread, and takes the start line: the IO
+    /// thread does not run yet.
+    fn start(
+        feed: Option<MakeFeed>,
+        sink: Arc<dyn EventSink>,
+        log: &Arc<dyn Log>,
+        loop_log: Arc<dyn Log>,
+    ) -> Self {
+        let handle = feed.and_then(|make| {
+            let started = UpdateThread::start(
+                move || AnyFeed(make()),
+                SystemClock,
+                Arc::clone(&sink),
+                Arc::clone(log),
+            );
+            match started {
+                Ok(handle) => {
+                    log.line(
+                        Level::Info,
+                        AREA,
+                        "Wakeshot is installed, so it checks for updates",
+                    );
+                    Some(handle)
+                }
+                Err(e) => {
+                    let text = format!(
+                        "update thread not started: {} failed with {}; no update checks in this run",
+                        e.call, e.code
+                    );
+                    log.line(Level::Warn, AREA, &text);
+                    None
+                }
+            }
+        });
+        Self {
+            handle,
+            sink,
+            log: loop_log,
+        }
+    }
+
+    /// `Command::ApplyUpdate`: hands it to the thread, which answers. With no thread to answer, the answer is
+    /// `Update(Err)` from here, so the core logs it and waits for the next `UpdateReady`.
+    fn apply(&self) {
+        if self.handle.as_ref().is_some_and(UpdateHandle::apply) {
+            return;
+        }
+        self.log.line(
+            Level::Warn,
+            AREA,
+            "update not applied: no update thread runs",
         );
-        log.line(Level::Warn, AREA, &text);
+        if let Err(e) = self
+            .sink
+            .post(Event::Done(Outcome::Update(Err(NO_UPDATE_THREAD))))
+        {
+            let text = format!(
+                "update answer not posted: {} failed with {}",
+                e.call, e.code
+            );
+            self.log.line(Level::Warn, AREA, &text);
+        }
+    }
+
+    /// Step 9. The handle logs a thread that did not stop in time through the log the thread got.
+    fn stop(self) {
+        if let Some(handle) = self.handle {
+            handle.stop();
+        }
+    }
+}
+
+/// The boxed feed `MakeFeed` gives, as the `UpdateFeed` the thread takes.
+struct AnyFeed(Box<dyn UpdateFeed>);
+
+impl UpdateFeed for AnyFeed {
+    fn check_and_download(&mut self) -> Result<Option<String>, FeedError> {
+        self.0.check_and_download()
+    }
+
+    fn apply(&mut self) -> Result<(), FeedError> {
+        self.0.apply()
     }
 }
 
@@ -803,6 +937,7 @@ struct RealRunners {
     hibernator: Hibernator,
     settings: Settings,
     watch: WatchHandle,
+    updater: Updater,
     subscriptions: Subscriptions,
     lost: LostPosts,
     session: Rc<SessionSlot>,
@@ -813,19 +948,21 @@ struct RealRunners {
 }
 
 impl RealRunners {
-    /// Step 9 after the IO thread finished, in the note's order. The update thread stops first once it is wired. Lines
-    /// from here on are lost with the IO thread gone; each part that can fail logs through its own log.
+    /// Step 9 after the IO thread finished, in the note's order, the update thread first. Lines from here on are lost
+    /// with the IO thread gone; each part that can fail logs through its own log.
     fn shut_down(self) {
         let Self {
             requests,
             icon,
             settings,
             watch,
+            updater,
             subscriptions,
             session,
             log,
             ..
         } = self;
+        updater.stop();
         watch.stop();
         drop(subscriptions);
         session.close(&*log);
@@ -889,7 +1026,7 @@ impl LoopRunners for RealRunners {
     }
 
     fn apply_update(&mut self) {
-        answer_update(&*self.sink, &*self.log);
+        self.updater.apply();
     }
 
     fn input_idle_ms(&mut self) -> u64 {
@@ -965,10 +1102,13 @@ mod tests {
     use std::sync::mpsc;
     use std::time::Duration;
 
+    use wakeshot_core::sim::Start;
+
     use super::*;
     use crate::power::hibernate::FakeHibernate;
     use crate::store::Names;
     use crate::testing::{FakeEventSink, FakeSoundPlayer, MemoryLog};
+    use crate::update::{FakeUpdateFeed, FeedCall};
 
     fn lines(log: &MemoryLog) -> Vec<(Level, String)> {
         log.lines
@@ -1079,16 +1219,179 @@ mod tests {
         );
     }
 
-    #[test]
-    fn apply_update_answers_err_until_the_update_thread_is_wired() {
-        let sink = FakeEventSink::default();
-        let log = MemoryLog::default();
-        answer_update(&sink, &log);
-        assert_eq!(
-            sink.events(),
-            [Event::Done(Outcome::Update(Err(UPDATE_NOT_WIRED)))]
+    /// Hands each event to the test as it comes, so a test waits on a channel, not a sleep.
+    struct ChannelSink(mpsc::Sender<Event>);
+
+    impl EventSink for ChannelSink {
+        fn post(&self, event: Event) -> Result<(), WinError> {
+            let _ = self.0.send(event);
+            Ok(())
+        }
+    }
+
+    fn make_feed(feed: &FakeUpdateFeed) -> MakeFeed {
+        let feed = feed.clone();
+        Box::new(move || Box::new(feed) as Box<dyn UpdateFeed>)
+    }
+
+    /// An updater over the real thread, with what it posts and both logs.
+    fn updater(
+        feed: Option<MakeFeed>,
+    ) -> (
+        Updater,
+        mpsc::Receiver<Event>,
+        Arc<MemoryLog>,
+        Arc<MemoryLog>,
+    ) {
+        let (events, received) = mpsc::channel();
+        let log = Arc::new(MemoryLog::default());
+        let loop_log = Arc::new(MemoryLog::default());
+        let thread_log: Arc<dyn Log> = log.clone();
+        let u = Updater::start(
+            feed,
+            Arc::new(ChannelSink(events)),
+            &thread_log,
+            loop_log.clone(),
         );
-        assert_eq!(lines(&log).len(), 1);
+        (u, received, log, loop_log)
+    }
+
+    const WAIT: Duration = Duration::from_secs(10);
+
+    #[test]
+    fn a_feed_starts_the_thread_and_apply_update_reaches_it_once() {
+        let feed = FakeUpdateFeed::default();
+        let (u, events, log, loop_log) = updater(Some(make_feed(&feed)));
+        assert!(u.handle.is_some(), "the thread runs");
+        assert_eq!(
+            lines(&log),
+            [(
+                Level::Info,
+                "Wakeshot is installed, so it checks for updates".to_owned()
+            )]
+        );
+        u.apply();
+        assert_eq!(
+            events.recv_timeout(WAIT),
+            Ok(Event::Done(Outcome::Update(Ok(()))))
+        );
+        assert_eq!(feed.calls(), [FeedCall::Apply]);
+        u.stop();
+        assert_eq!(feed.calls(), [FeedCall::Apply], "nothing after the stop");
+        assert!(events.try_recv().is_err(), "one answer only");
+        assert!(lines(&loop_log).is_empty(), "{:?}", lines(&loop_log));
+    }
+
+    #[test]
+    fn no_feed_starts_nothing_and_apply_update_answers_err() {
+        let (u, events, log, loop_log) = updater(None);
+        assert!(u.handle.is_none());
+        assert!(lines(&log).is_empty(), "{:?}", lines(&log));
+        u.apply();
+        assert_eq!(
+            events.recv_timeout(WAIT),
+            Ok(Event::Done(Outcome::Update(Err(NO_UPDATE_THREAD))))
+        );
+        assert_eq!(
+            lines(&loop_log),
+            [(
+                Level::Warn,
+                "update not applied: no update thread runs".to_owned()
+            )]
+        );
+        u.stop();
+    }
+
+    #[test]
+    fn an_update_thread_that_ended_gets_err_from_the_loop() {
+        // A successful apply ends the thread (the updater then waits for this process); a second apply is answered
+        // here, so the core is never left waiting.
+        let feed = FakeUpdateFeed::default();
+        let (u, events, _, loop_log) = updater(Some(make_feed(&feed)));
+        u.apply();
+        assert_eq!(
+            events.recv_timeout(WAIT),
+            Ok(Event::Done(Outcome::Update(Ok(()))))
+        );
+        let deadline = std::time::Instant::now() + WAIT;
+        while u.handle.as_ref().is_some_and(UpdateHandle::apply) {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the thread did not end"
+            );
+            thread::yield_now();
+        }
+        u.apply();
+        assert_eq!(
+            events.recv_timeout(WAIT),
+            Ok(Event::Done(Outcome::Update(Err(NO_UPDATE_THREAD))))
+        );
+        assert_eq!(feed.calls(), [FeedCall::Apply]);
+        assert_eq!(lines(&loop_log).len(), 1);
+        u.stop();
+    }
+
+    #[test]
+    fn a_lost_update_answer_is_logged() {
+        let sink = Arc::new(FakeEventSink {
+            fail_with: Some(WinError {
+                call: "PostMessageW",
+                code: 1400,
+            }),
+            ..FakeEventSink::default()
+        });
+        let loop_log = Arc::new(MemoryLog::default());
+        let log: Arc<dyn Log> = Arc::new(MemoryLog::default());
+        let u = Updater::start(None, sink, &log, loop_log.clone());
+        u.apply();
+        let logged = lines(&loop_log);
+        assert_eq!(logged.len(), 2, "{logged:?}");
+        assert_eq!(
+            logged[1],
+            (
+                Level::Warn,
+                "update answer not posted: PostMessageW failed with 1400".to_owned()
+            )
+        );
+    }
+
+    #[test]
+    fn updated_comes_after_started_locked_and_journal_corrupt_never_first() {
+        let started = Start::default().event();
+        let updated = Event::Updated {
+            version: "1.1.0".to_owned(),
+        };
+        let v = || Some("1.1.0".to_owned());
+        assert_eq!(
+            first_events(started.clone(), false, false, v()),
+            [started.clone(), updated.clone()]
+        );
+        assert_eq!(
+            first_events(started.clone(), true, false, v()),
+            [
+                started.clone(),
+                Event::Session(SessionChange::Locked),
+                updated.clone()
+            ]
+        );
+        assert_eq!(
+            first_events(started.clone(), false, true, v()),
+            [started.clone(), Event::JournalCorrupt, updated.clone()]
+        );
+        assert_eq!(
+            first_events(started.clone(), true, true, v()),
+            [
+                started.clone(),
+                Event::Session(SessionChange::Locked),
+                Event::JournalCorrupt,
+                updated
+            ]
+        );
+        assert_eq!(
+            first_events(started.clone(), false, false, None),
+            [started],
+            "no restart, no Updated"
+        );
     }
 
     #[test]

@@ -3430,3 +3430,46 @@ card's own build folder, with no other cargo command running. Rust 1.99.1, the r
   no `ExecutablePath`, still so 1.5 minutes after the run (session locked). The tray mode card's run had both. So a
   clean-up that looks only for the dry-run GUID can miss the entry; comparing the ids before and after finds it. Why
   the values were missing: not verified.
+
+## Update wiring checks
+
+Checked 2026-11-04 03:36 to 03:50 for card `docs/tasks/p6-int-update-wiring.md`. "Source" means read in velopack
+1.2.161 in the cargo registry (`~/.cargo/registry/src/index.crates.io-*/velopack-1.2.161/src`), the version
+`Cargo.lock` pins; "docs.rs" means the 1.2.161 pages on docs.rs; "test" means run on this laptop.
+
+- **A local folder source exists.** `velopack::sources::FileSource::new<P: AsRef<Path>>(path: P)`: "Retrieves
+  available updates from a local or network-attached disk. The directory must contain one or more valid packages, as
+  well as a 'releases.{channel}.json' index file." `get_release_feed` reads `<folder>\releases.<channel>.json`;
+  `download_release_entry` copies `<folder>\<asset FileName>` to the local file. The channel is the app's own (from
+  its manifest) unless `UpdateOptions` names one, as for `GithubSource`. **Verified** (source `sources/file.rs` and
+  docs.rs `struct.FileSource.html`). The `p6-velopack-facts` runs already updated through a local `FileSource` (point
+  3 of "Velopack checks for Wakeshot").
+- **`UpdateManager::new_boxed(Box<dyn UpdateSource>, ..)`** takes a source chosen at run time; `new` boxes its
+  argument and calls it. `UpdateSource: Send + Sync`. **Verified** (source `manager.rs`, `sources/mod.rs`).
+- **The restarted callback.** `VelopackApp::on_restarted<F: FnOnce(Version) + 'a>(self, hook: F)`: "This hook is
+  triggered when the application is restarted by Velopack after installing updates." Inside `run()`: the manager is
+  made with `NoneSource` (no install: an error line and `run()` returns before any hook); then
+  `env::var(VELOPACK_RESTART).is_ok()`, then `env::remove_var(VELOPACK_RESTART)`; at the end, when restarted, the
+  hook gets `manager.get_current_version()`, the manifest version of the running (new) install. So the version must be
+  kept inside the callback: after `run()` the variable is gone. Wakeshot keeps it in a `OnceLock<String>`
+  (`velo::RESTARTED`). **Verified** (source `app.rs` lines 125 to 203; docs.rs `struct.VelopackApp.html`); that
+  Update.exe sets `VELOPACK_RESTART=true` and the hook gets the new version: **verified** earlier by test, point 4 of
+  "Velopack checks for Wakeshot".
+- **Install check before the thread.** `velopack::locator::auto_locate_app_manifest(LocationContext::FromCurrentExe)`
+  is public. On Windows it looks for `Update.exe` beside the exe, then in `<root>` for an exe under `<root>\current\`,
+  and `VelopackLocator::new` also needs the manifest; every miss is `Error::NotInstalled`, a manifest that does not
+  read is another error. `velo::installed()` treats only `NotInstalled` as no install, so a broken install still runs
+  the update thread, whose checks then log the error. A test exe in `target\` is not installed (unit test
+  `velo::tests::a_build_folder_exe_gets_no_update_thread_and_no_updated_notice`). **Verified** (source `locator.rs`,
+  test).
+- **The debug-only feed name is not in a release exe.** `findstr /c:"WAKESHOT_UPDATE_FEED"` on the release
+  `wakeshot-tray.exe` (x64): exit 1, not found; on the debug test exe of the tray: found. The name and the code that
+  reads it sit under `#[cfg(debug_assertions)]`. **Verified** (test).
+- **The release tray grew by the HTTPS stack.** x64 release `wakeshot-tray.exe`: 3,947,520 bytes, against 2,026,496
+  measured by `p6-velopack-dependency`. Before this card `velo::feed()` was dead code in the exe, so LTO dropped
+  `UpdateManager`, `GithubSource` and the `ureq`, `rustls` and `ring` code under them; now the update thread calls it.
+  `findstr` finds `rustls`, `ureq`, `webpki` and `api.github.com` in the exe now. That the whole 1.9 MB is that stack:
+  not verified (no size breakdown run).
+- **Not verified:** that the tray Update.exe restarts gets the old tray's environment, so a `WAKESHOT_UPDATE_FEED` or
+  `WAKESHOT_DATA_DIR` set for the old debug tray reaches the new one. Update.exe is a child of the tray
+  (`wait_exit_then_apply_updates` spawns it), so it likely inherits it; `p6-int-update-e2e` should check.

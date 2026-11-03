@@ -141,12 +141,12 @@ hook; `Arc<BalloonNotifier>` and the balloon click hook (`take_click`, then `she
 thread of its own); the sound player (`Arc<dyn SoundPlayer>`, shared with the hibernate thread);
 `session::register(hwnd)` with its retry; `Subscriptions::start(sink)`; `WatchThread::start` with the Claude source
 only (`ClaudeSource::in_folder(claude_folder(home, CLAUDE_CONFIG_DIR), SystemZone::current())`) and
-`SystemLiveness`, before `Dispatcher::new` so its handle goes into the runners; `started` and `locked_at_start`;
+`SystemLiveness`, before `Dispatcher::new` so its handle goes into the runners; right after it the update thread
+(`p6-int-update-wiring`: tray mode only, installed only); `started` and `locked_at_start`;
 `JournalCorrupt` when `Startup.corrupt`; `Dispatcher::new`, which feeds `Started` first, then `Session(Locked)` if
 the session was locked at start (`docs/reviews/p1-close-verify.md` Major 1), then `JournalCorrupt`, then `Updated` if
 Velopack restarted the tray (`p6-int-update-wiring`); then `IoThread::start`, after `Dispatcher::new`, so the core's
-first `Tray` is queued before its first `Notify`; the update thread (`p6-int-update-wiring`: after
-`IoThread::start`, tray mode only, installed only); then the pump. Events posted before the pump runs wait in the
+first `Tray` is queued before its first `Notify`; then the pump. Events posted before the pump runs wait in the
 window's queue, so the core always sees `Started` first.
 9. The session registration is dropped at Quit, before `LoopWindow::run` destroys the window (Microsoft: unregister
 before that). After the pump: `IoThread::finish(10 s)`, update thread stop, `WatchHandle::stop`, subscriptions, icon
@@ -204,7 +204,7 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | `p6-int-dispatch` | no | no | `p6-int-skeleton`, `p2-core-lid`, `p3-power-io` | done (22:18): 21 tests, 22 of 22 mutants caught |
 | `p6-int-startup` | no | no | `p6-int-skeleton`, `p3-store`, `p3-log`, `p3-process`, `p3-session`, `p3-journal`, `p3-power-io` | done (00:05): 22 tests; journal read retried once after 500 ms |
 | `p6-int-tray-mode` | no | Part B: screen, about 10 min (a dry-run icon) | `p6-int-io-thread`, `p6-int-window`, `p6-int-dispatch`, `p6-int-startup`, `p3-requests`, `p3-system-events`, `p3-hibernate`, `p3-recovery`, `p4-watch-thread`, `p4-claude-transcript`, `p4-cron`, `p5-tray-icon`, `p5-menu-view`, `p5-notices`, `p5-sounds` | blocked: waiting for the screen slot (Part A done, 11 tests; smoke test passed 02:58 in the locked session; the picture waits for Haik) |
-| `p6-int-update-wiring` | no | no | `p6-int-tray-mode`, `p6-velopack-dependency`, `p6-update-schedule` | in progress (started 03:34) |
+| `p6-int-update-wiring` | no | no | `p6-int-tray-mode`, `p6-velopack-dependency`, `p6-update-schedule` | done (committed 03:54): 15 `tray_mode` tests; smoke passed; ARM64 tray CI only |
 | `p6-int-wiring-fixes` | no | no | `p6-int-tray-mode` Part A, `p6-velopack-dependency`, `p6-int-update-wiring` | ready (tray wiring findings 1 to 3, `log::log_file`) |
 | `p6-int-dry-run-e2e` | no | screen (dry-run icon, balloons, pictures); agent-session lane (one Claude Code test session) | `p6-int-update-wiring`, `p4-cli-args`, `p4-cli-run`, `p4-cli-commands`, `p4-cli-restore`, `p4-live-claude` | ready |
 | `p6-int-real-e2e` | no | global: power settings on active plan copies, RunOnce, a guard | `p6-int-dry-run-e2e`, `p3-real-checks` | ready |
@@ -330,3 +330,13 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   while all tests start (cause not verified; not a product bug). A fire may now be up to 50 ms early and 1,000 ms
   late; 20 of 20 whole-crate runs pass. Seen once before the fix: another test failed in 2 of 8 loaded runs (name not
   captured; not seen in the 20 runs after).
+- 2026-11-04 03:54 (orchestrator, session `wakeshot-46`): `p6-int-update-wiring` done and committed. `velo::updates()`
+  gives the feed only when installed, plus the version Velopack restarted the tray with (`on_restarted`, a
+  `OnceLock`); debug builds only: `WAKESHOT_UPDATE_FEED=<folder>` makes the feed a local folder (the release exe holds
+  no such string, checked). `tray_mode::run(dry_run, Updates)`: the update thread starts right after the watch thread
+  (note 6 updated), `ApplyUpdate` goes to it (or `Err` when none runs), it stops first at shutdown; `Updated` is fed
+  after `Started`, `Session(Locked)` and `JournalCorrupt`. Dry run never starts it. x64: fmt, clippy, 15 `tray_mode`
+  tests, release build; smoke test passed; ARM64 tray CI only. The release tray is now 3.95 MB (the HTTPS stack).
+  Worker notes: the local feed works only for an installed debug tray, so it is `p6-int-update-e2e`'s, not
+  `p6-int-dry-run-e2e`'s; an installed tray left running past 5 minutes asks GitHub once (no release yet; what
+  `GithubSource` answers then is not verified). 7 worker decisions, for Haik's review, in the card.

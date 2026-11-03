@@ -14,6 +14,7 @@ mod velo;
 use std::process::ExitCode;
 
 use mode::Mode;
+use wakeshot_windows::app::tray_mode::{self, Updates};
 
 fn main() -> ExitCode {
     // Tray startup step 1: Velopack runs a hook and exits before anything else starts.
@@ -22,11 +23,11 @@ fn main() -> ExitCode {
     match mode::parse(&args) {
         Some(Mode::Guard) => guard::run(&args[1..]),
         Some(Mode::Restore) => restore::run(&args[1..]),
-        // The wiring lives in the lib, where it tests with the fakes; the integration cards own this arm from now on
-        // (`p6-int-skeleton`, then `p6-int-update-wiring`).
-        Some(m @ (Mode::Tray | Mode::DryRun)) => {
-            wakeshot_windows::app::tray_mode::run(matches!(m, Mode::DryRun))
-        }
+        // The wiring lives in the lib, where it tests with the fakes; the integration cards own these arms from now on
+        // (`p6-int-skeleton`, then `p6-int-update-wiring`). Only tray mode updates.
+        Some(Mode::Tray) => tray_mode::run(false, velo::updates()),
+        // Run from an installed copy, an update would end that copy's real tray and run its hooks.
+        Some(Mode::DryRun) => tray_mode::run(true, Updates::default()),
         // A GUI exe has no console to print to, so a bad command line shows only in the exit code.
         None => ExitCode::from(2),
     }
