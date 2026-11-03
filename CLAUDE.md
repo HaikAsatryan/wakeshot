@@ -45,8 +45,9 @@ Start here: `docs/plan.md` (how we work, phases, status, next step). Then:
 ## Test laptop
 
 - Modern Standby, Balanced plan `381b4222-f694-41f0-9685-ff5bb260df2e`. Haik's own values: lid action Sleep on AC
-  and DC, sleep after 3 h on AC and 10 min on battery. A USB-C dock (DELL) with an external screen is always plugged
-  in; its cable can drop AC for a few seconds.
+  and DC, sleep after 3 h on AC and 4 h on battery (Haik raised battery from 10 min on 2026-11-03; read 20:41: DC
+  14400, AC 10800). A USB-C dock (DELL) with an external screen is always plugged in; its cable can drop AC for a few
+  seconds.
 - Nightcrew 0.3.1 was uninstalled 2026-11-03 (values above restored and checked). Nothing of it is left: no exe or
   data folder, no `HKCU\Software\Nightcrew` key, no Run entry, no scheduled task. If it is ever installed again, never
   run it during tests: it changes the same power settings.

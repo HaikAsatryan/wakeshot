@@ -130,9 +130,9 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | `p2-policy-power` | no | contracts card | done (20:05): 59 tests; settle time question to Haik |
 | `p2-present` | no | contracts card | done (20:02): 24 tests |
 | `p2-ownership-apply` | no | `p2-ownership-restore` | done (20:36): 46 tests, 10 of 11 mutants caught (the survivor cannot be caught) |
-| `p2-core-holds` | no | `p2-policy-holds`, `p2-policy-power`, `p2-present`, `p4-hold-files` | running (20:12) |
+| `p2-core-holds` | no | `p2-policy-holds`, `p2-policy-power`, `p2-present`, `p4-hold-files` | done (20:39): 40 scenarios and a proptest, 13 of 13 mutants caught |
 | `p2-ownership-props` | no | `p2-ownership-apply` | ready |
-| `p2-core-settings` | no (Phase 1 Question 10: default, console part built; Haik 2026-11-03 18:09) | `p2-core-holds` | ready |
+| `p2-core-settings` | no (Phase 1 Question 10: default, console part built; Haik 2026-11-03 18:09) | `p2-core-holds` | running (20:40) |
 | `p2-core-lid` | no | `p2-core-settings` | ready |
 | `p2-core-props` | no | `p2-core-lid`, `p2-ownership-apply` | ready |
 

@@ -77,6 +77,9 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03 17:00: card written by `p3-plan-windows-power`.
+- 2026-11-03 20:43, orchestrator: Haik's own battery sleep is now 4 h (DC 14400, read 20:41), not 600 s. Step F as
+  written ("Haik's own 600 s") would wait over 4 h: run it on an active plan copy with DC sleep 600 s, or skip it and
+  say so in the Result. Read his values live before and after; never assume 600.
 
 ## Result
 
