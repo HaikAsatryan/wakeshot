@@ -131,8 +131,8 @@ laptop" cards run one at a time across all tracks.
 | `p3-journal` | no | no | `p3-store`, `p3-log` | done (20:26): 16 tests |
 | `p3-hibernate` | no | no (never calls `SetSuspendState`) | `p3-system-events` | done (21:19): 21 tests; hibernate checks now run before the sound |
 | `p3-power-io` | no | no | `p3-journal`, `p3-power-plan`, core `p2-ownership-apply` | done (21:04): 24 tests, 22 of 22 mutants caught |
-| `p3-recovery` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09) | no | `p3-journal`, `p3-process`, `p3-log`, `p3-power-plan` (verify review Minor 3), core `p2-ownership-restore` | running (20:49) |
-| `p3-stop-points` | no | yes: a plan copy, never active | `p3-power-plan`, `p3-journal`, core `p2-ownership-apply` | ready |
+| `p3-recovery` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09) | no | `p3-journal`, `p3-process`, `p3-log`, `p3-power-plan` (verify review Minor 3), core `p2-ownership-restore` | done (21:22): 23 unit and 5 exe tests; real guard parent test passed |
+| `p3-stop-points` | no | yes: a plan copy, never active | `p3-power-plan`, `p3-journal`, core `p2-ownership-apply` | running (21:23; holds the laptop lane) |
 | `p3-harness` | no | yes for the `cleanup` smoke run only (global lane, review M7); other smoke runs touch no setting | `p3-power-io`, `p3-recovery`, `p3-requests`, `p3-session`, `p3-system-events` | ready |
 | `p3-real-checks` | no | yes: an active plan copy, 50 cycles | `p3-harness`, `p3-stop-points` | ready |
 | `p3-haik-checks` | yes: about 60 min elapsed, about 15 min of hands | yes, whole laptop: battery, lid, sign-out, sleep, lock; no other agent or cargo command runs (review B2) | `p3-real-checks` | ready |
@@ -192,3 +192,5 @@ Critical path: store, journal, (core ownership cards), power-io, harness, real-c
   the old hibernate order (privilege and `IsPwrHibernateAllowed` now run before the sound). For `p5-sounds`: keep the
   "going to sleep" sound short, since a lid opened while it plays still hibernates. `testing.rs` does not re-export
   `FakeHibernate`.
+- 2026-11-03 21:25: `p3-recovery` done and committed; `p3-stop-points` running in the laptop lane. Open, for the docs
+  pass: the architecture's Guard line could say the guard leaves a corrupt journal for the next sign-in's restore.

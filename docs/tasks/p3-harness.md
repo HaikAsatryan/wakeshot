@@ -79,6 +79,9 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03 17:00: card written by `p3-plan-windows-power`.
+- 2026-11-03 21:25, orchestrator, from `p3-recovery`'s Result: a guard inherits the harness's environment, so the
+  harness must set `WAKESHOT_DATA_DIR` before `ensure`; otherwise a debug guard reads the real data folder. Read the
+  Results of `p3-power-io`, `p3-recovery`, `p3-requests`, `p3-session` and `p3-system-events` for their APIs.
 
 ## Result
 
