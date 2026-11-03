@@ -129,8 +129,8 @@ laptop" cards run one at a time across all tracks.
 | `p3-system-events` | no | no (notifications only) | contracts card | done (20:46): 26 tests, both real tests pass |
 | `p3-session` | no | no (the lock test is ignored here) | contracts card | done (20:47): 4 tests, 3 ignored for `p3-real-checks` and `p3-haik-checks` |
 | `p3-journal` | no | no | `p3-store`, `p3-log` | done (20:26): 16 tests |
-| `p3-hibernate` | no | no (never calls `SetSuspendState`) | `p3-system-events` | ready |
-| `p3-power-io` | no | no | `p3-journal`, `p3-power-plan`, core `p2-ownership-apply` | running (20:37) |
+| `p3-hibernate` | no | no (never calls `SetSuspendState`) | `p3-system-events` | running (21:05) |
+| `p3-power-io` | no | no | `p3-journal`, `p3-power-plan`, core `p2-ownership-apply` | done (21:04): 24 tests, 22 of 22 mutants caught |
 | `p3-recovery` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09) | no | `p3-journal`, `p3-process`, `p3-log`, `p3-power-plan` (verify review Minor 3), core `p2-ownership-restore` | running (20:49) |
 | `p3-stop-points` | no | yes: a plan copy, never active | `p3-power-plan`, `p3-journal`, core `p2-ownership-apply` | ready |
 | `p3-harness` | no | yes for the `cleanup` smoke run only (global lane, review M7); other smoke runs touch no setting | `p3-power-io`, `p3-recovery`, `p3-requests`, `p3-session`, `p3-system-events` | ready |

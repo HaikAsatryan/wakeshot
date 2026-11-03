@@ -86,6 +86,11 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03: card written by `p6-plan-integration`.
+- 2026-11-03 21:06, orchestrator, from `p3-power-io`'s Result: `PowerExecutor::startup()` takes no argument (the
+  executor holds its own `Liveness`), so item 5's `startup_restore(executor, liveness)` is that call. `Startup.corrupt`
+  already reports a corrupt journal: item 8 has nothing left to do. `Started.journal` cannot say "the journal did not
+  read" (then nothing counts as owned, so a lid close gets no lock until the next apply). Orchestrator decision: no
+  contract change; on a failed read (not corrupt) at startup, retry the read once, and log if it fails again.
 
 ## Result
 

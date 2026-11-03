@@ -98,6 +98,8 @@ Problems seen but not fixed.
   source); `LoopRunners::input_idle_ms() -> u64` cannot return an error, so the runner must pick a value for a failed
   read (0 is safe). `testing.rs` does not re-export `FakeRequests` or `FakeLocker` (`p3-session`): a contract
   change the orchestrator runs alone, if you need them.
+- 2026-11-03 21:06, orchestrator, from `p3-power-io`'s Result: `session_ending()` queues the restore itself, so
+  dispatch needs no `push_front` first (one is not doubled).
 
 ## Result
 
