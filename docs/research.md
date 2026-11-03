@@ -2477,6 +2477,49 @@ depends on elevation (the Medium case is in "Reading elevated Claude Code sessio
   read nobody took, every 20th with one taken and queued again), in a child test process of its own: 122 handles
   before and after (`GetProcessHandleCount`).
 
+## CLI command checks
+
+Checked 2026-11-04 for card `docs/tasks/p4-cli-commands.md` (Windows 11 Pro 10.0.26300, elevated agent shell).
+
+- **`ShellExecuteExW` needs COM and `SEE_MASK_NOASYNC` here** (Microsoft docs, read 2026-11-04): the ShellExecuteEx
+  Remarks ask for `CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE)` first, since shell
+  extensions may need a single-threaded apartment. The SHELLEXECUTEINFO page says `SEE_MASK_NOASYNC` "must be
+  specified if the thread calling ShellExecuteEx does not have a message loop or if the thread or process will
+  terminate soon after", and that it is "only respected when launching files, does not apply to uris".
+  `SEE_MASK_FLAG_NO_UI` drops error dialogs; security prompts still show. On failure `GetLastError` holds the Win32
+  code (2, 3, 1155 no association, 1223 cancelled, among others).
+- **`AllowSetForegroundWindow(ASFW_ANY)` fails unless this process may set the foreground itself** (Microsoft docs):
+  for example right after the user clicked its menu. From a terminal it may fail; the open still works, the app may
+  then open behind.
+- **The real open** (`shell::tests::real_open_file`, run once by hand): a temp `.cmd` opened through
+  `open_with_default_app` returned after 119 ms, and the script had run (its mark file was there) within 622 ms. Its
+  window closed by itself: Windows Terminal is the default terminal on this PC, and its `closeOnExit` default
+  `"automatic"` closes a handed-off process's tab whatever its exit code (Windows Terminal docs, "Profile termination
+  behavior"). Windows started `smartscreen.exe` for the launch; it is Windows' own and was left to end on its own.
+- **A missing file opens nothing.** A path in a folder that does not exist, with an extension no app has, gave a
+  `ShellExecuteExW` error with `SEE_MASK_FLAG_NO_UI` (the test takes 2 or 3; which of the two: not recorded), and no
+  new process or window (`a_missing_file_is_an_error_without_a_dialog`, process list compared before and after).
+- **Why the real open was not a `.log`.** On this PC `.log` and `.txt` open in Windows Notepad
+  (`HKCU\...\FileExts\.log\UserChoice` ProgId `AppX4ztfk9wxr86nxmzzq47px0nh0e58b8fw`, Microsoft.WindowsNotepad
+  11.2607), and Haik's Notepad was open with an unsaved tab. Windows 11 Notepad opens a file as a new tab of an open
+  window by default (not verified here; not tried, so nothing touched that window). `open_log::tests::real_open_log`
+  does that open, for a run with a person at the screen.
+- **`wakeshot status`, `keep-awake 1h` and `automatic off` with `--dry-run`** (through each command's `main`,
+  `status::tests::dry_run_folder_checks`; `args::parse` routes no command yet): "Wakeshot is not running.", exit 0;
+  "Wakeshot is not running. Start it, then try again.", exit 1, no `keep-awake.json`; "Automatic is off.", exit 0,
+  `config.json` `{"version":1,"automatic":false}`, then removed (it did not exist before). The log got one `cli` line
+  per command. `%LocalAppData%\Wakeshot` did not exist before the run; the run made only `dry-run\logs\wakeshot.log`,
+  and the folder was removed after.
+- **`wakeshot restore` with `--dry-run` and no dry-run journal** (card `p4-cli-restore`, through `main`,
+  `restore::tests::dry_run_folder_check`): "Nothing to restore.", exit 0; one log line `cli: restore: no journal,
+  nothing to do`. The folder it made was removed after, as above.
+- **`restore_locked` logs a line of its own per run** in area `journal` (`restore of every plan: found journal
+  entries; 0 entries left`, or `... failed: <call> failed with <code>; ...`), beside the CLI's one `cli` line (seen in
+  `MemoryLog` in the `restore::tests` runs).
+- **`FileNet::restore_only` over a RunOnce key that does not exist writes nothing to the registry**: its clean-up's
+  `AutoStart::remove` finds no value and creates no key. After the `restore::tests` runs, `HKCU\Software` had no
+  `Wakeshot*` key (`Get-ChildItem HKCU:\Software`).
+
 ## Claude parsing review fix checks
 
 Card `docs/tasks/p4-claude-transcript.md`, section "Claude parsing review fixes (2026-11-04)"; review
