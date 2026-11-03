@@ -99,7 +99,7 @@ Problems seen but not fixed.
    standing problem.
 2. The fix round now also raises `LockFailed` when a lock is not confirmed and before a step back. The `LockFailed`
    words ("Windows did not lock the PC when Wakeshot asked. Press Windows key + L to lock it yourself.") still hold;
-   they do not say that a closed laptop then hibernates after 5 minutes idle. Change it when the core gives that case
+   they do not say that a closed laptop then hibernates after 5 minutes idle. (Done 2026-11-04 by the power fix round: the words now say it; the table below has them.) Change it when the core gives that case
    its own notice.
 
 ## Log
@@ -219,7 +219,7 @@ Notices (W = warning icon, S = silent, click: what clicking it opens):
 | Cannot hold | Wakeshot cannot keep the PC awake | Windows did not accept Wakeshot's request, so the PC may sleep while your work runs. | W |
 | Restore failed | Could not put back your power settings | Wakeshot keeps trying. Until it works, closing the lid may not sleep the PC, and on battery it may not sleep at all. Click to see your old values in the log. | W, click: log |
 | Hibernate failed | Wakeshot could not hibernate the PC | Wakeshot tried to hibernate the PC with the lid closed, but it did not work. Your power settings are back, so Windows should sleep it at your usual sleep time. | W |
-| Lock failed | Wakeshot could not lock the PC | Windows did not lock the PC when Wakeshot asked. Press Windows key + L to lock it yourself. | W |
+| Lock failed | Wakeshot could not lock the PC | Windows did not lock the PC. Lock it with Windows key + L. With the lid closed, Wakeshot tries once more; if that fails, it stops keeping the PC awake and hibernates it after 5 minutes with no input. | W |
 | Closed-lid report | The PC ran with the lid closed | The PC kept running for 2 h 15 min with the lid closed. What held it: Claude Code and cargo. | |
 | Update Wakeshot | Update Wakeshot | Wakeshot cannot fully read what Claude Code is doing, most likely because Claude Code was updated. Until you update Wakeshot, it may not keep the PC awake for Claude Code as it should. | W |
 | Corrupt journal | Check your lid and sleep settings | Wakeshot's record of your old power settings was damaged, so it cannot put them back. Set the lid and sleep settings again by hand; click to see the old values in the log. | W, click: log |
