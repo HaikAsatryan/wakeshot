@@ -117,7 +117,7 @@ Notes 7, 8 and 9 apply after v1: Codex and Copilot moved there (Haik, 2026-11-03
 | `p4-copilot-source` | no | `p4-cron` | later (after v1, Haik 2026-11-03) |
 | `p4-watch-data` | no | `p4-hold-files`, `p4-watch-reads` | done (21:12): 19 tests |
 | `p4-watch-agents` | no | `p4-watch-reads` | done (22:43): 19 tests; API changes for `p4-watch-thread` in its Result |
-| `p4-watch-thread` | no | `p4-watch-folders`, `p4-watch-data`, `p4-watch-agents`, `p3-process` | in progress |
+| `p4-watch-thread` | no | `p4-watch-folders`, `p4-watch-data`, `p4-watch-agents`, `p3-process` | done (committed 00:54): 14 thread tests, 2 m3 tests; each of 4 behaviours caught by its tests when broken |
 | `p4-cli-run` | no | `p4-cli-args`, `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | in progress |
 | `p4-cli-commands` | no; screen once (opens one file in the default app; global lane, review M6) | `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 30 tests; screen step ran once |
 | `p4-cli-restore` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09; nothing to add) | `p3-journal`, `p3-power-plan`, `p2-ownership-restore`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 10 tests |
@@ -243,3 +243,11 @@ limit; Copilot waiting does not hold. The cards build these.
   pushed 36416ae failed: 6 `watch/data.rs` tests use pid 4, which the Claude fix round (7ec7eda) now rejects as the
   System process. One worker runs both fixes (the `data.rs` tests, then M1 part b); the same verify brief checks M1
   part b after it. `p4-live-claude` waits for that verify.
+- 2026-11-04 00:56: `p4-watch-thread` done and committed, with the Claude review's m3 (a `sessions` listing error
+  now reads the known status files). `cargo test -p wakeshot-windows`: 367 passed, 6 failed (the `watch::data` pid 4
+  tests, fix running). Decided by the worker, for Haik's review: a restore request whose post failed is posted again at
+  the next tick if the request file still exists; an agent folder made after start is first watched at the next tick
+  (up to 30 s late), `holds\` at once. The `p4-watch-folders` rename question stays open for Haik. For
+  `p6-int-tray-mode`: `WatchThread::start(dir, config, sources, liveness, sink, log)` takes `Started`'s config; start
+  it after `Started` is posted; call `tick()` from `watch_tick`. For `p4-live-claude`: call `tick()` every 30 s and
+  pass `Config::default()`.
