@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- The app icon from crates/wakeshot-windows/src/tray/art.rs at 64 px, as shapes, so it stays sharp on high DPI
+       screens; the largest frame of assets/wakeshot.ico is 64 px. Ported numbers match that frame pixel for pixel. -->
+  <linearGradient id="plate" gradientUnits="userSpaceOnUse" x1="6.885" y1="17.5" x2="57.115" y2="46.5">
+    <stop offset="0" stop-color="#7957F4"/>
+    <stop offset="1" stop-color="#6B49F3"/>
+  </linearGradient>
+  <rect x="3" y="3" width="58" height="58" rx="12" fill="url(#plate)"/>
+  <path d="M21 43A11.5 11.5 0 0 1 44 43Z" fill="#FFCC4D"/>
+  <g stroke="#FFCC4D" stroke-width="3" stroke-linecap="round">
+    <line x1="32.5" y1="25.5" x2="32.5" y2="19.5"/>
+    <line x1="20.479" y1="30.979" x2="16.237" y2="26.737"/>
+    <line x1="44.521" y1="30.979" x2="48.763" y2="26.737"/>
+  </g>
+  <rect x="12" y="46" width="40" height="3" rx="1" fill="#FFFFFF"/>
+</svg>

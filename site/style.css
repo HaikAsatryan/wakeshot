@@ -1,0 +1,283 @@
+/* Colours from docs/brand.md. Gold is a highlight only, never text on a light page. Contrast (WCAG) of every text pair
+   is 6 or more; the numbers are in docs/tasks/p6-pages.md. */
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --text: #1a1a1a;
+  --muted: #55526a;
+  --panel: #f3f3f3;
+  --line: #dddae8;
+  --link: #5b3fd6;
+  --button-bg: #5b3fd6;
+  --button-text: #ffffff;
+  --gold: #ffcc4d;
+  --on-gold: #1a1a1a;
+  --focus: #5b3fd6;
+  --glow: rgba(114, 80, 244, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14121f;
+    --text: #eceaf4;
+    --muted: #b4afcb;
+    --panel: #1f1c2e;
+    --line: #34304a;
+    --link: #a996ff;
+    --button-bg: #a996ff;
+    --button-text: #14121f;
+    --on-gold: #14121f;
+    --focus: #ffcc4d;
+    --glow: rgba(114, 80, 244, 0.3);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  /* System fonts only: the page loads nothing from other hosts. */
+  font: 1.0625rem/1.6 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial,
+    sans-serif;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+.wrap {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+h1,
+h2,
+h3 {
+  font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+h2 {
+  font-size: 1.625rem;
+  margin: 0 0 1rem;
+}
+
+h3 {
+  font-size: 1.125rem;
+  margin: 0 0 0.5rem;
+}
+
+p,
+ul,
+ol {
+  margin: 0 0 1rem;
+}
+
+li > ul,
+li > ol {
+  margin: 0.25rem 0;
+}
+
+a {
+  color: var(--link);
+  text-underline-offset: 0.2em;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+code {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 0.9em;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.25rem;
+  padding: 0.05em 0.3em;
+}
+
+img,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
+/* The sunrise: a soft violet glow over the top of the page, and the icon's horizon under the header. */
+.hero {
+  text-align: center;
+  padding: 4rem 0 2.5rem;
+  background: radial-gradient(ellipse 60rem 22rem at 50% 0, var(--glow), transparent 70%);
+}
+
+.hero .logo {
+  display: block;
+  width: 6rem;
+  height: 6rem;
+  margin: 0 auto;
+}
+
+.hero h1 {
+  font-size: 2.75rem;
+  letter-spacing: -0.01em;
+  margin: 0.75rem 0 0.75rem;
+}
+
+.lead {
+  font-size: 1.375rem;
+  line-height: 1.45;
+  max-width: 36rem;
+  margin-left: auto;
+  margin-right: auto;
+  text-wrap: balance;
+}
+
+.hero::after {
+  content: "";
+  display: block;
+  width: 8rem;
+  height: 3px;
+  margin: 2.5rem auto 0;
+  border-radius: 2px;
+  background: var(--gold);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin: 1.75rem 0 1rem;
+}
+
+.button {
+  display: inline-block;
+  padding: 0.75rem 1.25rem;
+  border: 2px solid var(--button-bg);
+  border-radius: 0.5rem;
+  background: var(--button-bg);
+  color: var(--button-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.button.secondary {
+  background: transparent;
+  color: var(--link);
+}
+
+.fine {
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+section {
+  padding: 2.5rem 0 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 1rem;
+  margin: 0 0 1.25rem;
+}
+
+.cards article {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+}
+
+.cards article p {
+  margin: 0;
+}
+
+/* The steps of a night, numbered on small gold suns. */
+.steps {
+  list-style: none;
+  counter-reset: step;
+  padding: 0;
+}
+
+.steps li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 3rem;
+  margin-bottom: 1rem;
+}
+
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--gold);
+  color: var(--on-gold);
+  font-weight: 600;
+  line-height: 2rem;
+  text-align: center;
+}
+
+.table {
+  overflow-x: auto;
+  margin: 0 0 1.25rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+th {
+  font-weight: 600;
+}
+
+/* On a wide screen the setting and its value stay on one line; on a phone they wrap so the reason keeps room. */
+@media (min-width: 40rem) {
+  th:nth-child(-n + 2),
+  td:nth-child(-n + 2) {
+    white-space: nowrap;
+  }
+}
+
+.ticks {
+  padding-left: 1.25rem;
+}
+
+.ticks li {
+  margin-bottom: 0.5rem;
+}
+
+footer {
+  border-top: 1px solid var(--line);
+  padding: 2rem 0 3rem;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+footer ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+}

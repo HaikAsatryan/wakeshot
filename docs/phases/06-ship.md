@@ -162,7 +162,7 @@ those one at a time across all tracks.
 | `p6-winget-manifest` | no | `p6-pack-and-release`; `p6-launch-research` (the winget rules for an app that updates itself) | done (committed 02:25): templates and `fill.ps1`; `winget validate` passed on the local packs |
 | `p6-readme` | yes: a read at the Phase 6 sign-off; the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3, sign-off item 12) are in, all defaults | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-claude`; the tray track's `p5-haik-check` (review m2); `p6-launch-research` (its scope grows from that Result, Haik 2026-11-04); `p6-media` | blocked: draft done 04:22 (474 lines, 10 media spots, product words from the code as it is); waits for `p5-haik-check` and `p6-media` |
 | `p6-media` | yes: watches the video and the loop and says yes or what to change; about 10 min off the PC for the captures | `p6-launch-research` (tool, storyboard, shot list); `p5-haik-check` (final icon); integration's `p6-int-real-e2e` (the real app) | ready |
-| `p6-pages` | yes: one look before it goes live at v1 | `p6-readme`; the tray track's `p5-icon-art` and `p5-haik-check` (Haik's icon pick rewrites `assets/wakeshot.ico`; review m3) | ready |
+| `p6-pages` | yes: one look before it goes live at v1 | `p6-readme`; the tray track's `p5-icon-art` and `p5-haik-check` (Haik's icon pick rewrites `assets/wakeshot.ico`; review m3) | blocked: draft done (11:50); 9 marked spots wait for other cards |
 | `p6-startup-switch-check` | no | `p6-install-e2e` | done (06:23: the off choice survives Setup over the install by the keys; uninstall leaves the StartupApproved value) |
 | `p6-tray-size` | no (stop 2, a dependency change, waits for the orchestrator) | `p6-int-update-wiring` | done (07:01: release tray 3.95 to 2.71 MB, CLI 0.67 to 0.56 MB) |
 | `p6-uninstall-startup-approval` | no (orchestrator decision for his review) | `p6-startup-switch-check` | done (06:45: 1287 workspace tests; `e2e.ps1` 88 of 88) |
@@ -415,3 +415,9 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   (`docs/brand.md`), so the page is built now with marked spots for media, menu words, release and winget lines,
   and the sleep wording (checked after `p2-6-sleep-route`). Running beside it: `p2-6-sleep-route`, docs pass round 5,
   `p5-haik-check` Part A (built on an export of f47391d, since the tree does not compile mid-change).
+- 2026-11-04 11:50: `p6-pages` draft done: one page in the brand colours, light and dark, no scripts or trackers;
+  `site/` (`index.html`, `style.css`, `wakeshot.svg` drawn from `art.rs`, `favicon.ico`, `check_page.py`) and
+  `pages.yml` (after a finished Release run for stable tags, or by hand; not on `release: published`, since a
+  `GITHUB_TOKEN` event starts no workflow; its `--final` check fails until the 9 spots are filled). actionlint 0
+  errors; WCAG AA for every text colour pair. 10 worker decisions for Haik's review. Waits: `p6-media`,
+  `p5-haik-check` words, `p2-6-sleep-route` wording, README comparison, SmartScreen words, winget line.
