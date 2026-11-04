@@ -94,6 +94,8 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   (below), so a closed laptop never runs unlocked in a bag (Haik, 2026-11-03; power safety review finding 1). The step
   back lasts until the session locks or the lid opens; then the hold runs again. The notice about the failed lock is
   shown again when the user is back at the open laptop, since with the lid closed nobody may have seen it.
+  A hold that starts while the lid is already closed is no lid close, so it does not lock: the user may be working
+  on an external screen (`p2-6-props-rare` worker decision; Haik kept it, 2026-11-04).
 - Sounds wherever they give a useful hint (Haik, 2026-11-03):
   - Lid closed while Wakeshot holds: a short chime says the laptop keeps running.
   - Work ended with the lid closed: a short "going to sleep" sound right before Wakeshot puts the laptop to sleep.
@@ -134,7 +136,9 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   Windows slept by itself, Modern Standby, locked at wake). They go back at lid open, at an unlock, when a hold
   starts, at input (then the 5 minutes start again), and at every other restore point; not at a wake alone, so a
   laptop that wakes with the lid closed sleeps again. If the laptop has not
-  slept 5 minutes later, with the lid still closed and no input since, Wakeshot hibernates it, so a lid close's sleep
+  slept 5 minutes later, with the lid still closed and no input since, Wakeshot hibernates it, also when a restore
+  in those minutes put the user's own timeouts back (`wakeshot restore` from a script; a menu click is input), so a
+  closed laptop never runs on for hours (Haik, 2026-11-04). This way a lid close's sleep
   is matched even when another app holds the PC awake: `SetSuspendState(TRUE)` after `IsPwrHibernateAllowed` and
   enabling SeShutdownPrivilege, with the lid checked right before the call. If hibernate is not allowed or the call
   fails: notify; the short timeouts stay in force, so Windows sleeps the laptop once nothing holds it; they go back
