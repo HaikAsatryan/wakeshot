@@ -924,8 +924,9 @@ parse, met by the guard, restore mode, the install or updated hook or `wakeshot 
 aside; the log holds the old values. The uninstall hook resets at once, since no tray starts after it
 (`p2-6-sleep-route-fixes`, review major 3). The reset covers the sleep route's 1-minute timeouts too, so a lost journal
 while they were in force ends at the defaults (review major 2). A `journal.json.corrupt` whose rename to `.seen` fails
-is logged and not reported, so it is reset at most once: reported at each start, it would reset each time, by then
-maybe over values the user set (review minor 6). One left by `wakeshot restore` while a tray ran is reported only at
+is reported once and then deleted, so it is reset at most once (when it cannot be deleted either, each start reports
+it): reported at each start, it would reset each time, by then maybe over values the user set (review minor 6 and its
+verify). One left by `wakeshot restore` while a tray ran is reported only at
 that tray's next start; the late reset is kept, since nothing else would ever take back the values that file named.
 
 ### Lock and hibernate

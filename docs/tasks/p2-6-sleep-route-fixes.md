@@ -127,6 +127,12 @@ None. Decide the rest yourself and record each choice as "decided by the worker,
   after a window lock failed twice, the step back must not meet a third lock on our Do nothing (guard and test).
 - 2026-11-04 13:49: M4 to M13 again, M12 again after its test: 13 of 13 killed. Final checks (Result): fmt, clippy x64
   and ARM64, workspace tests 1355 passed, props at 4096. Scratch and build folders deleted, checked gone. Status done.
+- 2026-11-04 13:58: verify fix (orchestrator, from the review's "Verify (2026-11-04)" new minor): my minor 6 fix
+  dropped the first report too, so a damaged file restore mode set aside, with a failed rename, was never reset.
+  `mark_seen` now reports it and deletes `journal.json.corrupt` when the rename fails; a delete that fails too is
+  logged and reported again at the next start. Test replaced. Checks: `rustfmt --check` on `executor.rs`, clippy
+  `-p wakeshot-windows` x64 and ARM64, with and without `--all-targets`, `cargo test -p wakeshot-windows` (563
+  passed), two hand mutants (the old `false`, and no delete) both killed. Build and scratch folders deleted.
 
 ## Result
 
@@ -166,9 +172,10 @@ hooks' `HookEnv` (`reset_lost`), which only `hooks.rs` implements.
    says); test `short_keys_the_user_changes_in_a_step_back_never_stop_the_hold`. 5: the leaner of the review's two: a
    failed reset locks once, with the chime, a laptop whose lid closed in the window (`Core::lost_reset_failed`); no
    retry of the reset; test `a_failed_reset_locks_a_laptop_whose_lid_closed_in_the_window_once`. 6: the review's first
-   fix: a `.corrupt` that cannot be renamed to `.seen` is logged and not reported (`PowerExecutor::mark_seen`); the
-   late report of a file `wakeshot restore` set aside while a tray ran is kept, as nothing else would ever reset the
-   values it named; test `startup_does_not_report_a_corrupt_file_it_cannot_mark_seen`. 7: as the review says: the
+   fix, corrected after the verify: a `.corrupt` that cannot be renamed to `.seen` is still reported once, then
+   deleted, so later starts do not report and reset it again (`PowerExecutor::mark_seen`); the late report of a file
+   `wakeshot restore` set aside while a tray ran is kept, as nothing else would ever reset the values it named; test
+   `a_corrupt_file_it_cannot_mark_seen_is_reported_once_then_deleted`. 7: as the review says: the
    window lock waits for the power source to have lasted 30 s, and `check_lock` treats a window lock as ours while a
    hold holds (so a requests-only hold gets the retry and the step back); tests
    `a_window_lock_waits_out_a_short_ac_drop_for_a_docked_user`,
@@ -211,7 +218,7 @@ hooks' `HookEnv` (`reset_lost`), which only `hooks.rs` implements.
 | 4 | A failed reset locks once (with the chime), only for a lid closed in the window; the reset is not retried | Covers every failure cause for the lock; a policy failure would fail again | A log shows a failed reset that a retry would fix: retry it on the 2-minute clock |
 | 5 | Case B is answered from the reset's own answer (entries after a damaged set-aside, this tray the owner): restore, reset again, apply again, once | No timing and no new contract; the IO queue's order makes it exact. Its restore uses `RestoreWhy::WorkEnded` | A log shows it where the entries' originals were right (it costs one restore and one apply) |
 | 6 | The uninstall reset runs with `damaged: true` (the review said `false`), and keeps `logs\` | A file the restore routine set aside a moment ago is gone at the reset's load, and `false` would reset nothing then; the log holds the old values | Never likely |
-| 7 | Minor 6: no report when the `.seen` rename fails; the late report of a CLI set-aside is kept | Repeated resets cost more than a missed one; the late reset is the only thing that takes those values back | A log shows a late reset over the user's own values: skip a `.corrupt` older than the tray's last clean quit |
+| 7 | Minor 6 (after the verify): a `.corrupt` whose `.seen` rename fails is reported, then deleted; one that cannot be deleted either is reported at each start; the late report of a CLI set-aside is kept | The reset must run once, as its values may be in force; nothing can read the file, so deleting it stops the repeats; the late reset is the only thing that takes those values back | A log shows a late reset over the user's own values: skip a `.corrupt` older than the tray's last clean quit |
 | 8 | Notice words as listed; "Check your power settings" as the failed title | Fits four lines with room; the title keeps one line (a 41-character title risks wrapping) | Haik's screen check shows a cut, or he prefers other words |
 | 9 | The listing test drops the backup privilege on its own thread, not a skip | It then tests the denial in every shell | `ImpersonateSelf` fails on a runner: then skip with a printed reason |
 | 10 | The Windows defaults of the short keys are read, not pinned, in the real read-only test | Nothing measured them before; read now: 300, 300, 180 | A second read on another laptop: pin them per laptop |
@@ -245,3 +252,18 @@ deliverable 6), this card. No example needed a change; `notify.rs` none (it show
 - For Haik (`p5-haik-check`): the new notice words above; the window lock and failed-reset lock behavior (decisions
   1 to 4); the uninstall reset (decision 6).
 - Not tested on the laptop: the uninstall reset on a real install, and a real damaged journal in a run.
+
+### Verify fix (2026-11-04)
+
+The review's verify found one new minor in my minor 6 fix: a `.corrupt` that could not be renamed to `.seen` was not
+reported at all, so the values a damaged journal named (set aside by restore mode, the guard or a hook) were never
+reset. Fixed in `crates/wakeshot-windows/src/power/executor.rs` (`PowerExecutor::mark_seen`): the file is reported
+whatever the rename does; when the rename fails, `journal.json.corrupt` is deleted, so no later start reports it and
+resets again; when the delete fails too, the log says so and the next start reports it again (the reset matters more
+than a repeated notice). Test: `a_corrupt_file_it_cannot_mark_seen_is_reported_once_then_deleted` (replaces
+`startup_does_not_report_a_corrupt_file_it_cannot_mark_seen`). Checks: `rustfmt --check` on the file; clippy
+`-p wakeshot-windows` x64 and ARM64, with and without `--all-targets`: exit 0; `cargo test -p wakeshot-windows --locked`
+(debug): 563 passed, 0 failed; hand mutants (report nothing on a failed rename; report but do not delete): both killed.
+Not changed, not mine in this round: `docs/architecture.md` section 5 "Gap left" still says a `.corrupt` whose rename
+fails "is logged and not reported, so it is reset at most once"; it should read "is reported once and then deleted,
+so it is reset at most once (when it cannot be deleted either, each start reports it)".
