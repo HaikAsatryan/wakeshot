@@ -13,9 +13,11 @@ repository.workspace = true
 [dependencies]
 wakeshot-core.workspace = true
 wakeshot-windows.workspace = true
-# The tray only, and only `velo.rs` names it: it brings 113 packages and needs clang for ARM64 (`ring`), and the CLI
-# needs none of it.
+# The tray only, and only `velo.rs` names it: it brings over 90 packages and needs clang for ARM64 (`ring`), and the
+# CLI needs none of it.
 velopack.workspace = true
+# Never named in code: only the pin matters, it picks the IDNA stub for velopack's `url` (root `Cargo.toml`).
+idna_adapter.workspace = true
 
 [dependencies.windows]
 workspace = true

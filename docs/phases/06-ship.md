@@ -163,7 +163,7 @@ those one at a time across all tracks.
 | `p6-media` | yes: watches the video and the loop and says yes or what to change; about 10 min off the PC for the captures | `p6-launch-research` (tool, storyboard, shot list); `p5-haik-check` (final icon); integration's `p6-int-real-e2e` (the real app) | ready |
 | `p6-pages` | yes: one look before it goes live at v1 | `p6-readme`; the tray track's `p5-icon-art` and `p5-haik-check` (Haik's icon pick rewrites `assets/wakeshot.ico`; review m3) | ready |
 | `p6-startup-switch-check` | no | `p6-install-e2e` | done (06:23: the off choice survives Setup over the install by the keys; uninstall leaves the StartupApproved value) |
-| `p6-tray-size` | no (stop 2, a dependency change, waits for the orchestrator) | `p6-int-update-wiring` | blocked: stop 1 done 06:35; stop 2 (go given) runs alone among builders after `p6-uninstall-startup-approval` |
+| `p6-tray-size` | no (stop 2, a dependency change, waits for the orchestrator) | `p6-int-update-wiring` | done (07:01: release tray 3.95 to 2.71 MB, CLI 0.67 to 0.56 MB) |
 | `p6-uninstall-startup-approval` | no (orchestrator decision for his review) | `p6-startup-switch-check` | done (06:45: 1287 workspace tests; `e2e.ps1` 88 of 88) |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
@@ -376,3 +376,13 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   table uninstall row updated here. Left for the next docs pass: `architecture.md` section 6 "Registry values
   Wakeshot writes" and the `store.rs` module doc could name the switch value; the README registry and "What stays"
   lists wait for the README finish.
+- 2026-11-04 07:01: `p6-tray-size` done: `opt-level = "z"` and the `idna_adapter = "=1.0.0"` pin (root workspace
+  dependency; the tray's `Cargo.toml` carries it, since only a dependency takes effect). One resolve, no `cargo
+  update`: 181 to 160 lock packages (only `idna_adapter` and 21 ICU crates). Release x64: tray 3,954,176 to 2,706,432
+  bytes, CLI 668,672 to 557,056. fmt, clippy (x64 both forms, ARM64 core, windows, cli), 1287 tests, release build,
+  CRT check, debug smoke pass; the tray's ARM64 in CI only. Worker slip: an extra `cargo test --release` ran the CLI
+  `run.rs` tests against the real `%LocalAppData%\Wakeshot` (a release exe ignores `WAKESHOT_DATA_DIR`); the
+  folder did not exist before tonight's runs (install cards' BEFORE), so the worker copied it to scratch and deleted
+  it; no tray ran, no power setting touched. Left: that test's release guard, the `architecture.md` section 11
+  dependency rows, the velopack package counts in phase files (113 to 93), panic paths in local release builds
+  (CI builds the shipped exes; `trim-paths` still unstable).

@@ -3814,3 +3814,43 @@ session was locked the whole time, so nobody used the real Settings switch. "Tes
   (hash `E9B25BDF1FD8AC4E`), Path REG_EXPAND_SZ 332 bytes hash `A8FDC61D7FFE5745`; no install trace or data folder.
   The test value was deleted at the end. The `Run` and `StartupApproved\Run` keys' last write times moved (any write
   moves them; nothing puts them back). **Verified** (test; an elevated read at 06:16 and 06:20 matched).
+
+## Tray size
+
+Checked 2026-11-04 between 06:13 and 06:59 for card `docs/tasks/p6-tray-size.md`: release x64 builds of the tray
+(`--locked` unless the lock changed, no `RUSTFLAGS`), option builds in a scratch copy of the workspace. `cargo bloat`
+is not installed, so bytes per crate come from a linker map (`/MAP`, symbol address gaps) and builds with one change.
+
+- **What the update wiring added** (tray 2,026,496 to 3,953,152 bytes). TLS (`rustls`, `ring` with its C and asm
+  code and tables, `webpki-roots`): about 1.09 MB, since a build with SChannel instead was 1,086,464 bytes smaller.
+  The HTTP client (`ureq`, `http`, `ureq-proto`, `httparse`, `bytes`, `base64`): about 213 KB of code. `url`, `idna`
+  and ICU: a build with the IDNA stub was 132,608 bytes smaller. `regex` (a velopack dependency) leaves no code.
+  **Verified** (map and builds).
+- **velopack's features cannot turn these off.** 1.2.161 and the newest, `1.3.39-g8d2844f` (a pre-release), have only
+  `default = []`, `file-logging` and `public-utils`. Both take `ureq` with its default features and `url` as plain
+  dependencies. `ureq` 3.5.1's defaults are `rustls` (with `ring` and `webpki-roots`) and `gzip`; its TLS provider
+  defaults to Rustls and never picks native TLS by itself. **Verified** (registry `Cargo.toml` and
+  `ureq-3.5.1/src/tls/mod.rs`; crates.io API for the feature lists).
+- **The IDNA stub is safe for the tray.** `idna_adapter` README: 1.2.x uses ICU4X, 1.1.x unicode-rs (a larger binary),
+  1.0.x has no Unicode data and rejects non-ASCII host names. `idna` 1.1.0 passes lowercase ASCII labels through
+  without the Unicode back end (`is_passthrough_ascii_label` in `src/uts46.rs`). velopack parses only the GitHub repo
+  URL with `url` (`GithubSource::new`); asset and redirect URLs go to `ureq`. The 7 `velo` unit tests pass with the
+  stub; they build the GitHub source, which panics on a URL that does not parse. **Verified** (source and test);
+  `host_str()` at run time: **not verified** beyond the source.
+- **Sizes, release x64, bytes** (tray alone, `-p wakeshot-tray`): baseline 3,953,152; `opt-level = "s"` 3,053,568;
+  `"z"` 2,827,776; IDNA stub 3,820,544; SChannel (a patched velopack) 2,866,688; `"z"` and the stub 2,705,920; all
+  three 1,865,728 (ARM64 1,699,840). **Verified** (builds).
+- **Shipped: `opt-level = "z"` and `idna_adapter = "=1.0.0"`.** Workspace release x64 build: tray 3,954,176 to
+  2,706,432 (minus 31.6%), CLI `wakeshot.exe` 668,672 to 557,056 (minus 16.7%). `Cargo.lock` 181 to 160 packages:
+  `idna_adapter` 1.2.2 to 1.0.0 and 21 ICU packages gone, nothing else. Both exes pass the CI CRT check. **Verified**
+  (builds, lock diff, `dumpbin /dependents`).
+- **SChannel works for the update path; not shipped.** `ureq` 3.5.1 with `native-tls-no-default`,
+  `TlsProvider::NativeTls` and `RootCerts::PlatformVerifier`: GET of the GitHub releases API 200 (for
+  `HaikAsatryan/wakeshot` and `velopack/velopack`), HEAD of a release asset through the github.com redirect 200. With
+  it, `ring` leaves the build and the ARM64 tray builds with no clang on PATH. **Verified** (scratch program and
+  scratch build). Needs a patched velopack; a proposal for Haik.
+- **Cargo's `trim-paths` is not stable in Cargo 1.99.1** ("feature `trim-paths` is required"), so release exes keep
+  the build machine's source paths as panic locations (about 19 KB). **Verified** (manifest parse).
+- **No test runs the release exes.** The dry-run smoke test skips itself in a release build, and the CLI's
+  `tests/run.rs` has no such guard: under `cargo test --release` its runs ignore `WAKESHOT_DATA_DIR` and use the real
+  `%LocalAppData%\Wakeshot`. **Verified** (test; the folder this made was deleted).

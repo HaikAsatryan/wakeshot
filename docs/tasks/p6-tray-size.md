@@ -1,6 +1,6 @@
 # Why the release tray exe doubled, and whether it can shrink
 
-Phase: 6. Status: blocked (stop 1 done; stop 2 waits for the orchestrator's go). Needs Haik: no (a dependency change waits for the orchestrator's go). Agent:
+Phase: 6. Status: done. Needs Haik: no (a dependency change waits for the orchestrator's go). Agent:
 `wakeshot-worker`. Size: about 50K tokens. Written by the orchestrator (session `wakeshot-12`, 2026-11-04) from the
 `p6-install-e2e` rerun (sizes) and docs pass round 4 "Found outside scope" 8.
 Runs after: `p6-int-update-wiring` (done). Parallel with: stop 1 runs beside any card (read only, own target folder);
@@ -56,10 +56,18 @@ Problems seen but not fixed.
    hold the runner's paths, not Haik's name. Cargo's `trim-paths` would drop them, but it is still unstable in Cargo
    1.99.1 (checked: the manifest fails to parse with "feature `trim-paths` is required"). Change it when `trim-paths`
    is stable, or if a release is ever built on the laptop.
-2. The dry-run smoke test runs `CARGO_BIN_EXE_wakeshot-tray` of the test profile (debug), so no check runs the release
-   profile's exe. With a new `opt-level`, stop 2 should run the smoke test once with `--release` as well.
-3. The facts below (sizes, velopack features, the IDNA stub, the SChannel check) belong in `docs/research.md`. Stop 1
-   may change only this card, so stop 2 (or the orchestrator) adds them there.
+2. No test runs a release exe. The dry-run smoke test skips itself in a release build (a release exe ignores
+   `WAKESHOT_DATA_DIR`), so its `--release` run checks nothing; stop 1's advice to run it was wrong. The CLI's
+   `crates/wakeshot-cli/tests/run.rs` has no such guard: under `cargo test --release` its runs use the real
+   `%LocalAppData%\Wakeshot` (it happened here, see the Log at 06:58). Fix: the same `cfg!(debug_assertions)` skip as
+   `smoke.rs`, `recovery.rs` and `tests/e2e/mod.rs` (`tests/exe.rs` needs none: help and argument errors only).
+3. `docs/architecture.md` section 11 (Dependencies) has no row for the new direct dependency `idna_adapter` (1.0.0,
+   tray only, pinned in the root `[workspace.dependencies]`, never named in code: it picks the no-Unicode IDNA back
+   end for velopack's `url`). Its `velopack` row still says `Cargo.lock` 80 to 181 packages (now 160).
+   `docs/phases/06-ship.md` line 29 and `docs/phases/01-design-skeleton.md` line 501 say velopack brings 113
+   packages; now 93 on x64 (`cargo tree -e normal`, besides itself). Not edited: outside this card's files.
+4. The dry-run icon's `HKCU\Control Panel\NotifyIconSettings\15983757285637097514` (only `IconSnapshot`) was there
+   before this card's smoke run, from an earlier run; this run added no entry, so it was left alone.
 
 ## Log
 
@@ -79,10 +87,69 @@ Problems seen but not fixed.
   release profile plus `idna_adapter = "=1.0.0"` in `crates/wakeshot-tray/Cargo.toml` (3,953,152 to 2,705,920 bytes,
   minus 31.6%). SChannel through a patched velopack (to 1,865,728) is not in stop 2: it needs a vendored velopack, outside
   stop 2's three files; proposed as its own card. Reasons and triggers in Result, "Decided by the worker".
+- 2026-11-04 06:46: the orchestrator's go for stop 2 with the pick (opt-level "z" and the IDNA stub); SChannel stays a
+  proposal for Haik. No other card builds. Started: sizes before, then the change, then the full checks.
+- 2026-11-04 06:58: change made (root `Cargo.toml`, tray `Cargo.toml`, `Cargo.lock` by one resolve, no `cargo
+  update`); fmt, clippy (x64 both forms, ARM64 core, windows and cli both forms), `cargo test --workspace --locked`, the
+  release x64 build and both smoke runs passed. The smoke run with `--release` only prints "skipped: a release exe
+  ignores WAKESHOT_DATA_DIR": by design it never runs the release exe.
+- 2026-11-04 06:58: **my mistake, cleaned up.** As an extra check of the `"z"` code I ran `cargo test --workspace
+  --release --locked --target x86_64-pc-windows-msvc`. The CLI's `tests/run.rs` has no release guard, and a release
+  `wakeshot.exe` ignores `WAKESHOT_DATA_DIR`, so its runs used the real `%LocalAppData%\Wakeshot`: the folder was
+  created at 06:57:41 by these runs (it did not exist before; creation time and log lines match the tests), with two
+  logs and one leftover hold file `holds\run-23792.json` (pid 23792 already gone). No tray ran ("Wakeshot is not
+  running"), so nothing held the PC awake, and the CLI writes no power setting. 3 tests failed for the same reason, and
+  cargo stopped there. I copied the folder to `<scratchpad>\p6-tray-size\real-data-folder-copy`, deleted
+  `%LocalAppData%\Wakeshot` (checked gone 06:58), and found no process of mine left. Not rerun: the release test run is
+  invalid by design for these tests.
+- 2026-11-04 07:00: `docs/research.md` section "Tray size" added; build folder deleted (checked gone); the real data
+  folder still gone. Status done.
 
 ## Result
 
-**Stop 1 done 2026-11-04 06:34; stop 2 waits for the orchestrator's go.** Only this card changed in the repo.
+**Done 2026-11-04 07:00.** Stop 1 (read only) found the cause and the options; stop 2 shipped the pick on the
+orchestrator's go (an orchestrator decision, for Haik's review). The SChannel option stays a proposal for Haik.
+
+### Stop 2: what changed
+
+| File | Change |
+|---|---|
+| `Cargo.toml` | `[workspace.dependencies]`: `idna_adapter = "=1.0.0"` with a why comment. `[profile.release]`: `opt-level = "z"` with a why comment |
+| `crates/wakeshot-tray/Cargo.toml` | `idna_adapter.workspace = true` with a why comment (the pin works only as some package's dependency, and the tray is the one with velopack); the velopack comment's "113 packages" became "over 90" (93 on x64 now, `cargo tree -e normal`) |
+| `Cargo.lock` | written by one resolve (`cargo metadata`), no `cargo update`: `idna_adapter` 1.2.2 to 1.0.0, 21 ICU packages removed (`icu_*`, `zerovec`, `yoke`, `tinystr` and their kin), the tray's new edge; 181 to 160 packages, no other version changed (diffed); identical to stop 1's scratch lock |
+| `docs/research.md` | new section "Tray size" |
+
+Sizes, release x64, `cargo build --release --workspace --locked`:
+
+| Exe | Before | After | Change |
+|---|---|---|---|
+| `wakeshot-tray.exe` | 3,954,176 | 2,706,432 | minus 1,247,744 (31.6%) |
+| `wakeshot.exe` (CLI) | 668,672 | 557,056 | minus 111,616 (16.7%; `opt-level` only, the CLI has no velopack) |
+
+### Stop 2: checks
+
+| Check | Outcome |
+|---|---|
+| `cargo fmt --all --check` | exit 0 |
+| `cargo clippy --workspace --all-targets --locked --target x86_64-pc-windows-msvc -- -D warnings`, and without `--all-targets` | exit 0, both |
+| `cargo clippy -p wakeshot-core -p wakeshot-windows -p wakeshot-cli --locked --target aarch64-pc-windows-msvc -- -D warnings`, with and without `--all-targets` | exit 0, both |
+| ARM64 tray | **CI only**: no clang on this laptop (`ring`); not run |
+| `cargo test --workspace --locked` | exit 0; 14 suites, 1,287 passed, 0 failed, 52 ignored |
+| `cargo build --release --workspace --locked --target x86_64-pc-windows-msvc` | exit 0; sizes above |
+| CI's CRT check (`dumpbin /dependents`) on both new exes | passed; no Visual C++ runtime import |
+| Smoke, debug: `cargo test --locked -p wakeshot-tray --target x86_64-pc-windows-msvc --test smoke -- --ignored --test-threads=1` | 1 passed; the dry-run tray started, held, went idle, ended with code 0; no new `NotifyIconSettings` entry or AUMID key |
+| Smoke, `--release` | exit 0, but the test skips itself in a release build ("a release exe ignores WAKESHOT_DATA_DIR"), so it checks nothing |
+| Extra, my choice: `cargo test --workspace --release --locked --target x86_64-pc-windows-msvc` | **invalid by design, and it touched the real data folder**: 3 CLI `run.rs` tests failed because a release `wakeshot.exe` ignores `WAKESHOT_DATA_DIR`; the folder it made was copied to scratch and deleted (Log 06:58) |
+| Build folder | deleted, checked gone |
+
+No power setting was read or written by this card; no install, hook, Run or RunOnce value touched.
+
+Open items: the "Found outside scope" list (the CLI test release guard, the dependency rows in `docs/architecture.md`
+and the phase files, the old dry-run icon entry). The SChannel card if Haik wants it (stop 1 below). Scratch kept in
+`<scratchpad>\p6-tray-size\`: `exes\` (every measured exe and map), `ws\` (the scratch workspace with the patched
+velopack), `tlscheck\`, `real-data-folder-copy\`, scripts and lock files.
+
+### Stop 1 (read only, 06:13 to 06:34)
 
 ### What adds the bytes
 
@@ -164,10 +231,8 @@ What each costs, in detail:
   `velopack` default features of its own dependencies; none from a `wakeshot-*` crate.
 - The option builds above, in a scratch copy of the workspace; `cargo update` ran only there.
 
-### For stop 2
+### Stop 1's advice for stop 2
 
-- The card's checks, plus the dry-run smoke test once with `--release` (it otherwise runs the debug exe; "Found outside
-  scope" 2).
-- Build folder kept: `<scratchpad>\p6-tray-size\target` (the baseline build). Also kept in `<scratchpad>\p6-tray-size\`:
-  `exes\` (each exe and map), `ws\` (the scratch copy, now A2 + B + C with the patched velopack in `ws\vendor`),
-  `tlscheck\` (the SChannel check), the scripts and lock files. The second build folder (`target-map`) is deleted.
+- The card's checks, plus the smoke test once with `--release`. Wrong in part: that run skips itself (stop 2 checks
+  above; "Found outside scope" 2).
+- Stop 1's second build folder (`target-map`) was deleted at stop 1; the main one at stop 2.

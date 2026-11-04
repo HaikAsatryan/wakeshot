@@ -23,8 +23,13 @@ serde_json = "1.0.154"
 proptest = "1.12.0"
 # Pinned exactly: it must match the `vpk` 1.2.161 that packs the app (`docs/phases/06-ship.md`).
 velopack = "=1.2.161"
+# Pinned to the stub with no Unicode tables, which drops ICU from the tray: `url` (from velopack) needs them only for
+# non-ASCII host names, and the one URL the tray parses is ASCII (`p6-tray-size`).
+idna_adapter = "=1.0.0"
 
 [profile.release]
+# Smallest code over fastest: the tray mostly idles, and its exe size is a selling point (`p6-tray-size`).
+opt-level = "z"
 lto = true
 codegen-units = 1
 panic = "abort"
