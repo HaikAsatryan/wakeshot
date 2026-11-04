@@ -226,3 +226,20 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   finish and `p6-pages`. Open calls for him: `p6-int-wiring-fixes` decision 7 (a lock on a user's own Do nothing
   while the journal is unknown), the SChannel option of `p6-tray-size` (1.87 MB and no clang, but a patched
   velopack), the clang install, the winget token owner, actionlint on `release.yml`.
+- 2026-11-04 14:09 (session `wakeshot-12`, Haik back since about 09:50): Haik answered every open call (product.md and the
+  phase work logs: sleep, not hibernate, after a closed-lid work end and at the floor, through Windows' own idle
+  sleep with 60 s timeouts, hibernate as the fallback; a lost journal goes to Windows defaults; the TLS stays rustls,
+  velopack issue #1146; winget token on his account; the brand: the Sunrise, night violet and sun gold). Done and
+  pushed today: `p3-idle-sleep-check` (with Haik), `p2-6-record-lost`, `p2-6-sleep-route`, its review (0 blockers;
+  3 majors fixed and verified) and `p2-6-sleep-route-fixes`, the screen runs of `p5-tray-icon`, `p5-menu-view`,
+  `p5-notices`, the `p6-int-tray-mode` and `p6-int-dry-run-e2e` pictures, `p5-haik-check` Part A (`ux_all`),
+  docs passes 5 and 6, the README comparison (PowerToys Awake, Caffeine, Don't Sleep), drafts of `p6-pages` and
+  `p6-media` Part A. Nothing runs now. GitHub refused the SSH key 13:50 to about 14:30 (cause not verified); pushes
+  work again.
+- Next (orchestrator): check CI on the last push; one core property failed once in docs pass round 6
+  (`a_released_key_is_never_ours_in_force_again_in_its_episode`, on `SleepDc`; reruns passed; input lost): a small
+  card to find it. Then Haik, in order: read the README table; `p5-haik-check` Part B (about 25 min; the new notice
+  words are in `text.rs`); `p3-haik-checks` (about 60 min, alone on the laptop); `p6-int-haik-checks` (about 45
+  min, with its 2026-11-04 changes); `p6-media` Part B (speed numbers with the laptop idle, captures, his look);
+  then the README and Pages finish.
+
