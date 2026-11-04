@@ -160,6 +160,8 @@ those one at a time across all tracks.
 | `p6-readme` | yes: a read at the Phase 6 sign-off; the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3, sign-off item 12) are in, all defaults | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-claude`; the tray track's `p5-haik-check` (review m2); `p6-launch-research` (its scope grows from that Result, Haik 2026-11-04); `p6-media` | blocked: draft done 04:22 (474 lines, 10 media spots, product words from the code as it is); waits for `p5-haik-check` and `p6-media` |
 | `p6-media` | yes: watches the video and the loop and says yes or what to change; about 10 min off the PC for the captures | `p6-launch-research` (tool, storyboard, shot list); `p5-haik-check` (final icon); integration's `p6-int-real-e2e` (the real app) | ready |
 | `p6-pages` | yes: one look before it goes live at v1 | `p6-readme`; the tray track's `p5-icon-art` and `p5-haik-check` (Haik's icon pick rewrites `assets/wakeshot.ico`; review m3) | ready |
+| `p6-startup-switch-check` | no | `p6-install-e2e` | in progress (started 06:13; alone on the laptop: installs) |
+| `p6-tray-size` | no (stop 2, a dependency change, waits for the orchestrator) | `p6-int-update-wiring` | in progress (started 06:13: stop 1, read only) |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
 dependency 110K, pack and release 110K, install e2e 130K, winget 60K, README 70K, Pages 60K. About 880K in all.
@@ -342,3 +344,7 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   fixtures renamed `user_values` in 11 files (names and comments only); `claude-code-signals.md` closing note says
   `procStart`. Workspace tests and both clippy forms pass. Open from it: start at login after Setup over the install
   (not verified), SmartScreen text, the unlocked-session checks, the tray exe at 3.95 MB (was 2.0).
+- 2026-11-04 06:13 (orchestrator `wakeshot-12`): two new cards from docs pass round 4 and the `p6-readme` draft:
+  `p6-startup-switch-check` (does start at login stay off after `Setup.exe` over the install, and what uninstall
+  leaves of the switch; alone on the laptop) and `p6-tray-size` (why the release tray grew from 2.0 to 3.95 MB;
+  stop 1 read only, a dependency change only after the orchestrator's go).
