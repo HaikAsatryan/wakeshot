@@ -23,7 +23,7 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::test_runner::{Config as ProptestConfig, TestCaseError};
 
-use crate::command::{ApplyError, Command, Outcome};
+use crate::command::{ApplyError, Command, Outcome, RestoreWhy};
 use crate::event::{Event, SessionChange};
 use crate::holds::HoldFacts;
 use crate::ownership::fake::{FakeJournal, SetBy};
@@ -106,6 +106,9 @@ struct Model {
     plan: Option<PlanValues>,
     ac: Option<bool>,
     battery_pct: Option<u8>,
+    /// When the power source last changed, as the core heard it (run time): on battery, the last AC loss, from which
+    /// the floor's grace counts (Haik, 2026-11-05).
+    source_since: Option<u64>,
     stepped_back: bool,
     step_back_shown: bool,
     episode: Option<Episode>,
@@ -202,10 +205,29 @@ impl Model {
                 .is_some_and(|w| !w.retry && step.at.mono_ms >= w.check_mono)
     }
 
+    /// This step's `Lock`s less the one retry of a lid lock, which has no sound of its own.
+    fn new_locks(&self, step: &sim::Step) -> usize {
+        let locks = step
+            .commands
+            .iter()
+            .filter(|c| **c == Command::Lock)
+            .count();
+        locks.saturating_sub(usize::from(self.lock_retry_due(step)))
+    }
+
+    /// A lid-close or source lock in this step: a `Lock` with the lid chime, or a new one with the floor chime, as a
+    /// source lock that comes with a step back's first sound and notice goes without the chime (`p2-6-floor-grace`).
+    fn lid_lock_sent(&self, step: &sim::Step) -> bool {
+        let sent = |c: &Command| step.commands.contains(c);
+        (sent(&Command::Lock) && sent(&Command::Play(Cue::LidClosedHolding)))
+            || (self.new_locks(step) > 0 && sent(&Command::Play(Cue::BatteryFloor)))
+    }
+
     /// The lid lock watch through one step, from the section 8 row: the lock with the chime starts it, `Locked` or the
     /// lid opening ends it (and the step back), a failure makes the next tick decide, and a due tick gives the retry
     /// (its `Lock` in the step) or, after the retry, the step back.
     fn take_lock(&mut self, step: &sim::Step) {
+        let lid_lock = self.lid_lock_sent(step);
         match step.event {
             Event::Session(SessionChange::Locked) | Event::Lid { closed: false } => {
                 self.lock_watch = None;
@@ -231,10 +253,6 @@ impl Model {
             }
             _ => {}
         }
-        let lid_lock = step.commands.contains(&Command::Lock)
-            && step
-                .commands
-                .contains(&Command::Play(Cue::LidClosedHolding));
         if lid_lock && !self.locked {
             self.lock_watch = Some(LockWatch {
                 retry: false,
@@ -399,6 +417,9 @@ impl Model {
             },
             Event::SettingsOwner => self.owner = true,
             Event::Power { ac, battery_pct } => {
+                if self.ac.is_some_and(|was| was != *ac) {
+                    self.source_since = Some(step.at.mono_ms);
+                }
                 self.ac = Some(*ac);
                 self.battery_pct = *battery_pct;
             }
@@ -424,7 +445,15 @@ impl Model {
         self.take_lock(step);
         let was = self.stepped_back;
         if let Some(ac) = self.ac {
-            self.stepped_back = floor::stepped_back(was, ac, self.battery_pct, self.floor_pct());
+            let answer = floor::decide(
+                was,
+                ac,
+                self.battery_pct,
+                self.floor_pct(),
+                self.source_since,
+                step.at.mono_ms,
+            );
+            self.stepped_back = answer == floor::Floor::SteppedBack;
         }
         if !self.stepped_back {
             self.step_back_shown = false;
@@ -782,14 +811,15 @@ fn core_can_know(seen: &Seen<'_>) -> bool {
     truth.in_sync && seen.before.plan.is_some_and(|p| p.active == truth.active)
 }
 
-/// The lid-close and source lock (a `Lock` with the chime) never goes out while the lid action in force for the
+/// The lid-close and source lock ([`Model::lid_lock_sent`]) never goes out while the lid action in force for the
 /// current power source is the user's own Do nothing (decision 18). Judged only where [`core_can_know`]. Since
 /// `p2-6-record-lost` no guess locks while the journal is unknown, so that window needs no excuse.
 fn no_lock_on_the_users_own_do_nothing(world: &World) -> Result<(), String> {
     for seen in replay(world) {
         let truth = seen.truth();
-        let lid_lock =
-            seen.sent(&Command::Lock) && seen.sent(&Command::Play(Cue::LidClosedHolding));
+        let lid_lock = seen
+            .step
+            .is_some_and(|step| seen.before.lid_lock_sent(step));
         if !lid_lock || !core_can_know(&seen) {
             continue;
         }
@@ -878,7 +908,8 @@ fn every_action_is_explained(world: &World) -> Result<(), String> {
             && !commands.iter().any(|c| {
                 matches!(
                     c,
-                    Command::Play(Cue::LidClosedHolding) | Command::Notify(Notice::IdleLocked)
+                    Command::Play(Cue::LidClosedHolding | Cue::BatteryFloor)
+                        | Command::Notify(Notice::IdleLocked)
                 )
             })
             && !seen.before.lock_retry_due(step)
@@ -984,6 +1015,46 @@ fn every_action_is_explained(world: &World) -> Result<(), String> {
                 ));
             }
             _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// Haik, 2026-11-05: under the battery floor the step back comes only once the PC has been on battery for the grace
+/// since the last AC loss the core heard, or at once when it heard none (a tray that starts on battery). So a dock's
+/// short AC drop gives no floor chime, no step back notice and no floor restore. Judged on the model's own record of
+/// the source change and the step's time, not on its step back flag, which comes from `policy::floor` as the core's
+/// does. A floor restore the failed lid lock's step back sends is that rule's, not this one's.
+fn no_step_back_inside_the_grace(world: &World) -> Result<(), String> {
+    let floor_restore = Command::Restore {
+        plan: None,
+        why: RestoreWhy::Floor,
+    };
+    for seen in replay(world) {
+        let Some(step) = seen.step else {
+            continue;
+        };
+        let returning = seen.before.away() && !seen.after.away();
+        let chime = seen.sent(&Command::Play(Cue::BatteryFloor));
+        let notice = !returning
+            && step
+                .commands
+                .iter()
+                .any(|c| matches!(c, Command::Notify(Notice::StepBack { .. })));
+        let restore = !seen.after.lock_stepped_back && seen.sent(&floor_restore);
+        if !(chime || notice || restore) {
+            continue;
+        }
+        let on_battery_ms = seen
+            .after
+            .source_since
+            .map(|at| step.at.mono_ms.saturating_sub(at));
+        if seen.after.ac != Some(false) || on_battery_ms.is_some_and(|ms| ms < floor::GRACE_MS) {
+            return Err(format!(
+                "a floor step back (chime {chime}, notice {notice}, restore {restore}) on AC or after only \
+                 {on_battery_ms:?} ms on battery, {}",
+                seen.where_()
+            ));
         }
     }
     Ok(())
@@ -1453,6 +1524,16 @@ fn coverage_tally() {
                 }
                 if s.after.stepped_back && s.after.episode.is_some() {
                     bump("P6 steps stepped back while holding", 1);
+                }
+                if s.edges.step_back && s.after.source_since.is_some() {
+                    bump("P13 step backs after an AC loss", 1);
+                }
+                let in_grace = s.before.ac == Some(false)
+                    && !s.before.stepped_back
+                    && s.before.episode.is_some()
+                    && floor::below(s.before.battery_pct, s.before.floor_pct());
+                if in_grace && matches!(step.event, Event::Power { ac: true, .. }) {
+                    bump("P13 AC back under the floor before a step back, holding", 1);
                 }
                 if s.sent(&Command::Lock)
                     && s.sent(&Command::Play(Cue::LidClosedHolding))
@@ -2237,6 +2318,12 @@ proptest! {
     fn every_lock_step_back_and_user_change_is_explained(case in case()) {
         let world = play(&case);
         verdict(&world, every_action_is_explained(&world))?;
+    }
+
+    #[test]
+    fn no_floor_step_back_before_30_s_on_battery(case in prop_oneof![case(), lid_case()]) {
+        let world = play(&case);
+        verdict(&world, no_step_back_inside_the_grace(&world))?;
     }
 
     #[test]

@@ -337,7 +337,8 @@ State is one struct owned by the loop thread: `automatic`; holds by source; live
 `floor_pct`, `lid`; `episode: Option<Episode>` (from the first hold to the last: `released: Set<SettingKey>`, on every
 plan, `lid_closed_since`, labels of what held); a mirror of the journal, a copy of the entries that `Done(Applied)` and
 `Done(Restored)` carry, less the keys `UserChanged` names, with when it became unknown and whether a `ResetLost` is
-out; `requests`; `stepped_back` (battery floor); `on_console`;
+out; `requests`; `stepped_back` (battery floor); `source_since_mono` (when the power source last changed: on battery
+the AC loss the floor's grace and the source lock count from); `on_console`;
 `session_ending`; `ending: Option<Countdown>`; `short` (the sleep route's short timeouts in force, with the fallback's
 deadline) and the short keys the user changed in this countdown; `last_resume_mono` and `last_unlock_mono`; notices
 already shown; and the lid side's own
@@ -427,7 +428,11 @@ While holding:
   into a bag running and unlocked. The 30 s (Haik, 2026-11-03) keep a dock's short AC drop (5.3 s and 6.3 s on the
   test laptop; research, "AC can drop for a few seconds while docked", "Power rules checks") from locking someone who types on an external screen; someone who unplugs only the charger while doing so
   is locked, the safe side (decision 18). What Windows itself would do with the user's values at that moment: not
-  tested (checklist 8).
+  tested (checklist 8). An unplug under the battery floor makes this lock and the floor step back (below) due in the
+  same settle pass: the source lock settles first, so its `Lock` goes out ahead of the step back's `Restore`, and
+  without `Play(LidClosedHolding)`, since the step back's `Play(BatteryFloor)` and notice go with it and the chime says
+  the laptop keeps running (`p2-6-floor-grace`, worker decision for Haik's review). Change it when Haik wants both
+  sounds.
 - Another user's session takes the PC's own screen and keyboard (fast user switching, `Session(ConsoleLeft)`):
   `Restore { plan: None }` and hold the system request only, also with Keep screen on; `ConsoleBack`: the screen
   request again if asked for, and `Apply` as at a hold start. Plans are machine-wide, so our Do nothing would keep the
@@ -438,11 +443,18 @@ While holding:
   names "the console terminal or RemoteFX session"; not tested), so a user working over Remote Desktop gets requests
   only. A restore that fails here warns in this session, not the user at the screen; it is retried at the ticks (below).
   Session notices: not tested (checklist 11). Phase 1 Question 10: the default, Haik 2026-11-03 18:09.
-- On battery under the floor (energy saver threshold DC; 20 when it is 0 "Never" or 100 "On battery"): step back:
-  `Requests` off, `Restore`, notice and `Play(BatteryFloor)`; if the lid is closed and the user's own battery lid
-  action is not Do nothing, start the countdown (reason Floor). A lid close after the step back follows the same
-  rule (Haik, 2026-11-03; power safety review finding 7).
-  No hold starts while stepped back. AC back: hold again.
+- On battery under the floor (energy saver threshold DC; 20 when it is 0 "Never" or 100 "On battery"), once the PC has
+  been on battery for 30 s since the last AC loss the core heard (`policy::floor::decide`, `GRACE_MS`, the source
+  lock's 30 s; at once when it heard none, as for a tray that starts on battery): step back: `Requests` off,
+  `Restore`, notice and `Play(BatteryFloor)`; if the lid is closed and the user's own battery lid action is not Do
+  nothing, start the countdown (reason Floor). Until then holds hold, the settle pass gives the grace's end as a
+  deadline, and AC back within the 30 s does nothing: no step back, sound, notice, restore or apply (Haik,
+  2026-11-05: in his checks each dock drop of 4 to 10 s under the floor gave all of these). A lid close after the step
+  back follows the same rule (Haik, 2026-11-03; power safety review finding 7). With the lid closed, the restore 1 s
+  after an unplug made Windows' own lid action sleep the laptop at once, so the countdown never ran (Haik's block 4,
+  2026-11-05; whether the source change or the restore made Windows act: not verified); with the 30 s it is not known
+  whether Windows still acts at the restore or the countdown runs; both are safe. No hold starts while stepped back.
+  AC back: hold again.
 - Keep screen on: `Lock` and `Notify(IdleLocked)` when input idle passes the user's own sleep timeout for the current
   power source (from the journal's `original` while we own it; none when it is Never), once per idle period. Windows locks by itself at
   screen-off standby otherwise (research, "Lock").

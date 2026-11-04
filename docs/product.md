@@ -114,12 +114,19 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   battery below the floor, Wakeshot steps back once the PC has been on battery for 30 seconds: it releases every
   request, restores settings and notifies, so Windows rules apply. If AC comes back within the 30 seconds, nothing
   happens: no step back, no chime, no notice (Haik, 2026-11-05: in his checks every short dock AC drop gave a chime
-  and a notice, and one notice showed late, on AC; the same 30 seconds as the lock after an unplug). If the lid is closed, it then puts the laptop to sleep the same way as at work end (below;
-  sleep, not hibernate, Haik 2026-11-04), after the same 5 minutes with no input, so someone typing on an external
-  screen with the lid closed is not put to sleep. If the user's own battery lid action is Do nothing, it does not act,
-  the same rule as at work end (Haik, 2026-11-03). Right before it acts, it checks again that the lid is closed and
-  the PC is on battery under the floor: a USB-C dock can drop AC for a few seconds (seen on the test laptop). When AC
-  comes back, the hold resumes.
+  and a notice, and one notice showed late, on AC; the same 30 seconds as the lock after an unplug). During the 30
+  seconds every hold keeps holding, and no setting is restored or written again. They count from the last AC loss, so
+  AC that comes and goes starts them again. A battery that falls under the floor after 30 seconds on battery steps
+  back at once, and so does a Wakeshot that starts on battery under the floor: there is no AC drop to wait out
+  (worker decision of `p2-6-floor-grace`, for Haik's review). An unplug with the lid closed brings the lock after an
+  unplug (above) at the same moment: the lock goes first, with the battery floor sound only, since the lid-close chime
+  says the laptop keeps running (worker decision, for Haik's review). If the lid is closed, it then puts the laptop to
+  sleep the same way as at work end (below; sleep, not hibernate, Haik 2026-11-04), after the same 5 minutes with no
+  input, so someone typing on an external screen with the lid closed is not put to sleep; right after an AC loss
+  Windows may sleep it at once instead (work end, below). If the user's own battery lid action is Do nothing, it does
+  not act, the same rule as at work end (Haik, 2026-11-03). Right before it acts, it checks again that the lid is
+  closed and the PC is on battery under the floor: a USB-C dock can drop AC for a few seconds (seen on the test
+  laptop). When AC comes back, the hold resumes.
 - With the lid closed, Wakeshot holds for as long as the work runs: no time limit and no heat guard. Someone who sets
   the lid to Do nothing by hand and puts the laptop in a bag gets no heat check either, and the hardware's own
   protection applies the same in both cases: the CPU slows itself at its limit (not tested here), and Windows shuts
@@ -128,8 +135,13 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   (Haik, 2026-11-03), so someone typing on an external screen with the lid closed is not put to sleep. The rule
   (Haik, 2026-11-04): when Wakeshot is done, the laptop ends up where Windows would have put it, and with the lid
   closed that is sleep. It must act itself: putting the lid action back does not sleep a laptop whose lid is already
-  closed (tested), and after a release the laptop runs until the user's own screen timeout turns the screen off and
-  the sleep timeout has passed (tested with the lid closed on battery, `p3-idle-sleep-check`). On Modern Standby,
+  closed (tested, with no power source change). Right after one it did: in Haik's block 4 (2026-11-05) the battery
+  floor's step back put his own Sleep back 1 second after he unplugged the closed laptop, and Windows slept it 0.4
+  seconds later, so the 5-minute route never ran; whether the source change or the restore made Windows act is not
+  verified. With the battery floor's 30 seconds the restore comes 30 seconds after the unplug, and it is not known
+  whether Windows still acts then or the 5-minute route runs; both are safe. After a release the laptop runs until
+  the user's own screen timeout turns the screen off and the sleep timeout has passed (tested with the lid closed on
+  battery, `p3-idle-sleep-check`). On Modern Standby,
   Windows gives apps no call that starts sleep (Microsoft Q&A; on this
   laptop `SetSuspendState(FALSE)` hibernates, tested), so Wakeshot uses Windows' own idle sleep: after the sound it
   sets the screen and sleep timeouts of the plan in use, on AC and DC, to 1 minute where the user's own is longer,

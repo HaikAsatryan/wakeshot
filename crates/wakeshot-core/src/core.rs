@@ -12,7 +12,8 @@
 //! episode wants one and the core applies now; restores go out at the edges and as retries on the tick.
 //!
 //! The closed-lid and battery side lives in `lid`: the battery floor goes into the settle pass before the requests
-//! (stepped back takes none), the step back's actions, the countdown and the source lock after the episode edges.
+//! (stepped back takes none; its grace gives a deadline), the source lock, the step back's actions and the countdown
+//! after the episode edges.
 //! Every notice goes through `Core::notify`, which keeps it while the user is away. Updates live in `update`.
 
 mod holds;
@@ -290,7 +291,7 @@ impl Core {
                 self.notify(Notice::UpdateWakeshot { agent }, out);
             }
         }
-        self.settle_floor(out);
+        let floor_due = self.settle_floor(now, out);
 
         let wanted = requests::wanted(RequestFacts {
             holding: !found.holders.is_empty(),
@@ -329,6 +330,7 @@ impl Core {
         let state_due = view::show(&mut self.state, &found, now, out);
         let plan_due = self.plan_read_due(now);
         let next = nearest(nearest(found.next, state_due, now), plan_due, now);
+        let next = nearest(next, floor_due, now);
         self.state.next = nearest(nearest(next, lid_due, now), journal_due, now);
     }
 

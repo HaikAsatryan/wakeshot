@@ -1645,6 +1645,277 @@ fn a_lid_close_after_the_step_back_with_the_users_own_battery_do_nothing_gives_n
     assert!(sleep_checks(&out).is_empty(), "{trace}");
 }
 
+// Item 3b: the floor's grace (`p2-6-floor-grace`, Haik 2026-11-05): under the floor the step back comes only once the
+// PC has been on battery for 30 s, so a dock's short AC drop changes nothing.
+
+const FLOOR_RESTORE: Command = Command::Restore {
+    plan: None,
+    why: RestoreWhy::Floor,
+};
+
+/// A Claude Code session holds on AC at `pct` on `values`, the lid open, and the apply worked, writing `keys`.
+fn holding_on_ac_at(values: PlanValues, keys: &[SettingKey], pct: u8) -> Sim {
+    let mut sim = started_with(values, true, pct);
+    sim.send(working(1));
+    sim.send(applied(BALANCED, Ok(()), entries(BALANCED, keys)));
+    sim
+}
+
+/// No part of a step back or of the hold again after it: no request change, restore, apply, lock, notice or sound.
+fn nothing_of_a_step_back(sim: &Sim, out: &[Command]) {
+    let acted: Vec<&Command> = out
+        .iter()
+        .filter(|c| {
+            matches!(
+                c,
+                Command::Requests { .. }
+                    | Command::Restore { .. }
+                    | Command::Apply { .. }
+                    | Command::Lock
+                    | Command::Notify(_)
+                    | Command::Play(_)
+            )
+        })
+        .collect();
+    assert!(acted.is_empty(), "{acted:?}\n{}", sim.trace());
+    assert!(
+        sim.state_file().is_some_and(|f| !f.stepped_back),
+        "{}",
+        sim.trace()
+    );
+}
+
+/// The step back's own commands, once each: the requests off before the restore, the notice and the floor chime.
+fn steps_back(sim: &Sim, out: &[Command]) {
+    let trace = sim.trace();
+    assert_eq!(count(out, &OFF), 1, "{trace}");
+    assert_eq!(count(out, &FLOOR_RESTORE), 1, "{trace}");
+    assert!(
+        position(out, &OFF) < position(out, &FLOOR_RESTORE),
+        "{trace}"
+    );
+    assert_eq!(count(out, &FLOOR_CHIME), 1, "{trace}");
+}
+
+#[test]
+fn a_5_s_or_a_29_s_ac_drop_under_the_floor_changes_nothing() {
+    for drop_ms in [5 * SECOND, 29 * SECOND] {
+        let mut sim = holding_on_ac_at(plan(BALANCED), &KEYS, 19);
+        let mut out = sim.send(power(false, 19));
+        out.extend(sim.run(drop_ms));
+        nothing_of_a_step_back(&sim, &out);
+        let mut out = sim.send(power(true, 19));
+        out.extend(sim.run(10 * MINUTE));
+        nothing_of_a_step_back(&sim, &out);
+    }
+}
+
+#[test]
+fn a_30_s_ac_drop_under_the_floor_steps_back_at_30_s_with_holds_holding_until_then() {
+    let mut sim = holding_on_ac_at(plan(BALANCED), &KEYS, 19);
+    // Off the 10 s plan reads that began with the hold, so only the grace's own deadline can make the step back come
+    // at 30 s.
+    sim.run(3 * SECOND);
+    let at = sim.now();
+    let mut out = sim.send(power(false, 19));
+    out.extend(sim.run(SOURCE_SETTLE_MS - 1));
+    nothing_of_a_step_back(&sim, &out);
+
+    let out = sim.run(1);
+    steps_back(&sim, &out);
+    assert_eq!(
+        notices(&out),
+        [&Notice::StepBack { floor_pct: 20 }],
+        "{}",
+        sim.trace()
+    );
+    assert_eq!(
+        sim.sent_at(&FLOOR_CHIME)
+            .iter()
+            .map(|t| t.mono_ms - at.mono_ms)
+            .collect::<Vec<_>>(),
+        [SOURCE_SETTLE_MS],
+        "the grace's own deadline, off the safety tick and the plan reads\n{}",
+        sim.trace()
+    );
+    sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
+
+    // AC back: the hold again, as at a hold start.
+    let out = sim.send(power(true, 19));
+    assert_eq!(count(&out, &SYSTEM), 1, "{}", sim.trace());
+    assert!(
+        out.iter().any(|c| matches!(c, Command::Apply { .. })),
+        "{}",
+        sim.trace()
+    );
+}
+
+#[test]
+fn haiks_night_five_dock_drops_under_the_floor_give_no_chime_and_no_notice() {
+    // His checks, 2026-11-05: drops of 4.3, 4.4, 4.5, 4.7 and 9.65 s; each gave a chime and a notice before the grace.
+    let mut sim = holding_on_ac_at(plan(BALANCED), &KEYS, 19);
+    let mut out = Vec::new();
+    for drop_ms in [4_300, 4_400, 4_500, 4_700, 9_650] {
+        out.extend(sim.send(power(false, 19)));
+        out.extend(sim.run(drop_ms));
+        out.extend(sim.send(power(true, 19)));
+        out.extend(sim.run(3 * MINUTE));
+    }
+    let trace = sim.trace();
+    assert_eq!(plays(&out), 0, "{trace}");
+    assert!(notices(&out).is_empty(), "{trace}");
+    nothing_of_a_step_back(&sim, &out);
+}
+
+#[test]
+fn ac_that_flaps_inside_the_grace_starts_it_again_at_the_last_loss() {
+    let mut sim = holding_on_ac_at(plan(BALANCED), &KEYS, 19);
+    let mut out = sim.send(power(false, 19));
+    out.extend(sim.run(5 * SECOND));
+    out.extend(sim.send(power(true, 19)));
+    out.extend(sim.run(5 * SECOND));
+    let last_loss = sim.now();
+    out.extend(sim.send(power(false, 19)));
+    // 30 s after the first loss, 20 s after the last.
+    out.extend(sim.run(SOURCE_SETTLE_MS - 1));
+    nothing_of_a_step_back(&sim, &out);
+
+    let out = sim.run(1);
+    steps_back(&sim, &out);
+    assert_eq!(
+        sim.sent_at(&FLOOR_CHIME)
+            .iter()
+            .map(|t| t.mono_ms - last_loss.mono_ms)
+            .collect::<Vec<_>>(),
+        [SOURCE_SETTLE_MS],
+        "{}",
+        sim.trace()
+    );
+}
+
+#[test]
+fn a_percent_that_falls_under_the_floor_after_30_s_on_battery_steps_back_at_once() {
+    let mut sim = holding_on_ac_at(plan(BALANCED), &KEYS, 25);
+    sim.send(power(false, 25));
+    let out = sim.run(2 * MINUTE);
+    nothing_of_a_step_back(&sim, &out);
+    let out = sim.send(power(false, 19));
+    steps_back(&sim, &out);
+}
+
+#[test]
+fn a_percent_that_falls_under_the_floor_inside_the_grace_waits_for_its_end() {
+    let mut sim = holding_on_ac_at(plan(BALANCED), &KEYS, 25);
+    let at = sim.now();
+    let mut out = sim.send(power(false, 25));
+    out.extend(sim.run(10 * SECOND));
+    out.extend(sim.send(power(false, 19)));
+    out.extend(sim.run(SOURCE_SETTLE_MS - 10 * SECOND - 1));
+    nothing_of_a_step_back(&sim, &out);
+    let out = sim.run(1);
+    steps_back(&sim, &out);
+    assert_eq!(
+        sim.sent_at(&FLOOR_CHIME)[0].mono_ms - at.mono_ms,
+        SOURCE_SETTLE_MS,
+        "{}",
+        sim.trace()
+    );
+}
+
+#[test]
+fn a_tray_that_starts_on_battery_under_the_floor_steps_back_at_once() {
+    // No AC loss was seen, so there is no drop to wait out.
+    let mut sim = started_with(plan(BALANCED), false, 19);
+    let out = sim.send(working(1));
+    let trace = sim.trace();
+    assert_eq!(count(&out, &SYSTEM), 0, "{trace}");
+    assert_eq!(
+        notices(&out),
+        [&Notice::StepBack { floor_pct: 20 }],
+        "{trace}"
+    );
+    assert_eq!(count(&out, &FLOOR_CHIME), 1, "{trace}");
+}
+
+/// The lid closes while holding on AC under the floor, and the PC is unplugged: the source lock and the step back
+/// are both due 30 s after the unplug, the lock first and with the step back's sound, not the lid chime. Gives the
+/// commands at that moment.
+fn closed_unplug_at_30_s(sim: &mut Sim) -> Vec<Command> {
+    let at = sim.now();
+    let mut out = sim.send(power(false, 19));
+    out.extend(sim.run(SOURCE_SETTLE_MS - 1));
+    nothing_of_a_step_back(sim, &out);
+
+    let out = sim.run(1);
+    let trace = sim.trace();
+    steps_back(sim, &out);
+    assert_eq!(count(&out, &LOCK), 1, "{trace}");
+    assert_eq!(
+        count(&out, &CHIME),
+        0,
+        "the lid chime says the laptop keeps running\n{trace}"
+    );
+    assert!(
+        position(&out, &LOCK) < position(&out, &FLOOR_RESTORE),
+        "the lock never waits for the restore\n{trace}"
+    );
+    assert_eq!(
+        lock_times(sim, at).last(),
+        Some(&i128::from(SOURCE_SETTLE_MS)),
+        "{trace}"
+    );
+    out
+}
+
+#[test]
+fn an_unplug_with_the_lid_closed_under_the_floor_locks_and_steps_back_at_30_s() {
+    // Haik's block 4 (2026-11-05): his own Sleep on AC and battery, the lid-close lock confirmed, then the unplug.
+    let mut sim = holding_on_ac_at(plan(BALANCED), &KEYS, 19);
+    sim.send(lid(true));
+    sim.send(session(SessionChange::Locked));
+    let out = closed_unplug_at_30_s(&mut sim);
+    assert!(
+        notices(&out).is_empty(),
+        "the notice waits for the unlock\n{}",
+        sim.trace()
+    );
+    sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
+
+    // The floor countdown, as without the grace.
+    let out = sim.run(IDLE_MS + MINUTE);
+    assert_eq!(
+        sleep_checks(&out),
+        [&sleep_check(CountdownReason::Floor, None)],
+        "{}",
+        sim.trace()
+    );
+    let out = sim.send(session(SessionChange::Unlocked));
+    assert!(
+        notices(&out).contains(&&Notice::StepBack { floor_pct: 20 }),
+        "{}",
+        sim.trace()
+    );
+}
+
+#[test]
+fn a_docked_unplug_with_the_lid_closed_under_the_floor_locks_and_steps_back_at_30_s() {
+    // The user's own Do nothing on AC, signed in on the external screen: no lid-close lock, so the unplug's lock is
+    // the only one, and it is watched.
+    let mut sim = holding_on_ac_at(docked(), &DOCKED_KEYS, 19);
+    let out = sim.send(lid(true));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    let out = closed_unplug_at_30_s(&mut sim);
+    assert_eq!(
+        notices(&out),
+        [&Notice::StepBack { floor_pct: 20 }],
+        "{}",
+        sim.trace()
+    );
+    // Not confirmed in 5 s: the one retry.
+    let out = sim.run(LOCK_CHECK);
+    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+}
+
 // Item 4: the countdown.
 
 #[test]
@@ -3766,7 +4037,8 @@ fn sounds_never_wait() {
     let mut sim = holding(true);
     sim.send(session(SessionChange::Locked));
     sim.send(lid(true));
-    let out = sim.send(power(false, 19));
+    sim.send(power(false, 19));
+    let out = sim.run(SOURCE_SETTLE_MS);
     let trace = sim.trace();
     assert_eq!(count(&out, &FLOOR_CHIME), 1, "{trace}");
     assert!(notices(&out).is_empty(), "{trace}");
@@ -4087,7 +4359,8 @@ proptest! {
         let mut retry_for: Option<(u64, bool)> = None;
         for step in sim.steps() {
             prop_assert!(!quit || step.commands.is_empty(), "{}", sim.trace());
-            let chime = step.commands.contains(&CHIME);
+            // A source lock that goes with a step back's first sound has no chime of its own (`p2-6-floor-grace`).
+            let chime = step.commands.contains(&CHIME) || step.commands.contains(&FLOOR_CHIME);
             let explained = chime || step.commands.contains(&Command::Notify(Notice::IdleLocked));
             if step.commands.contains(&LOCK) && !explained {
                 let due = retry_for.is_some_and(|(at, failed)| {

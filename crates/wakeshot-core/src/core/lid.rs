@@ -30,7 +30,7 @@ use crate::command::{
     ApplyError, Command, CountdownReason, Failure, HibernateEnd, HibernateSkip, RestoreWhy,
 };
 use crate::policy::ending::{self, Cancel, Check};
-use crate::policy::floor;
+use crate::policy::floor::{self, Floor};
 use crate::policy::lid::{self, DO_NOTHING, SOURCE_SETTLE_MS, Settle};
 use crate::policy::lock::{self, IdleFacts};
 use crate::settings::{Guid, JournalEntry, PlanValues, SHORT_TIMEOUT_S, SettingKey};
@@ -338,8 +338,17 @@ impl Core {
     /// While holding, the closed-lid stretch begins for the report. A session the core knows as locked will not report
     /// `Locked` again, so only a lock into an unlocked one is watched.
     fn lock_and_chime(&mut self, now: Now, out: &mut Vec<Command>) {
+        self.closed_lid_lock(now, true, out);
+    }
+
+    /// [`Core::lock_and_chime`], with the chime only when `chime`: a lock that goes out with a step back's first sound
+    /// and notice has those (decision 0), and the chime, which says the laptop keeps running, would be wrong then and
+    /// play over the floor's sound.
+    fn closed_lid_lock(&mut self, now: Now, chime: bool, out: &mut Vec<Command>) {
         out.push(Command::Lock);
-        out.push(Command::Play(Cue::LidClosedHolding));
+        if chime {
+            out.push(Command::Play(Cue::LidClosedHolding));
+        }
         if !self.state.session_locked {
             self.state.lock.pending = Some(PendingLock {
                 retry: false,
@@ -373,8 +382,8 @@ impl Core {
         }
     }
 
-    /// `Power`. A source change with the lid closed may lock once the new source lasts (`policy::lid`); AC back ends
-    /// a `Floor` countdown.
+    /// `Power`. A source change with the lid closed may lock once the new source lasts (`policy::lid`), and an AC loss
+    /// starts the battery floor's grace from the same moment (`source_since_mono`); AC back ends a `Floor` countdown.
     pub(super) fn take_power(
         &mut self,
         ac: bool,
@@ -699,34 +708,67 @@ impl Core {
     }
 
     /// The battery floor from the facts now, before the requests: stepped back takes none (`policy::requests`). AC
-    /// back holds again as at a hold start.
-    pub(super) fn settle_floor(&mut self, out: &mut Vec<Command>) {
+    /// back holds again as at a hold start. Under the floor the step back waits until the PC has been on battery for
+    /// the grace since the last AC loss (`policy::floor::decide`, Haik 2026-11-05), and holds hold meanwhile; gives the
+    /// grace end, so the step back comes on time with no other event.
+    pub(super) fn settle_floor(&mut self, now: Now, out: &mut Vec<Command>) -> Option<Deadline> {
+        let ac = self.state.ac?;
         let was = self.state.stepped_back;
         let floor_pct = self.floor_pct();
-        let stepped_back = self.state.ac.map_or(was, |ac| {
-            floor::stepped_back(was, ac, self.state.battery_pct, floor_pct)
-        });
-        if stepped_back == was {
-            return;
+        let pct = self.state.battery_pct;
+        let answer = floor::decide(
+            was,
+            ac,
+            pct,
+            floor_pct,
+            self.state.source_since_mono,
+            now.mono_ms,
+        );
+        let pct_text = || pct.map_or_else(|| "?".to_owned(), |p| p.to_string());
+        let grace = match answer {
+            Floor::Grace { due_mono_ms } => Some(due_mono_ms),
+            Floor::Holds | Floor::SteppedBack => None,
+        };
+        match (self.state.floor_grace, grace) {
+            (None, Some(_)) => out.push(Command::Log(format!(
+                "On battery at {} %, under the floor of {floor_pct} %: step back once the PC has been on battery for \
+                 {} s, unless AC comes back first; holds hold meanwhile",
+                pct_text(),
+                floor::GRACE_MS / 1000
+            ))),
+            (Some(_), None) if answer == Floor::Holds => {
+                let why = if ac {
+                    "AC is back".to_owned()
+                } else {
+                    format!("the battery reads {} %, not under the floor", pct_text())
+                };
+                out.push(Command::Log(format!(
+                    "The battery floor's wait ends with no step back: {why}"
+                )));
+            }
+            _ => {}
         }
-        self.state.stepped_back = stepped_back;
-        if stepped_back {
-            let pct = self
-                .state
-                .battery_pct
-                .map_or_else(|| "?".to_owned(), |p| p.to_string());
-            out.push(Command::Log(format!(
-                "On battery at {pct} %, under the floor of {floor_pct} %: step back, no hold keeps the PC awake until AC"
-            )));
-        } else {
-            self.state.step_back_shown = false;
-            out.push(Command::Log("AC is back: the step back ends".to_owned()));
-            self.want_apply();
+        self.state.floor_grace = grace;
+        let stepped_back = answer == Floor::SteppedBack;
+        if stepped_back != was {
+            self.state.stepped_back = stepped_back;
+            if stepped_back {
+                out.push(Command::Log(format!(
+                    "On battery at {} %, under the floor of {floor_pct} %: step back, no hold keeps the PC awake \
+                     until AC",
+                    pct_text()
+                )));
+            } else {
+                self.state.step_back_shown = false;
+                out.push(Command::Log("AC is back: the step back ends".to_owned()));
+                self.want_apply();
+            }
         }
+        grace.map(Deadline::Mono)
     }
 
-    /// The settle pass's part after the episode edges: the step back's actions, the countdown, the closed-lid stretch,
-    /// the source lock. Gives the nearest deadline of these.
+    /// The settle pass's part after the episode edges: the source lock, the step back's actions, the countdown, the
+    /// closed-lid stretch. Gives the nearest deadline of these.
     pub(super) fn settle_lid(
         &mut self,
         now: Now,
@@ -746,7 +788,14 @@ impl Core {
             window_due = self.settle_window_lock(now, out);
         }
         // Once per step back, at the first moment a hold counts in it: a step back with nothing held changes nothing.
-        if self.state.stepped_back && self.state.episode.is_some() && !self.state.step_back_shown {
+        let step_back_shows =
+            self.state.stepped_back && self.state.episode.is_some() && !self.state.step_back_shown;
+        // Before the step back's actions: an unplug with the lid closed under the floor makes both due in one pass, at
+        // the grace's end, and the step back's restore can make Windows sleep the closed laptop at once (Haik's block
+        // 4, 2026-11-05), so the `Lock` goes out ahead of the `Restore` and never waits for it. The step back's sound
+        // and notice go with that lock.
+        let source_due = self.settle_source_lock(now, !step_back_shows, out);
+        if step_back_shows {
             self.state.step_back_shown = true;
             self.restore_all(RestoreWhy::Floor, out);
             let floor_pct = self.floor_pct();
@@ -773,7 +822,6 @@ impl Core {
             run.held_by.extend(episode.holding.iter().cloned());
         }
 
-        let source_due = self.settle_source_lock(now, out);
         let countdown_due = self.settle_countdown(now, tick, out);
         // A timer that fired without a reading: the next reading decides, at the latest at the safety tick.
         if tick
@@ -895,7 +943,13 @@ impl Core {
         }
     }
 
-    fn settle_source_lock(&mut self, now: Now, out: &mut Vec<Command>) -> Option<Deadline> {
+    /// The source lock once due; `chime` as in [`Core::closed_lid_lock`].
+    fn settle_source_lock(
+        &mut self,
+        now: Now,
+        chime: bool,
+        out: &mut Vec<Command>,
+    ) -> Option<Deadline> {
         let pending = self.state.source_lock?;
         let closed = self.state.lid_closed == Some(true);
         let answer = match (self.lock_view(), self.state.ac) {
@@ -908,11 +962,14 @@ impl Core {
             Settle::Wait(at) => Some(at),
             Settle::Lock => {
                 self.state.source_lock = None;
-                out.push(Command::Log(
+                let line = if chime {
                     "The new power source lasted with the lid closed, and Wakeshot keeps the laptop running: lock"
-                        .to_owned(),
-                ));
-                self.lock_and_chime(now, out);
+                } else {
+                    "The new power source lasted with the lid closed, and the battery floor's step back starts now: \
+                     lock, with the step back's sound and no chime"
+                };
+                out.push(Command::Log(line.to_owned()));
+                self.closed_lid_lock(now, chime, out);
                 None
             }
             Settle::Drop => {

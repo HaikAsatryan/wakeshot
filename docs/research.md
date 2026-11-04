@@ -4457,3 +4457,26 @@ and folders only (`store.rs` tests `real_signs_*`, a scratch PowerShell script);
 - **How the guard reads the switch value.** Off when the first DWORD is 1 (the real switch's form, "Start at login
   switch check") or 3 (the web sources' form); no value or any other form counts as on, so an unknown form stops a
   sign-out test rather than miss a tray that starts at sign-in. A rule of ours, not a fact about Windows.
+
+## Battery floor grace checks
+
+`p2-6-floor-grace`, 2026-11-05: the 30 s wait on battery before a floor step back (Haik's yes, 2026-11-05). Core
+sim, scenarios and props only; no real laptop.
+
+- **No `wakeshot-windows` test asserts a floor step back at an AC loss.** A search of `crates/wakeshot-windows/src/app`
+  for `StepBack`, `BatteryFloor` and `Floor` finds only notice names, hibernate tests with `CountdownReason::Floor`
+  and a `RestoreWhy::Floor` label; the Windows side uses only `policy::floor::below`, which did not change.
+  **Verified** (search).
+- **Two `Play` commands in one pass sound at the same time.** `WasapiPlayer::play` starts one thread per cue and
+  returns, with no queue (`crates/wakeshot-windows/src/sound/player.rs`), so a source lock's lid chime and a step
+  back's floor chime in one settle pass would overlap. **Verified** (code read). How shared-mode WASAPI then mixes
+  the two streams: **not verified**. This is why a source lock that goes with a step back plays no lid chime.
+- **The 10 s plan reads hid a missing grace deadline.** With the hold's apply and the unplug at the same moment, a
+  plan read falls due exactly 30 s after the unplug, so a hand mutant that dropped the grace's deadline still stepped
+  back on time. The 30 s scenario now unplugs 3 s off the plan reads. **Verified** (mutant M2 survived, then killed).
+- **Hand mutants, 6 of 6 killed** (in place, each file restored from a copy and checked by search): no grace at all;
+  no grace deadline; the source lock after the step back; the lid chime always with the source lock; the grace off by
+  one millisecond; the grace counted from the first AC loss of a flap. **Verified** (runs).
+- **Long property run.** `PROPTEST_CASES=10000`, release, `scenarios::props` and `lid_events_in_any_order`: 36 tests
+  passed in 20 s. `coverage_tally` (256 cases): 13 step backs after an AC loss, 3 AC returns under the floor before
+  a step back while holding. **Verified** (runs).

@@ -103,10 +103,13 @@ pub(crate) struct State {
     pub battery_pct: Option<u8>,
     /// When the current power source began (run time); `None` before the first change.
     pub source_since_mono: Option<u64>,
-    /// On battery under the floor: no requests, no apply, until AC.
+    /// On battery under the floor, after the grace: no requests, no apply, until AC.
     pub stepped_back: bool,
     /// The step back's notice and sound went out in this step back: once, at the first moment a hold counts in it.
     pub step_back_shown: bool,
+    /// On battery under the floor, the step back waits for the grace (`policy::floor::GRACE_MS`) to end at this run
+    /// time: kept only so the log tells its start and an end with no step back once each.
+    pub floor_grace: Option<u64>,
     /// A lock waiting for a new power source to last (`policy::lid::settle`).
     pub source_lock: Option<SourceLock>,
     /// Work ended with the lid closed and the countdown started; kept while the lid stays closed and no hold starts.
@@ -206,6 +209,7 @@ impl State {
             source_since_mono: None,
             stepped_back: false,
             step_back_shown: false,
+            floor_grace: None,
             source_lock: None,
             work_end: None,
             floor_countdown: false,
