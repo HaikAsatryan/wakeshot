@@ -1,6 +1,6 @@
 # Docs pass for Phases 2 to 6: make the docs match the built code
 
-Phase: 6. Status: rounds 1 to 6 done; round 7 ready. Needs Haik: no.
+Phase: 6. Status: rounds 1 to 7 done. Needs Haik: no.
 Runs after: the Phase 2 to 6 track cards named below. Parallel with: `p6-int-window`, `p6-int-startup`, `p5-text`,
 the power fix round (core), the Claude parsing review.
 
@@ -742,7 +742,7 @@ Open items: Found outside scope 1 (core worker), 2 to 5 (orchestrator). Haik rea
 
 ## Round 7 (2026-11-05)
 
-Status: ready. Written by the orchestrator, 2026-11-05. Runs after `p6-notice-app-icon` Part A (17c8eb4) and the
+Status: done. Written by the orchestrator, 2026-11-05. Runs after `p6-notice-app-icon` Part A (17c8eb4) and the
 `p2-6-floor-grace` fix round (c0cea9a). Docs only, no build. Owns: `README.md`, `packaging/README.md`, `site/index.html`
 (only the battery floor wording, if any), `docs/phases/06-ship.md` "Hooks" table, `docs/architecture.md` section 5
 "Notices", and this section.
@@ -768,3 +768,68 @@ floor"):
 ### Log
 
 - 2026-11-05: round 7 written by the orchestrator.
+- 2026-11-05: round 7 started, Status in progress.
+- 2026-11-05: read `hooks.rs` (`on_install`, `on_updated`, `on_uninstall` and their steps), `notify.rs` (the app id
+  constants and key path), `pack.ps1`, `policy/floor.rs` (`GRACE_MS`, `battery_run_start`, `decide`), `text.rs`
+  (`StepBack`), `product.md` "Battery floor". Items 1, 2, 3 and 5 edited. Default taken (Haik asleep): the night
+  story drops "at once" instead of naming the 30 s, since there the laptop has been on battery for long and the step
+  back does come at once; the README floor bullet leaves out the rare start on battery under the floor (also at
+  once). Added on the way, same files: the `06-ship.md` uninstall row names the lost-journal reset (`hooks.rs` runs it
+  when the journal does not parse); `packaging/README.md` says `pack.ps1` refuses to pack without the notice icon.
+- 2026-11-05: item 4 done after re-reading `architecture.md` lines 1026 to 1049 and section 6 (registry values, "The
+  notice header") and research "Balloon", "The balloon header's white square", "Notice header icon checks". The bullet
+  sat at lines 1036 to 1040, not 1028 to 1031. Default taken: say plainly that storage of the installed tray's
+  balloons is not tested (`p6-notice-app-icon` Part B step 7), and that clearing them may be needed if Part B shows
+  them stored, instead of guessing either way.
+- 2026-11-05: checks run (Result). Scratch check script deleted. Status done.
+
+### Found outside scope
+
+1. **The smoke test does not check the notice app id.** `packaging/smoke-test.ps1` checks neither the key
+   `HKCU\Software\Classes\AppUserModelId\velopack.HaikAsatryan.Wakeshot` nor `current\wakeshot-notice.png` after
+   install, nor the key gone after uninstall, and its refusal list of traces has no key (grep of `packaging/`: only
+   `pack.ps1` and `e2e.ps1` name it). So the release workflow on CI would not catch a hook that stops registering the
+   app id; `e2e.ps1` catches it on this laptop only. `packaging/README.md` "What the smoke test checks" matches the
+   script as it is, so I left it.
+2. **`packaging/README.md` line 81** (the smoke test paragraph) is 130 characters, older than this round.
+3. **The portable zip gets no notice app id** (`p6-notice-app-icon` decision 1: no install hook runs; not verified).
+   `README.md` does not name the portable zip at all, so nothing there is wrong today; when the portable zip is
+   documented as a way to run Wakeshot, it should say its notices show a plain square in the header.
+
+### Result
+
+Done 2026-11-05. Each line was checked in the code or in `docs/product.md` first.
+
+| # | Outcome |
+|---|---|
+| 1 | `README.md` "Everything else it keeps": the registry bullet adds `HKCU\Software\Classes\AppUserModelId\velopack.HaikAsatryan.Wakeshot`, "the name and icon in the header of its notices". Uninstall step 1 adds "the entry that gives its notices their name and icon". Checked: `hooks.rs` `on_install` and `on_updated` call `register_notices`, `on_uninstall` calls `remove_notices` before the restore; the key path is `notify.rs` `NoticeAppId::real` |
+| 2 | `packaging/README.md`: the `pack.ps1` row says it also copies the notice icon `assets/wakeshot-notice.png`; a new bullet says the script refuses to pack without it and that `-NoticeIcon` takes another file, still shipped as `wakeshot-notice.png` (`pack.ps1` lines 43, 97, 122) |
+| 3 | `docs/phases/06-ship.md` "Hooks" table: install writes the notice app id key (path, `DisplayName` and `IconUri`), updated writes it too, uninstall removes it with the other registry steps. Also, the uninstall row names the lost-journal reset when the journal does not parse (`on_uninstall`, `Unrestorable::DoesNotParse`) |
+| 4 | `docs/architecture.md` section 5, "Tray, notices, sounds", the Notices bullet: an installed tray's balloons go under `velopack.HaikAsatryan.Wakeshot`, which the hooks register; a tray run from `target\` gets `NotifyIconGeneratedAumid_<id>`, under which the shell stores no balloon. Whether the installed id now stores balloons is marked not tested (`p6-notice-app-icon` Part B step 7). The old "uninstall has no stored balloon to clear" line now says the uninstall removes the key, clears no stored balloon, and that Windows' `Notifications\Settings` key stays |
+| 5 | `README.md`: the night story step 5 drops "at once"; the "Battery floor" bullet now says the step back comes once the laptop has been on battery for 30 seconds, and that power back within those 30 seconds (a dock drop) gives nothing, no sound, no notice; the notice table's "When" for "Battery low" names the 30 seconds. `site/index.html`: the same story line drops "at once". Checked against `product.md` "Battery floor" and `policy/floor.rs` (`GRACE_MS` 30 s, `decide`) |
+| 6 | Not touched: `docs/product.md`, work logs, other card Logs, dated results, `CLAUDE.md`, code |
+
+Decided by the worker (Haik asleep), for Haik's review:
+
+| # | Choice | Why | Change it when |
+|---|---|---|---|
+| 1 | The night story says "steps back" with no time | There the laptop has been on battery for long, so the step back does come at once; naming the 30 s there would mislead too | Haik wants the 30 s in the story |
+| 2 | The README floor bullet leaves out a Wakeshot that starts on battery under the floor (steps back at once) | A rare case; the bullet stays short | A user report is confused by it |
+| 3 | Architecture marks the stored-balloon question open instead of guessing | Part B step 7 answers it | Part B is done: then say what Win+N showed, and whether the uninstall must clear anything |
+
+Files changed: `README.md`, `packaging/README.md`, `site/index.html` (one line), `docs/phases/06-ship.md` (the Hooks
+table), `docs/architecture.md` (the Notices bullet in section 5), this card (round 7 section and the Status line).
+
+Checks:
+
+| Check | Outcome |
+|---|---|
+| Each item read in the code or `product.md` before the edit | yes (Log) |
+| Changed files: em or en dash, emoji, CR byte, final newline | pass (scratch script, 5 files) |
+| Lines over 120 characters in my prose edits | none; table rows stay one line, as before; `packaging/README.md` line 81 is older (Found outside scope 2) |
+| No edit in `architecture.md` section 3 or `docs/phases/` beyond the owned Hooks table | yes |
+| No cargo command, no git | yes |
+| Scratch script deleted | yes, checked gone |
+
+Open items: Found outside scope 1 to 3 for the orchestrator. Item 4's open question waits on `p6-notice-app-icon`
+Part B.

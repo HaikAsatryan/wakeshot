@@ -1034,10 +1034,15 @@ that tray's next start; the late reset is kept, since nothing else would ever ta
   opened by code (a hotkey, a notice click) may not close on an outside click (research, "Menu details"), so any such
   path needs that fix and a check on screen (Phase 5).
 - Notices: `BalloonNotifier`, tray balloons (`NIF_INFO`). Tested: Windows 11 shows them as toast banners with no app
-  registration, while an unregistered toast shows no banner. Windows files a balloon under
-  `NotifyIconGeneratedAumid_<NotifyIconSettings id>` and does not store it, so its on/off switch most likely follows
-  the icon's settings entry and uninstall has no stored balloon to clear. Never count balloon events:
-  `NIN_BALLOONTIMEOUT` came twice in the same millisecond (both in research, "Balloon"). A successful call never proves
+  registration, while an unregistered toast shows no banner. Windows files a balloon under the tray's app id. An
+  installed tray has `velopack.HaikAsatryan.Wakeshot`, which the hooks register for the header's name and picture
+  (section 6, "The notice header"). A tray run from `target\` gets the shell's generated
+  `NotifyIconGeneratedAumid_<NotifyIconSettings id>`, under which the shell stores no balloon, so its on/off switch
+  most likely follows the icon's settings entry (research, "Balloon"). Whether Windows stores the installed tray's
+  balloons now that their id is registered: not tested (`p6-notice-app-icon` Part B, step 7). The uninstall clears no
+  stored balloon: it removes the app id key, and Windows' own `Notifications\Settings` key of the id stays (section
+  6); if Part B shows stored balloons, they may need clearing as for toasts (below). Never count balloon events:
+  `NIN_BALLOONTIMEOUT` came twice in the same millisecond (research, "Balloon"). A successful call never proves
   the user saw a notice. A balloon click (`NIN_BALLOONUSERCLICK`): not tested. A notice the shell refuses (the icon
   is not added yet, as at a sign-in before the taskbar exists, or Explorer restarts) is kept, in order and once each,
   and shown again through the IO thread when the icon is added (`BalloonNotifier::icon_added`); one shown again skips

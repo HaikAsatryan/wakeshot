@@ -70,8 +70,8 @@ The icon tells you what is going on, and the tooltip names what holds the PC awa
    input it plays a soft "going to sleep" sound and puts the laptop to sleep.
 4. **Morning.** You open the lid and sign in. A notice says how long the PC ran with the lid closed, and what kept it
    running.
-5. **The battery ran low instead?** Below Windows' own energy saver level, Wakeshot steps back at once, puts your
-   settings back and puts the closed laptop to sleep after 5 minutes with no input.
+5. **The battery ran low instead?** Below Windows' own energy saver level, Wakeshot steps back, puts your settings
+   back and puts the closed laptop to sleep after 5 minutes with no input.
 
 No window, no settings page, nothing to learn: a tray icon, one menu, a few notices and a small command line.
 
@@ -206,7 +206,9 @@ Everything else it keeps, all under your user:
   is doing, for `wakeshot status`), `journal.json` (your saved values, only while settings are changed),
   `restore-request.json` (a short-lived request from `wakeshot restore`), `logs\` (the log).
 - Registry, under `HKCU\Software\Microsoft\Windows\CurrentVersion`: `Run\Wakeshot` (start at login) and
-  `RunOnce\WakeshotRestore` (only while settings are changed: the restore at your next sign-in).
+  `RunOnce\WakeshotRestore` (only while settings are changed: the restore at your next sign-in). And
+  `HKCU\Software\Classes\AppUserModelId\velopack.HaikAsatryan.Wakeshot`: the name and icon in the header of its
+  notices.
 - Your user `Path`: the app's folder, for the `wakeshot` command.
 - Windows itself keeps a record of every tray icon it has seen, Wakeshot's too (`HKCU\Control Panel\NotifyIconSettings`).
 
@@ -237,10 +239,11 @@ Wakeshot never lowers your security.
 - **Open the lid and sign in.** A notice says how long the PC ran with the lid closed and what held it, such as "The
   PC kept running for 2 h 15 min with the lid closed. What held it: Claude Code."
 - **Battery floor.** Wakeshot uses Windows' own energy saver level (20% when energy saver is set to Never or Always);
-  there is no Wakeshot setting for it. On battery below it, Wakeshot steps back at once: it ends its power request,
-  puts your settings back, plays a sound and says "Battery low: the PC may sleep now". If the lid is closed, it then
-  puts the laptop to sleep the same way after 5 minutes with no input, unless your own battery lid action is Do
-  nothing. Plug in, and the hold comes back.
+  there is no Wakeshot setting for it. Below it, once the laptop has been on battery for 30 seconds, Wakeshot steps
+  back: it ends its power request, puts your settings back, plays a sound and says "Battery low: the PC may sleep
+  now". If power comes back within those 30 seconds, as when a dock drops it for a few seconds, nothing happens: no
+  sound, no notice. After a step back with the lid closed, it puts the laptop to sleep the same way after 5 minutes
+  with no input, unless your own battery lid action is Do nothing. Plug in, and the hold comes back.
 - **Keep screen on.** The screen never turns off, so Windows does not lock the PC at screen off; Wakeshot locks it
   instead once you have been away longer than your own sleep timeout.
 - **Start > Sleep.** Your own sleep always wins. Windows drops every power request then, and Wakeshot takes its
@@ -295,7 +298,7 @@ notice:
 | Wakeshot keeps your change | You changed a setting Wakeshot had changed |
 | Your power settings are back | You picked Restore my power settings |
 | The PC ran with the lid closed | You are back after a closed-lid hold |
-| Battery low: the PC may sleep now | The battery fell below the floor |
+| Battery low: the PC may sleep now | The battery is below the floor, and the laptop has been on battery for 30 seconds |
 | Wakeshot locked the PC | Keep screen on, and you were away past your sleep timeout |
 | Wakeshot updated to (version) | After an update, with no sound |
 | Update Wakeshot | Claude Code changed its files, and Wakeshot cannot fully read them |
@@ -463,8 +466,8 @@ the lid sleeps the laptop as usual, and on battery Windows ends the request abou
 
 Uninstall Wakeshot like any app, from Settings > Apps. The uninstall:
 
-1. removes start at login (with its switch in Settings > Apps > Startup), the sign-in restore entry and the `Path`
-   entry first;
+1. removes start at login (with its switch in Settings > Apps > Startup), the sign-in restore entry, the `Path` entry
+   and the entry that gives its notices their name and icon, first;
 2. puts your power settings back if Wakeshot had changed them, trying for up to 25 seconds; if the file with your
    saved values is damaged, it sets each setting that holds exactly Wakeshot's value to Windows' default instead (see
    [Limits](#limits));

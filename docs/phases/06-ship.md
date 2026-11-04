@@ -53,10 +53,10 @@ sign-off):
 
 | Hook | Velopack limit | Steps, in order |
 |---|---|---|
-| install (also Setup.exe over an install, which is what `winget upgrade` runs) | 30 s | write the Run value and the Path entry; then the restore routine if a journal exists and its owner is Gone, again every 2 s until 25 s |
+| install (also Setup.exe over an install, which is what `winget upgrade` runs) | 30 s | write the Run value, the Path entry and the notice app id key (`HKCU\Software\Classes\AppUserModelId\velopack.HaikAsatryan.Wakeshot`: `DisplayName` and `IconUri`, the notice header's name and picture); then the restore routine if a journal exists and its owner is Gone, again every 2 s until 25 s |
 | obsolete (old version, before an update) | 15 s | log only: updates apply only when nothing is overridden, and the updated hook restores anyway |
-| updated (new version) | 15 s | the Path entry (no change when `current` keeps its path); then restore as at install, until 10 s |
-| uninstall | 30 s | remove the Run value, its `StartupApproved` switch value, the RunOnce value and the Path entry; then restore with retries until 25 s; then the data folder (Question 2) |
+| updated (new version) | 15 s | the Path entry (no change when `current` keeps its path) and the notice app id key, so an update from a version without it gets it; then restore as at install, until 10 s |
+| uninstall | 30 s | remove the Run value, its `StartupApproved` switch value, the RunOnce value, the Path entry and the notice app id key; then restore with retries until 25 s; a journal that does not parse gets the lost-journal reset instead; then the data folder (Question 2) |
 
 - Registry first, restore last: a restore call that hangs is killed at the limit, and must not leave a Run value or a
   Path entry pointing into a deleted folder. This changes the order in `architecture.md` section 6 ("restores ...
