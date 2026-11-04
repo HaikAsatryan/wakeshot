@@ -255,7 +255,7 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   (later, before Haik installs the first release). Haik's call: notices stay `Shell_NotifyIcon` banners.
 - 2026-11-04 22:50: `p2-6-runonce-keep` done: Haik's B2 redo passed (restore at the next sign-in on the fixed code;
   his values same). README: Haik's trim (dd72a4d), the gap bullet, the flat contents list under Details. Haik:
-  `p6-media` Part B waits until his design review of the final software.
+  `p6-media` Part B waits until his design review of the final software. Pushed 0c7bc26: CI green on all three jobs.
 - Next (orchestrator): `p6-int-haik-checks` (about 42 min with Haik at the laptop, nothing else runs), then Haik's
   design review of the final software, then `p6-media` Part B, the README and Pages finish. Haik's review of the
   RunOnce fix decisions (`p2-6-runonce-keep` Decisions, finding 6) is open. `p6-real-install-guard` before he
