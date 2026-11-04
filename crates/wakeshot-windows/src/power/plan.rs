@@ -25,7 +25,8 @@ use windows::Win32::System::SystemServices::{
     GUID_ENERGY_SAVER_BATTERY_THRESHOLD, GUID_ENERGY_SAVER_SUBGROUP, GUID_LIDCLOSE_ACTION,
     GUID_MAX_POWER_SAVINGS, GUID_MIN_POWER_SAVINGS, GUID_POWERSCHEME_PERSONALITY,
     GUID_SLEEP_SUBGROUP, GUID_STANDBY_TIMEOUT, GUID_SYSTEM_BUTTON_SUBGROUP,
-    GUID_TYPICAL_POWER_SAVINGS, NO_SUBGROUP_GUID,
+    GUID_TYPICAL_POWER_SAVINGS, GUID_VIDEO_POWERDOWN_TIMEOUT, GUID_VIDEO_SUBGROUP,
+    NO_SUBGROUP_GUID,
 };
 use windows::core::GUID;
 
@@ -34,13 +35,23 @@ use crate::log::{Level, Log};
 
 const AREA: &str = "power";
 
-const KEYS: [SettingKey; 3] = [SettingKey::LidAc, SettingKey::LidDc, SettingKey::SleepDc];
+#[cfg(test)]
+const KEYS: [SettingKey; 3] = SettingKey::HOLD;
+
+/// The keys `PlanValues` carries, so a plan read notes them and a dry run shows its own values in them; the screen
+/// timeouts it does not carry.
+const VALUE_KEYS: [SettingKey; 4] = [
+    SettingKey::LidAc,
+    SettingKey::LidDc,
+    SettingKey::SleepDc,
+    SettingKey::SleepAc,
+];
 
 /// A list longer than this is taken as a call that never ends, so a broken `PowerEnumerate` fails the list instead of
 /// hanging the IO thread. Windows ships three or four plans; nobody keeps thousands.
 const MAX_PLANS: u32 = 4096;
 
-/// A plan value the IO thread reads. Wider than `SettingKey` because `PlanValues` also needs AC sleep and the energy
+/// A plan value the IO thread reads or writes. Wider than `SettingKey` because `PlanValues` also needs the energy
 /// saver threshold, which Wakeshot reads but never writes.
 ///
 /// Owner: power track (Phase 3).
@@ -51,6 +62,8 @@ pub enum PlanSetting {
     SleepAc,
     SleepDc,
     SaverThresholdDc,
+    VideoIdleAc,
+    VideoIdleDc,
 }
 
 impl From<SettingKey> for PlanSetting {
@@ -59,21 +72,26 @@ impl From<SettingKey> for PlanSetting {
             SettingKey::LidAc => Self::LidAc,
             SettingKey::LidDc => Self::LidDc,
             SettingKey::SleepDc => Self::SleepDc,
+            SettingKey::SleepAc => Self::SleepAc,
+            SettingKey::VideoIdleAc => Self::VideoIdleAc,
+            SettingKey::VideoIdleDc => Self::VideoIdleDc,
         }
     }
 }
 
 impl PlanSetting {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 7] = [
         Self::LidAc,
         Self::LidDc,
         Self::SleepAc,
         Self::SleepDc,
         Self::SaverThresholdDc,
+        Self::VideoIdleAc,
+        Self::VideoIdleDc,
     ];
 
-    /// The name in log lines. The three keys Wakeshot writes use their journal names, so a log line and a journal
-    /// entry can be matched by eye.
+    /// The name in log lines. The keys Wakeshot writes use their journal names, so a log line and a journal entry can
+    /// be matched by eye.
     pub fn name(self) -> &'static str {
         match self {
             Self::LidAc => "lidAc",
@@ -81,10 +99,13 @@ impl PlanSetting {
             Self::SleepAc => "sleepAc",
             Self::SleepDc => "sleepDc",
             Self::SaverThresholdDc => "saverThresholdDc",
+            Self::VideoIdleAc => "videoIdleAc",
+            Self::VideoIdleDc => "videoIdleDc",
         }
     }
 
-    /// The subgroup and setting GUIDs (winnt.h names, from the `windows` crate).
+    /// The subgroup and setting GUIDs (winnt.h names, from the `windows` crate). The screen timeout is `VIDEOIDLE` in
+    /// `powercfg`, "Turn off my screen after" in Settings.
     fn ids(self) -> (GUID, GUID) {
         match self {
             Self::LidAc | Self::LidDc => (GUID_SYSTEM_BUTTON_SUBGROUP, GUID_LIDCLOSE_ACTION),
@@ -93,11 +114,14 @@ impl PlanSetting {
                 GUID_ENERGY_SAVER_SUBGROUP,
                 GUID_ENERGY_SAVER_BATTERY_THRESHOLD,
             ),
+            Self::VideoIdleAc | Self::VideoIdleDc => {
+                (GUID_VIDEO_SUBGROUP, GUID_VIDEO_POWERDOWN_TIMEOUT)
+            }
         }
     }
 
     fn on_ac(self) -> bool {
-        matches!(self, Self::LidAc | Self::SleepAc)
+        matches!(self, Self::LidAc | Self::SleepAc | Self::VideoIdleAc)
     }
 }
 
@@ -203,7 +227,7 @@ fn read_value(plan: Guid, setting: PlanSetting) -> Result<u32, WinError> {
     Ok(value)
 }
 
-/// Takes only a `SettingKey`, so nothing but the three keys can be written (decision 17).
+/// Takes only a `SettingKey`, so nothing but its keys can be written (decision 17).
 fn write_value(plan: Guid, key: SettingKey, value: u32) -> Result<(), WinError> {
     let setting = PlanSetting::from(key);
     let scheme = GUID::from_u128(plan.0);
@@ -296,19 +320,28 @@ fn access_check(key: SettingKey) -> Result<(), WinError> {
     win("PowerSettingAccessCheckEx", rc.0)
 }
 
-fn key_value(values: &PlanValues, key: SettingKey) -> u32 {
+/// `None` for the screen timeouts, which `PlanValues` does not carry.
+fn key_value(values: &PlanValues, key: SettingKey) -> Option<u32> {
+    key_value_ref(values, key).copied()
+}
+
+fn key_value_ref(values: &PlanValues, key: SettingKey) -> Option<&u32> {
     match key {
-        SettingKey::LidAc => values.lid_ac,
-        SettingKey::LidDc => values.lid_dc,
-        SettingKey::SleepDc => values.sleep_dc,
+        SettingKey::LidAc => Some(&values.lid_ac),
+        SettingKey::LidDc => Some(&values.lid_dc),
+        SettingKey::SleepDc => Some(&values.sleep_dc),
+        SettingKey::SleepAc => Some(&values.sleep_ac),
+        SettingKey::VideoIdleAc | SettingKey::VideoIdleDc => None,
     }
 }
 
-fn key_value_mut(values: &mut PlanValues, key: SettingKey) -> &mut u32 {
+fn key_value_mut(values: &mut PlanValues, key: SettingKey) -> Option<&mut u32> {
     match key {
-        SettingKey::LidAc => &mut values.lid_ac,
-        SettingKey::LidDc => &mut values.lid_dc,
-        SettingKey::SleepDc => &mut values.sleep_dc,
+        SettingKey::LidAc => Some(&mut values.lid_ac),
+        SettingKey::LidDc => Some(&mut values.lid_dc),
+        SettingKey::SleepDc => Some(&mut values.sleep_dc),
+        SettingKey::SleepAc => Some(&mut values.sleep_ac),
+        SettingKey::VideoIdleAc | SettingKey::VideoIdleDc => None,
     }
 }
 
@@ -412,8 +445,10 @@ impl Win32Power {
             sleep_dc: read_value(plan, PlanSetting::SleepDc)?,
             saver_threshold_dc: read_value(plan, PlanSetting::SaverThresholdDc)?,
         };
-        for key in KEYS {
-            self.seen.note(plan, key, key_value(&values, key));
+        for key in VALUE_KEYS {
+            if let Some(value) = key_value(&values, key) {
+                self.seen.note(plan, key, value);
+            }
         }
         Ok(values)
     }
@@ -573,9 +608,14 @@ impl<P: PlanIo> PlanIo for DryRunPower<P> {
 
     fn values(&mut self) -> Result<PlanValues, Failure> {
         let mut values = self.inner.values()?;
-        for key in KEYS {
-            let shown = self.view(values.active, key, key_value(&values, key));
-            *key_value_mut(&mut values, key) = shown;
+        for key in VALUE_KEYS {
+            let Some(real) = key_value(&values, key) else {
+                continue;
+            };
+            let shown = self.view(values.active, key, real);
+            if let Some(slot) = key_value_mut(&mut values, key) {
+                *slot = shown;
+            }
             self.seen.note(values.active, key, shown);
         }
         Ok(values)
@@ -778,7 +818,7 @@ mod copies {
     pub struct CopyAsActive<P = Win32Power> {
         inner: P,
         copy: Guid,
-        in_force: [u32; 3],
+        in_force: [u32; 6],
         set_active_count: usize,
     }
 
@@ -828,15 +868,18 @@ mod copies {
             SettingKey::LidAc => 0,
             SettingKey::LidDc => 1,
             SettingKey::SleepDc => 2,
+            SettingKey::SleepAc => 3,
+            SettingKey::VideoIdleAc => 4,
+            SettingKey::VideoIdleDc => 5,
         }
     }
 
-    fn stored_keys(inner: &mut impl PlanIo, plan: Guid) -> Result<[u32; 3], Failure> {
-        Ok([
-            inner.read(plan, SettingKey::LidAc)?,
-            inner.read(plan, SettingKey::LidDc)?,
-            inner.read(plan, SettingKey::SleepDc)?,
-        ])
+    fn stored_keys(inner: &mut impl PlanIo, plan: Guid) -> Result<[u32; 6], Failure> {
+        let mut values = [0; 6];
+        for key in SettingKey::ALL {
+            values[key_index(key)] = inner.read(plan, key)?;
+        }
+        Ok(values)
     }
 
     impl<P: PlanIo + ValuesOf> PlanIo for CopyAsActive<P> {
@@ -932,6 +975,9 @@ mod tests {
         const STANDBYIDLE: u128 = 0x29f6c1db_86da_48c5_9fdb_f2b67b1f44da;
         const SUB_ENERGYSAVER: u128 = 0xde830923_a562_41af_a086_e3a2c6bad2da;
         const ESBATTTHRESHOLD: u128 = 0xe69653ca_cf7f_4f05_aa73_cb833fa90ad4;
+        // Not in the spike: `powercfg /aliases` on the test laptop, 2026-11-04 (`p2-6-sleep-route`).
+        const SUB_VIDEO: u128 = 0x7516b95f_f776_4464_8c53_06167f40cc99;
+        const VIDEOIDLE: u128 = 0x3c0bc021_c8a8_4e07_a973_6b14cbcb2b7e;
         let spike = [
             (PlanSetting::LidAc, SUB_BUTTONS, LIDACTION, true),
             (PlanSetting::LidDc, SUB_BUTTONS, LIDACTION, false),
@@ -943,6 +989,8 @@ mod tests {
                 ESBATTTHRESHOLD,
                 false,
             ),
+            (PlanSetting::VideoIdleAc, SUB_VIDEO, VIDEOIDLE, true),
+            (PlanSetting::VideoIdleDc, SUB_VIDEO, VIDEOIDLE, false),
         ];
         for (setting, sub, id, ac) in spike {
             let (s, i) = setting.ids();
@@ -1013,7 +1061,7 @@ mod tests {
         dry.set_active(plan).unwrap();
         dry.values().unwrap();
         for key in KEYS {
-            dry.write(plan, key, key_value(&user_values(plan), key))
+            dry.write(plan, key, key_value(&user_values(plan), key).unwrap())
                 .unwrap();
         }
         dry.write(OTHER, SettingKey::LidDc, 0).unwrap();
@@ -1485,6 +1533,9 @@ mod tests {
             let want = match key {
                 SettingKey::LidAc | SettingKey::LidDc => registry,
                 SettingKey::SleepDc => MODERN_STANDBY_SLEEP_DC,
+                SettingKey::SleepAc | SettingKey::VideoIdleAc | SettingKey::VideoIdleDc => {
+                    unreachable!("a lost journal resets only the hold keys")
+                }
             };
             assert_eq!(default, want, "{key:?}");
         }
@@ -1587,7 +1638,7 @@ mod tests {
         let values = io.values().unwrap();
         for (key, new) in targets {
             assert_eq!(io.in_force(key), new);
-            assert_eq!(key_value(&values, key), new);
+            assert_eq!(key_value(&values, key), Some(new));
         }
 
         assert_eq!(

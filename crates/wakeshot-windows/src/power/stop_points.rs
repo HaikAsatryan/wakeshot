@@ -552,7 +552,7 @@ impl Rig {
     fn unknown_entry(&self) -> JournalFileEntry {
         JournalFileEntry {
             plan: self.copy.guid(),
-            key: JournalKey::Other("sleepAc".into()),
+            key: JournalKey::Other("hibernateAc".into()),
             original: self.values.sleep_ac,
             written: TARGET,
             restored: false,
@@ -960,6 +960,10 @@ fn value_of(values: &PlanValues, key: SettingKey) -> u32 {
         LidAc => values.lid_ac,
         LidDc => values.lid_dc,
         SleepDc => values.sleep_dc,
+        SettingKey::SleepAc => values.sleep_ac,
+        SettingKey::VideoIdleAc | SettingKey::VideoIdleDc => {
+            unreachable!("these walks write only the hold keys")
+        }
     }
 }
 

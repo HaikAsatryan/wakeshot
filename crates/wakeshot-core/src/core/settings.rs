@@ -21,7 +21,7 @@ use crate::command::{ApplyError, Command, Failure, RestoreWhy};
 use crate::event::SessionChange;
 use crate::ownership::apply::JOURNAL_CORRUPT;
 use crate::settings::{Guid, JournalEntry, OwnedKey, PlanValues, SettingKey};
-use crate::state::ApplyStep;
+use crate::state::{ApplyStep, Applying};
 use crate::time::{Deadline, Now};
 use crate::view::Notice;
 
@@ -29,9 +29,8 @@ use crate::view::Notice;
 /// time, so a PC that slept in between still gets its tries.
 pub(super) const LOST_AFTER_MS: u64 = 120_000;
 
-/// The keys an apply writes, less the released ones (decision 17).
-pub(super) const KEYS: [SettingKey; 3] =
-    [SettingKey::LidAc, SettingKey::LidDc, SettingKey::SleepDc];
+/// The keys a hold's apply writes, less the released ones (decision 17).
+pub(super) const KEYS: [SettingKey; 3] = SettingKey::HOLD;
 
 /// Do nothing for the lid and Never for sleep are both 0 (section 5, "Power settings").
 pub(super) const TARGET: u32 = 0;
@@ -128,7 +127,8 @@ impl Core {
     }
 
     fn may_own_on(&self, plan: Guid) -> bool {
-        self.state.journal.iter().any(|e| e.plan == plan) || self.state.applying.contains(&plan)
+        self.state.journal.iter().any(|e| e.plan == plan)
+            || self.state.applying.iter().any(|a| a.plan == plan)
     }
 
     /// Apply as at a hold start, once this step's requests are out. Settle drops it when the core does not apply.
@@ -168,7 +168,7 @@ impl Core {
                     .map(|key| (key, TARGET))
                     .collect();
                 out.push(Command::Apply { plan, writes });
-                self.state.applying.push(plan);
+                self.state.applying.push(Applying { plan, short: false });
             }
             // Track note 15: no plan values yet, so read first and apply at the answer.
             (ApplyStep::Wanted, true, None) => {
@@ -241,7 +241,8 @@ impl Core {
         }
     }
 
-    /// `Plan`: a new active id is a plan switch, handled first. A failed read releases nothing.
+    /// `Plan`: a new active id is a plan switch, handled first. A failed read releases nothing. The sleep route's short
+    /// timeouts follow the switch as a hold's values do (product "User settings safety" 4).
     pub(super) fn take_plan(&mut self, read: Result<PlanValues, Failure>, out: &mut Vec<Command>) {
         let Ok(values) = read else {
             return;
@@ -256,6 +257,9 @@ impl Core {
                 });
             }
             self.want_apply();
+            if self.state.short.is_some() && self.can_write_short() {
+                self.send_short(values.active, out);
+            }
         } else if let Some(episode) = self.state.episode.as_mut()
             && episode.apply == ApplyStep::WaitPlan
         {
@@ -277,6 +281,10 @@ impl Core {
         self.state
             .journal
             .retain(|e| (e.plan, e.key) != (changed.plan, changed.key));
+        // The sleep route writes it again after input only while the user has not changed it (decision 26).
+        if self.state.countdown.is_some() && SettingKey::SHORT.contains(&changed.key) {
+            self.state.short_released.insert(changed.key);
+        }
         let what = key_words(changed.key);
         let newly = self
             .state
@@ -462,13 +470,20 @@ impl Core {
         now: Now,
         out: &mut Vec<Command>,
     ) {
-        if let Some(i) = self.state.applying.iter().position(|&p| p == plan) {
-            self.state.applying.remove(i);
-        }
+        let short = self
+            .state
+            .applying
+            .iter()
+            .position(|a| a.plan == plan)
+            .is_some_and(|i| self.state.applying.remove(i).short);
         let read_nothing = matches!(result, Err(ApplyError::SafetyNet(_) | ApplyError::Write(_)))
             && journal.is_empty();
         if !read_nothing {
             self.state.journal = journal;
+        }
+        if short {
+            self.done_short_applied(plan, result, now, out);
+            return;
         }
         match result {
             Ok(()) => self.state.requests_only_warned = false,
@@ -568,5 +583,8 @@ fn key_words(key: SettingKey) -> &'static str {
         SettingKey::LidAc => "the lid action on AC",
         SettingKey::LidDc => "the lid action on battery",
         SettingKey::SleepDc => "sleep on battery",
+        SettingKey::SleepAc => "sleep on AC",
+        SettingKey::VideoIdleAc => "screen off on AC",
+        SettingKey::VideoIdleDc => "screen off on battery",
     }
 }

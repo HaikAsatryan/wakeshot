@@ -37,14 +37,16 @@ use crate::holds::file::{self, Parsed};
 use crate::holds::{HoldFacts, HoldId, HoldKind};
 use crate::ownership::apply::apply;
 use crate::ownership::check::check;
-use crate::ownership::fake::{Action, FakeJournal, FakePlans, SetBy};
+use crate::ownership::fake::{Action, FAKE_SCREEN_OFF, FakeJournal, FakePlans, SetBy};
 use crate::ownership::io::PlanIo;
 use crate::ownership::reset::{KeyReset, reset_lost};
 use crate::ownership::restore::{Found, Restored, restore};
 use crate::policy::ending::IDLE_MS;
 use crate::policy::requests::Requests;
 use crate::process::{Alive, FileTime, ProcessRef};
-use crate::settings::{Guid, Journal, JournalEntry, JournalOwner, PlanValues, SettingKey};
+use crate::settings::{
+    Guid, Journal, JournalEntry, JournalOwner, PlanValues, SHORT_TIMEOUT_S, SettingKey,
+};
 use crate::sources::{Activity, FormatHealth, Liveness, SessionFacts, SessionKey, SourceId};
 use crate::testing::FakeClock;
 use crate::time::{Clock, Deadline, Now};
@@ -90,19 +92,31 @@ pub fn plan(active: Guid) -> PlanValues {
     }
 }
 
-/// The journal entries an apply leaves on `plan_id` for `keys`: each target 0 over the values of [`plan`].
+/// The journal entries a hold's apply leaves on `plan_id` for `keys`: each target 0 over the values of [`plan`].
 pub fn entries(plan_id: Guid, keys: &[SettingKey]) -> Vec<JournalEntry> {
     let values = plan(plan_id);
     keys.iter()
         .map(|&key| JournalEntry {
             plan: plan_id,
             key,
-            original: match key {
-                SettingKey::LidAc => values.lid_ac,
-                SettingKey::LidDc => values.lid_dc,
-                SettingKey::SleepDc => values.sleep_dc,
-            },
+            original: key_value(&values, key),
             written: 0,
+            restored: false,
+        })
+        .collect()
+}
+
+/// The journal entries the sleep route's apply leaves on `plan_id`: the four short keys at 1 minute over the values
+/// of [`plan`] and the fake's screen timeouts, all longer.
+pub fn short_entries(plan_id: Guid) -> Vec<JournalEntry> {
+    let values = plan(plan_id);
+    SettingKey::SHORT
+        .iter()
+        .map(|&key| JournalEntry {
+            plan: plan_id,
+            key,
+            original: key_value(&values, key),
+            written: SHORT_TIMEOUT_S,
             restored: false,
         })
         .collect()
@@ -759,12 +773,16 @@ pub fn world_plan(id: Guid) -> PlanValues {
     }
 }
 
-/// One of the three keys of a plan read.
+/// One key of a plan read; the screen timeouts, which a plan read does not carry, at a new fake plan's own
+/// ([`FAKE_SCREEN_OFF`]).
 pub fn key_value(values: &PlanValues, key: SettingKey) -> u32 {
     match key {
         SettingKey::LidAc => values.lid_ac,
         SettingKey::LidDc => values.lid_dc,
         SettingKey::SleepDc => values.sleep_dc,
+        SettingKey::SleepAc => values.sleep_ac,
+        SettingKey::VideoIdleAc => FAKE_SCREEN_OFF[0],
+        SettingKey::VideoIdleDc => FAKE_SCREEN_OFF[1],
     }
 }
 
@@ -944,7 +962,8 @@ fn run_file(n: u8) -> String {
 /// How a case ends, before the restore property looks at the plans.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum End {
-    /// Every hold goes, then the PC runs long enough for the restore retries.
+    /// Every hold goes, then the PC runs long enough for the restore retries; a closed lid then opens, since the sleep
+    /// route's short timeouts stay while it is closed.
     LastHold,
     Quit,
     /// `WM_ENDSESSION`, then the session ends.
@@ -1038,6 +1057,9 @@ pub struct Truth {
     pub lid_ac: (u32, SetBy),
     pub lid_dc: (u32, SetBy),
     pub sleep_dc: (u32, SetBy),
+    pub sleep_ac: (u32, SetBy),
+    pub screen_ac: (u32, SetBy),
+    pub screen_dc: (u32, SetBy),
     /// No command waits for the IO thread and no answer waits for the loop: the core has heard all the IO did.
     pub in_sync: bool,
     /// Windows holds a value of ours (stored on any plan, or in force on the active one), or an apply is not answered
@@ -1060,6 +1082,9 @@ impl Truth {
             SettingKey::LidAc => self.lid_ac,
             SettingKey::LidDc => self.lid_dc,
             SettingKey::SleepDc => self.sleep_dc,
+            SettingKey::SleepAc => self.sleep_ac,
+            SettingKey::VideoIdleAc => self.screen_ac,
+            SettingKey::VideoIdleDc => self.screen_dc,
         }
     }
 }
@@ -1142,7 +1167,7 @@ impl World {
         let mut user = BTreeMap::new();
         for id in PLANS {
             let values = world_plan(id);
-            for key in KEYS {
+            for key in SettingKey::ALL {
                 user.insert((id, key), key_value(&values, key));
             }
         }
@@ -1447,6 +1472,14 @@ impl World {
                     self.send(Event::Menu(MenuCommand::KeepAwake(KeepAwake::Off)));
                     self.flush();
                     self.run(RETRIES_MS);
+                    // With the lid closed the sleep route's short timeouts stay by design until the user is back
+                    // (`p2-6-sleep-route`): the lid opens, and they go back with the retries.
+                    if self.lid_closed {
+                        self.lid_closed = false;
+                        self.send(Event::Lid { closed: false });
+                        self.flush();
+                        self.run(RETRIES_MS);
+                    }
                 }
                 End::Quit => self.send(Event::Menu(MenuCommand::Quit)),
                 End::SessionEnd => {
@@ -1533,6 +1566,9 @@ impl World {
             lid_ac: force(SettingKey::LidAc),
             lid_dc: force(SettingKey::LidDc),
             sleep_dc: force(SettingKey::SleepDc),
+            sleep_ac: force(SettingKey::SleepAc),
+            screen_ac: force(SettingKey::VideoIdleAc),
+            screen_dc: force(SettingKey::VideoIdleDc),
             in_sync: self.io.is_empty() && self.posted.is_empty(),
             owned: !state.held().is_empty() || apply_pending,
             live_file: self
@@ -1596,6 +1632,13 @@ impl World {
                         self.io.push_back(command);
                     }
                     Command::Lock => self.lock(&mut answers),
+                    Command::SleepCheck {
+                        reason, floor_pct, ..
+                    } => {
+                        let result = self.last_check(reason, floor_pct);
+                        self.posted
+                            .push_back(Event::Done(Outcome::SleepCheck(result)));
+                    }
                     Command::Hibernate {
                         reason, floor_pct, ..
                     } => self.hibernate(reason, floor_pct),
@@ -1638,27 +1681,36 @@ impl World {
         }
     }
 
-    /// The hibernate thread's last check (architecture section 5, "Lock and hibernate"), then the PC hibernates and
-    /// resumes, or the answer says why not. The answer is posted like an IO outcome, so it may come late.
-    fn hibernate(&mut self, reason: CountdownReason, floor_pct: u8) {
+    /// The hibernate thread's last check (architecture section 5, "Lock and hibernate"), as `SleepCheck` and
+    /// `Hibernate` both run it. The sleep check's answer is posted like an IO outcome, so it may come late. The world
+    /// does not model Windows' own idle sleep under the short timeouts, so its fallback hibernate always comes.
+    fn last_check(&self, reason: CountdownReason, floor_pct: u8) -> Result<(), HibernateSkip> {
         let now = self.sim.now();
         let since_resume = self
             .last_resume_mono
             .map_or(u64::MAX, |at| now.mono_ms.saturating_sub(at));
         let idle = self.sim.idle_ms().unwrap_or(u64::MAX).min(since_resume);
         let floor = reason == CountdownReason::Floor;
-        let end = if !self.lid_closed {
-            HibernateEnd::Skipped(HibernateSkip::LidOpen)
+        if !self.lid_closed {
+            Err(HibernateSkip::LidOpen)
         } else if idle < IDLE_MS {
-            HibernateEnd::Skipped(HibernateSkip::InputSeen)
+            Err(HibernateSkip::InputSeen)
         } else if floor && self.ac {
-            HibernateEnd::Skipped(HibernateSkip::OnAc)
+            Err(HibernateSkip::OnAc)
         } else if floor && self.battery_pct >= floor_pct {
-            HibernateEnd::Skipped(HibernateSkip::AboveFloor)
-        } else if !self.hibernate_allowed {
-            HibernateEnd::NotAllowed
+            Err(HibernateSkip::AboveFloor)
         } else {
-            HibernateEnd::Resumed
+            Ok(())
+        }
+    }
+
+    /// The last check, then the PC hibernates and resumes, or the answer says why not. The answer is posted like an IO
+    /// outcome, so it may come late.
+    fn hibernate(&mut self, reason: CountdownReason, floor_pct: u8) {
+        let end = match self.last_check(reason, floor_pct) {
+            Err(skip) => HibernateEnd::Skipped(skip),
+            Ok(()) if !self.hibernate_allowed => HibernateEnd::NotAllowed,
+            Ok(()) => HibernateEnd::Resumed,
         };
         if end == HibernateEnd::Resumed {
             self.suspend(HIBERNATED_MS);

@@ -190,17 +190,19 @@ pub fn notice(notice: &Notice) -> NoticeText {
                  not sleep at all. Click to see your old values in the log.",
             )
         },
+        // The fallback after the 1-minute timeouts did not sleep the PC (`p2-6-sleep-route`), or the plain hibernate
+        // where they cannot be written. The 1-minute timeouts, where written, stay until the lid opens or input.
         Notice::HibernateFailed => warning(
-            "Wakeshot could not hibernate the PC",
-            "Wakeshot tried to hibernate the PC with the lid closed, but it did not work. Your power settings are \
-             back, so Windows should sleep it at your usual sleep time.",
+            "The PC did not go to sleep",
+            "The lid is closed, but the PC did not sleep and could not hibernate. Windows should sleep it once \
+             nothing else keeps it awake. Opening the lid puts your screen and sleep settings back.",
         ),
         // Raised at the first failure of a closed-lid lock, before its retry and the step back (architecture section
         // 8, "Lock fails"), and for a failed Keep screen on lock with the lid open, so it fits both.
         Notice::LockFailed => warning(
             "Wakeshot could not lock the PC",
             "Windows did not lock the PC. Lock it with Windows key + L. With the lid closed, Wakeshot tries once \
-             more; if that fails, it stops keeping the PC awake and hibernates it after 5 minutes with no input.",
+             more; if that fails, it stops keeping the PC awake and makes it sleep after 5 minutes with no input.",
         ),
         Notice::ClosedLidReport { ran_ms, held_by } => {
             let lead = format!(
@@ -306,6 +308,9 @@ fn setting(key: SettingKey) -> &'static str {
         SettingKey::LidAc => "what closing the lid does when plugged in",
         SettingKey::LidDc => "what closing the lid does on battery",
         SettingKey::SleepDc => "when the PC sleeps on battery",
+        SettingKey::SleepAc => "when the PC sleeps when plugged in",
+        SettingKey::VideoIdleAc => "when the screen turns off when plugged in",
+        SettingKey::VideoIdleDc => "when the screen turns off on battery",
     }
 }
 
@@ -945,6 +950,9 @@ mod tests {
         let lid_ac = text(Notice::UserChanged(SettingKey::LidAc));
         let lid_dc = text(Notice::UserChanged(SettingKey::LidDc));
         let sleep_dc = text(Notice::UserChanged(SettingKey::SleepDc));
+        let sleep_ac = text(Notice::UserChanged(SettingKey::SleepAc));
+        let screen_ac = text(Notice::UserChanged(SettingKey::VideoIdleAc));
+        let screen_dc = text(Notice::UserChanged(SettingKey::VideoIdleDc));
         let restored = text(Notice::RestoredByUser);
         let step_back = text(Notice::StepBack { floor_pct: 20 });
         let requests_only = text(Notice::RequestsOnly);
@@ -1102,6 +1110,21 @@ mod tests {
                 "You changed when the PC sleeps on battery. Wakeshot leaves it as you set it until the current work \
                  ends.",
             ),
+            (
+                sleep_ac.body,
+                "You changed when the PC sleeps when plugged in. Wakeshot leaves it as you set it until the current \
+                 work ends.",
+            ),
+            (
+                screen_ac.body,
+                "You changed when the screen turns off when plugged in. Wakeshot leaves it as you set it until the \
+                 current work ends.",
+            ),
+            (
+                screen_dc.body,
+                "You changed when the screen turns off on battery. Wakeshot leaves it as you set it until the current \
+                 work ends.",
+            ),
             (restored.title, "Your power settings are back"),
             (
                 restored.body,
@@ -1134,20 +1157,17 @@ mod tests {
                 "Wakeshot keeps trying. Until it works, closing the lid may not sleep the PC, and on battery it may \
                  not sleep at all. Click to see your old values in the log.",
             ),
-            (
-                hibernate_failed.title,
-                "Wakeshot could not hibernate the PC",
-            ),
+            (hibernate_failed.title, "The PC did not go to sleep"),
             (
                 hibernate_failed.body,
-                "Wakeshot tried to hibernate the PC with the lid closed, but it did not work. Your power settings are \
-                 back, so Windows should sleep it at your usual sleep time.",
+                "The lid is closed, but the PC did not sleep and could not hibernate. Windows should sleep it once \
+                 nothing else keeps it awake. Opening the lid puts your screen and sleep settings back.",
             ),
             (lock_failed.title, "Wakeshot could not lock the PC"),
             (
                 lock_failed.body,
                 "Windows did not lock the PC. Lock it with Windows key + L. With the lid closed, Wakeshot tries \
-                 once more; if that fails, it stops keeping the PC awake and hibernates it after 5 minutes with no \
+                 once more; if that fails, it stops keeping the PC awake and makes it sleep after 5 minutes with no \
                  input.",
             ),
             (report.title, "The PC ran with the lid closed"),

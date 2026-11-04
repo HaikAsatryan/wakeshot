@@ -63,9 +63,9 @@ lists end up the same. macOS and Linux later add an adapter crate next to `wakes
 | `core` | `Core::new(Config)`, `Core::handle(&mut self, Now, Event) -> Vec<Command>`, `Core::next_deadline(&self) -> Option<Deadline>`; `state` (private) |
 | `holds` | `HoldId`, `HoldKind { Agent, Run, Script, KeepAwake }`, `HoldFacts`; `holds::file`: hold file parsing, `parse_expires`, `format_expires` (sources track) |
 | `sources` | trait `AgentSource`, `WantedFile`, `Feed`, `Fed`, `SessionFacts`, `Activity`, `Liveness`, `FormatHealth`; `claude::{status, transcript}`, `codex`, `copilot`, `cron` (Claude's cron syntax, local time) |
-| `policy` | pure rules: `requests`, `lid`, `lock`, `floor` (battery floor), `ending` (hibernate countdown), `sessions` (agent sessions to holds), `hold_files` (hold files to holds) |
+| `policy` | pure rules: `requests`, `lid`, `lock`, `floor` (battery floor), `ending` (the countdown to sleep), `sessions` (agent sessions to holds), `hold_files` (hold files to holds) |
 | `ownership` | traits `PlanIo` (plan calls) and `SafetyNet` (journal file, RunOnce, guard), `JournalRead`; `apply`, `restore`, `check`: the one apply, restore routine and ownership check every process runs (section 5), generic over the two traits; `journal`: `JournalFile` split into known entries and the rest, and merged back; `fake::FakePlans` (test-support): stored and in-force values, a call log, a script of failures, stops and changes by call index |
-| `settings` | `Guid(u128)` (text lowercase `8-4-4-4-12`; the bit order of `windows::core::GUID::from_u128`), `SettingKey { LidAc, LidDc, SleepDc }`, `OwnedKey { plan, key }`, `PlanValues`, `Journal`, `JournalOwner`, `JournalEntry` |
+| `settings` | `Guid(u128)` (text lowercase `8-4-4-4-12`; the bit order of `windows::core::GUID::from_u128`), `SettingKey { LidAc, LidDc, SleepDc, SleepAc, VideoIdleAc, VideoIdleDc }` (`HOLD` the first three, `SHORT` the sleep route's four), `OwnedKey { plan, key }`, `PlanValues`, `Journal`, `JournalOwner`, `JournalEntry` |
 | `files` | `Config`, `StateFile`, `JournalFile`, `JournalFileEntry`, `JournalKey { Known(SettingKey), Other(String) }`, `HoldFile`, `RestoreRequest`, `VersionProbe`: serde structs, each with `version`; `read::<T>(bytes) -> Read<T> { Value(T), Newer(u32), Bad }`, the version rule (section 6) for every file but the journal |
 | `view` | `TrayView { icon: IconState, tooltip, menu: MenuModel }`, `MenuModel`, `MenuItem { Label(text), Separator, Action { text, command, checked, enabled }, Submenu { text, items } }`, `KeepAwake { Off, Minutes(u32), UntilOff }`, `MenuCommand { Automatic(bool), KeepAwake(KeepAwake), KeepScreenOn(bool), Restore, OpenLog, Quit }`, `Notice`, `Cue` |
 | `present` | `TrayView`, `MenuModel` and `StateFile` from the core's state; every word from `text` |
@@ -79,10 +79,10 @@ lists end up the same. macOS and Linux later add an adapter crate next to `wakes
 | `error` | `WinError { call, code }`, `From<WinError> for Failure` |
 | `clock` | `now() -> Now` (`GetSystemTimePreciseAsFileTime`, `QueryUnbiasedInterruptTime`), `SystemClock` (implements `Clock`), `input_idle_ms()` (`GetLastInputInfo`) |
 | `power::requests` | `PowerRequests`: `PowerCreateRequest`, `PowerSetRequest`, `PowerClearRequest`, `retake()`; real and dry run |
-| `power::plan` | `Win32Power` and `DryRunPower`, the Windows forms of the core's `PlanIo`; `PlanSetting { LidAc, LidDc, SleepAc, SleepDc, SaverThresholdDc }` (reads need AC sleep and the saver threshold for `PlanValues`; writes stay limited to `SettingKey`) |
+| `power::plan` | `Win32Power` and `DryRunPower`, the Windows forms of the core's `PlanIo`; `PlanSetting { LidAc, LidDc, SleepAc, SleepDc, SaverThresholdDc, VideoIdleAc, VideoIdleDc }` (reads need the saver threshold for `PlanValues`; writes stay limited to `SettingKey`) |
 | `power::journal` | `FileNet`, the Windows `SafetyNet` (journal file, RunOnce, guard); `restore_locked`, `apply_locked`, `check_locked`: the core's routines under `Local\Wakeshot.Journal`, the only way any process calls them |
 | `power::executor` | runs `ReadPlan` (`check_locked`, then `PlanIo::values`), `Apply` and `Restore` on the IO thread; the startup restore |
-| `power::hibernate` | the hibernate thread: the last check, the going to sleep sound, the lid once more, `SetSuspendState` |
+| `power::hibernate` | the hibernate thread: the last check, the going to sleep sound, the lid once more, `SetSuspendState`; the same check and sound with no hibernate for the sleep route (`run_sleep_check`) |
 | `power::system` | lid, AC, battery, active plan, suspend and resume notifications |
 | `io_queue` | `IoQueue`: the IO thread's commands in order; `push_front` and the end-of-session rule (section 4) |
 | `session` | session notifications, `lock()`; real and dry run |
@@ -246,14 +246,20 @@ pub enum Command {
     Restore { plan: Option<Guid>, why: RestoreWhy }, // None: every entry; Some: that plan's entries only
                                                 // why: WorkEnded, UserAsked, PlanSwitch, Floor, Quit, SessionEnd,
                                                 // ConsoleLeft, Leftover (a journal left at start; run only when
-                                                // its owner is Gone or this tray)
+                                                // its owner is Gone or this tray), ShortTimeouts (the sleep
+                                                // route's 1-minute timeouts go back)
     ResetLost { damaged: bool },                // a lost journal ("A journal that cannot be read" below): on the
                                                 // plan in use each key at Wakeshot's value goes to the plan's
                                                 // Windows default, the bad file goes aside (ownership::reset)
     Lock,
+    SleepCheck { reason: CountdownReason, floor_pct: u8, last_resume_mono_ms: Option<u64> },
+                                                // the countdown is due: the hibernate thread's last check and the
+                                                // going to sleep sound, no hibernate; then the core writes the
+                                                // short timeouts ("The sleep route" below)
     Hibernate { reason: CountdownReason, floor_pct: u8, last_resume_mono_ms: Option<u64> },
-                                                // what the hibernate thread's last check needs (section 5); that
-                                                // thread plays the going to sleep sound, never the core
+                                                // the fallback: what the hibernate thread's last check needs
+                                                // (section 5); that thread plays the going to sleep sound, never
+                                                // the core
     Tray(TrayView), Notify(Notice), Play(Cue),
     WriteState(StateFile), WriteConfig(Config),
     WriteHold { id: HoldId, hold: HoldFile },    // Keep awake from the menu (holds\keep-awake.json)
@@ -300,6 +306,7 @@ pub enum Outcome {
                                        // reset: the keys set to the default; journal: known entries when the
                                        // file read after all, and then nothing was reset
     Locked(Result<(), Failure>),
+    SleepCheck(Result<(), HibernateSkip>),  // Ok: write the short timeouts; LidUnknown counts as Ok
     Hibernate(HibernateEnd),           // Skipped(HibernateSkip) | NotAllowed | Failed(Failure) | Resumed
     Sound(Result<SoundEnd, Failure>),  // logged only
     Notified(Result<(), Failure>),
@@ -330,7 +337,9 @@ State is one struct owned by the loop thread: `automatic`; holds by source; live
 plan, `lid_closed_since`, labels of what held); a mirror of the journal, a copy of the entries that `Done(Applied)` and
 `Done(Restored)` carry, less the keys `UserChanged` names, with when it became unknown and whether a `ResetLost` is
 out; `requests`; `stepped_back` (battery floor); `on_console`;
-`session_ending`; `ending: Option<Countdown>`; `last_resume_mono`; notices already shown; and the lid side's own
+`session_ending`; `ending: Option<Countdown>`; `short` (the sleep route's short timeouts in force, with the fallback's
+deadline) and the short keys the user changed in this countdown; `last_resume_mono` and `last_unlock_mono`; notices
+already shown; and the lid side's own
 memory (`lock: LockWatch`): the lock watch (a closed-lid `Lock` until `Session(Locked)` confirms it), the lock step
 back, the lock after a hibernate that did not happen, notices kept for the user's return, countdown rules waiting for
 a plan read that tells the user's own lid action, and the journal mirror as the last settle pass saw it.
@@ -350,7 +359,10 @@ waited takes no Do nothing as final: it starts once a read shows the user's own 
 for Floor) as not Do nothing, and ends when the lid opens, a hold starts or, for Floor, AC comes back
 (`p2-6-unread-lid-countdown`, `p2-6-unread-floor-countdown`). When the unknown window ends, known or lost, with the lid
 closed and nothing holding, the work-end want starts waiting the same way; with a hold that holds nothing because of
-the battery floor, the Floor want does (`Core::unknown_journal_ended`, `p2-6-record-lost`).
+the battery floor, the Floor want does (`Core::unknown_journal_ended`, `p2-6-record-lost`). With a hold that holds and
+a lid close inside the window, which got no lock, the lock waits the same way for a read that shows the user's own
+lid action as not Do nothing, then comes as at a lid close, with the chime (`p2-6-sleep-route` deliverable 8; with
+the user's own Do nothing on every source, no lock, as at a lid close).
 
 ### Clocks
 
@@ -361,7 +373,11 @@ the battery floor, the Floor want does (`Core::unknown_journal_ended`, `p2-6-rec
   "Clock").
 - Input idle (`GetLastInputInfo`) counts suspended time (research, "Clock"). The core treats a resume as input:
   idle = min(reported idle, `mono_ms` since the last `Resumed`). The two count the same time there, because no
-  suspend lies between the last resume and now. So a countdown never hibernates a PC the user just woke.
+  suspend lies between the last resume and now. So a countdown never sleeps a PC the user just woke. The countdown
+  also counts idle from the last `Unlocked`: a sign-in by face or fingerprint may give no input Windows counts, and the
+  user who just signed in must not hear the going to sleep sound (`p2-6-sleep-route`). Input after the short
+  timeouts is a reading under the one before: reported idle only grows while nobody types, a sleep included, and
+  readings come at least every 30 s, far below the 5 minutes the short timeouts start from.
 - Safety tick every 30 s. It reads input idle, runs due deadlines, issues `ReadPlan` (any tick does, once the last
   read is 10 s old or more, so a burst of short deadlines sends no burst of reads), re-checks liveness that only the
   system process list can see, and retries the settings mutex when this tray does not own it. The loop keeps one
@@ -431,7 +447,8 @@ Holding ends (last hold gone):
   journal holds), or a lost journal's reset has not answered. The console-left and battery-floor restores follow the same rule; the user's Restore, Quit and
   session end go out whatever the mirror says.
 - If the lid is closed and the user's own lid action is not Do nothing: countdown (reason WorkEnded). Settings come
-  back first, so a crash during the countdown leaves nothing overridden.
+  back first, so a crash during the countdown leaves nothing overridden; the sleep route's short timeouts come later,
+  as journal entries like the hold's.
 
 A failed `Restore` is retried at a tick, at most once per 10 s, right before that tick's `ReadPlan`, so the read's
 ownership check sees the journal the retry left. While the core applies (holding, on the console, not stepped back,
@@ -465,20 +482,45 @@ reset is the log's only. A reset whose answer never comes goes out again two min
 reset: a lost journal's values on another plan stay (rare: a crash after a plan switch whose restore failed, then a
 journal that never reads).
 
-Countdown: due when input idle (clamped at resume as above) reaches 5 minutes (Haik, 2026-11-03). Cancelled by a new
+Countdown: due when input idle (clamped at resume and unlock as above) reaches 5 minutes (Haik, 2026-11-03). Cancelled by a new
 hold (not while stepped back, at the floor or after a failed lock, since no hold holds then), lid open, or AC back
 (Floor reason; a step back after a failed lock is no floor one). It pauses while another session has the PC's
 screen: input idle is this session's, so the other user's typing would not count. A work-end countdown also pauses
 while the user's own lid action for the current power source is Do nothing; after that pause it starts again only
 once a source whose own action is not Do nothing has lasted 30 s (`policy::lid::SOURCE_SETTLE_MS`), so a dock's short
-AC drop never hibernates a docked laptop left idle. A lid close on our Do nothing while nothing holds (a restore that
-failed or has not landed) starts the countdown as a work end does. When due: `Hibernate` (section 5); the hibernate
-thread plays the "going to sleep" sound after its last check, and the core sends no `Play` for it. Not allowed,
-failed or the lid unknown: `HibernateFailed`, the countdown ends; putting the lid action back does not sleep a laptop
-whose lid is already closed, so while the lid stays closed the core locks it, `Lock` with `Play(LidClosedHolding)`,
-at an input reading 5 minutes idle with the session unlocked and on the PC's screen, at most every 5 minutes, until
-the lid opens; not on a power source whose own lid action is Do nothing (as without Wakeshot), and only once that
-source lasted 30 s (power safety verify minor 1; worker's call for Haik's review).
+AC drop never sleeps a docked laptop left idle. A lid close on our Do nothing while nothing holds (a restore that
+failed or has not landed) starts the countdown as a work end does. When due: the sleep route below; the hibernate
+thread plays the "going to sleep" sound after its last check, and the core sends no `Play` for it.
+
+The sleep route (Haik, 2026-11-04: "just make it sleep"; `p2-6-sleep-route`). On Modern Standby no app call starts a
+sleep (product, work end), so Wakeshot uses Windows' own idle sleep. The same for the work end, the battery floor and
+the step back after a failed lock:
+
+1. Due: `SleepCheck`. The hibernate thread checks the lid, idle and (Floor) the battery as before a hibernate, plays
+   the sound, and reads the lid once more; an unknown lid does not stop it, since the core's own reading says closed.
+   Input, AC or the floor skip it as they skip a hibernate; the lid open ends the countdown.
+2. Passed: `Apply` of the four short keys (sleep after and screen off, AC and DC) at 60 s, less the keys the user
+   changed in this countdown or in a stepped-back episode. The apply writes a key only where the value in force is
+   longer or Never (`ownership::apply::meets`), as Wakeshot-owned journal entries with the RunOnce value and the
+   guard, like a hold's. The screen timeout is needed: on the test laptop the sleep came when the screen timer turned
+   the screen off, not at the sleep timeout (research, "Idle sleep with the lid closed").
+3. Fallback: 5 minutes of run time after the write, and again after each resume, if the PC has not slept and nothing
+   took the short timeouts back: `Hibernate` as before. A sleep is `Suspending` from the suspend-resume callback,
+   followed by `Resumed`, or, when that post was lost, by a tick whose wall clock moved at least 5 s past run time. Not
+   allowed, failed or the lid unknown: `HibernateFailed`, once per countdown; the short timeouts stay, so Windows
+   sleeps the laptop once nothing holds it, and the relock below. A failed write makes the fallback due at once. Where
+   nothing can be written (another session owns the settings, a policy blocked them, the session ends, every short key
+   is the user's), the countdown sends `Hibernate` at once, as before the sleep route.
+4. They go back (`Restore { why: ShortTimeouts }`) at an unlock (the user is there), input (then the countdown waits 5
+   minutes again), the lid open, a hold start (before its apply, which also takes battery sleep over), the countdown's
+   end (AC back for Floor, a pause, a resumed hibernate) and every other restore point (quit, sign-out, next start,
+   uninstall, guard). Not at a wake alone: a laptop that wakes with the lid closed sleeps again. A user's change to a
+   short key is released as a hold's is. A plan switch moves them to the new plan.
+
+While the lid stays closed after a hibernate that did not happen, the core locks the laptop, `Lock` with
+`Play(LidClosedHolding)`, at an input reading 5 minutes idle with the session unlocked and on the PC's screen, at most
+every 5 minutes, until the lid opens; not on a power source whose own lid action is Do nothing (as without Wakeshot),
+and only once that source lasted 30 s (power safety verify minor 1; worker's call for Haik's review).
 
 Closed-lid report: after a hold that ran with the lid closed, a notice says how long the PC kept running with the lid
 closed (`mono_ms`) and what held it. It goes out at the first unlock with the lid open, or when the lid opens while
@@ -521,7 +563,7 @@ Every decision in `product.md`, by section. Phase numbers are from `plan.md`.
 | 20 | Notice at sign-in after a closed-lid hold | episode flow, closed-lid report | 2, 5 |
 | 21 | Battery floor | episode flow; section 5, hibernate | 2, 3 |
 | 22 | No closed-lid time limit, no heat guard | no timer on holds; nothing reads temperature | none |
-| 23 | Work ends with the lid closed: hibernate after 5 minutes with no input | episode flow; section 5 | 2, 3 |
+| 23 | Work ends with the lid closed: sleep after 5 minutes with no input (1-minute timeouts, hibernate as the fallback; Haik 2026-11-04) | episode flow, "The sleep route"; section 5 | 2, 3 |
 | 24 | Save the original before any write | section 5 apply steps (a failed safety step means no write), in the core's `ownership::apply`; section 6 journal | 2, 3 |
 | 25 | Restore only what is still ours | section 5 ownership and restore routine, in the core's `ownership` | 2, 3 |
 | 26 | The user's latest change wins; "Restore my power settings" counts as one | `UserChanged` from the IO thread (`ownership::check`); 10 s read; `released` by key, on every plan | 2, 3 |
@@ -588,7 +630,7 @@ How they talk: files only. No pipes, no sockets.
 | Watch | overlapped `ReadDirectoryChangesW` on the data folder (`config.json` gives `ConfigChanged`, `holds\` gives `Holds`, `restore-request.json` gives `Menu(Restore)`) and the agent folders; file reads; source and hold parsers; process opens and every process exit wait (`RegisterWaitForSingleObject`; the pool callback only wakes the watch thread) | power calls |
 | System callbacks | power setting, suspend and resume callbacks | anything but posting to the loop |
 | Sound | one short-lived thread per sound: the WASAPI stream (section 2) | anything else |
-| Hibernate | one short-lived thread per hibernate: checks, `SetSuspendState` (returns only after resume) | |
+| Hibernate | one short-lived thread per sleep check or hibernate: checks, the sound, then `SetSuspendState` for a hibernate (returns only after resume) | |
 
 - Other threads post boxed events to the loop window (`PostMessage(hwnd, WM_APP, ...)`), never to the thread: thread
   messages are lost while a modal loop runs, and a menu runs one (Microsoft, `PostThreadMessage` Remarks). A failed
@@ -665,18 +707,30 @@ Wakeshot edits the active plan in place, never a copy: Settings writes battery s
 user's plan even while a copy is active, and a copy loses other changes made during a hold (research, "What Windows
 Settings writes").
 
+A hold writes:
+
 | Key | Target | Skipped when |
 |---|---|---|
 | Lid action AC | 0, Do nothing | the live value is already 0, or the user released it in this episode |
 | Lid action DC | 0, Do nothing | same |
 | Sleep after DC | 0, Never | same |
 
+The sleep route (section 3) writes, once the countdown after a closed-lid work end is due:
+
+| Key | Target | Skipped when |
+|---|---|---|
+| Sleep after AC and DC (`STANDBYIDLE`) | 60 s | the live value is already 60 s or less and not Never, or the user changed it in this countdown |
+| Screen off AC and DC (`VIDEOIDLE`, `GUID_VIDEO_POWERDOWN_TIMEOUT`) | 60 s | same |
+
 - Written when holding starts, also on AC, so an unplug or a short AC drop on a USB-C dock never meets the battery
   rule first (research, "AC can drop for a few seconds while docked"). Sleep DC Never kept requests honored for 16
   minutes on battery with the lid open (research, "Battery sleep Never stops the battery rule"). With the lid closed:
   not tested (Phase 3). A finite value would only move the point where Windows ends the requests: a time limit, which
   `product.md` rules out (signals are checked against facts, not capped by time).
-- AC sleep is never touched: on AC a held request blocks idle sleep (research, "Resume", H run 1).
+- A hold never touches AC sleep: on AC a held request blocks idle sleep (research, "Resume", H run 1). Only the sleep
+  route writes it, with no hold running.
+- A timeout target other than Never is a ceiling: the apply keeps a live value at or under it, and a hold's battery
+  sleep Never that a failed restore left over a user's own shorter value goes back to that value, not to 60 s.
 
 Apply, on the IO thread, under `Local\Wakeshot.Journal`:
 
@@ -750,10 +804,11 @@ guard, restore mode, Velopack hooks and the CLI, always under `Local\Wakeshot.Jo
 
 1. Load `journal.json`. Missing: nothing to do. Any other read error: this run fails. No entries (a stop before the
    clean-up): the clean-up of step 6. Corrupt (read in full, but it does not parse): move it to
-   `journal.json.corrupt`, warn; values stay as they are. That override then stays until the user sets the values by
-   hand: the next `Apply` sees Do nothing with no entry and takes it for the user's own value, so a lid close gets no
-   lock either. The warning says so; the log holds the old values (every settings write is logged with old and new
-   values). Listed in "Gap left". An apply that finds the file corrupt writes nothing and fails with
+   `journal.json.corrupt`; the routine changes no value. In the tray the journal is then lost (`JournalCorrupt`): the
+   reset puts each hold key that holds Wakeshot's value back to Windows' default, with one notice ("A journal that
+   cannot be read", section 3). The guard, restore mode, the hooks and `wakeshot restore` only set the file aside; the
+   tray's next start resets (not after an uninstall: no tray starts then). The log holds the old values (every
+   settings write is logged with old and new values). An apply that finds the file corrupt writes nothing and fails with
    `SafetyNet(JOURNAL_CORRUPT)`; the core then sends one `Restore { plan: None }`, once per corrupt file and not per
    apply, so this step sets the file aside and `JournalCorrupt` reaches the user (orchestrator, 2026-11-03).
 2. Read the active plan id and the whole plan list: `PowerEnumerate` until it returns 259 (`ERROR_NO_MORE_ITEMS`, the
@@ -846,8 +901,11 @@ Until a reinstall, with no warning: an uninstall during a hold whose restore fai
 is gone, hooks show no UI, and the uninstall removes the RunOnce value; the journal stays, so a reinstall's install
 hook restores.
 
-Until the user sets the values by hand: a journal file that reads but does not parse (restore step 1). It is moved
-aside with a warning; the log holds the old values.
+Until the next tray start resets them to Windows' defaults (`p2-6-record-lost`): a journal file that reads but does not
+parse, met by the guard, restore mode, a hook or `wakeshot restore` (restore step 1). It is moved aside; the log holds
+the old values. After an uninstall no tray starts, so its values stay until the user sets them. The reset covers only
+the hold keys: a lost journal while the sleep route's 1-minute timeouts were in force leaves them (rare: a crash in
+those minutes and a journal that does not read).
 
 ### Lock and hibernate
 
@@ -864,14 +922,20 @@ aside with a warning; the log holds the old values.
   the sound can open the lid to stop it; an agent turn that starts during the sound is not seen, since nothing
   cancels the thread), then `SetSuspendState(TRUE, FALSE, FALSE)` (hibernates here, returns only after resume,
   tested). The two checks come before the sound, so a PC with hibernate off never plays "going to sleep" and then
-  stays awake (card `p3-hibernate`). Not allowed or failed: a notice; settings are already
-  restored, so Windows' own timers most likely apply (inferred; with the lid closed not tested, checklist 2); with
-  the lid still closed the core then locks it whenever it is left idle (section 3, "Countdown").
-- One hibernate thread at a time: the dispatcher starts none while one runs, from its start to its `Done(Hibernate)`,
-  since a second could put the PC down again as soon as it wakes. The thread's last act posts that end; a post the full
-  queue refuses (1816) is tried again every 1 s, up to 60 tries, and any other error ends the tries with a warning. A
-  thread that cannot start is fed as `Done(Hibernate(Failed))` at once, not posted (`app/dispatch.rs`,
-  `app/tray_mode.rs`; `p6-int-wiring-fixes` item 2).
+  stays awake (card `p3-hibernate`). Not allowed or failed: a notice; the hold's settings are already
+  restored and the sleep route's 1-minute timeouts stay, so Windows most likely sleeps the laptop once nothing holds
+  it (inferred; with the lid closed not tested, checklist 2); with the lid still closed the core then locks it
+  whenever it is left idle (section 3, "Countdown"). Since `p2-6-sleep-route` this is the fallback 5 minutes after the
+  short timeouts.
+- Sleep check (`Command::SleepCheck`, `power::hibernate::run_sleep_check`), on the same thread: the lid, input idle
+  and the floor as above, the sound, the lid once more; no privilege, no hibernate check, no call. An unknown lid is
+  logged and the check goes on. It answers `Done(SleepCheck)`; on `Ok` the core writes the short timeouts.
+- One hibernate thread at a time, a sleep check included: the dispatcher starts none while one runs, from its start to
+  its `Done`, since a second could put the PC down again as soon as it wakes. The thread's last act posts that end; a
+  post the full queue refuses (1816) is tried again every 1 s, up to 60 tries, and any other error ends the tries with
+  a warning. A thread that cannot start is fed as `Done(Hibernate(Failed))` at once, not posted, and a sleep check that
+  cannot start as `Done(SleepCheck(Ok))`: the core checked the lid, idle and floor before it asked, so only the sound
+  and the second look are lost (`app/dispatch.rs`, `app/tray_mode.rs`; `p6-int-wiring-fixes` item 2).
 
 ### OS events
 
@@ -976,6 +1040,10 @@ Journal format:
   journal shows up in a test or a report.
 - The entry fields above are frozen: a later version only adds fields, and every version restores the entries whose
   `key` it knows, also from a newer journal, so a downgrade (winget can install an older version) still restores.
+- Keys: `lidAc`, `lidDc`, `sleepDc` (a hold), and since `p2-6-sleep-route` `sleepAc`, `videoIdleAc`, `videoIdleDc`
+  (the sleep route's 1-minute timeouts; `sleepDc` too, with `written` 60). A journal from before them loads as it
+  did. A version before them keeps their entries as keys it does not know and restores nothing of them, so a
+  downgrade in those minutes leaves the 1-minute timeouts until a newer version runs.
 
 Registry values Wakeshot writes, all under HKCU, all removed by uninstall: `...\CurrentVersion\Run\Wakeshot` (start at
 login, set by the install hook); `...\CurrentVersion\RunOnce\WakeshotRestore` (only while overriding). Windows itself
@@ -1080,10 +1148,10 @@ fallback. The one exception is `watch::read` (the watch thread's file reads, std
 | Active plan read fails at the start of an apply | nothing written; requests only for the episode, notice |
 | Plan read fails | nothing released; log; retried at the next read |
 | Restore fails | journal kept; the tray retries at a tick, at most once per 10 s, while the restore is still wanted and warns once; restore mode and the guard retry for 2 minutes while the journal's owner is still the dead process, then start the tray; the Velopack hooks retry every 2 s for up to 25 s (updated: 10 s) |
-| Journal corrupt | moved aside; warning notice; values left as they are until the user sets them by hand (section 5, "Gap left") |
+| Journal corrupt | moved aside; the tray resets each hold key at Wakeshot's value to Windows' default, with one `JournalLost` notice (section 3, "A journal that cannot be read"); the guard, restore mode, the hooks and the CLI only move it aside, and the tray's next start resets (section 5, "Gap left") |
 | Liveness Unknown | last state kept, retried on the next tick; no file deleted, no restore started |
 | Settings mutex held by another session | requests only; retried on each tick |
-| Hibernate not allowed, fails, or lid state unknown | notice; settings were already restored; while the lid stays closed, `Lock` with the chime at each input reading 5 minutes idle with the session unlocked and on the PC's screen, at most every 5 minutes, until the lid opens, unless the user's own lid action for the power source is Do nothing (power safety verify minor 1); a notice raised with the lid closed and the session unlocked is shown again with the closed-lid report (verify minor 2) |
+| Hibernate not allowed, fails, or lid state unknown | notice, once per countdown; the hold's settings were already restored and the sleep route's 1-minute timeouts stay, so Windows sleeps the laptop once nothing holds it; while the lid stays closed, `Lock` with the chime at each input reading 5 minutes idle with the session unlocked and on the PC's screen, at most every 5 minutes, until the lid opens, unless the user's own lid action for the power source is Do nothing (power safety verify minor 1); a notice raised with the lid closed and the session unlocked is shown again with the closed-lid report (verify minor 2) |
 | Lock fails | log, notice; a closed-lid lock also counts as failed when no `Session(Locked)` comes within 5 s (`LockWorkStation` only starts the lock); with the lid closed on our Do nothing: `Lock` once more at the next tick; if that fails too, step back as at the floor (`Requests` off, `restore_all`) and start the work-end countdown, until the session locks or the lid opens (Haik, 2026-11-03; power safety review finding 1); `LockFailed` is shown again with the closed-lid report, when the user is back at the open laptop (power safety verify minor 2) |
 | Sound fails | log only |
 | Agent file format unknown | "update Wakeshot" notice |
@@ -1174,7 +1242,7 @@ and after, and change nothing by hand during the test.
 | 4 | End task on the tray in Task Manager, then on its group: the guard (Explorer as parent) lives on and restores | 3 |
 | 5 | Tray and guard killed, start at login off, sign out and in: RunOnce restores | 3 |
 | 6 | Sign out during a hold: restored before the session ends | 3 |
-| 7 | Work ends with the lid closed: hibernates after 5 minutes; not while typing on an external screen | 6 (integration) |
+| 7 | Work ends with the lid closed: sleeps (1-minute timeouts) after 5 minutes, hibernates 5 minutes later if it did not; not while typing on an external screen | 6 (integration) |
 | 8 | Battery floor with a short AC drop on the dock; the lid closed on the dock with the user's own AC lid action Do nothing, then unplugged: lock and sound, and what Windows does with the user's own values; the lid closed on the dock while holding, signed in on the external screen, then unplugged: lock and sound after 30 s on battery, none for a short AC drop | 6 (integration) |
 | 9 | Plan switch during a hold | 6 (integration) |
 | 10 | Unlock after a closed-lid hold: the report notice | 6 (integration) |

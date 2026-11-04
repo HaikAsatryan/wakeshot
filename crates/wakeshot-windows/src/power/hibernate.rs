@@ -1,6 +1,8 @@
-//! The hibernate thread: the last check, the going to sleep sound, the lid once more, `SetSuspendState`.
+//! The hibernate thread: the last check, the going to sleep sound, the lid once more, `SetSuspendState`. Since
+//! `p2-6-sleep-route` it also runs the sleep check: the same check and sound with no hibernate, before the core sets
+//! the 1-minute sleep and screen timeouts ([`run_sleep_check`]).
 //!
-//! Owner: `p3-hibernate`.
+//! Owner: `p3-hibernate`, then `p2-6-sleep-route`.
 //!
 //! The integration runs [`run_hibernate`] on a new thread for each `Command::Hibernate` and posts what it returns as
 //! `Event::Done(Outcome::Hibernate(..))`. When the hibernate works, the call returns only after the PC resumed
@@ -143,6 +145,67 @@ pub fn run_hibernate(
             warn(&format!("{}: no hibernate", failed(e)));
             HibernateEnd::Failed(e.into())
         }
+    }
+}
+
+/// The hibernate thread's run for `Command::SleepCheck` (`p2-6-sleep-route`): steps 1 to 3, 6 and 7 of
+/// [`run_hibernate`], with no privilege, no hibernate check and no call. So the going to sleep sound plays right before
+/// the core sets the 1-minute timeouts, and a user who hears it can still open the lid. An unknown lid does not stop
+/// it: it is logged, and the core's own lid reading decides (`Command::SleepCheck`). `Ok`: the core writes the short
+/// timeouts next. A failed sound is logged and the check goes on, as before a hibernate.
+pub fn run_sleep_check(
+    reason: CountdownReason,
+    floor_pct: u8,
+    last_resume_mono_ms: Option<u64>,
+    deps: &dyn HibernateDeps,
+    sound: &dyn SoundPlayer,
+    log: &dyn Log,
+) -> Result<(), HibernateSkip> {
+    log.line(
+        Level::Info,
+        AREA,
+        &format!(
+            "sleep check before the 1-minute sleep and screen timeouts, {}",
+            reason_text(reason)
+        ),
+    );
+    let lid = |after_sound| match check_lid(deps, log, after_sound) {
+        Err(HibernateSkip::LidUnknown) => {
+            log.line(
+                Level::Info,
+                AREA,
+                "the core's own lid reading says closed: the sleep check goes on",
+            );
+            Ok(())
+        }
+        other => other,
+    };
+    lid(false)
+        .and_then(|()| check_idle(last_resume_mono_ms, deps, log))
+        .and_then(|()| match reason {
+            CountdownReason::Floor => check_floor(floor_pct, deps, log),
+            CountdownReason::WorkEnded => Ok(()),
+        })?;
+    play_going_to_sleep(sound, log);
+    lid(true)?;
+    log.line(Level::Info, AREA, "sleep check passed");
+    Ok(())
+}
+
+/// A sound is only a hint: a failed one must not keep a closed laptop running in a bag.
+fn play_going_to_sleep(sound: &dyn SoundPlayer, log: &dyn Log) {
+    match sound.play_and_wait(Cue::GoingToSleep) {
+        Ok(SoundEnd::Played) => log.line(Level::Info, AREA, "going to sleep sound played"),
+        Ok(SoundEnd::Skipped) => log.line(
+            Level::Info,
+            AREA,
+            "going to sleep sound skipped: the sound scheme is No sounds",
+        ),
+        Err(e) => log.line(
+            Level::Warn,
+            AREA,
+            &format!("going to sleep sound: {}; going on anyway", failed(e)),
+        ),
     }
 }
 
@@ -1277,5 +1340,101 @@ mod tests {
         );
         assert!(!allowed || caps.SystemS4, "allowed without S4");
         assert_eq!(Win32Hibernate.hibernate_allowed(), allowed, "a second read");
+    }
+
+    // The sleep check (`p2-6-sleep-route`).
+
+    fn check_with(
+        reason: CountdownReason,
+        fake: &FakeHibernate,
+    ) -> (Result<(), HibernateSkip>, Vec<Cue>) {
+        let sound = FakeSoundPlayer::default();
+        let log = MemoryLog::default();
+        let result = run_sleep_check(reason, FLOOR, None, fake, &sound, &log);
+        let played = sound.played.lock().unwrap().clone();
+        (result, played)
+    }
+
+    #[test]
+    fn the_sleep_check_runs_the_checks_and_the_sound_and_never_hibernates() {
+        let fake = FakeHibernate::default();
+        let (result, played) = check_with(Floor, &fake);
+        assert_eq!(result, Ok(()));
+        assert_eq!(played, [Cue::GoingToSleep]);
+        assert_eq!(fake.calls(), [Lid, InputIdle, MonoNow, PowerStatus, Lid]);
+
+        let fake = FakeHibernate::default();
+        let (result, _) = check_with(WorkEnded, &fake);
+        assert_eq!(result, Ok(()));
+        assert_eq!(fake.calls(), [Lid, InputIdle, MonoNow, Lid]);
+    }
+
+    #[test]
+    fn the_sleep_check_skips_as_the_hibernate_check_does_before_the_sound() {
+        let open = FakeHibernate {
+            lid: Some(false),
+            ..FakeHibernate::default()
+        };
+        let typed = FakeHibernate {
+            idle_ms: Ok(ending::IDLE_MS - 1),
+            ..FakeHibernate::default()
+        };
+        let on_ac = FakeHibernate {
+            power: Ok((true, Some(5))),
+            ..FakeHibernate::default()
+        };
+        let above = FakeHibernate {
+            power: Ok((false, Some(FLOOR))),
+            ..FakeHibernate::default()
+        };
+        for (fake, skip) in [
+            (open, HibernateSkip::LidOpen),
+            (typed, HibernateSkip::InputSeen),
+            (on_ac, HibernateSkip::OnAc),
+            (above, HibernateSkip::AboveFloor),
+        ] {
+            let (result, played) = check_with(Floor, &fake);
+            assert_eq!(result, Err(skip));
+            assert!(played.is_empty(), "{skip:?}: no sound before a skip");
+        }
+    }
+
+    #[test]
+    fn the_sleep_check_goes_on_with_the_lid_unknown_and_stops_for_a_lid_opened_during_the_sound() {
+        let unknown = FakeHibernate {
+            lid: None,
+            ..FakeHibernate::default()
+        };
+        let (result, played) = check_with(WorkEnded, &unknown);
+        assert_eq!(result, Ok(()));
+        assert_eq!(played, [Cue::GoingToSleep]);
+
+        let fake = LidDuringSound {
+            fake: FakeHibernate::default(),
+            after: Some(false),
+            played: AtomicBool::new(false),
+        };
+        let sound_log = MemoryLog::default();
+        let result = run_sleep_check(WorkEnded, FLOOR, None, &fake, &fake, &sound_log);
+        assert_eq!(result, Err(HibernateSkip::LidOpen));
+    }
+
+    #[test]
+    fn a_failed_sound_does_not_stop_the_sleep_check() {
+        let fake = FakeHibernate::default();
+        let sound = FakeSoundPlayer {
+            wait_error: Some(error("waveOutOpen", 2)),
+            ..FakeSoundPlayer::default()
+        };
+        let log = MemoryLog::default();
+        let result = run_sleep_check(WorkEnded, FLOOR, None, &fake, &sound, &log);
+        assert_eq!(result, Ok(()));
+        let lines = log.lines.lock().unwrap().clone();
+        assert!(
+            lines
+                .iter()
+                .any(|(level, _, text)| *level == Level::Warn && text.contains("going on anyway")),
+            "{lines:?}"
+        );
     }
 }

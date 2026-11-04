@@ -490,6 +490,9 @@ mod tests {
         match key {
             SettingKey::LidAc | SettingKey::LidDc => 1,
             SettingKey::SleepDc => 600,
+            SettingKey::SleepAc => 10_800,
+            SettingKey::VideoIdleAc => wakeshot_core::ownership::fake::FAKE_SCREEN_OFF[0],
+            SettingKey::VideoIdleDc => wakeshot_core::ownership::fake::FAKE_SCREEN_OFF[1],
         }
     }
 
@@ -617,7 +620,7 @@ mod tests {
     fn unknown_entry() -> JournalFileEntry {
         JournalFileEntry {
             plan: BALANCED,
-            key: JournalKey::Other("sleepAc".into()),
+            key: JournalKey::Other("hibernateAc".into()),
             original: 10_800,
             written: 0,
             restored: false,

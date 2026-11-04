@@ -773,6 +773,9 @@ impl Values {
             SettingKey::LidAc => self.lid_ac,
             SettingKey::LidDc => self.lid_dc,
             SettingKey::SleepDc => self.sleep_dc,
+            SettingKey::SleepAc | SettingKey::VideoIdleAc | SettingKey::VideoIdleDc => {
+                unreachable!("these runs check only the hold keys")
+            }
         }
     }
 }

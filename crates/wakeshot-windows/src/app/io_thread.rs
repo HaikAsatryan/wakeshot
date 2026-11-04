@@ -277,6 +277,7 @@ impl Runner {
             Command::Requests { .. }
             | Command::Retake
             | Command::Lock
+            | Command::SleepCheck { .. }
             | Command::Hibernate { .. }
             | Command::Tray(_)
             | Command::Play(_)
@@ -440,6 +441,7 @@ fn label(command: &Command) -> String {
         Command::ResetLost { damaged: true } => "ResetLost (damaged)".to_owned(),
         Command::ResetLost { damaged: false } => "ResetLost".to_owned(),
         Command::Lock => "Lock".to_owned(),
+        Command::SleepCheck { .. } => "SleepCheck".to_owned(),
         Command::Hibernate { .. } => "Hibernate".to_owned(),
         Command::Tray(_) => "Tray".to_owned(),
         Command::Notify(notice) => format!("Notify ({})", notice_name(notice)),
@@ -1053,6 +1055,7 @@ mod tests {
             RestoreWhy::Quit,
             RestoreWhy::ConsoleLeft,
             RestoreWhy::Leftover,
+            RestoreWhy::ShortTimeouts,
         ]
         .map(restore)
         .to_vec();
@@ -1215,6 +1218,11 @@ mod tests {
             },
             Command::Retake,
             Command::Lock,
+            Command::SleepCheck {
+                reason: CountdownReason::WorkEnded,
+                floor_pct: 10,
+                last_resume_mono_ms: None,
+            },
             Command::Hibernate {
                 reason: CountdownReason::WorkEnded,
                 floor_pct: 10,

@@ -1,5 +1,5 @@
 //! The closed-lid and battery side of the episode: the lid-close lock and chime, the lock when a closed laptop changes
-//! power source, the battery floor step back, the countdown to hibernate, the Keep screen on idle lock, the closed-lid
+//! power source, the battery floor step back, the countdown to sleep, the Keep screen on idle lock, the closed-lid
 //! report, and the notices that wait while the user is away (architecture section 3, "Episode flow").
 //!
 //! Owner: `p2-core-lid`.
@@ -11,19 +11,30 @@
 //!
 //! A closed-lid lock is watched until the session reports it (`State::lock`): one that fails, or that no
 //! `Session(Locked)` follows within [`LOCK_CHECK_MS`], is sent once more, and when that one goes the same way the core
-//! steps back as at the battery floor (section 8, "Lock fails"; power safety review finding 1). A hibernate that did
-//! not happen leaves a closed laptop running: from then on it is locked, with the chime, whenever input has been idle
-//! 5 minutes, until the lid opens (power safety verify minor 1).
+//! steps back as at the battery floor (section 8, "Lock fails"; power safety review finding 1).
+//!
+//! The sleep route (`p2-6-sleep-route`, Haik 2026-11-04: "just make it sleep"). On Modern Standby no app call starts
+//! a sleep, so when the countdown is due the hibernate thread runs the last check and the going to sleep sound
+//! (`SleepCheck`), then an `Apply` sets the sleep and screen timeouts to 1 minute where the user's own is longer or
+//! Never, and Windows' own idle sleep takes the laptop (`p3-idle-sleep-check`). They are Wakeshot's journal entries
+//! (`State::short`) and go back at an unlock, input, the lid open, a hold start, the countdown's end and every other
+//! restore point; not at a wake alone, so a laptop that wakes with the lid closed sleeps again. If it has not slept
+//! [`ending::FALLBACK_MS`] after the write (a sleep is `Suspending`, then `Resumed` or the clock gap at the next
+//! tick), `Hibernate` as before. A hibernate that did not happen leaves the short timeouts, and from then on the closed
+//! laptop is locked, with the chime, whenever input has been idle 5 minutes, until the lid opens (power safety verify
+//! minor 1).
 
 use super::settings::{KEYS, TARGET};
 use super::{Core, label, ms_ahead, nearest};
-use crate::command::{Command, CountdownReason, Failure, HibernateEnd, HibernateSkip, RestoreWhy};
+use crate::command::{
+    ApplyError, Command, CountdownReason, Failure, HibernateEnd, HibernateSkip, RestoreWhy,
+};
 use crate::policy::ending::{self, Cancel, Check};
 use crate::policy::floor;
 use crate::policy::lid::{self, DO_NOTHING, SOURCE_SETTLE_MS, Settle};
 use crate::policy::lock::{self, IdleFacts};
-use crate::settings::{Guid, JournalEntry, PlanValues, SettingKey};
-use crate::state::{ClosedLid, Countdown, IdleReading, PendingLock, WorkEnd};
+use crate::settings::{Guid, JournalEntry, PlanValues, SHORT_TIMEOUT_S, SettingKey};
+use crate::state::{Applying, ClosedLid, Countdown, IdleReading, PendingLock, Short, WorkEnd};
 use crate::time::{Deadline, Now};
 use crate::view::{Cue, Notice};
 
@@ -65,9 +76,13 @@ impl Core {
     pub(super) fn in_force(&self) -> Option<(PlanValues, Vec<JournalEntry>)> {
         let mut plan = self.plan_copy()?;
         let mut journal = self.state.journal.clone();
-        if self.state.applying.contains(&plan.active) {
+        // Only a hold's apply writes the lid keys; the sleep route's touches no value a lid or lock rule reads.
+        let holding_apply = |a: &Applying| a.plan == plan.active && !a.short;
+        if self.state.applying.iter().any(holding_apply) {
             for key in KEYS {
-                let live = value(&plan, key);
+                let Some(live) = value(&plan, key) else {
+                    continue;
+                };
                 let entered = journal
                     .iter()
                     .any(|e| e.plan == plan.active && e.key == key);
@@ -107,7 +122,7 @@ impl Core {
                     .any(|e| (e.plan, e.key) == (seen.plan, seen.key))
         });
         for entry in gone {
-            if value(&plan, entry.key) == entry.written {
+            if value(&plan, entry.key) == Some(entry.written) {
                 set(&mut plan, entry.key, entry.original);
             }
         }
@@ -154,8 +169,11 @@ impl Core {
     /// Wakeshot's that the reset or a restore just took back, and putting the lid action back does not sleep a laptop
     /// whose lid is already closed. So the work-end want waits for the next plan read, which tells the user's own lid
     /// action (`work_end_waited`): the copy still shows the values from before the reset or restore. A step back with a
-    /// hold that holds nothing waits the same way for the `Floor` countdown.
+    /// hold that holds nothing waits the same way for the `Floor` countdown. A hold that holds, through a lid close in
+    /// the window, kept the closed laptop running with no lock: the lock waits for the same read
+    /// ([`Core::settle_window_lock`], `p2-6-sleep-route` deliverable 8).
     pub(super) fn unknown_journal_ended(&mut self) {
+        let window_close = std::mem::take(&mut self.state.lock.window_close);
         if self.state.lid_closed != Some(true) {
             return;
         }
@@ -166,6 +184,37 @@ impl Core {
             }
         } else if self.state.stepped_back && !self.state.floor_countdown {
             self.state.lock.floor_waits = true;
+        } else if window_close && !self.holds_back() {
+            self.state.lock.window_lock_waits = true;
+        }
+    }
+
+    /// The lock a lid close in the unknown window did not get, once a plan read tells the user's own lid action: the
+    /// copy may still show the values from before the reset or restore, so a Do nothing waits for the next read, as
+    /// the countdown wants do. With the user's own Do nothing on every source the laptop would run without Wakeshot
+    /// too, and gets no lock (decision 18), as at a lid close. Ends when the hold ends, it steps back or the lid opens.
+    fn settle_window_lock(&mut self, now: Now, out: &mut Vec<Command>) {
+        if !self.state.lock.window_lock_waits {
+            return;
+        }
+        if self.state.lid_closed != Some(true) || self.state.episode.is_none() || self.holds_back()
+        {
+            self.state.lock.window_lock_waits = false;
+            return;
+        }
+        let own_sleeps = self.in_force().is_some_and(|(plan, journal)| {
+            self.sources()
+                .iter()
+                .any(|&ac| lid::user_action(&plan, ac, &journal) != DO_NOTHING)
+        });
+        if own_sleeps {
+            self.state.lock.window_lock_waits = false;
+            out.push(Command::Log(
+                "The journal is known again, and a hold keeps the closed laptop running since a lid close Wakeshot \
+                 could not lock: lock"
+                    .to_owned(),
+            ));
+            self.lock_and_chime(now, out);
         }
     }
 
@@ -226,6 +275,10 @@ impl Core {
     pub(super) fn take_lid(&mut self, closed: bool, now: Now, out: &mut Vec<Command>) {
         match (self.state.lid_closed.replace(closed), closed) {
             (Some(false), true) => {
+                // No lock now (`lock_view`): when the window ends, a hold that still holds gets it.
+                if self.journal_unknown() {
+                    self.state.lock.window_close = true;
+                }
                 // A user whose own lid action is Do nothing gets neither (decision 18); with the user's own Sleep
                 // Windows sleeps the laptop itself.
                 if self.lid_ours() {
@@ -234,8 +287,8 @@ impl Core {
                     ));
                     self.lock_and_chime(now, out);
                     // Nothing holds or it stepped back, yet our Do nothing (a restore that failed or has not landed)
-                    // keeps the closed laptop running, with our battery sleep Never: so it must hibernate itself, as
-                    // after work that ended with the lid closed.
+                    // keeps the closed laptop running, with our battery sleep Never: so it must sleep as after work
+                    // that ended with the lid closed.
                     if self.state.episode.is_none() {
                         self.work_ended();
                     } else if self.state.stepped_back {
@@ -271,9 +324,12 @@ impl Core {
     }
 
     fn lid_opens(&mut self, now: Now, out: &mut Vec<Command>) {
+        self.end_short("the lid opened", out);
         self.cancel_countdowns(Cancel::LidOpened, "the lid opened", out);
         self.state.lock.pending = None;
         self.state.lock.relock = None;
+        self.state.lock.window_close = false;
+        self.state.lock.window_lock_waits = false;
         self.end_lock_step_back("the lid opened", out);
         if let Some(run) = self.state.closed_lid.as_mut()
             && let Some(since) = run.since_mono.take()
@@ -319,21 +375,204 @@ impl Core {
         }
     }
 
-    /// `InputIdle`: the countdown, the Keep screen on idle lock and the lock after a hibernate that did not happen
-    /// decide only on a reading.
+    /// `InputIdle`: the countdown, the fallback hibernate, the Keep screen on idle lock and the lock after a hibernate
+    /// that did not happen decide only on a reading. A reading under the one before means input came: input idle only
+    /// grows while nobody types, through a sleep too, since it counts suspended time (research, "Clock"), and readings
+    /// come at least every 30 s while the PC runs, far less than the 5 minutes of idle the short timeouts start from.
+    /// So someone at an external screen gets their own timeouts back, and the countdown waits 5 minutes again. A read
+    /// that failed gives 0, so it counts as input too: the safe side for the user at the screen.
     pub(super) fn take_input_idle(&mut self, ms: u64, now: Now, out: &mut Vec<Command>) {
-        self.state.idle = Some(IdleReading {
+        let before = self.state.idle.replace(IdleReading {
             ms,
             at_mono: now.mono_ms,
         });
+        if before.is_some_and(|b| ms < b.ms) {
+            self.end_short("input came", out);
+        }
         self.check_countdown(now, out);
         self.idle_lock(ms, now, out);
         self.relock(ms, now, out);
     }
 
-    /// `Resumed`, and a `Hibernate` that resumed: a resume counts as input for the idle clamp.
-    pub(super) fn take_resumed(&mut self, now: Now) {
+    /// `Resumed`, and a `Hibernate` that resumed: a resume counts as input for the idle clamp. With the short timeouts
+    /// in force the laptop slept and woke with the lid closed, and must sleep again (product, work end): they stay,
+    /// and the fallback counts again from now, as the hibernate thread's idle check counts from the resume. The resume
+    /// tells the sleep, so the tick's clock gap check is not needed for it ([`Core::check_slept`]).
+    pub(super) fn take_resumed(&mut self, now: Now, out: &mut Vec<Command>) {
         self.state.last_resume_mono = Some(now.mono_ms);
+        if let Some(short) = self.state.short.as_mut() {
+            short.suspended_at = None;
+            out.push(Command::Log(
+                "Resumed with the 1-minute timeouts in force and the lid closed: they stay, so the PC sleeps again"
+                    .to_owned(),
+            ));
+        }
+        self.rearm_fallback(now);
+    }
+
+    /// `Suspending`: only the short timeouts' fallback cares, and the next tick tells whether it was a sleep.
+    pub(super) fn take_suspending(&mut self, now: Now) {
+        if let Some(short) = self.state.short.as_mut() {
+            short.suspended_at = Some(clock_gap(now));
+        }
+    }
+
+    /// At a tick: a `Suspending` with the short timeouts in force and no `Resumed` since (its post lost) was a sleep
+    /// when the wall clock moved past run time by [`ending::SLEPT_GAP_MS`] since, as run time stops during a sleep
+    /// (research, "Clock"). Then the laptop woke with the lid still closed: the fallback counts again from now. A
+    /// suspend that did not happen leaves the fallback as it was (`p3-idle-sleep-check`).
+    pub(super) fn check_slept(&mut self, now: Now, out: &mut Vec<Command>) {
+        let Some(at) = self
+            .state
+            .short
+            .as_mut()
+            .and_then(|short| short.suspended_at.take())
+        else {
+            return;
+        };
+        let gap_ms = clock_gap(now).saturating_sub(at);
+        if gap_ms >= ending::SLEPT_GAP_MS {
+            out.push(Command::Log(format!(
+                "The PC slept for {} s with the 1-minute timeouts and woke with the lid closed: they stay, so it \
+                 sleeps again",
+                gap_ms / 1000
+            )));
+            self.rearm_fallback(now);
+        } else {
+            out.push(Command::Log(format!(
+                "Suspending came, but the clocks show no sleep ({gap_ms} ms): the fallback stays as it was"
+            )));
+        }
+    }
+
+    /// The fallback hibernate [`ending::FALLBACK_MS`] from now, unless no hibernate is left in this countdown.
+    fn rearm_fallback(&mut self, now: Now) {
+        let Some(short) = self
+            .state
+            .short
+            .as_mut()
+            .filter(|short| short.fallback_mono.is_some())
+        else {
+            return;
+        };
+        let at = now.mono_ms.saturating_add(ending::FALLBACK_MS);
+        short.fallback_mono = Some(at);
+        if let Some(countdown) = self.state.countdown.as_mut() {
+            countdown.check = Some(Deadline::Mono(at));
+        }
+    }
+
+    /// The short timeouts go back, behind their own `Apply` when it is still out: the user is there, a hold starts, or
+    /// the countdown stopped. Restore takes every entry, and nothing else is Wakeshot's while they are in force: the
+    /// countdown runs only when no hold holds.
+    fn end_short(&mut self, why: &str, out: &mut Vec<Command>) {
+        if self.state.short.take().is_none() {
+            return;
+        }
+        out.push(Command::Log(format!(
+            "The 1-minute sleep and screen timeouts go back: {why}"
+        )));
+        self.restore_all(RestoreWhy::ShortTimeouts, out);
+    }
+
+    /// The short timeouts can be written: this tray owns the settings and its session has the screen, no policy blocked
+    /// settings in this run, the session is not ending, a plan read worked, and some short key is not the user's.
+    pub(super) fn can_write_short(&self) -> bool {
+        let state = &self.state;
+        state.owner
+            && state.on_console
+            && !state.requests_only_run
+            && !state.session_ending
+            && state.plan.is_some()
+            && SettingKey::SHORT
+                .iter()
+                .any(|&k| !self.short_key_released(k))
+    }
+
+    /// The user changed this key in this countdown, or in the episode a battery floor step back keeps open: the work
+    /// has not ended, so their change wins until it does (product "User settings safety" 3).
+    fn short_key_released(&self, key: SettingKey) -> bool {
+        self.state.short_released.contains(&key)
+            || self
+                .state
+                .episode
+                .as_ref()
+                .is_some_and(|e| e.released.contains(&key))
+    }
+
+    /// The `Apply` of the short timeouts to `plan`: each short key the user did not take back, at 1 minute. The apply
+    /// keeps a value already at or under it and not Never (`ownership::apply::meets`), the user's own.
+    pub(super) fn send_short(&mut self, plan: Guid, out: &mut Vec<Command>) {
+        let writes: Vec<(SettingKey, u32)> = SettingKey::SHORT
+            .into_iter()
+            .filter(|&k| !self.short_key_released(k))
+            .map(|k| (k, SHORT_TIMEOUT_S))
+            .collect();
+        out.push(Command::Log(format!(
+            "Sleep and screen off after {SHORT_TIMEOUT_S} s on plan {plan}, AC and battery, where the user's own is \
+             longer or Never: Windows sleeps the closed laptop once nothing holds it"
+        )));
+        out.push(Command::Apply { plan, writes });
+        self.state.applying.push(Applying { plan, short: true });
+    }
+
+    /// The sleep check passed: the short timeouts, with the fallback 5 minutes on. One that cannot be written (the
+    /// check took seconds, and the facts may have changed) leaves the fallback due at once.
+    fn write_short(&mut self, now: Now, out: &mut Vec<Command>) {
+        let can_write = self.can_write_short();
+        let Some(countdown) = self.state.countdown.as_mut() else {
+            out.push(Command::Log(
+                "The sleep check passed, but the countdown ended meanwhile: nothing to write"
+                    .to_owned(),
+            ));
+            return;
+        };
+        let delay = if can_write { ending::FALLBACK_MS } else { 0 };
+        let fallback = (!countdown.no_hibernate).then(|| now.mono_ms.saturating_add(delay));
+        countdown.check = fallback.map(Deadline::Mono);
+        self.state.short = Some(Short {
+            fallback_mono: fallback,
+            suspended_at: None,
+        });
+        match self.state.plan.map(|p| p.active).filter(|_| can_write) {
+            Some(plan) => self.send_short(plan, out),
+            None => out.push(Command::Log(
+                "The 1-minute timeouts cannot be written now: the fallback is due at once"
+                    .to_owned(),
+            )),
+        }
+    }
+
+    /// `Applied` for the short timeouts. A failed one wrote nothing that stays (the apply's own restore ran), so
+    /// Windows' idle sleep will not come soon: the fallback is due at once. A plan that changed meanwhile: a read
+    /// tells, and the plan switch writes the new plan ([`Core::take_plan`]).
+    pub(super) fn done_short_applied(
+        &mut self,
+        plan: Guid,
+        result: Result<(), ApplyError>,
+        now: Now,
+        out: &mut Vec<Command>,
+    ) {
+        let failure = match result {
+            Ok(()) => return,
+            Err(ApplyError::PlanChanged) => {
+                self.read_plan(now, out);
+                return;
+            }
+            Err(ApplyError::SafetyNet(failure) | ApplyError::Write(failure)) => failure,
+        };
+        let Failure { call, code } = failure;
+        out.push(Command::Log(format!(
+            "The 1-minute timeouts were not written on plan {plan} ({call}, code {code}): the fallback is due at once"
+        )));
+        if let Some(short) = self.state.short.as_mut()
+            && let Some(at) = short.fallback_mono.as_mut()
+        {
+            *at = now.mono_ms;
+            if let Some(countdown) = self.state.countdown.as_mut() {
+                countdown.check = Some(Deadline::Mono(now.mono_ms));
+            }
+        }
     }
 
     /// `Locked`: a watched lock is confirmed, and a closed laptop that is locked after all may hold again.
@@ -347,6 +586,8 @@ impl Core {
     /// external screen with the lid still closed gets no report yet: the stretch goes on.
     pub(super) fn take_unlocked(&mut self, now: Now, out: &mut Vec<Command>) {
         self.state.session_locked = false;
+        self.state.last_unlock_mono = Some(now.mono_ms);
+        self.end_short("the session is unlocked, so the user is there", out);
         self.send_held(out);
         if self.state.lid_closed != Some(true) {
             self.back_at_the_laptop(now, out);
@@ -438,6 +679,7 @@ impl Core {
             if std::mem::take(&mut self.state.lock.floor_waits) && self.state.stepped_back {
                 self.floor_countdown_waited();
             }
+            self.settle_window_lock(now, out);
         }
         // Once per step back, at the first moment a hold counts in it: a step back with nothing held changes nothing.
         if self.state.stepped_back && self.state.episode.is_some() && !self.state.step_back_shown {
@@ -449,7 +691,7 @@ impl Core {
             self.floor_countdown_wanted();
         }
         // Our Do nothing kept the closed laptop running and it could not be locked: give the settings back and let it
-        // hibernate as after work that ended, read before the restore lands. The requests went off in this pass.
+        // sleep as after work that ended, read before the restore lands. The requests went off in this pass.
         if self.state.lock.stepped_back && !self.state.lock.step_back_sent {
             self.state.lock.step_back_sent = true;
             self.restore_all(RestoreWhy::Floor, out);
@@ -685,9 +927,7 @@ impl Core {
             self.state.floor_countdown = false;
         }
         if (work || floor) && self.state.countdown.is_some() {
-            out.push(Command::Log(format!(
-                "Countdown to hibernate cancelled: {why}"
-            )));
+            out.push(Command::Log(format!("Countdown to sleep cancelled: {why}")));
         }
     }
 
@@ -701,8 +941,9 @@ impl Core {
     /// not end it. The user's own lid action for the current source decides whether the work-end want counts
     /// (orchestrator decision 2026-11-03 21:22, Haik's yes 21:23): their own Do nothing keeps a closed laptop running,
     /// so Wakeshot only releases; a source whose own action is not Do nothing starts it again once that source has
-    /// lasted `SOURCE_SETTLE_MS`, so a dock's short AC drop never hibernates a docked laptop left idle. Never while
+    /// lasted `SOURCE_SETTLE_MS`, so a dock's short AC drop never sleeps a docked laptop left idle. Never while
     /// another session has the PC's screen: input idle is this session's, so the other user's typing would not count.
+    /// With no countdown the short timeouts go back, and keys the user took back in it are Wakeshot's to write again.
     fn settle_countdown(
         &mut self,
         now: Now,
@@ -739,12 +980,13 @@ impl Core {
         match (self.state.countdown, reason) {
             (None, Some(reason)) => {
                 out.push(Command::Log(format!(
-                    "Countdown to hibernate starts ({reason:?}): due after {} minutes without input",
+                    "Countdown to sleep starts ({reason:?}): due after {} minutes without input",
                     ending::IDLE_MS / 60_000
                 )));
                 self.state.countdown = Some(Countdown {
                     reason,
                     check: Some(Deadline::Mono(now.mono_ms)),
+                    no_hibernate: false,
                 });
                 self.check_countdown(now, out);
             }
@@ -757,7 +999,7 @@ impl Core {
                     } else {
                         "another session has the PC's screen"
                     };
-                    out.push(Command::Log(format!("Countdown to hibernate stops: {why}")));
+                    out.push(Command::Log(format!("Countdown to sleep stops: {why}")));
                 }
             }
             (Some(running), Some(reason)) if running.reason != reason => {
@@ -766,6 +1008,10 @@ impl Core {
                 }
             }
             _ => {}
+        }
+        if self.state.countdown.is_none() {
+            self.end_short("the countdown stopped", out);
+            self.state.short_released.clear();
         }
         let countdown = self.state.countdown.as_mut();
         let check = countdown.and_then(|countdown| {
@@ -779,7 +1025,9 @@ impl Core {
     }
 
     /// The countdown at a reading taken now. A reading from before now cannot tell that no input came since, so only
-    /// a fresh one may make it due.
+    /// a fresh one may make it due. Due: the sleep check, whose pass writes the short timeouts; where they cannot be
+    /// written (settings blocked, another session owns them, the user took every short key back), `Hibernate` at once,
+    /// as before the sleep route. With the short timeouts in force, the fallback instead.
     fn check_countdown(&mut self, now: Now, out: &mut Vec<Command>) {
         let Some(reading) = self.state.idle.filter(|r| r.at_mono == now.mono_ms) else {
             return;
@@ -787,39 +1035,82 @@ impl Core {
         let Some(countdown) = self.state.countdown else {
             return;
         };
-        let idle = ending::clamped_idle_ms(reading.ms, now.mono_ms, self.state.last_resume_mono);
         let floor_pct = self.floor_pct();
-        let check = match ending::check(idle, now.mono_ms) {
-            Check::Wait(at) => Some(at),
-            // One at a time; and the floor as the hibernate thread will check it, so a percent that reads at the
-            // floor again sends none.
-            Check::Due
-                if self.state.hibernating
-                    || (countdown.reason == CountdownReason::Floor
-                        && (self.state.above_floor_skipped
-                            || !floor::below(self.state.battery_pct, floor_pct))) =>
-            {
-                None
+        // One at a time; and the floor as the hibernate thread will check it, so a percent that reads at the floor
+        // again sends none.
+        let waits = self.state.hibernating
+            || (countdown.reason == CountdownReason::Floor
+                && (self.state.above_floor_skipped
+                    || !floor::below(self.state.battery_pct, floor_pct)));
+        let clamp = self.countdown_clamp();
+        let check = if let Some(short) = self.state.short {
+            match short.fallback_mono {
+                Some(at) if now.mono_ms < at => Some(Deadline::Mono(at)),
+                Some(_) if !waits => {
+                    out.push(Command::Log(format!(
+                        "The PC did not sleep within {} minutes of the 1-minute timeouts ({:?}): hibernate",
+                        ending::FALLBACK_MS / 60_000,
+                        countdown.reason
+                    )));
+                    self.send_hibernate(countdown.reason, floor_pct, out);
+                    None
+                }
+                _ => None,
             }
-            Check::Due => {
-                self.state.hibernating = true;
-                out.push(Command::Log(format!(
-                    "Countdown to hibernate due ({:?}): {} s without input",
-                    countdown.reason,
-                    idle / 1000
-                )));
-                // The hibernate thread plays the going to sleep sound after its last check (track note 4).
-                out.push(Command::Hibernate {
-                    reason: countdown.reason,
-                    floor_pct,
-                    last_resume_mono_ms: self.state.last_resume_mono,
-                });
-                None
+        } else {
+            let idle = ending::clamped_idle_ms(reading.ms, now.mono_ms, clamp);
+            match ending::check(idle, now.mono_ms) {
+                Check::Wait(at) => Some(at),
+                Check::Due if waits => None,
+                Check::Due if self.can_write_short() => {
+                    self.state.hibernating = true;
+                    out.push(Command::Log(format!(
+                        "Countdown to sleep due ({:?}): {} s without input; the last check, then the 1-minute \
+                         timeouts",
+                        countdown.reason,
+                        idle / 1000
+                    )));
+                    // The hibernate thread plays the going to sleep sound after its last check (track note 4).
+                    out.push(Command::SleepCheck {
+                        reason: countdown.reason,
+                        floor_pct,
+                        last_resume_mono_ms: clamp,
+                    });
+                    None
+                }
+                Check::Due if !countdown.no_hibernate => {
+                    out.push(Command::Log(format!(
+                        "Countdown to sleep due ({:?}): {} s without input; the 1-minute timeouts cannot be \
+                         written: hibernate",
+                        countdown.reason,
+                        idle / 1000
+                    )));
+                    self.send_hibernate(countdown.reason, floor_pct, out);
+                    None
+                }
+                Check::Due => None,
             }
         };
         if let Some(countdown) = self.state.countdown.as_mut() {
             countdown.check = check;
         }
+    }
+
+    /// The hibernate thread plays the going to sleep sound after its last check (track note 4).
+    fn send_hibernate(&mut self, reason: CountdownReason, floor_pct: u8, out: &mut Vec<Command>) {
+        self.state.hibernating = true;
+        out.push(Command::Hibernate {
+            reason,
+            floor_pct,
+            last_resume_mono_ms: self.countdown_clamp(),
+        });
+    }
+
+    /// Where the countdown's idle counts from at the latest: a resume, or an unlock, since a sign-in by face or
+    /// fingerprint may give no input Windows counts, and the user who just signed in must not hear the going to sleep
+    /// sound. The hibernate thread gets the same point, so its idle check agrees.
+    fn countdown_clamp(&self) -> Option<u64> {
+        self.state.last_resume_mono.max(self.state.last_unlock_mono)
     }
 
     /// The Keep screen on idle lock, once per idle period (`policy::lock`, track note 11). The timeout is the user's own
@@ -878,17 +1169,64 @@ impl Core {
         }
     }
 
-    /// How the hibernate thread ended. Not allowed, failed or an unknown lid: a notice, and the countdown ends; settings
-    /// came back at the work end or the step back, so Windows' own timers most likely apply (section 8), and with the
-    /// lid still closed the laptop is locked whenever it is left idle ([`Core::relock`]). A skip for the lid open ends
-    /// it too; one for input goes on to the next reading, one for the floor to the next battery reading; one for AC
-    /// ends only a `Floor` countdown (`policy::ending::cancels`). `Resumed` counts as a resume, and the countdown is
-    /// done.
+    /// How the sleep check ended. Passed: the short timeouts. An unknown lid passes too, since the core's own reading
+    /// says closed and the short timeouts go back when the lid opens (`Command::SleepCheck`). The lid open ends the
+    /// countdown; input, AC and the floor go on as after a hibernate skip.
+    pub(super) fn done_sleep_check(
+        &mut self,
+        result: Result<(), HibernateSkip>,
+        now: Now,
+        out: &mut Vec<Command>,
+    ) {
+        self.state.hibernating = false;
+        match result {
+            Ok(()) | Err(HibernateSkip::LidUnknown) => {
+                out.push(Command::Log(
+                    "Sleep check passed and the going to sleep sound played".to_owned(),
+                ));
+                self.write_short(now, out);
+            }
+            Err(HibernateSkip::LidOpen) => {
+                out.push(Command::Log(
+                    "Sleep check skipped: the lid is open".to_owned(),
+                ));
+                self.end_countdowns();
+            }
+            Err(skip) => self.skip_goes_on(skip, "Sleep check", out),
+        }
+    }
+
+    /// A last check that found input, AC or the battery above the floor: input brings back the user's own timeouts,
+    /// AC ends only a `Floor` countdown (`policy::ending::cancels`), the floor waits for the next battery reading; the
+    /// next input reading decides again.
+    fn skip_goes_on(&mut self, skip: HibernateSkip, what: &str, out: &mut Vec<Command>) {
+        match skip {
+            HibernateSkip::OnAc => {
+                self.cancel_countdowns(Cancel::AcBack, "the PC is on AC", out);
+            }
+            HibernateSkip::AboveFloor => self.state.above_floor_skipped = true,
+            HibernateSkip::InputSeen => self.end_short("the last check saw input", out),
+            HibernateSkip::LidOpen | HibernateSkip::LidUnknown => {}
+        }
+        out.push(Command::Log(format!(
+            "{what} skipped ({skip:?}): the countdown goes on"
+        )));
+        if let Some(countdown) = self.state.countdown.as_mut() {
+            countdown.check = None;
+        }
+    }
+
+    /// How the fallback hibernate ended. Not allowed, failed or an unknown lid: a notice, and no second hibernate in
+    /// this countdown; the short timeouts stay, so Windows sleeps the laptop once nothing holds it, and with the lid
+    /// still closed it is locked whenever it is left idle ([`Core::relock`]). A skip for the lid open ends the
+    /// countdown; the other skips go on ([`Core::skip_goes_on`]). `Resumed` counts as a resume, and the countdown is
+    /// done: the short timeouts go back with it.
     pub(super) fn done_hibernate(&mut self, end: HibernateEnd, now: Now, out: &mut Vec<Command>) {
         self.state.hibernating = false;
         match end {
             HibernateEnd::Resumed => {
-                self.take_resumed(now);
+                self.end_short("hibernated and resumed", out);
+                self.take_resumed(now, out);
                 out.push(Command::Log(
                     "Hibernated and resumed: the countdown is done".to_owned(),
                 ));
@@ -905,9 +1243,15 @@ impl Core {
                     _ => "skipped: the lid state is unknown".to_owned(),
                 };
                 out.push(Command::Log(format!(
-                    "Hibernate {what}: the countdown ends"
+                    "Hibernate {what}: no second one in this countdown; the 1-minute timeouts stay where written"
                 )));
-                self.end_countdowns();
+                if let Some(countdown) = self.state.countdown.as_mut() {
+                    countdown.no_hibernate = true;
+                    countdown.check = None;
+                }
+                if let Some(short) = self.state.short.as_mut() {
+                    short.fallback_mono = None;
+                }
                 self.notify(Notice::HibernateFailed, out);
                 self.keep_for_return(Notice::HibernateFailed);
                 if self.state.lid_closed == Some(true) {
@@ -923,23 +1267,10 @@ impl Core {
                 out.push(Command::Log(
                     "Hibernate skipped: the lid is open".to_owned(),
                 ));
+                self.end_short("the lid is open", out);
                 self.end_countdowns();
             }
-            HibernateEnd::Skipped(skip) => {
-                match skip {
-                    HibernateSkip::OnAc => {
-                        self.cancel_countdowns(Cancel::AcBack, "the PC is on AC", out);
-                    }
-                    HibernateSkip::AboveFloor => self.state.above_floor_skipped = true,
-                    _ => {}
-                }
-                out.push(Command::Log(format!(
-                    "Hibernate skipped ({skip:?}): the countdown goes on"
-                )));
-                if let Some(countdown) = self.state.countdown.as_mut() {
-                    countdown.check = None;
-                }
-            }
+            HibernateEnd::Skipped(skip) => self.skip_goes_on(skip, "Hibernate", out),
         }
     }
 }
@@ -964,11 +1295,15 @@ fn stand_in(active: Guid, lid: u32) -> PlanValues {
     }
 }
 
-fn value(plan: &PlanValues, key: SettingKey) -> u32 {
+/// A key's value in the plan copy; `None` for the screen timeouts, which `PlanValues` does not carry and no lid or
+/// lock rule reads.
+fn value(plan: &PlanValues, key: SettingKey) -> Option<u32> {
     match key {
-        SettingKey::LidAc => plan.lid_ac,
-        SettingKey::LidDc => plan.lid_dc,
-        SettingKey::SleepDc => plan.sleep_dc,
+        SettingKey::LidAc => Some(plan.lid_ac),
+        SettingKey::LidDc => Some(plan.lid_dc),
+        SettingKey::SleepDc => Some(plan.sleep_dc),
+        SettingKey::SleepAc => Some(plan.sleep_ac),
+        SettingKey::VideoIdleAc | SettingKey::VideoIdleDc => None,
     }
 }
 
@@ -977,5 +1312,13 @@ fn set(plan: &mut PlanValues, key: SettingKey, value: u32) {
         SettingKey::LidAc => plan.lid_ac = value,
         SettingKey::LidDc => plan.lid_dc = value,
         SettingKey::SleepDc => plan.sleep_dc = value,
+        SettingKey::SleepAc => plan.sleep_ac = value,
+        SettingKey::VideoIdleAc | SettingKey::VideoIdleDc => {}
     }
+}
+
+/// Wall time less run time: it grows by the time a sleep took, since run time stops then (research, "Clock").
+fn clock_gap(now: Now) -> i64 {
+    now.wall_ms
+        .saturating_sub(i64::try_from(now.mono_ms).unwrap_or(i64::MAX))
 }

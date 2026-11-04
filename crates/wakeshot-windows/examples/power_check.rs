@@ -1675,6 +1675,17 @@ impl<T: PlanIo> PlanIo for Timed<T> {
         self.note("values read", started, &result);
         result
     }
+
+    // Without it the trait's default answers "not supported", so a lost journal's reset through this wrapper would
+    // reset nothing (`p2-6-record-lost` Found outside scope 2).
+    fn read_default(&mut self, plan: Guid, key: SettingKey) -> Result<u32, Failure> {
+        let started = Instant::now();
+        let result = self.inner.read_default(plan, key);
+        let value = result.map_or_else(|_| String::new(), |v| format!(" = {v}"));
+        let what = format!("default of {}{value} on {plan}", key_name(key));
+        self.note(&what, started, &result);
+        result
+    }
 }
 
 impl<T: SafetyNet> SafetyNet for Timed<T> {

@@ -90,15 +90,51 @@ impl<'de> Deserialize<'de> for Guid {
 /// The only settings Wakeshot ever writes (decision 17). A write takes this type, so no other setting can be written
 /// by mistake.
 ///
-/// Owner: core track (Phase 2). Frozen in the journal as `"lidAc"`, `"lidDc"`, `"sleepDc"`: a later version may add
-/// keys, never rename these, or an older version could not restore them.
+/// Owner: core track (Phase 2). Frozen in the journal as `"lidAc"`, `"lidDc"`, `"sleepDc"`, `"sleepAc"`,
+/// `"videoIdleAc"`, `"videoIdleDc"`: a later version may add keys, never rename these, or an older version could not
+/// restore them. A hold writes the first three ([`SettingKey::HOLD`]); the sleep after a closed-lid work end writes the
+/// sleep and screen timeouts ([`SettingKey::SHORT`], `p2-6-sleep-route`). An older version keeps the last three as
+/// keys it does not know and restores nothing of them, so a downgrade during the sleep route leaves them until a newer
+/// version runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SettingKey {
     LidAc,
     LidDc,
     SleepDc,
+    SleepAc,
+    VideoIdleAc,
+    VideoIdleDc,
 }
+
+impl SettingKey {
+    /// What a hold writes: the lid action Do nothing and battery sleep Never, both 0 (section 5).
+    pub const HOLD: [Self; 3] = [Self::LidAc, Self::LidDc, Self::SleepDc];
+    /// What the sleep after a closed-lid work end writes: sleep and screen off after [`SHORT_TIMEOUT_S`], AC and DC.
+    pub const SHORT: [Self; 4] = [
+        Self::SleepAc,
+        Self::SleepDc,
+        Self::VideoIdleAc,
+        Self::VideoIdleDc,
+    ];
+    pub const ALL: [Self; 6] = [
+        Self::LidAc,
+        Self::LidDc,
+        Self::SleepDc,
+        Self::SleepAc,
+        Self::VideoIdleAc,
+        Self::VideoIdleDc,
+    ];
+
+    /// A timeout in seconds, where 0 is Never; the lid keys are actions.
+    pub fn is_timeout(self) -> bool {
+        !matches!(self, Self::LidAc | Self::LidDc)
+    }
+}
+
+/// The sleep and screen timeouts the sleep route writes, in seconds: Windows' shortest choice in Settings, so a closed
+/// laptop sleeps about a minute after nothing holds it (product, work end; `p3-idle-sleep-check`).
+pub const SHORT_TIMEOUT_S: u32 = 60;
 
 /// One key on one plan, because a plan switch keeps the old plan's entries apart from the new one's.
 ///
@@ -188,10 +224,37 @@ mod tests {
 
     #[test]
     fn setting_keys_use_the_journal_names() {
-        let names: Vec<String> = [SettingKey::LidAc, SettingKey::LidDc, SettingKey::SleepDc]
+        let names: Vec<String> = SettingKey::ALL
             .iter()
             .map(|k| serde_json::to_string(k).unwrap())
             .collect();
-        assert_eq!(names, [r#""lidAc""#, r#""lidDc""#, r#""sleepDc""#]);
+        assert_eq!(
+            names,
+            [
+                r#""lidAc""#,
+                r#""lidDc""#,
+                r#""sleepDc""#,
+                r#""sleepAc""#,
+                r#""videoIdleAc""#,
+                r#""videoIdleDc""#
+            ]
+        );
+        for key in SettingKey::ALL {
+            let text = serde_json::to_string(&key).unwrap();
+            assert_eq!(serde_json::from_str::<SettingKey>(&text).unwrap(), key);
+        }
+    }
+
+    #[test]
+    fn the_key_lists_split_all_keys() {
+        let mut both: Vec<SettingKey> = SettingKey::HOLD
+            .into_iter()
+            .chain(SettingKey::SHORT)
+            .collect();
+        both.sort();
+        both.dedup();
+        assert_eq!(both, SettingKey::ALL);
+        assert!(SettingKey::SHORT.iter().all(|k| k.is_timeout()));
+        assert!(!SettingKey::LidAc.is_timeout() && !SettingKey::LidDc.is_timeout());
     }
 }

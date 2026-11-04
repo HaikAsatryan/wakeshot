@@ -332,7 +332,7 @@ mod tests {
     fn sleep_ac() -> JournalFileEntry {
         JournalFileEntry {
             plan: P1,
-            key: JournalKey::Other("sleepAc".into()),
+            key: JournalKey::Other("hibernateAc".into()),
             original: 10_800,
             written: 0,
             restored: false,

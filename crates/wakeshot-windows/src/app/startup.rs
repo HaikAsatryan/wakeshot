@@ -484,6 +484,10 @@ mod tests {
         match key {
             SettingKey::LidAc | SettingKey::LidDc => 1,
             SettingKey::SleepDc => 14_400,
+            SettingKey::SleepAc => 10_800,
+            SettingKey::VideoIdleAc | SettingKey::VideoIdleDc => {
+                unreachable!("these tests start from hold entries only")
+            }
         }
     }
 

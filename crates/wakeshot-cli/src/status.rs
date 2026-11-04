@@ -97,6 +97,9 @@ pub(crate) fn setting_words(key: SettingKey) -> &'static str {
         SettingKey::LidAc => "what closing the lid does when plugged in",
         SettingKey::LidDc => "what closing the lid does on battery",
         SettingKey::SleepDc => "when the PC sleeps on battery",
+        SettingKey::SleepAc => "when the PC sleeps when plugged in",
+        SettingKey::VideoIdleAc => "when the screen turns off when plugged in",
+        SettingKey::VideoIdleDc => "when the screen turns off on battery",
     }
 }
 
@@ -473,7 +476,7 @@ mod tests {
     /// The tray and the CLI name a setting in the same words.
     #[test]
     fn setting_words_match_the_notices() {
-        for key in [SettingKey::LidAc, SettingKey::LidDc, SettingKey::SleepDc] {
+        for key in SettingKey::ALL {
             let body = text::notice(&Notice::UserChanged(key)).body;
             let words = format!("You changed {}.", setting_words(key));
             assert!(body.contains(&words), "{body:?} lacks {words:?}");

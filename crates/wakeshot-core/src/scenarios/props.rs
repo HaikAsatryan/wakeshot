@@ -514,6 +514,13 @@ fn writes(command: &Command) -> Option<&[(SettingKey, u32)]> {
     }
 }
 
+/// The sleep route's apply: short keys only, each at 1 minute.
+fn short_writes(writes: &[(SettingKey, u32)]) -> bool {
+    writes
+        .iter()
+        .all(|&(k, v)| SettingKey::SHORT.contains(&k) && v == crate::settings::SHORT_TIMEOUT_S)
+}
+
 /// A released key is never written again in its episode, on any plan (power verify minor 9): no `Apply` sent after
 /// the release names it.
 fn released_keys_stay_released(world: &World) -> Result<(), String> {
@@ -695,7 +702,13 @@ fn no_request_without_a_hold(world: &World) -> Result<(), String> {
                 seen.where_()
             ));
         }
-        if seen.after.episode.is_none() && seen.commands().iter().any(|c| writes(c).is_some()) {
+        // With no hold only the sleep route writes: its short timeouts, with the lid closed (`p2-6-sleep-route`).
+        let stray = seen
+            .commands()
+            .iter()
+            .filter_map(writes)
+            .any(|w| !short_writes(w) || !seen.after.lid_closed);
+        if seen.after.episode.is_none() && stray {
             return Err(format!("an apply with no hold, {}", seen.where_()));
         }
     }

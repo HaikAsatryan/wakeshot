@@ -119,11 +119,12 @@ impl Core {
             Event::Tick => {
                 self.tick(now, out);
                 self.check_lock(now, out);
+                self.check_slept(now, out);
             }
             // The idle clamp counts from here; the settle pass takes the requests again.
-            Event::Resumed => self.take_resumed(now),
-            // Only the resume matters to the idle clamp; run time stops by itself during the sleep.
-            Event::Suspending => {}
+            Event::Resumed => self.take_resumed(now, out),
+            // The idle clamp needs only the resume; the sleep route's fallback needs to know the PC slept.
+            Event::Suspending => self.take_suspending(now),
             Event::SettingsOwner => {
                 self.state.owner = true;
                 self.want_apply();
@@ -272,6 +273,7 @@ impl Core {
                 journal,
             } => self.done_reset(reset, result, journal, now, out),
             Outcome::Locked(result) => self.done_locked(result, now, out),
+            Outcome::SleepCheck(result) => self.done_sleep_check(result, now, out),
             Outcome::Hibernate(end) => self.done_hibernate(end, now, out),
             Outcome::Update(result) => self.done_update(result, out),
             // Their runners log them.

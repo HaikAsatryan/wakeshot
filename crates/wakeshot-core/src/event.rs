@@ -48,6 +48,9 @@ pub enum SessionChange {
 /// - `JournalCorrupt`: a corrupt journal was set aside, once per corrupt file (at start for one left by restore mode,
 ///   the guard or a hook; at once for the tray's own restore). The journal is lost: the core sends
 ///   `ResetLost { damaged: true }` (product "User settings safety" 7).
+/// - `Suspending`: `PBT_APMSUSPEND` from the suspend-resume callback, the only route that shows a Modern Standby sleep
+///   (research, "Idle sleep with the lid closed"). The core counts it as a sleep at the next `Resumed`, or, when that
+///   post was lost, once the next `Tick` shows the wall clock moved past run time (`p2-6-sleep-route`).
 /// - `UpdateReady`: an update is downloaded, at most once per version per run.
 /// - `Updated`: Velopack restarted the tray after it installed `version`. At most once per run, at start, after
 ///   `Started` (and after `JournalCorrupt` when both come); the core answers with `Notify(Notice::Updated)`.

@@ -51,7 +51,9 @@ use crate::localtime::SystemZone;
 use crate::log::{self, Level, Log, LogWriter, Proc};
 use crate::notify::BalloonNotifier;
 use crate::power::executor::PowerExecutor;
-use crate::power::hibernate::{DryRunHibernate, HibernateDeps, Win32Hibernate, run_hibernate};
+use crate::power::hibernate::{
+    DryRunHibernate, HibernateDeps, Win32Hibernate, run_hibernate, run_sleep_check,
+};
 use crate::power::journal::{FileNet, GuardControl};
 use crate::power::plan::{DryRunPower, Win32Power};
 use crate::power::requests::{DryRunRequests, PowerRequests, RequestApi};
@@ -917,7 +919,8 @@ impl UpdateFeed for AnyFeed {
     }
 }
 
-/// Starts the hibernate thread for one `Command::Hibernate`; the dispatcher keeps it to one at a time.
+/// Starts the hibernate thread for one `Command::Hibernate` or `Command::SleepCheck`; the dispatcher keeps it to one
+/// at a time.
 #[derive(Clone)]
 struct Hibernator {
     deps: Arc<dyn HibernateDeps>,
@@ -937,10 +940,37 @@ impl Hibernator {
         floor_pct: u8,
         last_resume_mono_ms: Option<u64>,
     ) -> Result<JoinHandle<()>, WinError> {
+        self.spawn(move |run| run.run(reason, floor_pct, last_resume_mono_ms))
+    }
+
+    /// The same thread for `Command::SleepCheck` (`p2-6-sleep-route`): the check and the sound, no hibernate.
+    fn start_check(
+        &self,
+        reason: CountdownReason,
+        floor_pct: u8,
+        last_resume_mono_ms: Option<u64>,
+    ) -> Result<JoinHandle<()>, WinError> {
+        self.spawn(move |run| {
+            let result = run_sleep_check(
+                reason,
+                floor_pct,
+                last_resume_mono_ms,
+                &*run.deps,
+                &*run.sound,
+                &*run.log,
+            );
+            run.post_end(&Event::Done(Outcome::SleepCheck(result)));
+        })
+    }
+
+    fn spawn(
+        &self,
+        body: impl FnOnce(Hibernator) + Send + 'static,
+    ) -> Result<JoinHandle<()>, WinError> {
         let run = self.clone();
         thread::Builder::new()
             .name("wakeshot-hibernate".to_owned())
-            .spawn(move || run.run(reason, floor_pct, last_resume_mono_ms))
+            .spawn(move || body(run))
             .map_err(|e| WinError {
                 call: "CreateThread",
                 code: e.raw_os_error().map_or(u32::MAX, |c| c as u32),
@@ -1061,6 +1091,25 @@ impl LoopRunners for RealRunners {
         if let Err(e) = &started {
             let text = format!(
                 "hibernate thread not started: {} failed with {}",
+                e.call, e.code
+            );
+            self.log.line(Level::Warn, AREA, &text);
+        }
+        started.map(|_| ())
+    }
+
+    fn start_sleep_check(
+        &mut self,
+        reason: CountdownReason,
+        floor_pct: u8,
+        last_resume_mono_ms: Option<u64>,
+    ) -> Result<(), WinError> {
+        let started = self
+            .hibernator
+            .start_check(reason, floor_pct, last_resume_mono_ms);
+        if let Err(e) = &started {
+            let text = format!(
+                "sleep check thread not started: {} failed with {}",
                 e.call, e.code
             );
             self.log.line(Level::Warn, AREA, &text);
@@ -1218,6 +1267,24 @@ mod tests {
                 .iter()
                 .any(|(_, t)| t == "dry run: SetSuspendState(TRUE, FALSE, FALSE)"),
             "{logged:?}"
+        );
+    }
+
+    #[test]
+    fn the_sleep_check_thread_posts_its_result_and_never_hibernates() {
+        let deps = Arc::new(FakeHibernate::default());
+        let (h, sink, _) = hibernator(deps.clone());
+        h.start_check(CountdownReason::WorkEnded, 20, None)
+            .unwrap()
+            .join()
+            .unwrap();
+        assert_eq!(sink.events(), [Event::Done(Outcome::SleepCheck(Ok(())))]);
+        assert!(
+            !deps
+                .calls()
+                .contains(&crate::power::hibernate::HibernateCall::Hibernate),
+            "{:?}",
+            deps.calls()
         );
     }
 

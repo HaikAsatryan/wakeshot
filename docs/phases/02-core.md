@@ -139,7 +139,7 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | `p2-6-unread-lid-countdown` | no | `p6-int-wiring-fixes` | done (05:28: 3 new scenarios, `startup_unread` drawn in the props, 22 props at 4096 cases 3 of 3) |
 | `p2-6-unread-floor-countdown` | no | `p2-6-unread-lid-countdown` | done (05:58: 4 new scenarios; 1284 workspace tests; 8 of 10 mutants caught) |
 | `p2-6-record-lost` | no (Haik's rule of 2026-11-04 in `product.md`) | nothing | done (11:13: 1312 workspace tests; 14 of 14 mutants killed; 12 worker decisions) |
-| `p2-6-sleep-route` | no (Haik's rule of 2026-11-04; his lid test is in `p6-int-haik-checks`) | `p2-6-record-lost`, `p3-idle-sleep-check` | ready |
+| `p2-6-sleep-route` | no (Haik's rule of 2026-11-04; his lid test is in `p6-int-haik-checks`) | `p2-6-record-lost`, `p3-idle-sleep-check` | done (12:16: 1340 workspace tests; 13 of 13 mutants killed; 17 worker decisions) |
 
 No card touches the real laptop (no power settings, screen, sound or installs) or needs Haik's hands. "Contracts
 card": the one card the orchestrator runs alone before the track builds.
@@ -331,3 +331,14 @@ Where each item this track owns is built. "Integration" is planned after the tra
   `p2-6-sleep-route` as deliverables 8 and 9 (orchestrator decision, for Haik's review): a hold that runs through
   the window with the lid closed now runs unlocked until it ends, so lock when the window ends; `power_check`'s
   `Timed` wrapper. `p2-6-sleep-route` starts now.
+- 2026-11-04 12:16 (orchestrator `wakeshot-12`): `p2-6-sleep-route` done: when the countdown is due, `SleepCheck` runs the
+  checks and the sound, then an apply sets the sleep and screen timeouts to 60 s on AC and DC where the user's own
+  is longer or Never (three new journaled keys); no sleep 5 minutes later means `Hibernate` as before. The
+  timeouts go back at an unlock, input, lid open, a hold start or the countdown's end (`product.md` now says "an
+  unlock"). Deliverables 8 (lock when the unknown window ends with the lid closed while holding) and 9 done. 17
+  worker decisions for Haik's review. Files outside its list that had to change: CLI `status.rs`, `restore.rs`, tray
+  `e2e_real.rs`, `hooks.rs`, `recovery.rs`. One test fails in the agent shell since about 12:00,
+  `watch::agents::a_folder_that_cannot_be_listed_reads_its_known_files` (the deny ACL does not take; it fails on
+  f47391d too, CI passed it there; cause not verified): to the small fixes card. Gap for a follow-up card
+  (orchestrator default, for Haik's review): rule 7's reset should also put back the 60 s timeouts when they hold
+  exactly Wakeshot's value, and the uninstall hook should reset a corrupt or unreadable journal's values.

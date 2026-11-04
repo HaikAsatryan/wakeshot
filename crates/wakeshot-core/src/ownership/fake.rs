@@ -14,7 +14,7 @@ use crate::ownership::io::{JournalRead, PlanIo, SafetyNet};
 use crate::ownership::journal::JournalParts;
 use crate::settings::{Guid, JournalEntry, OwnedKey, PlanValues, SettingKey};
 
-const KEYS: [SettingKey; 3] = [SettingKey::LidAc, SettingKey::LidDc, SettingKey::SleepDc];
+const KEYS: [SettingKey; 6] = SettingKey::ALL;
 
 /// The code the fake returns for a plan it does not hold. The fake's own choice: what Windows returns for a deleted
 /// plan is not verified.
@@ -30,6 +30,14 @@ pub const FAKE_DEFAULT_LID: u32 = 1;
 /// `read_default` of battery sleep on a plan with no entry in `FakeState::defaults`: 3 minutes, Balanced's on the
 /// Modern Standby test laptop (research, "Windows defaults of the three keys").
 pub const FAKE_DEFAULT_SLEEP_DC: u32 = 180;
+
+/// `read_default` of the other timeouts (AC sleep, screen off) on a plan with no entry in `FakeState::defaults`: the
+/// fake's own choice, 5 minutes; no routine reads them today, since a lost journal resets only the hold keys.
+pub const FAKE_DEFAULT_OTHER: u32 = 300;
+
+/// A new fake plan's screen-off timeouts, AC then DC, which `PlanValues` does not carry: the fake's own choice, longer
+/// than the sleep route's 1 minute, as most users' are.
+pub const FAKE_SCREEN_OFF: [u32; 2] = [600, 300];
 
 /// One call to either seam, with its arguments, in the order the routine made them.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -112,6 +120,9 @@ pub struct SetByKeys {
     pub lid_ac: SetBy,
     pub lid_dc: SetBy,
     pub sleep_dc: SetBy,
+    pub sleep_ac: SetBy,
+    pub screen_ac: SetBy,
+    pub screen_dc: SetBy,
 }
 
 impl SetByKeys {
@@ -119,6 +130,9 @@ impl SetByKeys {
         lid_ac: SetBy::User,
         lid_dc: SetBy::User,
         sleep_dc: SetBy::User,
+        sleep_ac: SetBy::User,
+        screen_ac: SetBy::User,
+        screen_dc: SetBy::User,
     };
 
     pub fn get(&self, key: SettingKey) -> SetBy {
@@ -126,6 +140,9 @@ impl SetByKeys {
             SettingKey::LidAc => self.lid_ac,
             SettingKey::LidDc => self.lid_dc,
             SettingKey::SleepDc => self.sleep_dc,
+            SettingKey::SleepAc => self.sleep_ac,
+            SettingKey::VideoIdleAc => self.screen_ac,
+            SettingKey::VideoIdleDc => self.screen_dc,
         }
     }
 
@@ -134,19 +151,25 @@ impl SetByKeys {
             SettingKey::LidAc => &mut self.lid_ac,
             SettingKey::LidDc => &mut self.lid_dc,
             SettingKey::SleepDc => &mut self.sleep_dc,
+            SettingKey::SleepAc => &mut self.sleep_ac,
+            SettingKey::VideoIdleAc => &mut self.screen_ac,
+            SettingKey::VideoIdleDc => &mut self.screen_dc,
         }
     }
 }
 
 /// One plan. `stored` is what a read returns; `in_force` is what Windows runs with, copied from `stored` at each
 /// `set_active` of the plan, so a test sees a value we wrote that is stored back but still in force. Both carry the
-/// plan's own id in `active`. `stored_by` and `in_force_by` say who set each value, and move with them.
+/// plan's own id in `active`. `stored_by` and `in_force_by` say who set each value, and move with them. The screen-off
+/// timeouts, AC then DC, are apart because `PlanValues` does not carry them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FakePlan {
     pub stored: PlanValues,
     pub in_force: PlanValues,
     pub stored_by: SetByKeys,
     pub in_force_by: SetByKeys,
+    pub stored_screen: [u32; 2],
+    pub in_force_screen: [u32; 2],
 }
 
 impl FakePlan {
@@ -156,12 +179,23 @@ impl FakePlan {
             in_force: values,
             stored_by: SetByKeys::USER,
             in_force_by: SetByKeys::USER,
+            stored_screen: FAKE_SCREEN_OFF,
+            in_force_screen: FAKE_SCREEN_OFF,
         }
     }
 
     fn come_into_force(&mut self) {
         self.in_force = self.stored;
         self.in_force_by = self.stored_by;
+        self.in_force_screen = self.stored_screen;
+    }
+
+    fn stored_mut(&mut self, key: SettingKey) -> &mut u32 {
+        value_mut(&mut self.stored, &mut self.stored_screen, key)
+    }
+
+    fn in_force_mut(&mut self, key: SettingKey) -> &mut u32 {
+        value_mut(&mut self.in_force, &mut self.in_force_screen, key)
     }
 }
 
@@ -189,10 +223,10 @@ impl FakeState {
     pub fn user_write(&mut self, plan: Guid, key: SettingKey, value: u32) {
         let active = self.active;
         if let Some(p) = self.plans.get_mut(&plan) {
-            *value_mut(&mut p.stored, key) = value;
+            *p.stored_mut(key) = value;
             *p.stored_by.get_mut(key) = SetBy::User;
             if plan == active {
-                *value_mut(&mut p.in_force, key) = value;
+                *p.in_force_mut(key) = value;
                 *p.in_force_by.get_mut(key) = SetBy::User;
             }
         }
@@ -211,11 +245,15 @@ impl FakeState {
     }
 
     pub fn stored(&self, plan: Guid, key: SettingKey) -> Option<u32> {
-        self.plans.get(&plan).map(|p| value(&p.stored, key))
+        self.plans
+            .get(&plan)
+            .map(|p| value(&p.stored, &p.stored_screen, key))
     }
 
     pub fn in_force(&self, plan: Guid, key: SettingKey) -> Option<u32> {
-        self.plans.get(&plan).map(|p| value(&p.in_force, key))
+        self.plans
+            .get(&plan)
+            .map(|p| value(&p.in_force, &p.in_force_screen, key))
     }
 
     pub fn stored_by(&self, plan: Guid, key: SettingKey) -> Option<SetBy> {
@@ -230,7 +268,7 @@ impl FakeState {
     /// step goes through the seams or `user_write`.
     pub fn set_stored(&mut self, plan: Guid, key: SettingKey, value: u32, by: SetBy) {
         if let Some(p) = self.plans.get_mut(&plan) {
-            *value_mut(&mut p.stored, key) = value;
+            *p.stored_mut(key) = value;
             *p.stored_by.get_mut(key) = by;
         }
     }
@@ -238,7 +276,7 @@ impl FakeState {
     /// Sets an in-force value as a crash or an earlier run left it, with no call logged (see `set_stored`).
     pub fn set_in_force(&mut self, plan: Guid, key: SettingKey, value: u32, by: SetBy) {
         if let Some(p) = self.plans.get_mut(&plan) {
-            *value_mut(&mut p.in_force, key) = value;
+            *p.in_force_mut(key) = value;
             *p.in_force_by.get_mut(key) = by;
         }
     }
@@ -283,6 +321,9 @@ impl FakeState {
             .unwrap_or(match key {
                 SettingKey::LidAc | SettingKey::LidDc => FAKE_DEFAULT_LID,
                 SettingKey::SleepDc => FAKE_DEFAULT_SLEEP_DC,
+                SettingKey::SleepAc | SettingKey::VideoIdleAc | SettingKey::VideoIdleDc => {
+                    FAKE_DEFAULT_OTHER
+                }
             })
     }
 
@@ -366,19 +407,29 @@ impl FakePlans {
     }
 }
 
-fn value(values: &PlanValues, key: SettingKey) -> u32 {
+fn value(values: &PlanValues, screen: &[u32; 2], key: SettingKey) -> u32 {
     match key {
         SettingKey::LidAc => values.lid_ac,
         SettingKey::LidDc => values.lid_dc,
         SettingKey::SleepDc => values.sleep_dc,
+        SettingKey::SleepAc => values.sleep_ac,
+        SettingKey::VideoIdleAc => screen[0],
+        SettingKey::VideoIdleDc => screen[1],
     }
 }
 
-fn value_mut(values: &mut PlanValues, key: SettingKey) -> &mut u32 {
+fn value_mut<'a>(
+    values: &'a mut PlanValues,
+    screen: &'a mut [u32; 2],
+    key: SettingKey,
+) -> &'a mut u32 {
     match key {
         SettingKey::LidAc => &mut values.lid_ac,
         SettingKey::LidDc => &mut values.lid_dc,
         SettingKey::SleepDc => &mut values.sleep_dc,
+        SettingKey::SleepAc => &mut values.sleep_ac,
+        SettingKey::VideoIdleAc => &mut screen[0],
+        SettingKey::VideoIdleDc => &mut screen[1],
     }
 }
 
@@ -424,7 +475,7 @@ impl PlanIo for FakePlans {
         let mut state = self.begin(Call::Write(plan, key, value), NAME)?;
         let by = state.write_label(plan, key, value);
         let p = state.plans.get_mut(&plan).ok_or(missing(NAME))?;
-        *value_mut(&mut p.stored, key) = value;
+        *p.stored_mut(key) = value;
         *p.stored_by.get_mut(key) = by;
         Ok(())
     }

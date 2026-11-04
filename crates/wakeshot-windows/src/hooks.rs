@@ -1657,7 +1657,7 @@ mod tests {
         // Known entries restored, a newer version's entry left: the file stays for it.
         let newer = JournalFileEntry {
             plan: P1,
-            key: JournalKey::Other("sleepAc".into()),
+            key: JournalKey::Other("hibernateAc".into()),
             original: 10_800,
             written: 0,
             restored: false,

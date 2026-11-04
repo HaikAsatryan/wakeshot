@@ -1125,7 +1125,7 @@ mod tests {
                  "entries": [
                    { "plan": "381b4222-f694-41f0-9685-ff5bb260df2e", "key": "lidDc", "original": 1, "written": 0,
                      "restored": false },
-                   { "plan": "381b4222-f694-41f0-9685-ff5bb260df2e", "key": "sleepAc", "original": 10800,
+                   { "plan": "381b4222-f694-41f0-9685-ff5bb260df2e", "key": "hibernateAc", "original": 10800,
                      "written": 0, "restored": false, "since": 5 } ] }"#,
         )
         .unwrap();
@@ -1134,7 +1134,7 @@ mod tests {
                 panic!("a newer journal reads");
             };
             assert_eq!(file.version, 2);
-            assert_eq!(file.entries[1], unknown("sleepAc"));
+            assert_eq!(file.entries[1], unknown("hibernateAc"));
         }
         let unknown_lines =
             |log: &MemoryLog| count_containing(log, "keys this version does not know");
@@ -1144,13 +1144,16 @@ mod tests {
             line,
             &format!(
                 "journal (version 2) holds 1 entries with keys this version does not know, kept as they are: \
-                 \"sleepAc\" on {BALANCED}: original 10800, written 0;"
+                 \"hibernateAc\" on {BALANCED}: original 10800, written 0;"
             )
         );
 
         // Another unknown entry is news; a journal with none says nothing and resets, so they show again later.
-        net.save_journal(&journal(vec![unknown("sleepAc"), unknown("hibernateDc")]))
-            .unwrap();
+        net.save_journal(&journal(vec![
+            unknown("hibernateAc"),
+            unknown("hibernateDc"),
+        ]))
+        .unwrap();
         net.load_journal();
         net.load_journal();
         assert_eq!(unknown_lines(&log), 2);
@@ -1158,7 +1161,7 @@ mod tests {
             .unwrap();
         net.load_journal();
         assert_eq!(unknown_lines(&log), 2);
-        net.save_journal(&journal(vec![unknown("sleepAc")]))
+        net.save_journal(&journal(vec![unknown("hibernateAc")]))
             .unwrap();
         net.load_journal();
         assert_eq!(unknown_lines(&log), 3);
@@ -1647,7 +1650,7 @@ mod tests {
         let names = Names::test("journal::timeout");
         let (release, holder) = hold(&names);
         let fake = FakePlans::new(VALUES);
-        let file = journal(vec![known(SettingKey::LidAc, true), unknown("sleepAc")]);
+        let file = journal(vec![known(SettingKey::LidAc, true), unknown("hibernateAc")]);
         let left = JournalParts::split(file.clone()).known.entries;
         fake.state().journal = FakeJournal::File(file);
         let log = MemoryLog::default();

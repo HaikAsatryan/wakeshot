@@ -100,7 +100,7 @@ mod tests {
             version: 2,
             owner: OWNER,
             entries: vec![
-                unknown("sleepAc"),
+                unknown("hibernateAc"),
                 known(SettingKey::LidAc, false),
                 unknown("hibernateDc"),
                 known(SettingKey::LidDc, true),
@@ -131,7 +131,10 @@ mod tests {
                 },
             ]
         );
-        assert_eq!(parts.other, [unknown("sleepAc"), unknown("hibernateDc")]);
+        assert_eq!(
+            parts.other,
+            [unknown("hibernateAc"), unknown("hibernateDc")]
+        );
     }
 
     #[test]
@@ -144,7 +147,7 @@ mod tests {
             [
                 known(SettingKey::LidAc, false),
                 known(SettingKey::LidDc, true),
-                unknown("sleepAc"),
+                unknown("hibernateAc"),
                 unknown("hibernateDc"),
             ]
         );
@@ -156,10 +159,10 @@ mod tests {
         let file = JournalFile {
             version: 2,
             owner: OWNER,
-            entries: vec![unknown("sleepAc")],
+            entries: vec![unknown("hibernateAc")],
         };
         let parts = JournalParts::split(file);
         assert!(parts.known.entries.is_empty());
-        assert_eq!(parts.other, [unknown("sleepAc")]);
+        assert_eq!(parts.other, [unknown("hibernateAc")]);
     }
 }

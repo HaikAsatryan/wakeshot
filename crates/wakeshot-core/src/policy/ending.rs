@@ -1,9 +1,11 @@
-//! The hibernate countdown when work ends with the lid closed, or at a step back with the lid closed (decisions 21,
-//! 23).
+//! The countdown to sleep when work ends with the lid closed, or at a step back with the lid closed (decisions 21,
+//! 23; sleep, not hibernate, Haik 2026-11-04).
 //!
-//! The core sends only `Hibernate` when the countdown is due; the hibernate thread checks again and plays the going to
-//! sleep sound (track note 4). Its idle check must stay the same as [`clamped_idle_ms`] and [`IDLE_MS`] here, so it
-//! skips only for input that came after the core's reading.
+//! When the countdown is due the core sends `SleepCheck`: the hibernate thread checks again and plays the going to
+//! sleep sound (track note 4), then the core sets the 1-minute sleep and screen timeouts so Windows' own idle sleep
+//! takes the laptop (`p2-6-sleep-route`). `Hibernate` is the fallback [`FALLBACK_MS`] later. The thread's idle check
+//! must stay the same as [`clamped_idle_ms`] and [`IDLE_MS`] here, so it skips only for input that came after the
+//! core's reading.
 //!
 //! Owner: `p2-policy-power`.
 
@@ -14,6 +16,17 @@ use crate::time::Deadline;
 /// Input idle that makes the countdown due (Haik, 2026-11-03), so someone typing on an external screen with the lid
 /// closed is not put to sleep.
 pub const IDLE_MS: u64 = 5 * 60 * 1000;
+
+/// How long the PC may stay awake with the short timeouts in force before the fallback hibernate, counted in run time
+/// from the write and again from each resume: the same 5 minutes (product, work end). On the test laptop the sleep
+/// came when the screen timer turned the screen off (`p3-idle-sleep-check`, one run), so with a 1-minute screen
+/// timeout most likely about a minute after the write (inferred, not tested).
+pub const FALLBACK_MS: u64 = 5 * 60 * 1000;
+
+/// How far the wall clock must move past run time between a `Suspending` and the next tick for it to count as a
+/// sleep. A sleep on the test laptop showed 227 s (research, "Idle sleep with the lid closed"), a suspend that did not
+/// happen shows next to none, and 5 s stay clear of the wall clock's own small corrections.
+pub const SLEPT_GAP_MS: i64 = 5_000;
 
 /// Input idle with a resume counted as input: the smaller of the reported idle and the mono time since the last
 /// `Resumed`. Input idle counts suspended time and mono time does not (research, "Clock"), but no suspend lies between
@@ -57,7 +70,7 @@ pub enum Cancel {
 }
 
 /// Holding again or the lid opening ends every countdown; AC back ends only `Floor`, because work that ended still
-/// needs the hibernate on AC.
+/// needs the sleep on AC.
 pub fn cancels(reason: CountdownReason, cancel: Cancel) -> bool {
     match cancel {
         Cancel::HoldingStarts | Cancel::LidOpened => true,
@@ -68,7 +81,7 @@ pub fn cancels(reason: CountdownReason, cancel: Cancel) -> bool {
 /// The countdown at one input idle reading.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Check {
-    /// Send `Hibernate` now.
+    /// Send `SleepCheck` now.
     Due,
     /// Not yet: the next check, when the countdown is due if no input comes.
     Wait(Deadline),

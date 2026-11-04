@@ -71,6 +71,16 @@ pub trait LoopRunners {
         last_resume_mono_ms: Option<u64>,
     ) -> Result<(), WinError>;
 
+    /// `Command::SleepCheck`: starts the hibernate thread for the sleep check and returns; the thread posts
+    /// `Done(SleepCheck)` once. One thread at a time with `start_hibernate`. `Err`: no thread started; the dispatcher
+    /// feeds `Done(SleepCheck(Ok))` at once.
+    fn start_sleep_check(
+        &mut self,
+        reason: CountdownReason,
+        floor_pct: u8,
+        last_resume_mono_ms: Option<u64>,
+    ) -> Result<(), WinError>;
+
     /// `Command::ApplyUpdate`: hands the update to the update thread.
     fn apply_update(&mut self);
 
@@ -114,7 +124,7 @@ pub struct Dispatcher<R> {
     pending: RefCell<VecDeque<Input>>,
     /// This tray owns the settings mutex: from `Started`, then from the `SettingsOwner` fed.
     owner: Cell<bool>,
-    /// A hibernate thread runs: from `start_hibernate` to its `Done(Hibernate)`.
+    /// A hibernate thread runs: from `start_hibernate` or `start_sleep_check` to its `Done`.
     hibernating: Cell<bool>,
     /// `Command::Quit` ran: nothing more reaches the core.
     quitting: Cell<bool>,
@@ -315,7 +325,9 @@ impl<R: LoopRunners> Dispatcher<R> {
     fn handle(&self, event: Event) -> Vec<Command> {
         match &event {
             Event::SettingsOwner => self.owner.set(true),
-            Event::Done(Outcome::Hibernate(_)) => self.hibernating.set(false),
+            Event::Done(Outcome::Hibernate(_) | Outcome::SleepCheck(_)) => {
+                self.hibernating.set(false);
+            }
             _ => {}
         }
         #[cfg(test)]
@@ -370,6 +382,33 @@ impl<R: LoopRunners> Dispatcher<R> {
                 started
                     .err()
                     .map(|e| Event::Done(Outcome::Hibernate(HibernateEnd::Failed(e.into()))))
+            }
+            Command::SleepCheck {
+                reason,
+                floor_pct,
+                last_resume_mono_ms,
+            } => {
+                if self.hibernating.replace(true) {
+                    self.log(
+                        "A sleep check was asked while the hibernate thread runs: not started"
+                            .to_owned(),
+                    );
+                    return None;
+                }
+                let started = self.runners.borrow_mut().start_sleep_check(
+                    reason,
+                    floor_pct,
+                    last_resume_mono_ms,
+                );
+                // The core checked the lid, idle and floor itself before it asked; only the sound and the second look
+                // are lost, so the short timeouts still go, and a closed laptop still sleeps.
+                started.err().map(|e| {
+                    self.log(format!(
+                        "The sleep check thread did not start ({}, code {}): the core's own checks stand, no sound",
+                        e.call, e.code
+                    ));
+                    Event::Done(Outcome::SleepCheck(Ok(())))
+                })
             }
             Command::ApplyUpdate => {
                 self.runners.borrow_mut().apply_update();
@@ -476,11 +515,11 @@ mod tests {
     use wakeshot_core::command::{FileKind, HibernateEnd, Outcome, RestoreWhy};
     use wakeshot_core::files::{Config, HoldFile};
     use wakeshot_core::holds::HoldId;
-    use wakeshot_core::policy::ending::IDLE_MS;
+    use wakeshot_core::policy::ending::{FALLBACK_MS, IDLE_MS};
     use wakeshot_core::process::Alive;
     use wakeshot_core::sim::{
         self, BALANCED, KEYS, OTHER_PLAN, START, Start, applied, claude, entries, plan, reset_done,
-        restored, watched,
+        restored, short_entries, watched,
     };
     use wakeshot_core::sources::Activity;
     use wakeshot_core::testing::FakeClock;
@@ -511,7 +550,7 @@ mod tests {
     };
 
     /// Every `Command` variant, by the name [`name`] gives.
-    const ALL: [&str; 20] = [
+    const ALL: [&str; 21] = [
         "Requests",
         "Retake",
         "ReadPlan",
@@ -519,6 +558,7 @@ mod tests {
         "Restore",
         "ResetLost",
         "Lock",
+        "SleepCheck",
         "Hibernate",
         "Tray",
         "Notify",
@@ -544,6 +584,7 @@ mod tests {
             Command::Restore { .. } => "Restore",
             Command::ResetLost { .. } => "ResetLost",
             Command::Lock => "Lock",
+            Command::SleepCheck { .. } => "SleepCheck",
             Command::Hibernate { .. } => "Hibernate",
             Command::Tray(_) => "Tray",
             Command::Notify(_) => "Notify",
@@ -571,6 +612,11 @@ mod tests {
         Lock,
         Tray(IconState),
         Play(Cue),
+        SleepCheck {
+            reason: CountdownReason,
+            floor_pct: u8,
+            last_resume_mono_ms: Option<u64>,
+        },
         Hibernate {
             reason: CountdownReason,
             floor_pct: u8,
@@ -592,6 +638,7 @@ mod tests {
                 Call::Lock => Some("Lock"),
                 Call::Tray(_) => Some("Tray"),
                 Call::Play(_) => Some("Play"),
+                Call::SleepCheck { .. } => Some("SleepCheck"),
                 Call::Hibernate { .. } => Some("Hibernate"),
                 Call::ApplyUpdate => Some("ApplyUpdate"),
                 Call::InputIdle(_) | Call::TryOwner | Call::Lost | Call::WatchTick => None,
@@ -673,6 +720,20 @@ mod tests {
             last_resume_mono_ms: Option<u64>,
         ) -> Result<(), WinError> {
             self.record(Call::Hibernate {
+                reason,
+                floor_pct,
+                last_resume_mono_ms,
+            });
+            self.hibernate
+        }
+
+        fn start_sleep_check(
+            &mut self,
+            reason: CountdownReason,
+            floor_pct: u8,
+            last_resume_mono_ms: Option<u64>,
+        ) -> Result<(), WinError> {
+            self.record(Call::SleepCheck {
                 reason,
                 floor_pct,
                 last_resume_mono_ms,
@@ -978,8 +1039,25 @@ mod tests {
             }
             w.fire();
         }
+        // The sleep check passed and the short timeouts landed; the PC does not sleep, so the fallback comes.
+        w.post(Event::Done(Outcome::SleepCheck(Ok(()))));
+        w.post(applied(BALANCED, Ok(()), short_entries(BALANCED)));
+        let written = w.mono();
+        for _ in 0..40 {
+            if w.mono() > written + FALLBACK_MS + MINUTE {
+                break;
+            }
+            w.fire();
+        }
         w.post(Event::Done(Outcome::Hibernate(HibernateEnd::Resumed)));
         w.post(lid(false));
+        // The short timeouts went back with the resume; until that restore answers, nothing may update.
+        w.post(restored(
+            None,
+            RestoreWhy::ShortTimeouts,
+            Ok(()),
+            Vec::new(),
+        ));
         w.post(Event::UpdateReady {
             version: "1.1.0".to_owned(),
         });
@@ -1000,6 +1078,7 @@ mod tests {
             "Lock",
             "Tray",
             "Play",
+            "SleepCheck",
             "Hibernate",
             "ApplyUpdate",
         ]);
@@ -1104,7 +1183,7 @@ mod tests {
     }
 
     #[test]
-    fn countdown_hibernates_at_the_idle_mark_with_input_idle_before_each_tick() {
+    fn countdown_starts_the_sleep_check_at_the_idle_mark_with_input_idle_before_each_tick() {
         let w = holding();
         w.post(lid(true));
         w.clock.run(OFF_THE_TICK);
@@ -1125,11 +1204,11 @@ mod tests {
             let started = w
                 .calls()
                 .iter()
-                .filter(|c| matches!(c, Call::Hibernate { .. }))
+                .filter(|c| matches!(c, Call::SleepCheck { .. }))
                 .count();
             if started > 0 {
                 assert_eq!(started, 1);
-                assert_eq!(hibernated_at, None, "a second hibernate: {waits:?}");
+                assert_eq!(hibernated_at, None, "a second sleep check: {waits:?}");
                 hibernated_at = Some(w.mono());
             }
         }
@@ -1147,11 +1226,11 @@ mod tests {
                 .calls
                 .iter()
                 .map(|(call, _)| call.clone())
-                .filter(|call| matches!(call, Call::Hibernate { .. }))
+                .filter(|call| matches!(call, Call::SleepCheck { .. }))
                 .collect();
         assert_eq!(
             started,
-            [Call::Hibernate {
+            [Call::SleepCheck {
                 reason: CountdownReason::WorkEnded,
                 floor_pct: 20,
                 last_resume_mono_ms: None,

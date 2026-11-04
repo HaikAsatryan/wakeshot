@@ -424,7 +424,7 @@ mod tests {
             "entries": [
               { "plan": "381b4222-f694-41f0-9685-ff5bb260df2e", "key": "sleepDc", "original": 600,
                 "written": 0, "restored": false, "since": 12 },
-              { "plan": "381b4222-f694-41f0-9685-ff5bb260df2e", "key": "sleepAc", "original": 10800,
+              { "plan": "381b4222-f694-41f0-9685-ff5bb260df2e", "key": "hibernateDc", "original": 10800,
                 "written": 0, "restored": false } ] }"#;
         let journal: JournalFile = serde_json::from_str(doc).unwrap();
         assert_eq!(journal.version, 2);
@@ -433,7 +433,52 @@ mod tests {
             keys,
             [
                 &JournalKey::Known(SettingKey::SleepDc),
-                &JournalKey::Other("sleepAc".into())
+                &JournalKey::Other("hibernateDc".into())
+            ]
+        );
+        round_trip(&journal);
+    }
+
+    /// The sleep route's keys (`p2-6-sleep-route`) read as known keys and keep their names on a save; a journal from
+    /// before them, with the three hold keys only, still loads as it did.
+    #[test]
+    fn the_sleep_route_keys_round_trip_and_an_older_journal_still_loads() {
+        let doc = r#"{ "version": 1, "owner": { "pid": 9120, "procStart": "5", "session": 1 },
+            "entries": [
+              { "plan": "381b4222-f694-41f0-9685-ff5bb260df2e", "key": "sleepAc", "original": 18000,
+                "written": 60, "restored": false },
+              { "plan": "381b4222-f694-41f0-9685-ff5bb260df2e", "key": "videoIdleAc", "original": 300,
+                "written": 60, "restored": false },
+              { "plan": "381b4222-f694-41f0-9685-ff5bb260df2e", "key": "videoIdleDc", "original": 0,
+                "written": 60, "restored": true } ] }"#;
+        let journal: JournalFile = serde_json::from_str(doc).unwrap();
+        let keys: Vec<&JournalKey> = journal.entries.iter().map(|e| &e.key).collect();
+        assert_eq!(
+            keys,
+            [
+                &JournalKey::Known(SettingKey::SleepAc),
+                &JournalKey::Known(SettingKey::VideoIdleAc),
+                &JournalKey::Known(SettingKey::VideoIdleDc)
+            ]
+        );
+        let text = serde_json::to_string(&journal).unwrap();
+        assert!(text.contains(r#""key":"sleepAc""#), "{text}");
+        assert!(text.contains(r#""key":"videoIdleDc""#), "{text}");
+        round_trip(&journal);
+
+        let older = r#"{ "version": 1, "owner": { "pid": 9120, "procStart": "5", "session": 1 },
+            "entries": [
+              { "plan": "381b4222-f694-41f0-9685-ff5bb260df2e", "key": "lidDc", "original": 1,
+                "written": 0, "restored": false },
+              { "plan": "381b4222-f694-41f0-9685-ff5bb260df2e", "key": "sleepDc", "original": 600,
+                "written": 0, "restored": false } ] }"#;
+        let journal: JournalFile = serde_json::from_str(older).unwrap();
+        let keys: Vec<&JournalKey> = journal.entries.iter().map(|e| &e.key).collect();
+        assert_eq!(
+            keys,
+            [
+                &JournalKey::Known(SettingKey::LidDc),
+                &JournalKey::Known(SettingKey::SleepDc)
             ]
         );
         round_trip(&journal);

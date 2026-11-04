@@ -521,7 +521,7 @@ mod tests {
         let data = TempData::new("restore-newer");
         let owner = dead();
         let other = format!(
-            r#",{{"plan":"{BALANCED}","key":"sleepAc","original":10800,"written":0,"restored":false}}"#
+            r#",{{"plan":"{BALANCED}","key":"hibernateAc","original":10800,"written":0,"restored":false}}"#
         );
         data.write(DataFile::Journal, &journal_with(owner, 2, &other));
         let run = restore(&data, plans(), &SystemLiveness);
@@ -537,7 +537,7 @@ mod tests {
         );
         let kept = String::from_utf8(data.read(DataFile::Journal).expect("kept")).unwrap();
         assert!(
-            kept.contains("sleepAc") && !kept.contains("lidDc"),
+            kept.contains("hibernateAc") && !kept.contains("lidDc"),
             "{kept}"
         );
 

@@ -24,6 +24,17 @@ pub const READ_BACK_DIFFERS: Failure = Failure {
     code: 13,
 };
 
+/// A live value that already does what a write of `target` would. A timeout target other than Never is a ceiling
+/// (the sleep route's 1 minute, `p2-6-sleep-route`): a value at or under it, and not Never, sleeps the PC as soon or
+/// sooner, so it is the user's own and stays. Any other target is met only by itself.
+pub fn meets(key: SettingKey, live: u32, target: u32) -> bool {
+    if key.is_timeout() && target != 0 {
+        live != 0 && live <= target
+    } else {
+        live == target
+    }
+}
+
 /// How one apply went, for `Outcome::Applied`. `journal`: the known entries left after it.
 ///
 /// - `written`: the keys whose target this run wrote (the write call returned `Ok`), in call order, whatever `result`
@@ -289,15 +300,17 @@ fn own(
             write: live != target,
         },
     };
+    let ours = |e: JournalEntry| live == e.written || (e.restored && live == e.original);
     match entry {
-        // Still ours (restore step 3's two "ours" cases): taken over with its `original` and its mark (Apply step 3).
-        // Targets are fixed (section 5), so `written` already is the target.
-        Some(e) if live == e.written || (e.restored && live == e.original) => {
-            Some(slot(JournalEntry {
-                written: target,
-                ..e
-            }))
-        }
+        // Still ours, but the user's own value meets the ceiling (a hold's battery sleep Never left by a failed
+        // restore, over the user's own 30 s): that value goes back, as for a key not in `writes`.
+        Some(e) if ours(e) && target != 0 && meets(key, e.original, target) => release(e, live),
+        // Still ours (restore step 3's two "ours" cases): taken over with its `original` and its mark (Apply step 3),
+        // and `written` becomes this run's target: a hold takes over the sleep route's 1 minute, and the other way.
+        Some(e) if ours(e) => Some(slot(JournalEntry {
+            written: target,
+            ..e
+        })),
         // Neither ours nor `original`: the user changed it since our write, and no ownership check has seen it yet
         // (one runs every 10 s). Writing over it would break "the latest change wins at once" (decision 26), so the
         // key is skipped and the entry kept as it is: the next check reports it and the core releases the key (power
@@ -306,8 +319,8 @@ fn own(
             entry: e,
             role: Role::Keep,
         }),
-        // No entry: the live value is the user's own. At the target it is skipped.
-        _ if live == target => None,
+        // No entry: the live value is the user's own. At the target, or under a ceiling, it is skipped.
+        _ if meets(key, live, target) => None,
         // No entry, or one never written (not marked, live equals `original`): a new entry, marked until our value is
         // in force, so a run that never writes it leaves nothing the check reads as the user's change (power safety
         // review finding 9). Keeping an older `original` could put back a value older than the user's latest.
@@ -502,7 +515,7 @@ mod tests {
     fn sleep_ac() -> JournalFileEntry {
         JournalFileEntry {
             plan: P1,
-            key: JournalKey::Other("sleepAc".into()),
+            key: JournalKey::Other("hibernateAc".into()),
             original: 10_800,
             written: 0,
             restored: false,
@@ -1537,5 +1550,170 @@ mod tests {
         let back = KEYS.map(|k| s.in_force(P1, k).unwrap());
         assert_eq!(back, [1, 3, 600]);
         assert!(s.held().is_empty() && s.known_entries().is_empty());
+    }
+
+    // The sleep route's short timeouts (`p2-6-sleep-route`): the four short keys at 1 minute, where the user's own is
+    // longer or Never.
+
+    use crate::ownership::fake::FAKE_SCREEN_OFF;
+    use crate::settings::SHORT_TIMEOUT_S;
+    use SettingKey::{SleepAc, VideoIdleAc, VideoIdleDc};
+
+    const SHORT: [(SettingKey, u32); 4] = [
+        (SleepAc, SHORT_TIMEOUT_S),
+        (SleepDc, SHORT_TIMEOUT_S),
+        (VideoIdleAc, SHORT_TIMEOUT_S),
+        (VideoIdleDc, SHORT_TIMEOUT_S),
+    ];
+
+    /// A fresh plan's value of every key, as `fresh` and the fake set them.
+    fn fresh_value(key: SettingKey) -> u32 {
+        match key {
+            LidAc | LidDc => 1,
+            SleepDc => 600,
+            SleepAc => 10_800,
+            VideoIdleAc => FAKE_SCREEN_OFF[0],
+            VideoIdleDc => FAKE_SCREEN_OFF[1],
+        }
+    }
+
+    #[test]
+    fn a_ceiling_is_met_at_or_under_it_and_not_by_never() {
+        for key in [SleepAc, SleepDc, VideoIdleAc, VideoIdleDc] {
+            assert!(
+                !meets(key, 0, 60),
+                "{key:?}: Never is longer than any timeout"
+            );
+            assert!(
+                meets(key, 1, 60) && meets(key, 30, 60) && meets(key, 60, 60),
+                "{key:?}"
+            );
+            assert!(!meets(key, 61, 60) && !meets(key, 18_000, 60), "{key:?}");
+            assert!(
+                meets(key, 0, 0) && !meets(key, 60, 0),
+                "{key:?}: a target of Never is met only by Never"
+            );
+        }
+        for key in [LidAc, LidDc] {
+            assert!(meets(key, 0, 0) && !meets(key, 1, 0), "{key:?}");
+            assert!(
+                meets(key, 3, 3) && !meets(key, 2, 3),
+                "{key:?}: an action is no ceiling"
+            );
+        }
+    }
+
+    #[test]
+    fn a_short_apply_writes_only_what_is_longer_or_never() {
+        let fake = fresh();
+        {
+            let mut s = fake.state();
+            s.user_write(P1, SleepAc, 0);
+            s.user_write(P1, VideoIdleAc, 30);
+            s.user_write(P1, VideoIdleDc, 60);
+        }
+        let r = run(&fake, &SHORT);
+        assert_eq!(r.result, Ok(()));
+        assert_eq!(r.written, [SleepAc, SleepDc], "{r:?}");
+        let new = |key, original| JournalEntry {
+            plan: P1,
+            key,
+            original,
+            written: SHORT_TIMEOUT_S,
+            restored: false,
+        };
+        assert_eq!(r.journal, [new(SleepAc, 0), new(SleepDc, 600)]);
+        let s = fake.state();
+        for (key, value) in [
+            (SleepAc, 60),
+            (SleepDc, 60),
+            (VideoIdleAc, 30),
+            (VideoIdleDc, 60),
+        ] {
+            assert_eq!(s.in_force(P1, key), Some(value), "{key:?}");
+        }
+        assert!(s.run_once && s.guard == FakeGuard::Running);
+    }
+
+    #[test]
+    fn a_hold_takes_the_short_battery_sleep_over_and_puts_the_other_short_keys_back() {
+        let fake = fresh();
+        assert_eq!(run(&fake, &SHORT).result, Ok(()));
+        let r = run(&fake, &ALL);
+        assert_eq!(r.result, Ok(()));
+        // Battery sleep keeps the user's own 600 as `original`; the three others are the user's again.
+        let mut journal = r.journal.clone();
+        journal.sort_by_key(|e| e.key);
+        assert_eq!(
+            journal,
+            [LidAc, LidDc, SleepDc].map(|k| JournalEntry {
+                plan: P1,
+                key: k,
+                original: fresh_value(k),
+                written: 0,
+                restored: false,
+            })
+        );
+        {
+            let s = fake.state();
+            for key in [SleepAc, VideoIdleAc, VideoIdleDc] {
+                assert_eq!(s.in_force(P1, key), Some(fresh_value(key)), "{key:?}");
+            }
+        }
+        assert_eq!(restore_all(&fake).result, Ok(()));
+        let s = fake.state();
+        for key in SettingKey::ALL {
+            assert_eq!(s.in_force(P1, key), Some(fresh_value(key)), "{key:?}");
+        }
+        assert!(s.held().is_empty() && s.known_entries().is_empty());
+    }
+
+    #[test]
+    fn a_short_apply_puts_back_a_never_left_over_the_users_own_shorter_sleep() {
+        // A hold's battery sleep Never, left by a failed restore, over the user's own 30 s.
+        let left_never = JournalEntry {
+            plan: P1,
+            key: SleepDc,
+            original: 30,
+            written: 0,
+            restored: false,
+        };
+        let fake = left(TRAY, &[(left_never, Live::Ours)], vec![]);
+        let r = run(&fake, &SHORT);
+        assert_eq!(r.result, Ok(()));
+        assert!(!r.written.contains(&SleepDc), "{r:?}");
+        assert!(r.journal.iter().all(|e| e.key != SleepDc), "{r:?}");
+        let s = fake.state();
+        assert_eq!(s.stored(P1, SleepDc), Some(30));
+        assert_eq!(s.in_force(P1, SleepDc), Some(30));
+        assert_eq!(s.in_force(P1, SleepAc), Some(60));
+    }
+
+    #[test]
+    fn a_short_apply_stopped_at_any_call_keeps_every_value_reachable_and_the_next_restore_puts_all_back()
+     {
+        let clean = fresh();
+        run(&clean, &SHORT);
+        let total = calls(&clean).len();
+        for index in 0..total {
+            let fake = fresh();
+            run_stopped(&fake, &SHORT, index);
+            let case = format!("stop at call {index}");
+            assert_reachable(&fake, &case);
+            assert_eq!(restore_all(&fake).result, Ok(()), "{case}");
+            let s = fake.state();
+            for key in SettingKey::ALL {
+                assert_eq!(s.stored(P1, key), Some(fresh_value(key)), "{case}: {key:?}");
+                assert_eq!(
+                    s.in_force(P1, key),
+                    Some(fresh_value(key)),
+                    "{case}: {key:?} in force"
+                );
+            }
+            assert!(
+                s.held().is_empty() && s.known_entries().is_empty(),
+                "{case}"
+            );
+        }
     }
 }

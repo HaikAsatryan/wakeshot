@@ -12,11 +12,11 @@ use crate::settings::{JournalEntry, PlanValues, SettingKey};
 use crate::time::Deadline;
 
 /// The user's own sleep timeout for a power source in ms, or `None` when it is Never (0): then Windows would never
-/// sleep or lock for idle either. On battery it is the journal's `original` while we own the key, since our value is
-/// Never; on AC it is always the live value, because Wakeshot never writes AC sleep (decision 17).
+/// sleep or lock for idle either. It is the journal's `original` while we own the key: a hold writes battery sleep
+/// Never, and the sleep route writes 1 minute on both sources (`p2-6-sleep-route`).
 pub fn sleep_timeout_ms(plan: &PlanValues, ac: bool, journal: &[JournalEntry]) -> Option<u64> {
     let secs = if ac {
-        plan.sleep_ac
+        user_value(journal, plan.active, SettingKey::SleepAc, plan.sleep_ac)
     } else {
         user_value(journal, plan.active, SettingKey::SleepDc, plan.sleep_dc)
     };

@@ -130,9 +130,9 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   sets the screen and sleep timeouts of the plan in use, on AC and DC, to 1 minute where the user's own is longer,
   marked in the journal as Wakeshot's. The screen one is needed: on this laptop the sleep came when the screen
   timeout turned the screen off, not at the sleep timeout (`p3-idle-sleep-check`: with the lid closed on battery,
-  Windows slept by itself, Modern Standby, locked at wake). They go back at lid open, at the first unlock after a
-  wake, when a hold starts, at input (then the 5 minutes start again), and at every other restore point; not at a
-  wake alone, so a laptop that wakes with the lid closed sleeps again. If the laptop has not
+  Windows slept by itself, Modern Standby, locked at wake). They go back at lid open, at an unlock, when a hold
+  starts, at input (then the 5 minutes start again), and at every other restore point; not at a wake alone, so a
+  laptop that wakes with the lid closed sleeps again. If the laptop has not
   slept 5 minutes later, with the lid still closed and no input since, Wakeshot hibernates it, so a lid close's sleep
   is matched even when another app holds the PC awake: `SetSuspendState(TRUE)` after `IsPwrHibernateAllowed` and
   enabling SeShutdownPrivilege, with the lid checked right before the call. If hibernate is not allowed or the call

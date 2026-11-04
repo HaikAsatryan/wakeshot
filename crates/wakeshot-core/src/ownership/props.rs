@@ -53,10 +53,13 @@ fn at() -> impl Strategy<Value = usize> {
 }
 
 /// The user's values per key, each set holding the target; the usual value first, so a shrunk case starts from it.
+/// These cases write only the hold keys at 0 (`KEYS`); the sleep route's 1-minute writes have their own stop-point
+/// test in `ownership::apply`.
 fn choices(key: SettingKey) -> [u32; 3] {
     match key {
         SettingKey::LidAc | SettingKey::LidDc => [1, TARGET, 2],
-        SettingKey::SleepDc => [600, TARGET, 10_800],
+        SettingKey::SleepDc | SettingKey::SleepAc => [600, TARGET, 10_800],
+        SettingKey::VideoIdleAc | SettingKey::VideoIdleDc => [300, TARGET, 600],
     }
 }
 
@@ -65,6 +68,9 @@ fn index(key: SettingKey) -> usize {
         SettingKey::LidAc => 0,
         SettingKey::LidDc => 1,
         SettingKey::SleepDc => 2,
+        SettingKey::SleepAc => 3,
+        SettingKey::VideoIdleAc => 4,
+        SettingKey::VideoIdleDc => 5,
     }
 }
 
@@ -73,6 +79,9 @@ fn key_name(key: SettingKey) -> &'static str {
         SettingKey::LidAc => "lidAc",
         SettingKey::LidDc => "lidDc",
         SettingKey::SleepDc => "sleepDc",
+        SettingKey::SleepAc => "sleepAc",
+        SettingKey::VideoIdleAc => "videoIdleAc",
+        SettingKey::VideoIdleDc => "videoIdleDc",
     }
 }
 
@@ -110,7 +119,7 @@ fn tray_name(who: JournalOwner) -> String {
 fn newer_entry() -> JournalFileEntry {
     JournalFileEntry {
         plan: PLANS[0],
-        key: JournalKey::Other("sleepAc".into()),
+        key: JournalKey::Other("hibernateAc".into()),
         original: 10_800,
         written: 0,
         restored: false,

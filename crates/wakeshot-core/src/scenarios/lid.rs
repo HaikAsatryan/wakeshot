@@ -1,6 +1,6 @@
 //! Lid, countdown and notice scenarios over `Core`: the lid-close lock and chime, the lock when a closed laptop
-//! changes power source, the battery floor, the countdown to hibernate, the Keep screen on idle lock, the closed-lid
-//! report, notices that wait while the user is away, and updates.
+//! changes power source, the battery floor, the countdown to sleep with its short timeouts and fallback hibernate, the
+//! Keep screen on idle lock, the closed-lid report, notices that wait while the user is away, and updates.
 //!
 //! Owner: `p2-core-lid`.
 //!
@@ -16,13 +16,13 @@ use crate::command::{
     ApplyError, Command, CountdownReason, Failure, HibernateEnd, HibernateSkip, Outcome, RestoreWhy,
 };
 use crate::event::{Event, SessionChange};
-use crate::policy::ending::IDLE_MS;
+use crate::policy::ending::{FALLBACK_MS, IDLE_MS};
 use crate::policy::lid::SOURCE_SETTLE_MS;
 use crate::process::{Alive, FileTime};
 use crate::settings::{Journal, JournalOwner, OwnedKey, PlanValues, SettingKey};
 use crate::sim::{
     self, BALANCED, KEYS, SAFETY_TICK_MS, Sim, Start, applied, claude, entries, hold, plan,
-    reset_done, restored,
+    reset_done, restored, short_entries,
 };
 use crate::sources::Activity;
 use crate::time::Now;
@@ -109,12 +109,64 @@ fn docked() -> PlanValues {
 /// What an apply leaves on a docked plan: the AC lid key is the user's own Do nothing, so the IO side skips it.
 const DOCKED_KEYS: [SettingKey; 2] = [SettingKey::LidDc, SettingKey::SleepDc];
 
-fn hibernate(reason: CountdownReason, last_resume: Option<Now>) -> Command {
+/// What the countdown sends when it is due: the last check and the going to sleep sound, then the short timeouts.
+fn sleep_check(reason: CountdownReason, last_resume: Option<Now>) -> Command {
+    Command::SleepCheck {
+        reason,
+        floor_pct: 20,
+        last_resume_mono_ms: last_resume.map(|t| t.mono_ms),
+    }
+}
+
+/// The fallback when the PC did not sleep within 5 minutes of the short timeouts.
+fn fallback(reason: CountdownReason, last_resume: Option<Now>) -> Command {
     Command::Hibernate {
         reason,
         floor_pct: 20,
         last_resume_mono_ms: last_resume.map(|t| t.mono_ms),
     }
+}
+
+fn checked(result: Result<(), HibernateSkip>) -> Event {
+    Event::Done(Outcome::SleepCheck(result))
+}
+
+/// The sleep route's `Apply` to Balanced with every short key at 1 minute.
+fn short_apply() -> Command {
+    Command::Apply {
+        plan: BALANCED,
+        writes: SettingKey::SHORT
+            .iter()
+            .map(|&k| (k, crate::settings::SHORT_TIMEOUT_S))
+            .collect(),
+    }
+}
+
+const SHORT_BACK: Command = Command::Restore {
+    plan: None,
+    why: RestoreWhy::ShortTimeouts,
+};
+
+/// The sleep check passed and the short timeouts landed on Balanced; gives the commands of both steps.
+fn short_written(sim: &mut Sim) -> Vec<Command> {
+    let mut out = sim.send(checked(Ok(())));
+    assert_eq!(count(&out, &short_apply()), 1, "{}", sim.trace());
+    out.extend(sim.send(applied(BALANCED, Ok(()), short_entries(BALANCED))));
+    out
+}
+
+/// From a due countdown to the fallback: the check passes, the short timeouts land, and the PC does not sleep for
+/// `FALLBACK_MS`. Gives the commands of the last run, which hold the `Hibernate`.
+fn to_fallback(sim: &mut Sim) -> Vec<Command> {
+    short_written(sim);
+    sim.run(FALLBACK_MS)
+}
+
+fn fallbacks(commands: &[Command]) -> Vec<&Command> {
+    commands
+        .iter()
+        .filter(|c| matches!(c, Command::Hibernate { .. }))
+        .collect()
 }
 
 fn count(commands: &[Command], wanted: &Command) -> usize {
@@ -145,10 +197,10 @@ fn notices(commands: &[Command]) -> Vec<&Notice> {
         .collect()
 }
 
-fn hibernates(commands: &[Command]) -> Vec<&Command> {
+fn sleep_checks(commands: &[Command]) -> Vec<&Command> {
     commands
         .iter()
-        .filter(|c| matches!(c, Command::Hibernate { .. }))
+        .filter(|c| matches!(c, Command::SleepCheck { .. }))
         .collect()
 }
 
@@ -169,10 +221,10 @@ fn reports(sim: &Sim) -> Vec<(u64, Vec<String>)> {
         .collect()
 }
 
-/// When each `Hibernate` went out, in run time since `from`.
-fn hibernate_times(sim: &Sim, from: Now) -> Vec<i128> {
+/// When each `SleepCheck` went out, in run time since `from`.
+fn sleep_check_times(sim: &Sim, from: Now) -> Vec<i128> {
     sim.commands()
-        .filter(|(_, c)| matches!(c, Command::Hibernate { .. }))
+        .filter(|(_, c)| matches!(c, Command::SleepCheck { .. }))
         .map(|(at, _)| i128::from(at.mono_ms) - i128::from(from.mono_ms))
         .collect()
 }
@@ -339,10 +391,14 @@ fn lid_closed_on_a_failed_restore_after_work_ended_counts_down() {
     sim.send(lid(true));
     sim.run(IDLE_MS + MINUTE);
     let trace = sim.trace();
-    assert_eq!(hibernate_times(&sim, at), [i128::from(IDLE_MS)], "{trace}");
     assert_eq!(
-        hibernates(&all(&sim)),
-        [&hibernate(CountdownReason::WorkEnded, None)],
+        sleep_check_times(&sim, at),
+        [i128::from(IDLE_MS)],
+        "{trace}"
+    );
+    assert_eq!(
+        sleep_checks(&all(&sim)),
+        [&sleep_check(CountdownReason::WorkEnded, None)],
         "{trace}"
     );
 }
@@ -364,10 +420,14 @@ fn lid_closed_during_a_step_back_with_our_do_nothing_left_counts_down() {
     sim.send(session(SessionChange::Locked));
     sim.run(IDLE_MS + MINUTE);
     let trace = sim.trace();
-    assert_eq!(hibernate_times(&sim, at), [i128::from(IDLE_MS)], "{trace}");
     assert_eq!(
-        hibernates(&all(&sim)),
-        [&hibernate(CountdownReason::Floor, None)],
+        sleep_check_times(&sim, at),
+        [i128::from(IDLE_MS)],
+        "{trace}"
+    );
+    assert_eq!(
+        sleep_checks(&all(&sim)),
+        [&sleep_check(CountdownReason::Floor, None)],
         "{trace}"
     );
 }
@@ -593,8 +653,12 @@ fn closed_on_an_unread_do_nothing(sim: &mut Sim) -> Now {
 /// The one `Hibernate` came at `IDLE_MS` after `at`, for `reason`.
 fn hibernated_after_idle(sim: &Sim, at: Now, reason: CountdownReason) {
     let trace = sim.trace();
-    assert_eq!(hibernate_times(sim, at), [i128::from(IDLE_MS)], "{trace}");
-    assert_eq!(hibernates(&all(sim)), [&hibernate(reason, None)], "{trace}");
+    assert_eq!(sleep_check_times(sim, at), [i128::from(IDLE_MS)], "{trace}");
+    assert_eq!(
+        sleep_checks(&all(sim)),
+        [&sleep_check(reason, None)],
+        "{trace}"
+    );
 }
 
 #[test]
@@ -650,7 +714,7 @@ fn with_an_unread_journal_the_countdown_waits_through_failed_retries() {
     ));
     sim.send(read(do_nothing_dc()));
     let out = sim.run(MINUTE);
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
     sim.send(restored(None, RestoreWhy::Leftover, Ok(()), vec![]));
     sim.send(read(plan(BALANCED)));
     sim.run(IDLE_MS);
@@ -665,7 +729,7 @@ fn with_an_unread_journal_the_users_own_do_nothing_gives_no_countdown() {
     sim.send(restored(None, RestoreWhy::Leftover, Ok(()), vec![]));
     let mut out = sim.send(read(do_nothing_dc()));
     out.extend(sim.run(20 * MINUTE));
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
 
     // The lid opens: the waiting want ends as a countdown would. Closed again, nothing of ours keeps it running, so a
     // Sleep the user sets later is Windows' to act on.
@@ -674,7 +738,7 @@ fn with_an_unread_journal_the_users_own_do_nothing_gives_no_countdown() {
     assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
     let mut out = sim.send(read(plan(BALANCED)));
     out.extend(sim.run(20 * MINUTE));
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
 }
 
 // `p2-6-unread-lid-countdown` Found outside scope 2: the same for a step back with the lid closed. Once a restore puts
@@ -713,10 +777,12 @@ fn with_an_unread_journal_a_closed_step_back_counts_down_once_the_users_sleep_is
     sim.run(IDLE_MS);
     hibernated_after_idle(&sim, at, CountdownReason::Floor);
 
-    // Resumed with the lid still closed: the countdown is done, and the want that waited does not start another.
+    // The PC did not sleep, so the fallback hibernate came and resumed with the lid still closed: the countdown is
+    // done, and the want that waited does not start another.
+    to_fallback(&mut sim);
     sim.send(hibernated(HibernateEnd::Resumed));
     sim.run(20 * MINUTE);
-    assert_eq!(hibernates(&all(&sim)).len(), 1, "{}", sim.trace());
+    assert_eq!(sleep_checks(&all(&sim)).len(), 1, "{}", sim.trace());
 }
 
 #[test]
@@ -747,7 +813,7 @@ fn with_an_unread_journal_a_close_after_the_step_back_counts_down_once_a_retry_w
     ));
     sim.send(read(do_nothing_dc()));
     let out = sim.run(MINUTE);
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
     sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
     sim.send(read(plan(BALANCED)));
     sim.run(IDLE_MS);
@@ -762,7 +828,7 @@ fn with_an_unread_journal_the_users_own_battery_do_nothing_gives_no_floor_countd
     sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
     let mut out = sim.send(read(do_nothing_dc()));
     out.extend(sim.run(20 * MINUTE));
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
 
     // The lid opens: the waiting want ends as a countdown would. Closed again, nothing of ours keeps it running, so a
     // Sleep the user sets later is Windows' to act on.
@@ -771,7 +837,7 @@ fn with_an_unread_journal_the_users_own_battery_do_nothing_gives_no_floor_countd
     assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
     let mut out = sim.send(read(plan(BALANCED)));
     out.extend(sim.run(20 * MINUTE));
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
 }
 
 #[test]
@@ -790,7 +856,7 @@ fn with_an_unread_journal_a_step_back_with_the_lid_open_wants_no_countdown() {
     out.extend(sim.run(20 * MINUTE));
     let trace = sim.trace();
     assert_eq!(count(&out, &LOCK), 0, "{trace}");
-    assert!(hibernates(&out).is_empty(), "{trace}");
+    assert!(sleep_checks(&out).is_empty(), "{trace}");
 }
 
 // The end of the window (`p2-6-record-lost` deliverable 4): known or lost, with the lid closed and nothing holding,
@@ -805,7 +871,7 @@ fn a_lost_journal_with_the_lid_closed_counts_down_after_the_reset() {
     let out = sim.run_failing_restores(2 * MINUTE, RESTORE_FAILED);
     let trace = sim.trace();
     assert!(
-        hibernates(&out).is_empty(),
+        sleep_checks(&out).is_empty(),
         "no countdown in the window\n{trace}"
     );
     assert_eq!(count(&out, &RESET), 1, "{trace}");
@@ -826,6 +892,7 @@ fn a_lost_journal_with_the_lid_closed_counts_down_after_the_reset() {
     hibernated_after_idle(&sim, at, CountdownReason::WorkEnded);
 
     // The notice went to a closed laptop's screen: it comes again at the open laptop.
+    to_fallback(&mut sim);
     sim.send(hibernated(HibernateEnd::Resumed));
     let out = sim.send(lid(false));
     assert_eq!(notices(&out), [&lost], "{}", sim.trace());
@@ -849,7 +916,7 @@ fn a_damaged_file_with_the_lid_closed_counts_down_after_its_reset() {
         sim.trace()
     );
     let out = sim.run(MINUTE);
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
     sim.send(reset_done(&[SettingKey::LidDc], Ok(())));
     sim.send(read(plan(BALANCED)));
     sim.run(IDLE_MS);
@@ -879,7 +946,7 @@ fn after_the_window_a_do_nothing_still_in_force_gives_no_countdown() {
     let mut out = sim.send(read(do_nothing_dc()));
     out.extend(sim.run(20 * MINUTE));
     let trace = sim.trace();
-    assert!(hibernates(&out).is_empty(), "{trace}");
+    assert!(sleep_checks(&out).is_empty(), "{trace}");
     assert_eq!(count(&out, &LOCK), 0, "{trace}");
 }
 
@@ -907,14 +974,25 @@ fn a_hold_in_the_window_runs_on_requests_and_counts_down_when_it_ends() {
     let out = sim.send(lid(true));
     assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
     sim.run_failing_restores(2 * MINUTE, RESTORE_FAILED);
-    sim.send(reset_done(
+    // The window ends: the copy still shows the Do nothing, so the lock the close did not get waits for a read
+    // (`p2-6-sleep-route` deliverable 8).
+    let out = sim.send(reset_done(
         &[SettingKey::LidDc, SettingKey::SleepDc],
         Ok(()),
     ));
-    sim.send(read(plan(BALANCED)));
-    let out = sim.run(10 * MINUTE);
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    let out = sim.send(read(plan(BALANCED)));
+    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
     assert!(
-        hibernates(&out).is_empty(),
+        position(&out, &LOCK) < position(&out, &CHIME),
+        "{}",
+        sim.trace()
+    );
+    sim.send(session(SessionChange::Locked));
+    let out = sim.run(10 * MINUTE);
+    assert_eq!(count(&out, &LOCK), 0, "once {}", sim.trace());
+    assert!(
+        sleep_checks(&out).is_empty(),
         "the hold holds\n{}",
         sim.trace()
     );
@@ -926,6 +1004,33 @@ fn a_hold_in_the_window_runs_on_requests_and_counts_down_when_it_ends() {
     sim.send(idle(1));
     sim.run(IDLE_MS);
     hibernated_after_idle(&sim, at, CountdownReason::WorkEnded);
+}
+
+#[test]
+fn a_hold_in_the_window_on_the_users_own_do_nothing_gets_no_lock_when_it_ends() {
+    // As above, but the user's own battery lid action is Do nothing: the laptop would run closed without Wakeshot too.
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(false, 80));
+    sim.send(read(do_nothing_dc()));
+    sim.send(lid(false));
+    sim.send(working(1));
+    let load_failed = Failure {
+        call: "ReadFile (journal.json)",
+        code: 33,
+    };
+    sim.send(applied(
+        BALANCED,
+        Err(ApplyError::SafetyNet(load_failed)),
+        vec![],
+    ));
+    sim.send(lid(true));
+    sim.run_failing_restores(2 * MINUTE, RESTORE_FAILED);
+    let mut out = sim.send(reset_done(&[], Ok(())));
+    out.extend(sim.send(read(do_nothing_dc())));
+    out.extend(sim.run(10 * MINUTE));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    assert_eq!(count(&out, &CHIME), 0, "{}", sim.trace());
 }
 
 // Item 2: the power source changes with the lid closed.
@@ -1058,7 +1163,7 @@ fn battery_floor_with_the_lid_open_steps_back_then_ac_back_holds_again() {
     let mut out = sim.run(10 * MINUTE);
     out.extend(sim.send(power(false, 15)));
     let trace = sim.trace();
-    assert!(hibernates(&out).is_empty(), "{trace}");
+    assert!(sleep_checks(&out).is_empty(), "{trace}");
     assert!(notices(&out).is_empty(), "{trace}");
     assert_eq!(plays(&out), 0, "{trace}");
     assert_eq!(count(&out, &SYSTEM), 0, "{trace}");
@@ -1094,11 +1199,15 @@ fn battery_floor_with_the_lid_closed_hibernates_after_5_minutes_idle() {
     let out = sim.run(IDLE_MS + MINUTE);
     let trace = sim.trace();
     assert_eq!(
-        hibernates(&out),
-        [&hibernate(CountdownReason::Floor, None)],
+        sleep_checks(&out),
+        [&sleep_check(CountdownReason::Floor, None)],
         "{trace}"
     );
-    assert_eq!(hibernate_times(&sim, at), [i128::from(IDLE_MS)], "{trace}");
+    assert_eq!(
+        sleep_check_times(&sim, at),
+        [i128::from(IDLE_MS)],
+        "{trace}"
+    );
     never_going_to_sleep(&sim);
 }
 
@@ -1115,7 +1224,7 @@ fn ac_back_cancels_the_floor_countdown_and_holds_again() {
     assert!(logs(&out) >= 1, "the cancel is logged\n{trace}");
 
     let out = sim.run(10 * MINUTE);
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
 }
 
 #[test]
@@ -1207,7 +1316,7 @@ fn battery_floor_with_the_lid_closed_and_the_users_own_battery_do_nothing_gives_
     assert_eq!(count(&out, &FLOOR_CHIME), 1, "{trace}");
     sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
     let out = sim.run(20 * MINUTE);
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
 }
 
 #[test]
@@ -1227,7 +1336,7 @@ fn a_lid_close_after_the_step_back_with_the_users_own_battery_do_nothing_gives_n
     out.extend(sim.run(20 * MINUTE));
     let trace = sim.trace();
     assert_eq!(count(&out, &LOCK), 0, "{trace}");
-    assert!(hibernates(&out).is_empty(), "{trace}");
+    assert!(sleep_checks(&out).is_empty(), "{trace}");
 }
 
 // Item 4: the countdown.
@@ -1252,20 +1361,24 @@ fn work_ends_with_the_lid_closed_hibernates_after_5_minutes_idle() {
         1,
         "settings come back first\n{trace}"
     );
-    assert!(hibernates(&out).is_empty(), "{trace}");
+    assert!(sleep_checks(&out).is_empty(), "{trace}");
     assert!(logs(&out) >= 2, "hold end and countdown start\n{trace}");
     sim.send(restored(None, RestoreWhy::WorkEnded, Ok(()), vec![]));
 
     let out = sim.run(IDLE_MS - SECOND);
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
     let out = sim.run(2 * SECOND);
     let trace = sim.trace();
     assert_eq!(
-        hibernates(&out),
-        [&hibernate(CountdownReason::WorkEnded, None)],
+        sleep_checks(&out),
+        [&sleep_check(CountdownReason::WorkEnded, None)],
         "{trace}"
     );
-    assert_eq!(hibernate_times(&sim, at), [i128::from(IDLE_MS)], "{trace}");
+    assert_eq!(
+        sleep_check_times(&sim, at),
+        [i128::from(IDLE_MS)],
+        "{trace}"
+    );
     assert_eq!(plays(&out), 0, "no sound from the core\n{trace}");
     assert!(logs(&out) >= 1, "the due countdown is logged\n{trace}");
     never_going_to_sleep(&sim);
@@ -1279,13 +1392,13 @@ fn work_ended_with_the_lid_closed_does_not_hibernate_while_typing() {
         sim.input();
         out.extend(sim.run(MINUTE));
     }
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
 
     sim.input();
     let stopped = sim.now();
     sim.run(IDLE_MS + MINUTE);
     assert_eq!(
-        hibernate_times(&sim, stopped),
+        sleep_check_times(&sim, stopped),
         [i128::from(IDLE_MS)],
         "{}",
         sim.trace()
@@ -1302,7 +1415,7 @@ fn work_ended_after_a_long_idle_hibernates_at_once() {
     sim.send(idle(1));
     sim.send(restored(None, RestoreWhy::WorkEnded, Ok(()), vec![]));
     sim.run(SECOND);
-    assert_eq!(hibernate_times(&sim, ended), [0], "{}", sim.trace());
+    assert_eq!(sleep_check_times(&sim, ended), [0], "{}", sim.trace());
 }
 
 #[test]
@@ -1314,7 +1427,7 @@ fn a_resume_during_the_countdown_restarts_the_idle_count() {
     let resumed = sim.now();
     let out = sim.run(IDLE_MS - SECOND);
     assert!(
-        hibernates(&out).is_empty(),
+        sleep_checks(&out).is_empty(),
         "a resume counts as input\n{}",
         sim.trace()
     );
@@ -1322,12 +1435,12 @@ fn a_resume_during_the_countdown_restarts_the_idle_count() {
     let out = sim.run(2 * SECOND);
     let trace = sim.trace();
     assert_eq!(
-        hibernates(&out),
-        [&hibernate(CountdownReason::WorkEnded, Some(resumed))],
+        sleep_checks(&out),
+        [&sleep_check(CountdownReason::WorkEnded, Some(resumed))],
         "{trace}"
     );
     assert_eq!(
-        hibernate_times(&sim, resumed),
+        sleep_check_times(&sim, resumed),
         [i128::from(IDLE_MS)],
         "{trace}"
     );
@@ -1341,7 +1454,7 @@ fn work_ends_with_the_users_own_do_nothing_gives_no_countdown() {
     out.extend(sim.send(restored(None, RestoreWhy::WorkEnded, Ok(()), vec![])));
     out.extend(sim.run(20 * MINUTE));
     let trace = sim.trace();
-    assert!(hibernates(&out).is_empty(), "{trace}");
+    assert!(sleep_checks(&out).is_empty(), "{trace}");
     assert_eq!(count(&out, &OFF), 1, "only the release\n{trace}");
 }
 
@@ -1352,7 +1465,7 @@ fn a_new_hold_cancels_the_countdown() {
     let out = sim.send(working(1));
     assert!(logs(&out) >= 1, "the cancel is logged\n{}", sim.trace());
     let out = sim.run(20 * MINUTE);
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
 }
 
 #[test]
@@ -1362,7 +1475,7 @@ fn opening_the_lid_cancels_the_countdown() {
     let out = sim.send(lid(false));
     assert!(logs(&out) >= 1, "the cancel is logged\n{}", sim.trace());
     let out = sim.run(20 * MINUTE);
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
 }
 
 #[test]
@@ -1372,14 +1485,14 @@ fn another_session_on_the_console_holds_the_countdown_back() {
     let mut out = sim.send(session(SessionChange::ConsoleLeft));
     out.extend(sim.run(20 * MINUTE));
     assert!(
-        hibernates(&out).is_empty(),
+        sleep_checks(&out).is_empty(),
         "never hibernate the other user's PC\n{}",
         sim.trace()
     );
     let back = sim.now();
     sim.send(session(SessionChange::ConsoleBack));
     sim.run(SECOND);
-    assert_eq!(hibernate_times(&sim, back), [0], "{}", sim.trace());
+    assert_eq!(sleep_check_times(&sim, back), [0], "{}", sim.trace());
 }
 
 #[test]
@@ -1396,22 +1509,22 @@ fn a_power_source_change_onto_the_users_own_do_nothing_cancels_the_countdown_and
     let out = sim.send(power(true, 80));
     assert!(logs(&out) >= 1, "the cancel is logged\n{}", sim.trace());
     let out = sim.run(10 * MINUTE);
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
 
     // A short AC drop does not start it again.
     let mut out = sim.send(power(false, 80));
     out.extend(sim.run(3 * SECOND));
     out.extend(sim.send(power(true, 80)));
     out.extend(sim.run(5 * MINUTE));
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
 
     // Unplugged for good: the countdown again once the source lasted; idle is long past 5 minutes.
     let unplugged = sim.now();
     let out = sim.send(power(false, 80));
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
     sim.run(SOURCE_SETTLE_MS + SECOND);
     assert_eq!(
-        hibernate_times(&sim, unplugged),
+        sleep_check_times(&sim, unplugged),
         [i128::from(SOURCE_SETTLE_MS)],
         "{}",
         sim.trace()
@@ -1427,7 +1540,7 @@ fn a_power_source_change_onto_the_users_own_sleep_keeps_the_countdown() {
     sim.send(power(true, 80));
     sim.run(IDLE_MS + MINUTE);
     assert_eq!(
-        hibernate_times(&sim, at),
+        sleep_check_times(&sim, at),
         [i128::from(IDLE_MS)],
         "{}",
         sim.trace()
@@ -1448,7 +1561,7 @@ fn work_ended_on_the_users_own_ac_do_nothing_then_unplugged_gives_no_countdown()
     let mut out = sim.send(power(false, 80));
     out.extend(sim.run(20 * MINUTE));
     let trace = sim.trace();
-    assert!(hibernates(&out).is_empty(), "{trace}");
+    assert!(sleep_checks(&out).is_empty(), "{trace}");
     assert_eq!(
         count(&out, &LOCK),
         0,
@@ -1456,43 +1569,83 @@ fn work_ended_on_the_users_own_ac_do_nothing_then_unplugged_gives_no_countdown()
     );
 }
 
-// Item 5: how the hibernate ended.
+// Item 5: the sleep check, the short timeouts and the fallback hibernate (`p2-6-sleep-route`).
 
-#[test]
-fn hibernate_not_allowed_shows_a_notice_and_ends_the_countdown() {
-    for end in [
-        HibernateEnd::NotAllowed,
-        HibernateEnd::Failed(SUSPEND_FAILED),
-        HibernateEnd::Skipped(HibernateSkip::LidUnknown),
-    ] {
-        let mut sim = work_ended_closed(true);
-        sim.run(IDLE_MS + MINUTE);
-        assert_eq!(hibernates(&all(&sim)).len(), 1);
-        let out = sim.send(hibernated(end));
-        let trace = sim.trace();
-        assert_eq!(
-            notices(&out),
-            [&Notice::HibernateFailed],
-            "{end:?}\n{trace}"
-        );
-        assert!(logs(&out) >= 1, "{end:?}\n{trace}");
-        let out = sim.run(20 * MINUTE);
-        assert!(hibernates(&out).is_empty(), "{end:?}\n{}", sim.trace());
+/// When each fallback `Hibernate` went out, in run time since `from`.
+fn fallback_times(sim: &Sim, from: Now) -> Vec<i128> {
+    sim.commands()
+        .filter(|(_, c)| matches!(c, Command::Hibernate { .. }))
+        .map(|(at, _)| i128::from(at.mono_ms) - i128::from(from.mono_ms))
+        .collect()
+}
+
+/// The sleep route's apply to Balanced without the keys the user took back.
+fn short_apply_without(released: &[SettingKey]) -> Command {
+    Command::Apply {
+        plan: BALANCED,
+        writes: SettingKey::SHORT
+            .iter()
+            .filter(|k| !released.contains(k))
+            .map(|&k| (k, crate::settings::SHORT_TIMEOUT_S))
+            .collect(),
     }
 }
 
 #[test]
-fn hibernate_skipped_for_input_goes_on() {
+fn a_passed_sleep_check_writes_the_short_timeouts_and_hibernates_5_minutes_after_them() {
+    let mut sim = work_ended_closed(false);
+    sim.run(IDLE_MS + MINUTE);
+    assert_eq!(sleep_checks(&all(&sim)).len(), 1, "{}", sim.trace());
+    let written = sim.now();
+    let out = short_written(&mut sim);
+    let trace = sim.trace();
+    assert!(fallbacks(&out).is_empty(), "{trace}");
+    assert_eq!(
+        plays(&out),
+        0,
+        "the sound is the hibernate thread's\n{trace}"
+    );
+    assert!(
+        logs(&out) >= 2,
+        "the check and the write are logged\n{trace}"
+    );
+
+    let out = sim.run(FALLBACK_MS - SECOND);
+    assert!(fallbacks(&out).is_empty(), "{}", sim.trace());
+    assert_eq!(count(&out, &SHORT_BACK), 0, "{}", sim.trace());
+    let out = sim.run(2 * SECOND);
+    let trace = sim.trace();
+    assert_eq!(
+        fallbacks(&out),
+        [&fallback(CountdownReason::WorkEnded, None)],
+        "{trace}"
+    );
+    assert_eq!(
+        fallback_times(&sim, written),
+        [i128::from(FALLBACK_MS)],
+        "{trace}"
+    );
+    assert_eq!(
+        count(&out, &SHORT_BACK),
+        0,
+        "they stay for Windows\n{trace}"
+    );
+    never_going_to_sleep(&sim);
+}
+
+#[test]
+fn a_sleep_check_skipped_for_input_goes_on() {
     let mut sim = work_ended_closed(true);
     sim.run(IDLE_MS + MINUTE);
-    let out = sim.send(hibernated(HibernateEnd::Skipped(HibernateSkip::InputSeen)));
+    let out = sim.send(checked(Err(HibernateSkip::InputSeen)));
     assert!(notices(&out).is_empty(), "{}", sim.trace());
+    assert_eq!(count(&out, &short_apply()), 0, "{}", sim.trace());
     sim.input();
     let typed = sim.now();
     let out = sim.run(IDLE_MS + MINUTE);
-    assert_eq!(hibernates(&out).len(), 1, "{}", sim.trace());
+    assert_eq!(sleep_checks(&out).len(), 1, "{}", sim.trace());
     assert_eq!(
-        hibernate_times(&sim, typed).last(),
+        sleep_check_times(&sim, typed).last(),
         Some(&i128::from(IDLE_MS)),
         "{}",
         sim.trace()
@@ -1500,42 +1653,51 @@ fn hibernate_skipped_for_input_goes_on() {
 }
 
 #[test]
-fn hibernate_skipped_with_the_lid_open_ends_the_countdown() {
+fn a_sleep_check_skipped_with_the_lid_open_ends_the_countdown() {
     let mut sim = work_ended_closed(true);
     sim.run(IDLE_MS + MINUTE);
-    let mut out = sim.send(hibernated(HibernateEnd::Skipped(HibernateSkip::LidOpen)));
+    let mut out = sim.send(checked(Err(HibernateSkip::LidOpen)));
     out.extend(sim.run(20 * MINUTE));
     let trace = sim.trace();
     assert!(notices(&out).is_empty(), "{trace}");
-    assert!(hibernates(&out).is_empty(), "{trace}");
+    assert!(sleep_checks(&out).is_empty(), "{trace}");
+    assert_eq!(count(&out, &short_apply()), 0, "{trace}");
 }
 
 #[test]
-fn hibernate_skipped_on_ac_ends_only_the_floor_countdown() {
+fn a_sleep_check_with_the_lid_unknown_still_writes_the_short_timeouts() {
+    let mut sim = work_ended_closed(true);
+    sim.run(IDLE_MS + MINUTE);
+    let out = sim.send(checked(Err(HibernateSkip::LidUnknown)));
+    assert_eq!(count(&out, &short_apply()), 1, "{}", sim.trace());
+}
+
+#[test]
+fn a_sleep_check_skipped_on_ac_ends_only_the_floor_countdown() {
     let mut sim = holding(false);
     sim.send(lid(true));
     sim.send(power(false, 19));
     sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
     sim.run(IDLE_MS + MINUTE);
-    let mut out = sim.send(hibernated(HibernateEnd::Skipped(HibernateSkip::OnAc)));
+    let mut out = sim.send(checked(Err(HibernateSkip::OnAc)));
     out.extend(sim.run(20 * MINUTE));
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
+    assert_eq!(count(&out, &short_apply()), 0, "{}", sim.trace());
 }
 
 #[test]
-fn hibernate_skipped_above_the_floor_waits_for_a_new_battery_reading() {
+fn a_sleep_check_skipped_above_the_floor_waits_for_a_new_battery_reading() {
     let mut sim = holding(false);
     sim.send(lid(true));
     sim.send(power(false, 19));
     sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
     sim.run(IDLE_MS + MINUTE);
-    let out = sim.send(hibernated(HibernateEnd::Skipped(HibernateSkip::AboveFloor)));
+    let out = sim.send(checked(Err(HibernateSkip::AboveFloor)));
     assert!(notices(&out).is_empty(), "{}", sim.trace());
     let out = sim.run(10 * MINUTE);
     assert!(
-        hibernates(&out).is_empty(),
-        "the two readings disagree
-{}",
+        sleep_checks(&out).is_empty(),
+        "the two readings disagree\n{}",
         sim.trace()
     );
 
@@ -1543,21 +1705,103 @@ fn hibernate_skipped_above_the_floor_waits_for_a_new_battery_reading() {
     sim.send(power(false, 18));
     let out = sim.run(SAFETY_TICK_MS);
     assert_eq!(
-        hibernates(&out),
-        [&hibernate(CountdownReason::Floor, None)],
+        sleep_checks(&out),
+        [&sleep_check(CountdownReason::Floor, None)],
         "{}",
         sim.trace()
     );
 }
 
 #[test]
+fn a_fallback_that_does_not_happen_shows_a_notice_and_keeps_the_short_timeouts() {
+    for end in [
+        HibernateEnd::NotAllowed,
+        HibernateEnd::Failed(SUSPEND_FAILED),
+        HibernateEnd::Skipped(HibernateSkip::LidUnknown),
+    ] {
+        let mut sim = work_ended_closed(true);
+        sim.run(IDLE_MS + MINUTE);
+        let out = to_fallback(&mut sim);
+        assert_eq!(fallbacks(&out).len(), 1, "{end:?}\n{}", sim.trace());
+        let out = sim.send(hibernated(end));
+        let trace = sim.trace();
+        assert_eq!(
+            notices(&out),
+            [&Notice::HibernateFailed],
+            "{end:?}\n{trace}"
+        );
+        assert_eq!(count(&out, &SHORT_BACK), 0, "{end:?}\n{trace}");
+        assert!(logs(&out) >= 1, "{end:?}\n{trace}");
+        let out = sim.run(20 * MINUTE);
+        let trace = sim.trace();
+        assert!(
+            fallbacks(&out).is_empty(),
+            "one per countdown\n{end:?}\n{trace}"
+        );
+        assert!(sleep_checks(&out).is_empty(), "{end:?}\n{trace}");
+        assert_eq!(count(&out, &SHORT_BACK), 0, "{end:?}\n{trace}");
+
+        // Someone types on an external screen: their own timeouts back; once they leave, the short ones again,
+        // with no second hibernate and no second notice.
+        sim.input();
+        let out = sim.run(SAFETY_TICK_MS);
+        assert_eq!(count(&out, &SHORT_BACK), 1, "{end:?}\n{}", sim.trace());
+        let out = sim.run(IDLE_MS);
+        assert_eq!(sleep_checks(&out).len(), 1, "{end:?}\n{}", sim.trace());
+        let mut out = short_written(&mut sim);
+        out.extend(sim.run(20 * MINUTE));
+        let trace = sim.trace();
+        assert!(fallbacks(&out).is_empty(), "{end:?}\n{trace}");
+        assert!(notices(&out).is_empty(), "{end:?}\n{trace}");
+    }
+}
+
+#[test]
+fn a_fallback_skipped_for_input_puts_the_short_timeouts_back_and_counts_again() {
+    let mut sim = work_ended_closed(true);
+    sim.run(IDLE_MS + MINUTE);
+    to_fallback(&mut sim);
+    let out = sim.send(hibernated(HibernateEnd::Skipped(HibernateSkip::InputSeen)));
+    assert_eq!(count(&out, &SHORT_BACK), 1, "{}", sim.trace());
+    assert!(notices(&out).is_empty(), "{}", sim.trace());
+    sim.input();
+    let typed = sim.now();
+    sim.run(IDLE_MS + MINUTE);
+    assert_eq!(
+        sleep_check_times(&sim, typed).last(),
+        Some(&i128::from(IDLE_MS)),
+        "{}",
+        sim.trace()
+    );
+}
+
+#[test]
+fn a_fallback_skipped_with_the_lid_open_puts_the_short_timeouts_back() {
+    let mut sim = work_ended_closed(true);
+    sim.run(IDLE_MS + MINUTE);
+    to_fallback(&mut sim);
+    let mut out = sim.send(hibernated(HibernateEnd::Skipped(HibernateSkip::LidOpen)));
+    assert_eq!(count(&out, &SHORT_BACK), 1, "{}", sim.trace());
+    out.extend(sim.run(20 * MINUTE));
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
+}
+
+#[test]
 fn a_hibernate_that_resumed_counts_as_a_resume() {
     let mut sim = work_ended_closed(true);
     sim.run(IDLE_MS + MINUTE);
+    to_fallback(&mut sim);
     let back = sim.now();
-    sim.send(hibernated(HibernateEnd::Resumed));
+    let out = sim.send(hibernated(HibernateEnd::Resumed));
+    assert_eq!(
+        count(&out, &SHORT_BACK),
+        1,
+        "the countdown is done\n{}",
+        sim.trace()
+    );
     let out = sim.run(20 * MINUTE);
-    assert!(hibernates(&out).is_empty(), "it ended\n{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "it ended\n{}", sim.trace());
+    assert!(fallbacks(&out).is_empty(), "it ended\n{}", sim.trace());
 
     // The lid stayed closed; new work ends again: idle counts from that resume.
     sim.send(working(1));
@@ -1565,11 +1809,284 @@ fn a_hibernate_that_resumed_counts_as_a_resume() {
     sim.send(idle(1));
     let out = sim.run(SECOND);
     assert_eq!(
-        hibernates(&out),
-        [&hibernate(CountdownReason::WorkEnded, Some(back))],
+        sleep_checks(&out),
+        [&sleep_check(CountdownReason::WorkEnded, Some(back))],
         "{}",
         sim.trace()
     );
+}
+
+#[test]
+fn the_short_timeouts_go_back_when_the_lid_opens() {
+    let mut sim = work_ended_closed(false);
+    sim.run(IDLE_MS + MINUTE);
+    short_written(&mut sim);
+    sim.run(MINUTE);
+    let out = sim.send(lid(false));
+    assert_eq!(count(&out, &SHORT_BACK), 1, "{}", sim.trace());
+    let out = sim.run(20 * MINUTE);
+    assert!(fallbacks(&out).is_empty(), "{}", sim.trace());
+    assert_eq!(count(&out, &SHORT_BACK), 0, "once\n{}", sim.trace());
+}
+
+#[test]
+fn an_unlock_puts_the_short_timeouts_back_and_the_countdown_counts_from_it() {
+    let mut sim = work_ended_closed(true);
+    sim.send(session(SessionChange::Locked));
+    sim.run(IDLE_MS + MINUTE);
+    short_written(&mut sim);
+    sim.run(MINUTE);
+    // A sign-in by face gives no input Windows counts.
+    let unlocked = sim.now();
+    let out = sim.send(session(SessionChange::Unlocked));
+    assert_eq!(count(&out, &SHORT_BACK), 1, "{}", sim.trace());
+    let out = sim.run(IDLE_MS - SECOND);
+    assert!(
+        sleep_checks(&out).is_empty(),
+        "the user is there\n{}",
+        sim.trace()
+    );
+    assert!(fallbacks(&out).is_empty(), "{}", sim.trace());
+    let out = sim.run(2 * SECOND);
+    assert_eq!(
+        sleep_checks(&out),
+        [&sleep_check(CountdownReason::WorkEnded, Some(unlocked))],
+        "{}",
+        sim.trace()
+    );
+}
+
+#[test]
+fn input_after_the_write_puts_them_back_and_waits_5_minutes_again() {
+    let mut sim = work_ended_closed(true);
+    sim.run(IDLE_MS + MINUTE);
+    short_written(&mut sim);
+    sim.run(MINUTE);
+    sim.input();
+    let typed = sim.now();
+    let out = sim.run(SAFETY_TICK_MS);
+    assert_eq!(count(&out, &SHORT_BACK), 1, "{}", sim.trace());
+    let out = sim.run(IDLE_MS);
+    let trace = sim.trace();
+    assert!(fallbacks(&out).is_empty(), "{trace}");
+    assert_eq!(
+        sleep_check_times(&sim, typed).last(),
+        Some(&i128::from(IDLE_MS)),
+        "{trace}"
+    );
+}
+
+#[test]
+fn a_hold_that_starts_puts_them_back_before_its_apply() {
+    let mut sim = work_ended_closed(true);
+    sim.run(IDLE_MS + MINUTE);
+    short_written(&mut sim);
+    let out = sim.send(working(2));
+    let hold_apply = Command::Apply {
+        plan: BALANCED,
+        writes: KEYS.iter().map(|&k| (k, 0)).collect(),
+    };
+    let trace = sim.trace();
+    assert_eq!(count(&out, &SHORT_BACK), 1, "{trace}");
+    assert!(
+        position(&out, &SHORT_BACK) < position(&out, &hold_apply),
+        "{trace}"
+    );
+    let out = sim.run(20 * MINUTE);
+    assert!(fallbacks(&out).is_empty(), "{}", sim.trace());
+}
+
+#[test]
+fn a_wake_with_the_lid_closed_keeps_them_and_the_fallback_counts_from_the_resume() {
+    let mut sim = work_ended_closed(false);
+    sim.run(IDLE_MS + MINUTE);
+    short_written(&mut sim);
+    sim.run(MINUTE);
+    let out = sim.suspend(30 * MINUTE);
+    assert_eq!(count(&out, &SHORT_BACK), 0, "a wake alone\n{}", sim.trace());
+    let woke = sim.now();
+    let out = sim.run(FALLBACK_MS - SECOND);
+    assert!(fallbacks(&out).is_empty(), "{}", sim.trace());
+    assert_eq!(count(&out, &SHORT_BACK), 0, "{}", sim.trace());
+    let out = sim.run(2 * SECOND);
+    assert_eq!(
+        fallbacks(&out),
+        [&fallback(CountdownReason::WorkEnded, Some(woke))],
+        "{}",
+        sim.trace()
+    );
+}
+
+#[test]
+fn a_sleep_seen_only_by_the_clock_gap_starts_the_fallback_again() {
+    // The `Resumed` post was lost: the tick after the suspend sees the wall clock 10 minutes past run time.
+    let mut sim = work_ended_closed(false);
+    sim.run(IDLE_MS + MINUTE);
+    short_written(&mut sim);
+    sim.run(MINUTE);
+    sim.send(Event::Suspending);
+    let woke = sim.now();
+    sim.set_wall(woke.wall_ms + 10 * 60_000);
+    sim.run(FALLBACK_MS + SAFETY_TICK_MS);
+    let times = fallback_times(&sim, woke);
+    let trace = sim.trace();
+    assert_eq!(times.len(), 1, "{trace}");
+    assert!(
+        (i128::from(FALLBACK_MS)..=i128::from(FALLBACK_MS + SAFETY_TICK_MS)).contains(&times[0]),
+        "{trace}"
+    );
+
+    // A `Suspending` the clocks do not confirm leaves the fallback where it was.
+    let mut sim = work_ended_closed(false);
+    sim.run(IDLE_MS + MINUTE);
+    let written_too = sim.now();
+    short_written(&mut sim);
+    sim.run(MINUTE);
+    sim.send(Event::Suspending);
+    sim.run(FALLBACK_MS);
+    assert_eq!(
+        fallback_times(&sim, written_too),
+        [i128::from(FALLBACK_MS)],
+        "{}",
+        sim.trace()
+    );
+}
+
+#[test]
+fn a_users_change_to_a_short_timeout_is_not_written_again_in_this_countdown() {
+    let mut sim = work_ended_closed(true);
+    sim.run(IDLE_MS + MINUTE);
+    short_written(&mut sim);
+    let changed = OwnedKey {
+        plan: BALANCED,
+        key: SettingKey::VideoIdleDc,
+    };
+    let out = sim.send(Event::UserChanged(changed));
+    assert_eq!(
+        notices(&out),
+        [&Notice::UserChanged(SettingKey::VideoIdleDc)],
+        "{}",
+        sim.trace()
+    );
+    sim.input();
+    sim.run(SAFETY_TICK_MS);
+    let out = sim.run(IDLE_MS);
+    assert_eq!(sleep_checks(&out).len(), 1, "{}", sim.trace());
+    let out = sim.send(checked(Ok(())));
+    assert_eq!(
+        count(&out, &short_apply_without(&[SettingKey::VideoIdleDc])),
+        1,
+        "{}",
+        sim.trace()
+    );
+}
+
+#[test]
+fn the_floor_countdown_writes_them_too_and_ac_back_puts_them_back() {
+    let mut sim = holding(false);
+    sim.send(lid(true));
+    sim.send(power(false, 19));
+    sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
+    sim.run(IDLE_MS + MINUTE);
+    assert_eq!(
+        sleep_checks(&all(&sim)),
+        [&sleep_check(CountdownReason::Floor, None)],
+        "{}",
+        sim.trace()
+    );
+    short_written(&mut sim);
+    let out = sim.send(power(true, 19));
+    assert_eq!(count(&out, &SHORT_BACK), 1, "{}", sim.trace());
+    let out = sim.run(20 * MINUTE);
+    assert!(fallbacks(&out).is_empty(), "{}", sim.trace());
+}
+
+#[test]
+fn short_timeouts_that_cannot_be_written_hibernate_at_once() {
+    // Another session's tray owns the settings: no write, so the plain hibernate as before the sleep route.
+    let mut sim = Sim::new();
+    sim.send(
+        Start {
+            owner: false,
+            ..Start::default()
+        }
+        .event(),
+    );
+    sim.send(power(false, 80));
+    sim.send(lid(false));
+    sim.input();
+    sim.run(OFF_THE_TICK);
+    sim.send(read(plan(BALANCED)));
+    sim.send(working(1));
+    sim.send(lid(true));
+    sim.send(idle(1));
+    sim.run(IDLE_MS + MINUTE);
+    let commands = all(&sim);
+    let trace = sim.trace();
+    assert!(sleep_checks(&commands).is_empty(), "{trace}");
+    assert_eq!(
+        fallbacks(&commands),
+        [&fallback(CountdownReason::WorkEnded, None)],
+        "{trace}"
+    );
+}
+
+#[test]
+fn a_failed_short_write_makes_the_fallback_due_at_once() {
+    let mut sim = work_ended_closed(true);
+    sim.run(IDLE_MS + MINUTE);
+    let out = sim.send(checked(Ok(())));
+    assert_eq!(count(&out, &short_apply()), 1, "{}", sim.trace());
+    let failed = sim.now();
+    sim.send(applied(
+        BALANCED,
+        Err(ApplyError::SafetyNet(RESTORE_FAILED)),
+        vec![],
+    ));
+    sim.run(SECOND);
+    assert_eq!(fallback_times(&sim, failed), [0], "{}", sim.trace());
+}
+
+#[test]
+fn a_plan_switch_moves_the_short_timeouts_to_the_new_plan() {
+    let mut sim = work_ended_closed(true);
+    sim.run(IDLE_MS + MINUTE);
+    short_written(&mut sim);
+    let out = sim.send(read(plan(sim::OTHER_PLAN)));
+    let old_back = Command::Restore {
+        plan: Some(BALANCED),
+        why: RestoreWhy::PlanSwitch,
+    };
+    let new_apply = Command::Apply {
+        plan: sim::OTHER_PLAN,
+        writes: SettingKey::SHORT
+            .iter()
+            .map(|&k| (k, crate::settings::SHORT_TIMEOUT_S))
+            .collect(),
+    };
+    let trace = sim.trace();
+    assert_eq!(count(&out, &old_back), 1, "{trace}");
+    assert_eq!(count(&out, &new_apply), 1, "{trace}");
+    assert!(
+        position(&out, &old_back) < position(&out, &new_apply),
+        "{trace}"
+    );
+}
+
+#[test]
+fn a_failed_lock_step_back_ends_in_the_short_timeouts_too() {
+    let mut sim = closed_unconfirmed(false);
+    failed_twice(&mut sim);
+    sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
+    sim.run(IDLE_MS + MINUTE);
+    assert_eq!(
+        sleep_checks(&all(&sim)),
+        [&sleep_check(CountdownReason::WorkEnded, None)],
+        "{}",
+        sim.trace()
+    );
+    let out = sim.send(checked(Ok(())));
+    assert_eq!(count(&out, &short_apply()), 1, "{}", sim.trace());
 }
 
 // Item 6: Keep screen on.
@@ -1758,12 +2275,12 @@ fn a_lid_close_lock_that_fails_twice_steps_back_and_hibernates_after_5_minutes_i
         "{trace}"
     );
     assert_eq!(
-        hibernates(&out),
-        [&hibernate(CountdownReason::WorkEnded, None)],
+        sleep_checks(&out),
+        [&sleep_check(CountdownReason::WorkEnded, None)],
         "{trace}"
     );
     assert_eq!(
-        hibernate_times(&sim, input),
+        sleep_check_times(&sim, input),
         [i128::from(IDLE_MS)],
         "{trace}"
     );
@@ -1843,7 +2360,7 @@ fn the_session_locking_or_the_lid_opening_ends_the_step_back() {
     assert!(position(&out, &SYSTEM) < position(&out, &apply), "{trace}");
     out.extend(sim.run(20 * MINUTE));
     assert!(
-        hibernates(&out).is_empty(),
+        sleep_checks(&out).is_empty(),
         "holding again ends the countdown\n{}",
         sim.trace()
     );
@@ -1929,7 +2446,7 @@ fn a_source_lock_that_fails_twice_steps_back_and_a_redock_onto_the_users_own_do_
     let mut out = sim.send(power(true, 80));
     out.extend(sim.run(20 * MINUTE));
     let trace = sim.trace();
-    assert!(hibernates(&out).is_empty(), "{trace}");
+    assert!(sleep_checks(&out).is_empty(), "{trace}");
     assert_eq!(count(&out, &LOCK), 0, "{trace}");
     assert_eq!(count(&out, &SYSTEM), 0, "still stepped back\n{trace}");
 
@@ -1938,7 +2455,7 @@ fn a_source_lock_that_fails_twice_steps_back_and_a_redock_onto_the_users_own_do_
     sim.send(power(false, 80));
     sim.run(SOURCE_SETTLE_MS + SECOND);
     assert_eq!(
-        hibernate_times(&sim, unplugged),
+        sleep_check_times(&sim, unplugged),
         [i128::from(SOURCE_SETTLE_MS)],
         "{}",
         sim.trace()
@@ -1957,12 +2474,12 @@ fn ac_back_after_a_lock_step_back_keeps_the_work_end_countdown() {
     let trace = sim.trace();
     assert_eq!(count(&out, &SYSTEM), 0, "{trace}");
     assert_eq!(
-        hibernates(&out),
-        [&hibernate(CountdownReason::WorkEnded, None)],
+        sleep_checks(&out),
+        [&sleep_check(CountdownReason::WorkEnded, None)],
         "{trace}"
     );
     assert_eq!(
-        hibernate_times(&sim, input),
+        sleep_check_times(&sim, input),
         [i128::from(IDLE_MS)],
         "{trace}"
     );
@@ -1996,10 +2513,15 @@ fn a_work_end_right_after_restore_my_power_settings_reads_the_users_own_lid_acti
     sim.send(idle(1));
     sim.run(IDLE_MS + MINUTE);
     let trace = sim.trace();
-    assert_eq!(hibernate_times(&sim, at), [i128::from(IDLE_MS)], "{trace}");
     assert_eq!(
-        hibernates(&all(&sim)),
-        [&hibernate(CountdownReason::WorkEnded, None)],
+        sleep_check_times(&sim, at),
+        [i128::from(IDLE_MS)],
+        "{trace}"
+    );
+    // The unlock was at the same moment: idle counts from it (`p2-6-sleep-route`).
+    assert_eq!(
+        sleep_checks(&all(&sim)),
+        [&sleep_check(CountdownReason::WorkEnded, Some(at))],
         "{trace}"
     );
 
@@ -2011,7 +2533,7 @@ fn a_work_end_right_after_restore_my_power_settings_reads_the_users_own_lid_acti
     sim.send(restored(None, RestoreWhy::UserAsked, Ok(()), vec![]));
     let mut out = sim.send(idle(1));
     out.extend(sim.run(20 * MINUTE));
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
 }
 
 #[test]
@@ -2027,7 +2549,7 @@ fn a_plan_read_after_the_restore_wins_over_the_values_put_back() {
     sim.send(read(own_battery_do_nothing()));
     let mut out = sim.send(idle(1));
     out.extend(sim.run(20 * MINUTE));
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
 }
 
 #[test]
@@ -2075,16 +2597,20 @@ fn a_lock_step_back_before_the_first_plan_read_counts_down_once_the_plan_is_read
     assert_eq!(count(&out, &restore), 1, "{}", sim.trace());
     sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
     let out = sim.run(MINUTE);
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
 
     // The first read answers with the test's user values.
     sim.send(read(plan(BALANCED)));
     sim.run(IDLE_MS);
     let trace = sim.trace();
-    assert_eq!(hibernate_times(&sim, at), [i128::from(IDLE_MS)], "{trace}");
     assert_eq!(
-        hibernates(&all(&sim)),
-        [&hibernate(CountdownReason::WorkEnded, None)],
+        sleep_check_times(&sim, at),
+        [i128::from(IDLE_MS)],
+        "{trace}"
+    );
+    assert_eq!(
+        sleep_checks(&all(&sim)),
+        [&sleep_check(CountdownReason::WorkEnded, None)],
         "{trace}"
     );
 }
@@ -2104,7 +2630,7 @@ fn a_lid_close_with_nothing_holding_before_the_first_plan_read_counts_down_once_
     sim.send(read(plan(BALANCED)));
     sim.run(IDLE_MS + MINUTE);
     assert_eq!(
-        hibernate_times(&sim, at),
+        sleep_check_times(&sim, at),
         [i128::from(IDLE_MS)],
         "{}",
         sim.trace()
@@ -2124,12 +2650,12 @@ fn a_lid_close_with_nothing_holding_before_the_first_plan_read_counts_down_once_
     sim.send(restored(None, RestoreWhy::Leftover, Ok(()), vec![]));
     sim.send(read(docked()));
     let out = sim.run(20 * MINUTE);
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
     let unplugged = sim.now();
     sim.send(power(false, 80));
     sim.run(SOURCE_SETTLE_MS + SECOND);
     assert_eq!(
-        hibernate_times(&sim, unplugged),
+        sleep_check_times(&sim, unplugged),
         [i128::from(SOURCE_SETTLE_MS)],
         "{}",
         sim.trace()
@@ -2150,7 +2676,7 @@ fn a_lid_close_with_nothing_holding_before_the_first_plan_read_counts_down_once_
     assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
     let mut out = sim.send(read(plan(BALANCED)));
     out.extend(sim.run(20 * MINUTE));
-    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    assert!(sleep_checks(&out).is_empty(), "{}", sim.trace());
 }
 
 #[test]
@@ -2168,10 +2694,14 @@ fn a_floor_step_back_before_the_first_plan_read_counts_down_once_the_plan_is_rea
     sim.send(read(plan(BALANCED)));
     sim.run(IDLE_MS + MINUTE);
     let trace = sim.trace();
-    assert_eq!(hibernate_times(&sim, at), [i128::from(IDLE_MS)], "{trace}");
     assert_eq!(
-        hibernates(&all(&sim)),
-        [&hibernate(CountdownReason::Floor, None)],
+        sleep_check_times(&sim, at),
+        [i128::from(IDLE_MS)],
+        "{trace}"
+    );
+    assert_eq!(
+        sleep_checks(&all(&sim)),
+        [&sleep_check(CountdownReason::Floor, None)],
         "{trace}"
     );
 }
@@ -2205,7 +2735,8 @@ fn a_hibernate_not_allowed_after_a_lock_step_back_locks_again_with_the_chime_eve
     failed_twice(&mut sim);
     sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
     sim.run(IDLE_MS + MINUTE);
-    assert_eq!(hibernates(&all(&sim)).len(), 1, "{}", sim.trace());
+    assert_eq!(sleep_checks(&all(&sim)).len(), 1, "{}", sim.trace());
+    to_fallback(&mut sim);
     let from = sim.steps().len();
     let out = sim.send(hibernated(HibernateEnd::NotAllowed));
     assert_eq!(notices(&out), [&Notice::HibernateFailed], "{}", sim.trace());
@@ -2267,7 +2798,8 @@ fn a_failed_hibernate_waits_for_5_minutes_without_input_before_it_locks() {
     sim.send(restored(None, RestoreWhy::WorkEnded, Ok(()), vec![]));
     sim.input();
     sim.run(IDLE_MS + MINUTE);
-    assert_eq!(hibernates(&all(&sim)).len(), 1, "{}", sim.trace());
+    assert_eq!(sleep_checks(&all(&sim)).len(), 1, "{}", sim.trace());
+    to_fallback(&mut sim);
     let from = sim.steps().len();
     sim.send(hibernated(HibernateEnd::Failed(SUSPEND_FAILED)));
 
@@ -2299,7 +2831,8 @@ fn a_failed_hibernate_gives_no_lock_on_the_users_own_do_nothing_or_off_the_conso
     sim.send(restored(None, RestoreWhy::WorkEnded, Ok(()), vec![]));
     sim.input();
     sim.run(IDLE_MS + MINUTE);
-    assert_eq!(hibernates(&all(&sim)).len(), 1, "{}", sim.trace());
+    assert_eq!(sleep_checks(&all(&sim)).len(), 1, "{}", sim.trace());
+    to_fallback(&mut sim);
     sim.send(hibernated(HibernateEnd::NotAllowed));
     let mut out = sim.send(power(true, 80));
     out.extend(sim.run(20 * MINUTE));
@@ -2337,6 +2870,7 @@ fn a_lock_step_back_keeps_its_notices_for_the_users_return() {
     failed_twice(&mut sim);
     sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
     sim.run(IDLE_MS + MINUTE);
+    to_fallback(&mut sim);
     sim.send(hibernated(HibernateEnd::NotAllowed));
     sim.run(MINUTE);
     let out = sim.send(lid(false));
@@ -2377,6 +2911,7 @@ fn a_lock_step_back_keeps_its_notices_for_the_users_return() {
     let mut sim = work_ended_closed(true);
     sim.send(session(SessionChange::Locked));
     sim.run(IDLE_MS + MINUTE);
+    to_fallback(&mut sim);
     let out = sim.send(hibernated(HibernateEnd::NotAllowed));
     assert!(notices(&out).is_empty(), "{}", sim.trace());
     sim.send(lid(false));
@@ -2405,9 +2940,10 @@ fn closed_lid_report_once_with_the_right_time_across_a_suspend() {
     sim.send(idle(1));
     sim.send(restored(None, RestoreWhy::WorkEnded, Ok(()), vec![]));
     sim.run(SECOND);
-    assert_eq!(hibernates(&all(&sim)).len(), 1);
+    assert_eq!(sleep_checks(&all(&sim)).len(), 1);
 
-    // Hibernated overnight: run time stops, the wall clock does not.
+    // Hibernated overnight after the fallback: run time stops, the wall clock does not.
+    to_fallback(&mut sim);
     sim.suspend(8 * HOUR);
     sim.send(hibernated(HibernateEnd::Resumed));
     sim.run(2 * SECOND);

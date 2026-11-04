@@ -65,8 +65,9 @@ pub(crate) struct State {
     /// A copy of the journal from `Started`, `Done(Applied)` and `Done(Restored)`, less the keys `UserChanged` names.
     /// A failed outcome with an empty `journal` read nothing (the load failed), so the copy before it stays.
     pub journal: Vec<JournalEntry>,
-    /// The plan of each `Apply` sent and not yet answered, oldest first: what it writes is not in the copy yet.
-    pub applying: Vec<Guid>,
+    /// Each `Apply` sent and not yet answered, oldest first: what it writes is not in the copy yet. The IO thread
+    /// answers in order, so the first one on a plan is the one an `Applied` for that plan answers.
+    pub applying: Vec<Applying>,
     /// A restore failed and is still wanted, or `Started` brought a journal from an earlier run (`Leftover`, track
     /// note 9): retried on each tick, with this reason, until a restore of every plan works.
     pub retry: Option<RestoreWhy>,
@@ -110,9 +111,16 @@ pub(crate) struct State {
     /// A step back with the lid closed wants the countdown (`CountdownReason::Floor`) until AC, the lid opens or
     /// holding starts again.
     pub floor_countdown: bool,
-    /// The countdown to hibernate that runs now: derived from `work_end` and `floor_countdown` in each settle pass.
+    /// The countdown to sleep that runs now: derived from `work_end` and `floor_countdown` in each settle pass.
     pub countdown: Option<Countdown>,
-    /// A `Hibernate` went out and its `Done` has not come back: never a second one at the same time.
+    /// The sleep route's 1-minute timeouts are written, or their `Apply` is out (`p2-6-sleep-route`): until they go
+    /// back at an unlock, input, the lid open, a hold start or the countdown's end.
+    pub short: Option<Short>,
+    /// Short keys the user changed while the sleep route ran: not written again until the countdown ends, as a hold
+    /// leaves a released key alone until the work ends (decision 26).
+    pub short_released: BTreeSet<SettingKey>,
+    /// A `SleepCheck` or a `Hibernate` went out and its `Done` has not come back: both run on the hibernate thread,
+    /// one at a time.
     pub hibernating: bool,
     /// The hibernate thread found the battery above the floor: no second `Floor` hibernate before a new battery
     /// reading, or each input reading would send one more while the two readings disagree.
@@ -121,6 +129,9 @@ pub(crate) struct State {
     pub idle: Option<IdleReading>,
     /// For the idle clamp at resume (`policy::ending::clamped_idle_ms`).
     pub last_resume_mono: Option<u64>,
+    /// The last `Unlocked` (run time): the user is there, so the countdown counts idle from it too, also after a
+    /// sign-in that gave no input Windows counts (`p2-6-sleep-route`).
+    pub last_unlock_mono: Option<u64>,
     /// `Session(Locked)` came and no `Unlocked` yet.
     pub session_locked: bool,
     /// When the Keep screen on idle lock last locked (`policy::lock::idle_lock`).
@@ -195,10 +206,13 @@ impl State {
             work_end: None,
             floor_countdown: false,
             countdown: None,
+            short: None,
+            short_released: BTreeSet::new(),
             hibernating: false,
             above_floor_skipped: false,
             idle: None,
             last_resume_mono: None,
+            last_unlock_mono: None,
             session_locked: false,
             idle_locked_at_mono: None,
             idle_lock_check: None,
@@ -277,13 +291,34 @@ pub(crate) enum ApplyStep {
     WaitPlan,
 }
 
-/// A countdown to hibernate (`policy::ending`).
+/// An `Apply` not answered yet: a hold's, or the sleep route's short timeouts (`short`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Applying {
+    pub plan: Guid,
+    pub short: bool,
+}
+
+/// A countdown to sleep (`policy::ending`): 5 minutes without input, then the sleep route's last check, the short
+/// timeouts, and the fallback hibernate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Countdown {
     pub reason: CountdownReason,
     /// When the next input reading decides, so the loop reads it on time; `None`: at the next reading, whenever it
     /// comes (a timer fired without one, or the last one was used).
     pub check: Option<Deadline>,
+    /// A hibernate did not happen in this countdown (not allowed, failed, the lid unknown): no second one, so its
+    /// notice comes once; the short timeouts alone sleep the PC from then on.
+    pub no_hibernate: bool,
+}
+
+/// The sleep route's short timeouts in force (`core::lid`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Short {
+    /// When the fallback `Hibernate` is due if the PC has not slept (run time): 5 minutes after the write, and again
+    /// after each resume. `None` once a hibernate did not happen in this countdown.
+    pub fallback_mono: Option<u64>,
+    /// `Suspending` came: wall time less run time then, so the next tick tells by the clock gap whether the PC slept.
+    pub suspended_at: Option<i64>,
 }
 
 /// The user's own lid actions when work ended with the lid closed, read before the restore landed (the journal's
@@ -324,6 +359,12 @@ pub(crate) struct LockWatch {
     pub floor_waits: bool,
     /// The journal copy as the last settle pass ended, so the next one sees which entries a restore took away.
     pub journal_seen: Vec<JournalEntry>,
+    /// The lid closed while the journal was unknown, so the lid-close lock did not come (`p2-6-sleep-route`
+    /// deliverable 8). Ends when the lid opens or the window ends.
+    pub window_close: bool,
+    /// The window ended with the lid closed while a hold holds: lock once a plan read shows the user's own lid action
+    /// as not Do nothing (`core::lid::settle_window_lock`).
+    pub window_lock_waits: bool,
 }
 
 /// A closed-lid `Lock` waiting for `Session(Locked)`.

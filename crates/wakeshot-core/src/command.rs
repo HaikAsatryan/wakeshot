@@ -24,6 +24,8 @@ pub struct Failure {
 ///
 /// Owner: core track (Phase 2). `Leftover`: a journal left at start by a dead tray; the IO side runs it only when the
 /// journal's owner is Gone or is this tray, so Unknown never starts a restore (architecture section 5, "Liveness").
+/// `ShortTimeouts`: the sleep route's 1-minute timeouts go back, because the user is there (lid open, an unlock,
+/// input), a hold starts, or the countdown stopped (`p2-6-sleep-route`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RestoreWhy {
     WorkEnded,
@@ -34,9 +36,10 @@ pub enum RestoreWhy {
     SessionEnd,
     ConsoleLeft,
     Leftover,
+    ShortTimeouts,
 }
 
-/// Why a hibernate countdown runs, because the last check differs: `Floor` also needs the PC still on battery and
+/// Why the countdown to sleep runs, because the last check differs: `Floor` also needs the PC still on battery and
 /// under the floor.
 ///
 /// Owner: core track (Phase 2) starts the countdown; power track (Phase 3) runs the last check.
@@ -61,24 +64,30 @@ pub enum FileKind {
 /// (architecture section 4, "Tray threads").
 ///
 /// Owner: core track (Phase 2) issues them; power track (Phase 3) runs `Requests`, `Retake`, `ReadPlan`, `Apply`,
-/// `Restore`, `ResetLost`, `Lock`, `Hibernate`; tray track (Phase 5) runs `Tray`, `Notify`, `Play`; ship track
-/// (Phase 6) runs `ApplyUpdate`; the integration step wires the rest. Each runner may rely on getting commands in the
-/// order the core returned them.
+/// `Restore`, `ResetLost`, `Lock`, `SleepCheck`, `Hibernate`; tray track (Phase 5) runs `Tray`, `Notify`, `Play`;
+/// ship track (Phase 6) runs `ApplyUpdate`; the integration step wires the rest. Each runner may rely on getting
+/// commands in the order the core returned them.
 ///
 /// - `Requests`: `system` means SYSTEM plus EXECUTION; `display` only for Keep screen on.
 /// - `Retake`: answers as `Outcome::Requests`.
-/// - `Apply`: `writes` is the three keys less the ones the user released, never less a key already at its target;
-///   the apply restores this plan's journal entries for other keys in the same run (architecture section 5, Apply).
+/// - `Apply`: a hold's `writes` is the three hold keys at 0 less the ones the user released, never less a key already
+///   at its target; the sleep route's is the four short keys at `SHORT_TIMEOUT_S` less the released ones. A timeout
+///   target other than Never is a ceiling: a live value at or under it, and not Never, is the user's own and is kept.
+///   The apply restores this plan's journal entries for other keys in the same run (architecture section 5, Apply).
 /// - `Restore`: `plan: None` takes every entry, `Some` only that plan's.
 /// - `ResetLost`: the journal is lost (product "User settings safety" 7): on the plan in use, each key at the value
 ///   Wakeshot writes goes to the plan's Windows default, and the bad file is set aside (`ownership::reset`). It first
 ///   loads the journal once more: a file with known entries read after all, and nothing is reset. A missing file, or
 ///   one with no known entry, means someone else restored it, unless `damaged`: then a corrupt file was set aside just
 ///   before, and the values it named are still in force. Answers as `Outcome::ResetLost`.
-/// - `Hibernate`: the hibernate thread checks again right before the call (section 5), so it gets what that check
-///   needs: the reason, the battery floor, and the last resume (idle counts from it). The hibernate thread plays
-///   `Cue::GoingToSleep` after its last check, then reads the lid once more; the core never sends
-///   `Play(GoingToSleep)`.
+/// - `SleepCheck`: the countdown to sleep is due. The hibernate thread runs the last check of `Hibernate` (lid, idle,
+///   floor), plays `Cue::GoingToSleep` and reads the lid once more, but does not hibernate; it answers
+///   `Outcome::SleepCheck`, and on `Ok` the core writes the short timeouts (`p2-6-sleep-route`). An unknown lid does
+///   not stop it: the core's own lid reading says closed, and the short timeouts go back at the next lid open.
+/// - `Hibernate`: the fallback when the PC did not sleep within 5 minutes of the short timeouts. The hibernate thread
+///   checks again right before the call (section 5), so it gets what that check needs: the reason, the battery floor,
+///   and the last resume (idle counts from it). The hibernate thread plays `Cue::GoingToSleep` after its last check,
+///   then reads the lid once more; the core never sends `Play(GoingToSleep)`.
 /// - `WriteConfig`: the runner never writes over a newer `config.json` (section 6).
 /// - `WriteHold`: Keep awake from the menu; the hold file carries the tray's own pid and start.
 /// - `FinishRestoreRequest`: after `Done(Restored { why: UserAsked })`, write this `state.json` at once, then delete
@@ -108,6 +117,11 @@ pub enum Command {
         damaged: bool,
     },
     Lock,
+    SleepCheck {
+        reason: CountdownReason,
+        floor_pct: u8,
+        last_resume_mono_ms: Option<u64>,
+    },
     Hibernate {
         reason: CountdownReason,
         floor_pct: u8,
@@ -143,7 +157,7 @@ pub enum ApplyError {
     Write(Failure),
 }
 
-/// Why the hibernate thread did not hibernate after its last check.
+/// Why the hibernate thread did not hibernate, or a `SleepCheck` did not pass, after its last check.
 ///
 /// Owner: power track (Phase 3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -206,6 +220,7 @@ pub enum Outcome {
         journal: Vec<JournalEntry>,
     },
     Locked(Result<(), Failure>),
+    SleepCheck(Result<(), HibernateSkip>),
     Hibernate(HibernateEnd),
     Sound(Result<SoundEnd, Failure>),
     Notified(Result<(), Failure>),
