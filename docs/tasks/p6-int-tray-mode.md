@@ -284,7 +284,8 @@ itself (order, threads, shutdown) has no unit test: the smoke test in Part B is 
 - The picture: take it while the hold is on (pause there, or run the same steps by hand with the same `.cmd`), crop
   to the taskbar as `05-tray-ux.md` note 4 says, `docs/research/img/ux/int-smoke-*.png`.
 - After the last run: `reg export` to the scratchpad, then delete `HKCU\Control Panel\NotifyIconSettings\<id>`
-  whose `IconGuid` is the dry-run GUID `c0d07dcd-dfd4-4a9d-b139-ad1e2ce9f987`, and
+  for the entry that was not there before the run (list the ids before and after; an entry may hold only
+  `IconSnapshot`, no `IconGuid`: `p6-int-wiring-fixes`, Found outside scope 6), and
   `HKCU\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\NotifyIconGeneratedAumid_<id>`; check both
   gone, and again a minute later. Check no tray pid is left.
 - What could go wrong first (not verified, none run yet): the hold may need the watch thread's 200 ms retry; the

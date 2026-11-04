@@ -136,6 +136,7 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | `p2-core-lid` | no | `p2-core-settings` | done (21:46): 57 scenarios, 19 of 19 mutants caught; fixed a lid lock gap in the first seconds of a hold |
 | `p2-core-props` | no | `p2-core-lid`, `p2-ownership-apply` | done (23:29): 13 properties at 10,000 cases; two findings kept as ignored tests |
 | `p2-6-unread-journal` | no | core round B (Log in `p2-core-settings`); runs alone among cards that build | done (committed 02:51): findings 3 and 6, the newer `config.json` write check; 1256 workspace tests |
+| `p2-6-unread-lid-countdown` | no | `p6-int-wiring-fixes` | in progress (started 04:38; beside `p6-int-dry-run-e2e`) |
 
 No card touches the real laptop (no power settings, screen, sound or installs) or needs Haik's hands. "Contracts
 card": the one card the orchestrator runs alone before the track builds.
@@ -276,3 +277,7 @@ Where each item this track owns is built. "Integration" is planned after the tra
   keyed on `unread`; no notice at start for an unread journal; the random World start does not draw the unread case.
   Seen: two `app::window` timer tests failed under load in 2 of 5 runs (not its file; may flake CI; routed to a small
   test fix).
+- 2026-11-04 04:38 (orchestrator `wakeshot-12`): new card `p2-6-unread-lid-countdown` from `p6-int-wiring-fixes`
+  Found outside scope 3 and 5: with an unread startup journal, a lid closed before the `Leftover` restore lands starts
+  no countdown, so a closed laptop runs on until the user's battery sleep timeout. Started beside
+  `p6-int-dry-run-e2e` (core files only; that card fixes `wakeshot-windows` `app/*`, tray tests and CLI files).
