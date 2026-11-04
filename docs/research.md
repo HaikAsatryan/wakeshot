@@ -3854,3 +3854,72 @@ is not installed, so bytes per crate come from a linker map (`/MAP`, symbol addr
 - **No test runs the release exes.** The dry-run smoke test skips itself in a release build, and the CLI's
   `tests/run.rs` has no such guard: under `cargo test --release` its runs ignore `WAKESHOT_DATA_DIR` and use the real
   `%LocalAppData%\Wakeshot`. **Verified** (test; the folder this made was deleted).
+
+## Idle sleep with the lid closed
+
+Checked 2026-11-04 10:30 to 10:37 in Haik's run of `docs/tasks/p3-idle-sleep-check.md`. Battery 98%, dock unplugged,
+no external screen (506 `ExternalMonitorConnectedState=false`). A copy of Balanced was active with lid action Do
+nothing and sleep after 60 s, AC and DC; the copy kept Haik's DC dim (165 s) and display off (180 s). A recorder
+(Medium, started from Explorer) held SYSTEM and EXECUTION requests until 120 s after the lid closed, and logged both
+message routes and a 5 s tick. Sources: the recorder log; `powercfg /requests` every 30 s (only the recorder's
+requests, 10:30:22 to 10:31:52; none after); the System log through `Get-WinEvent`. Logs were kept in the worker's
+temporary scratchpad (`p3-idle-sleep-check\run\`).
+
+| Time | What | Source |
+|---|---|---|
+| 10:30:08.3 | requests set | recorder |
+| 10:30:08.8 | copy active; policy in force: lid action 0, idle 60 s, AC and DC | UserModePowerService 12, recorder |
+| about 10:30:14.4 | last input | recorder idle reads |
+| 10:30:19.317 | lid closed, both routes in the same ms | recorder |
+| 10:31:15 | idle 60 s: the sleep timeout passed while the requests held | recorder |
+| 10:32:19.482 | requests released, 120.2 s after the close, idle about 125 s | recorder |
+| 10:32:59.839 | display dimmed, about 165 s after the last input | recorder, window route |
+| 10:33:14.842 | 506 entering Modern Standby, "Idle Timeout", `LidOpenState=false`; display off at .848 | System, recorder |
+| 10:33:14.881 | `PBT_APMSUSPEND` | recorder, callback route |
+| 10:33:14.899 | 566 session to sleep; the screen-off part lasted 59.6 ms | System |
+| 10:36:59.311 | 507 exiting Modern Standby, "Lid", `SleepEntered=true`, sleep 224.4 s, DRIPS 209.4 s | System |
+| 10:37:01.911 | `PBT_APMRESUMEAUTOMATIC`, then `PBT_APMRESUMESUSPEND` 4 ms later | recorder, callback route |
+| 10:37:01.990 | lid open, display on, then `WTS_SESSION_LOCK` | recorder, window route |
+| 10:37:03.173 | `WTS_SESSION_UNLOCK` (Haik signed in) | recorder |
+
+- **It sleeps by itself.** With the lid closed and action Do nothing, on battery, no external screen and sleep after
+  60 s, Windows entered Modern Standby and slept with no app call: 506 "Idle Timeout", `PBT_APMSUSPEND` 55.4 s after
+  the requests ended. A real sleep, not hibernate: 507 `SleepEntered=true`, DRIPS 93% of the 224 s; no Kernel-Power
+  42, 107 or 1, no boot. **Verified** (one run).
+- **Release to sleep: 55.4 s** (10:32:19.482 to 10:33:14.881). It did not come at the release, although the 60 s
+  timeout had passed 64 s before. It came at the DC display timeout: display off 180.3 to 180.7 s after the last
+  input, 506 and `PBT_APMSUSPEND` within 40 ms of it. One run cannot tell two readings apart: (a) once the sleep
+  timeout has passed, Windows sleeps when the display turns off on its own timer; (b) Windows restarts the 60 s timer
+  at the release (that would fire at 10:33:19.5, 4.6 s after the seen sleep). (a) fits better: the dim and the off
+  followed the display timers from the last input, and the sleep followed the off at once. **Not measured:** a release
+  after the display already turned off (work longer than the display timeout, the common case); a display timeout
+  longer than the sleep timeout, or Never.
+- **What a desktop app sees.**
+  - Callback route (`PowerRegisterSuspendResumeNotification` with `DEVICE_NOTIFY_CALLBACK`, as `power::system`):
+    `PBT_APMSUSPEND` at the sleep; `PBT_APMRESUMEAUTOMATIC` and `PBT_APMRESUMESUSPEND` at the wake, 2.6 s after
+    507. The lid callback gave closed and open. **Verified.**
+  - Window route (a hidden top-level window in the tray's style, `RegisterPowerSettingNotification` for its
+    settings): `PBT_POWERSETTINGCHANGE` for lid, console display and session display (dimmed, off, on), but no
+    `PBT_APMSUSPEND`, `PBT_APMRESUMEAUTOMATIC` or `PBT_APMRESUMESUSPEND` at all. **Verified.** A Microsoft Q&A answer
+    ("Cannot receive WM_POWERBROADCAST message on Win10 2004", read 2026-11-04) says that on Modern Standby a window
+    must call `RegisterSuspendResumeNotification` to get them; the recorder did not, so this fits. Not tested with
+    that call.
+  - Display off alone is no sign of sleep: apps run in the screen-off part (research, "Lid and sleep spike"); here it
+    lasted 59.6 ms only because the sleep timeout had passed.
+  - First tick after the wake: wall step 229.4 s, unbiased step 2.4 s; idle read 407 s (it counts the sleep);
+    `SystemExecutionState` 0x1 with no request of ours (Windows' own after a resume, as before), 0x0 5 s later.
+- **Lock and sign-in.** The session was locked at the wake: `WTS_SESSION_LOCK` reached the window at 10:37:01.990,
+  but only after the resume, so the log does not show when the lock happened (most likely at the 506: Windows locks
+  within 1 s of a display-off standby entry, research "Lid and sleep spike"; inference). Haik: "yes it asked to sign
+  in, screen came on by itself": opening the lid woke the laptop, with no key or power button, and the lock screen
+  asked for a sign-in.
+- **`powercfg` at Medium.** `/duplicatescheme`, `/changename`, `/setacvalueindex`, `/setdcvalueindex`, `/setactive`
+  and `/delete` all returned 0 from a Medium token started by Explorer; UserModePowerService 12 logs each plan switch
+  with `powercfg.exe` and its pid. **Verified.** Haik's Balanced after the run equals the reading before it on all
+  1738 lines of `powercfg /qh`.
+- **For `p2-6-sleep-route`.** Tell "the laptop slept" by `PBT_APMSUSPEND` from the callback route (`power::system`
+  already posts it as `Event::Suspending`), and confirm it on the next tick by a wall step far above the unbiased
+  step. Not by a window's `WM_POWERBROADCAST` without `RegisterSuspendResumeNotification`, and not by display off.
+  "It did not sleep" can only be a deadline with no `Event::Suspending`; from this run the sleep waits for the
+  display timeout, so a deadline of release plus the 60 s timeout is too short when the display is still on
+  (inference from one run).

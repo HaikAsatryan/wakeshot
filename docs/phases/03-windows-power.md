@@ -138,7 +138,7 @@ laptop" cards run one at a time across all tracks.
 | `p3-harness` | no | yes for the `cleanup` smoke run only (global lane, review M7); other smoke runs touch no setting | `p3-power-io`, `p3-recovery`, `p3-requests`, `p3-session`, `p3-system-events` | done (22:56): 22 tests, smoke runs done; Haik's values same |
 | `p3-real-checks` | no | yes: an active plan copy, 50 cycles | `p3-harness`, `p3-stop-points` | done (00:54): every step passed; 16 real tests in `wakeshot-windows`, 2 in the tray; 50 cycles, `PowerSetActiveScheme` median 51.5 ms, max 121.8 ms |
 | `p3-haik-checks` | yes: about 60 min elapsed, about 15 min of hands | yes, whole laptop: battery, lid, sign-out, sleep, lock; no other agent or cargo command runs (review B2) | `p3-real-checks` | blocked: waiting for Haik (01:08); step files ready in its card |
-| `p3-idle-sleep-check` | yes: about 10 min (dock out, lid closed 4 min) | yes: an active plan copy, lid, battery; Haik's plan never written | nothing | ready |
+| `p3-idle-sleep-check` | yes: about 10 min (dock out, lid closed 4 min) | yes: an active plan copy, lid, battery; Haik's plan never written | nothing | done (10:42): it sleeps (Modern Standby, not hibernate) 55 s after the release, when the screen timeout turns the screen off; locked at wake |
 
 Size estimates (one worker's context): store 90K, log 80K, process 110K, power-plan 110K, requests 60K,
 system-events 100K, session 80K, journal 90K, hibernate 90K, power-io 110K, recovery 140K, stop-points 110K, harness
@@ -236,3 +236,10 @@ Critical path: store, journal, (core ownership cards), power-io, harness, real-c
   idle sleep put a closed laptop on battery to sleep, how long after the last request ends, and what a desktop app
   sees at that sleep and wake. It decides how `p2-6-sleep-route` tells that the laptop slept (Haik's rule of
   2026-11-04 in `product.md`: sleep, not hibernate). The orchestrator's overnight keep-awake request ended at 10:13.
+- 2026-11-04 10:42 (orchestrator `wakeshot-12`): `p3-idle-sleep-check` done (Haik's steps 10:31 to 10:37: "yes it asked
+  to sign in, screen came on by itself"). With the lid closed, on battery, Windows' own idle sleep put the laptop
+  into Modern Standby (Kernel-Power 506 Idle Timeout, 507 `SleepEntered`, no hibernate) 55 s after the requests
+  ended, at the moment the battery screen timeout (180 s after the last input) turned the screen off, not at the
+  60 s sleep timeout. An app sees the suspend and the resumes only through the suspend-resume callback, not as window
+  messages. AFTER equals BEFORE. Open: whether a long screen timeout delays the sleep (the worker proposes a
+  15-minute rerun); `p2-6-sleep-route` must cover it either way.
