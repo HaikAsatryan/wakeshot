@@ -77,21 +77,16 @@ No window, no settings page, nothing to learn: a tray icon, one menu, a few noti
 
 ## Details
 
-- [Wakeshot](#wakeshot)
-  - [How it compares](#how-it-compares)
-  - [See it work](#see-it-work)
-    - [A night with Wakeshot](#a-night-with-wakeshot)
-  - [Details](#details)
-    - [Install](#install)
-    - [What keeps the PC awake](#what-keeps-the-pc-awake)
-    - [What it changes on your PC](#what-it-changes-on-your-pc)
-    - [Lid closed, lock and battery](#lid-closed-lock-and-battery)
-    - [The menu, notices and start at login](#the-menu-notices-and-start-at-login)
-    - [Commands](#commands)
-    - [Updates and privacy](#updates-and-privacy)
-    - [Limits](#limits)
-    - [Uninstall](#uninstall)
-  - [Credits and license](#credits-and-license)
+- [Install](#install)
+- [What keeps the PC awake](#what-keeps-the-pc-awake)
+- [What it changes on your PC](#what-it-changes-on-your-pc)
+- [Lid closed, lock and battery](#lid-closed-lock-and-battery)
+- [The menu, notices and start at login](#the-menu-notices-and-start-at-login)
+- [Commands](#commands)
+- [Updates and privacy](#updates-and-privacy)
+- [Limits](#limits)
+- [Uninstall](#uninstall)
+- [Credits and license](#credits-and-license)
 
 ### Install
 
@@ -400,6 +395,7 @@ that needs admin rights, which Wakeshot never asks for.
   - End task ends Wakeshot and its guard together, if their separate starts do not keep them apart (not tested yet).
 - Until Wakeshot next starts (from the Start menu, or at the next sign-in when start at login is on), because Windows
   deletes the one-time sign-in entry before it runs it:
+  - a crash, power cut or End task as above, between a sign-in running that entry and Wakeshot setting it again;
   - the restore at sign-in fails for 2 minutes, and the Wakeshot it then starts fails to start too;
   - the restore at sign-in crashes.
 - Until you reinstall, with no warning: you uninstall during a hold, and the restore fails for the uninstall's whole

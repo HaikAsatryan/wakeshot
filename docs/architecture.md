@@ -915,9 +915,10 @@ leftover of another tray that this tray cannot restore yet (owner alive or Unkno
 gets the value too, so the next sign-in still restores it if this tray dies first; restore mode checks the owner, so
 for a live or Unknown one the value costs only a start that exits. Only a journal this tray owns gets a guard (a guard
 waits on this tray).
-Picked over a logon task (Nightcrew's way): one value, no task XML. Tested: restore mode's start from RunOnce, its
-journal read and its owner check (research "Power track manual checks"). Not tested yet: its restore of a gone owner's
-journal at sign-in (checklist 5).
+Picked over a logon task (Nightcrew's way): one value, no task XML. Tested (research "Power track manual checks"):
+restore mode's start from RunOnce, its journal read, its owner check, and its restore of a gone owner's journal at
+sign-in (checklist 5, one sign-in, 2026-11-04). Shown only by tests: a hold that starts before its sign-in's RunOnce
+pass gets the value back at its next plan read.
 
 Gap left. In these cases nothing restores for a while, so the lid action stays Do nothing and battery sleep Never, and
 a closed laptop at the sign-in screen does not sleep (accepted by Haik, 2026-11-03; the README says so). Until the next

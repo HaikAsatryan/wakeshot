@@ -1,7 +1,6 @@
 # Keep the RunOnce value while a hold owns entries, then redo B2
 
-Phase: 2 to 6 (power track fix). Status: blocked: waiting for Haik (fix round done; Part B prep done, B2 redo
-steps ready in "Part B: B2 redo"). Needs Haik:
+Phase: 2 to 6 (power track fix). Status: done (2026-11-04 22:46; B2 redo passed). Needs Haik:
 Part B only: about 5 minutes of his hands, one sign-out, after the review of Part A. Agent: `wakeshot-worker`. Size: about 120K tokens (Part A about 80K, Part B about 40K).
 Written by the orchestrator (session after `wakeshot-27`, 2026-11-04 18:32) from `docs/tasks/p3-haik-checks.md`
 "Found outside scope" item 2 and Result "Open items" 1 and 2.
@@ -191,7 +190,21 @@ Problems seen but not fixed.
 4. `power/executor.rs:128`, a doc line from `p3-power-io`, is 121 characters (one over the wrap). Harmless.
 5. **`README.md`'s gap list lags architecture's "Gap left"** (review finding 3): it does not list the up to 10 s after
    a sign-in's RunOnce pass, a value that cannot be written back, or a journal that does not read. Not changed: the
-   orchestrator skipped it this round, as `README.md` holds someone else's uncommitted edits. Open.
+   orchestrator skipped it this round, as `README.md` holds someone else's uncommitted edits. Fixed 2026-11-04 22:45
+   (deliverable 6 round): one bullet under "Until Wakeshot next starts" covers all three (they all start when a
+   sign-in runs the entry and end when the tray sets it again).
+6. **`docs/architecture.md` section 5 "Logon restore", lines 918 to 920, is now stale:** "Not tested yet: its restore
+   of a gone owner's journal at sign-in (checklist 5)." The B2 redo showed it (research "Power track manual checks",
+   "Checklist 5 holds"). Not changed: this round owns only the "README says so" line of that file. Suggest: "Tested:
+   restore mode's start from RunOnce, its journal read, its owner check and its restore of a gone owner's journal at
+   sign-in (checklist 5; research "Power track manual checks")". The phase file's checklist 5 status may lag the same
+   way (not read). Fixed 2026-11-04 22:47 (the coordinator's ask): lines 918 to 921 now list checklist 5 as tested on
+   one sign-in and keep "shown only by tests" for a hold that starts before its sign-in's pass. The phase file: not
+   read, still open.
+7. **Step 2 of "After Haik's steps" expected a restore mode line `RunOnce value WakeshotRestore removed`.** Restore
+   mode cannot log it at a sign-in: Windows deletes the value before it runs the command, and `clear_run_once`
+   (`power/journal.rs:582`) logs only a value it removed. The step's wording, not the code, was off. Harmless; noted
+   so a later harness card does not expect the line.
 
 ## Log
 
@@ -244,10 +257,79 @@ Problems seen but not fixed.
   start and exit the same, RunOnce and guard name `<S2>\target\debug\wakeshot-tray.exe`, data folder
   `%LocalAppData%\Wakeshot`; afterwards no data folder, no RunOnce value, no test plan. Scratch folders deleted.
   Nothing of mine runs. Steps for Haik written ("Part B: B2 redo"). Status `blocked: waiting for Haik`.
+- 2026-11-04 22:39, worker (deliverable 6, "After Haik's steps"): started. Haik's report, his words: "B2 was fully
+  ok" (step 3 green `READY: SIGN OUT NOW`, step 5 `check: ALL OK`). Checking both against the logs before cleanup;
+  then the README gap bullet (Found outside scope 5).
+- 2026-11-04 22:41, worker: step 1 done, evidence copied before any change to
+  `<my scratchpad>\p2-6-runonce-keep\evidence` (harness folder, data folder, Winlogon, Kernel-Power, Shell-Core
+  9705 to 9708, Run and RunOnce values, `powercfg /list`). Step 2, the logs agree with Haik: `B2-kill.txt` 22:34:42.032
+  `READY: SIGN OUT NOW`, `check.log` 22:37:25 `check: ALL OK`. Details in Result.
+- 2026-11-04 22:41, worker: the copy's values read before the cleanup (read only, `powercfg /qh`): lid AC 1, lid DC 1,
+  sleep AC 18000, sleep DC 18000, as restore mode wrote them back. No `wakeshot-tray` or `power_check` process runs.
+  Step 3: `power_check cleanup` (pid 13860) exit 0: removed the run record, deleted the copy `435c96a0-...`;
+  `check.ps1` 22:41:44 `check: ALL OK`: Balanced active, lid AC 1 and DC 1, sleep AC 18000 and DC 18000, energy saver
+  DC 30, the same as the baseline; nothing put back. `powercfg /list`: Balanced only. No journal; RunOnce empty; Run has
+  the same 7 values as at prep, no Wakeshot.
+- 2026-11-04 22:42, worker: step 4: the final `check.log` and the cleanup's log copied to the evidence folder, then
+  deleted `%LocalAppData%\Wakeshot-harness` (all, with `haik`, `haik-out`, `runs`, `cleanup`), `%LocalAppData%\Wakeshot`
+  and `<S2>\target` (2.1 GB); `<S2>\scripts` and `make-cmd.py` kept (the card names only `target`). Read again at
+  22:42:28 by `powercfg /qh`: Balanced active and the only plan, lid AC 1, DC 1, sleep AC 18000, DC 18000, energy saver
+  DC 30; no `WakeshotRestore`; `WAKESHOT_DATA_DIR` unset; `powercfg /requests` None for all six types.
+- 2026-11-04 22:44, worker: step 5: `docs/research.md` "Power track manual checks", new bullet "Checklist 5 holds"
+  (re-read right before the edit; addition only). Next: the README gap bullet, then the coordinator's extra README fix
+  (the flat contents list under "Details").
+- 2026-11-04 22:45, worker: `README.md`, the gap bullet added as the first item under "Until Wakeshot next starts"
+  (Haik's lines unchanged, the bullet fits one line). Then the coordinator's extra fix (Haik's ask, same round): the
+  contents list under "## Details" is now flat, the section's 9 subsections plus "Credits and license", the same
+  anchors; every other line of Haik's trim unchanged. Built from the coordinator's list and the current anchors, not
+  from the file before dd72a4d (no git). `docs/architecture.md:923` "the README says so" now holds: every case of "Gap
+  left" is in the README's Limits (next sign-in 3, Wakeshot's next start 3, reinstall 1, the lost record paragraph);
+  no change there. Lines 918 to 920 of that file are stale: Found outside scope 6.
+- 2026-11-04 22:46, worker: acceptance (B2 redo) pass; Result written; Status done. Nothing of mine runs; the
+  evidence folder in my scratchpad stays.
+- 2026-11-04 22:47, worker: the coordinator's ask: `docs/architecture.md:918-921` ("Logon restore", the tested line)
+  now names checklist 5 as tested on one sign-in and keeps the tests-only part. Found outside scope 6 fixed.
 
 ## Result
 
-Part A done (2026-11-04); fix round of the review done (19:01); Part B prep done (19:08), Haik's B2 redo next.
+Done (2026-11-04 22:46): Part A, the fix round of the review, Part B prep, Haik's B2 redo (22:34 to 22:37) and
+deliverable 6.
+
+Part B, deliverable 6 ("After Haik's steps"): **pass**, the logs agree with Haik's "B2 was fully ok".
+
+- Evidence (copied before any change): `<my scratchpad>\p2-6-runonce-keep\evidence`, where my scratchpad is
+  `C:\Users\haika\AppData\Local\Temp\claude\f7c2c08a8f04f07b\9e63f57e-1449-4ae9-b41f-f046e0b19a2e\scratchpad`.
+- Step 3 of Haik's steps: `B2-kill.txt` 22:34:39.882 tray pid 13448, guard pid 5280; 22:34:42.011 `both gone: True;
+  ... journal left: True; RunOnce: "<S2>\target\debug\wakeshot-tray.exe" --restore`; 22:34:42.032 `READY: SIGN OUT
+  NOW`.
+- Sign-out and sign-in: Winlogon 7002 22:35:15.117, 7001 22:35:23.220. Shell-Core: RunOnce `9705`, then `9707`
+  `Started execution of command 'wakeshot-tray.exe" --restore'` 22:36:00.200 (37.0 s after the sign-in), `9708` (PID
+  29660) 22:36:00.227.
+- Restore mode (`wakeshot.log`): `restore mode started` 22:36:00.239; `wrote lidAc ... 0 to 1`, `lidDc ... 0 to 1`,
+  `sleepDc ... 0 to 18000` on the copy `435c96a0-...`; `journal deleted`; `restore mode: restored the journal's
+  entries` 22:36:00.251. The owner was gone: restore mode goes on to restore only for a Gone owner
+  (`recovery.rs:758`); it logs no owner line on that path. RunOnce removed: by Windows before the run (the key empty at
+  22:37:25 and 22:39); restore mode logs no `removed` line then (Found outside scope 7). The copy read lid 1 and 1,
+  sleep 18000 and 18000 at 22:41:25.
+- Step 5: `check.log` 22:37:25 `check: ALL OK` (and `test copy left, not active`).
+- The fake tray logged no `RunOnce value was missing` line, as expected (it started at 22:34:11, after its sign-in's
+  pass at 18:16:37.290); its new `step RunOnce set: ok` ran at each plan read (22:34:24, 22:34:34).
+- Cleanup: `power_check cleanup` exit 0 (run record removed, copy deleted). `check.ps1` 22:41:44 `check: ALL OK`.
+  **Haik's values equal the baseline**, nothing put back: Balanced active and the only plan, lid AC 1, DC 1, sleep AC
+  18000, DC 18000, energy saver DC 30; read again 22:42:28 by `powercfg /qh`, the same. No journal, no
+  `WakeshotRestore`, Run without Wakeshot, `WAKESHOT_DATA_DIR` unset, `powercfg /requests` None.
+- Deleted: `%LocalAppData%\Wakeshot-harness` (all: `haik`, `haik-out`, `runs`, `cleanup`, `original-plan.txt`),
+  `%LocalAppData%\Wakeshot`, `<S2>\target` (2.1 GB). Kept: `<S2>\scripts`, `<S2>\make-cmd.py` (the card names only
+  `target`).
+- `docs/research.md` "Power track manual checks": bullet "Checklist 5 holds". The case the fix closes (a hold that
+  starts before its sign-in's pass) did not run here; it is shown by tests only.
+- `README.md`: review finding 3 (Found outside scope 5), one bullet, the first under "Until Wakeshot next starts":
+  "a crash, power cut or End task as above, between a sign-in running that entry and Wakeshot setting it again;".
+  The coordinator's extra fix: the contents list under "## Details" is flat again (Install to Uninstall, plus Credits
+  and license, the same anchors). `docs/architecture.md` "the README says so" (now line 924) holds; not changed.
+- `docs/architecture.md:918-921` (coordinator's ask, Found outside scope 6): checklist 5 tested on one sign-in; a hold
+  that starts before its sign-in's pass getting the value back: shown only by tests.
+- No cargo run this round (no code changed).
 
 Fix round (review `docs/reviews/p2-6-runonce-keep.md`, 0 blockers, 0 majors, 6 minors):
 
@@ -311,9 +393,12 @@ harmless). While the tray lives, no other process restores its journal: the guar
 gone, and `wakeshot restore` hands the job to the tray. A restore command may now write the value right before its own
 clean-up removes it. That costs two registry calls, and the value is there if a session end cuts the restore short.
 
-Open items (updated 2026-11-04 19:08):
+Open items (updated 2026-11-04 22:46):
 
-1. Haik's B2 redo ("Part B: B2 redo", "Steps for Haik"), then deliverable 6 by a new worker ("After Haik's steps").
-2. Haik's review of finding 6's fix (the value also for another owner's leftover; Decisions 9).
-3. Found outside scope 5: the README's gap list (review finding 3), once `README.md`'s other edits are committed.
-4. Done in the fix round: the review's findings 1, 2, 4, 5, 6 and Found outside scope 1 to 3.
+1. Haik's review of finding 6's fix (the value also for another owner's leftover; Decisions 9).
+2. The phase file's checklist 5 status may still say not tested (not read). `docs/architecture.md:918-921` fixed
+   22:47 (Found outside scope 6).
+3. The case the fix closes (a hold that starts before its sign-in's RunOnce pass) is shown by tests only, not on a
+   real sign-in.
+4. Done: B2 redo and deliverable 6 (22:46), with review finding 3 (Found outside scope 5, README); the review's
+   findings 1, 2, 4, 5, 6 and Found outside scope 1 to 3 in the fix round.

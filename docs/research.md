@@ -4340,3 +4340,22 @@ to the 16:44 baseline after every check and at the end (18:26, `powercfg`).
   owner check) at 18:15:18.683, after the pass had ended. So a value the tray writes again at its next plan read (up to
   10 s later) is not run a second time by that pass. Whether Explorer would pick up a value written inside those 17 ms:
   **not verified**. **Verified** (event log and Wakeshot log, one sign-in).
+- **Checklist 5 holds: with tray and guard ended, restore mode at the next sign-in restores the journal.** Card
+  `docs/tasks/p2-6-runonce-keep.md`, Part B (B2 redo), 2026-11-04 22:34 to 22:42, on the code after that card's fix
+  round (debug x64, built 19:06). The hold ran in `power_check fake-tray` (Medium, through the real executor and
+  `FileNet`), restore mode in the real `wakeshot-tray.exe --restore`. The fake tray started 22:34:11, long after its
+  sign-in's RunOnce pass (18:16:37.290), applied lid AC 0, lid DC 0, sleep DC 0 to a copy that is never active, set the
+  value at 22:34:11.720 and started guard pid 5280; at the plan reads of 22:34:24 and 22:34:34 the new RunOnce step
+  found the value there (no "was missing" line). `kill.ps1` ended guard and tray at 22:34:39.892; `B2-kill.txt`: both
+  gone, journal left, RunOnce `"...\wakeshot-tray.exe" --restore`, `READY: SIGN OUT NOW` 22:34:42.032. Winlogon 7002
+  22:35:15.117, 7001 22:35:23.220. Shell-Core: RunOnce `9705` and `9707` (`wakeshot-tray.exe" --restore`)
+  22:36:00.200, 37.0 s after the sign-in, `9708` (PID 29660) and `9706` 22:36:00.227 (a 27 ms pass). Restore mode:
+  `restore mode started` 22:36:00.239, after the pass; lidAc 0 to 1, lidDc 0 to 1, sleepDc 0 to 18000 on the copy,
+  `journal deleted`, `restored the journal's entries` 22:36:00.251. It logs no owner line on this path: it restores only
+  when the owner is Gone (`recovery.rs:758`). No `RunOnce value WakeshotRestore removed` line either: Windows deleted
+  the value before it ran it, and `clear_run_once` logs only a value it removed. The copy read lid 1 and 1, sleep 18000
+  and 18000 at 22:41:25 (`powercfg /qh`); `check.log` 22:37:25 `check: ALL OK`; Haik's values equal to the 19:06
+  baseline at 22:41:44 and 22:42:28. **Verified** (Wakeshot log, event logs, `powercfg`, one sign-in). The case the fix
+  closes (a hold that starts before its sign-in's pass gets the value back at its next plan read) was not run here:
+  shown only by tests (`run_once_comes_back_with_the_real_net` over a scratch HKCU key); on a real sign-in **not
+  verified**.
