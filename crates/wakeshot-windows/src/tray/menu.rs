@@ -1,6 +1,6 @@
 //! `OwnerDrawnMenu`, the `MenuView` the product uses.
 //!
-//! Owner: `p5-menu-view`.
+//! Owner: `p5-menu-view`, then `p5-haik-check` (the menu opens above the taskbar, Haik's check).
 //!
 //! The Phase 1 pick (`docs/research/tray-menu-look.md`, "Pick"): a classic Win32 popup menu, so Windows keeps the menu
 //! loop, keyboard, access keys, light dismiss, placement, submenus and screen readers, with every item owner-drawn by
@@ -67,11 +67,13 @@ const FALLBACK_THEME: Theme = Theme {
 pub enum Note {
     /// The menu opened at `dpi` with `theme`. `foreground`: what `SetForegroundWindow` returned; without it the menu
     /// may not close on an outside click. `frame`: the classic frame got the same mode (uxtheme had both calls).
+    /// `at`: the point the menu was aligned to, after the taskbar rule ([`placement`]).
     Opened {
         dpi: u32,
         theme: Theme,
         foreground: bool,
         frame: bool,
+        at: Anchor,
     },
     /// A menu window got round corners and the border colour.
     Styled {
@@ -184,7 +186,10 @@ impl MenuView for OwnerDrawnMenu {
         let theme = self
             .forced_theme
             .unwrap_or_else(|| theme::read().unwrap_or(FALLBACK_THEME));
-        let (dpi, monitor) = monitor_at(anchor);
+        let (dpi, area) = monitor_at(anchor);
+        // SAFETY: plain call.
+        let drop_right = unsafe { GetSystemMetrics(SM_MENUDROPALIGNMENT) } != 0;
+        let place = placement(drop_right, anchor, area);
         // Items are ours, but Windows still draws the frame and the gutter around them with the process's mode.
         let frame = self.ux.set(mode_for(&theme));
         let open = match Open::new(&menu.items, &theme, dpi) {
@@ -203,13 +208,13 @@ impl MenuView for OwnerDrawnMenu {
             theme,
             foreground,
             frame,
+            at: place.at,
         });
-        // SAFETY: plain call.
-        let drop_right = unsafe { GetSystemMetrics(SM_MENUDROPALIGNMENT) } != 0;
         // No `TPM_NONOTIFY`: the menu must send `WM_MENUCHAR` and the owner-draw messages.
-        let flags = TPM_RETURNCMD | TPM_RIGHTBUTTON | alignment(drop_right, anchor, monitor);
+        let flags = TPM_RETURNCMD | TPM_RIGHTBUTTON | place.flags;
         // SAFETY: `root` lives in `shared.open` until after the call, and no borrow of it is held during the call.
-        let id = unsafe { TrackPopupMenuEx(root, flags.0, anchor.x, anchor.y, self.hwnd, None) };
+        let id =
+            unsafe { TrackPopupMenuEx(root, flags.0, place.at.x, place.at.y, self.hwnd, None) };
         // `TrackPopupMenuEx` Remarks: a message to the owner after the menu, so the next one also closes as it should.
         // SAFETY: this thread's own window.
         let _ = unsafe { PostMessageW(Some(self.hwnd), WM_NULL, WPARAM(0), LPARAM(0)) };
@@ -666,9 +671,28 @@ fn menu_char<'a>(key: u16, items: impl IntoIterator<Item = &'a MenuItem>) -> isi
     ignore
 }
 
-/// Left or right of the anchor from `SM_MENUDROPALIGNMENT` (Microsoft's notification icon sample does the same);
-/// above it when the click came from the lower half of its monitor (a bottom taskbar), else below it.
-fn alignment(drop_right: bool, anchor: Anchor, monitor: RECT) -> TRACK_POPUP_MENU_FLAGS {
+/// The anchor's monitor: its whole rect and its work area, the part the taskbar does not cover.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct MonitorArea {
+    monitor: RECT,
+    work: RECT,
+}
+
+/// The point `TrackPopupMenuEx` aligns the menu to, and how.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Placement {
+    at: Anchor,
+    flags: TRACK_POPUP_MENU_FLAGS,
+}
+
+/// Where the menu opens. A click or key select on a taskbar icon gives a point on the taskbar, outside the work area;
+/// the menu then sits against the work area's edge that faces the taskbar, as Windows 11's own tray menus do, so it
+/// never hides taskbar icons (Haik's check, 2026-11-04). Along that edge it stays at the anchor, and Windows keeps it
+/// inside the monitor. A point inside the work area (the overflow flyout, or an auto-hidden taskbar, whose work area
+/// is the whole monitor) is used as it is: the menu goes above it in the lower half of the monitor, else below it.
+/// Left or right of the point follows `SM_MENUDROPALIGNMENT`, as Microsoft's notification icon sample does.
+fn placement(drop_right: bool, anchor: Anchor, area: MonitorArea) -> Placement {
+    let MonitorArea { monitor, work } = area;
     let horizontal = if drop_right {
         TPM_RIGHTALIGN
     } else {
@@ -680,12 +704,29 @@ fn alignment(drop_right: bool, anchor: Anchor, monitor: RECT) -> TRACK_POPUP_MEN
     } else {
         TPM_TOPALIGN
     };
-    horizontal | vertical
+    // `RECT` right and bottom are exclusive: the bottom taskbar starts at `work.bottom`, and a menu aligned there with
+    // `TPM_BOTTOMALIGN` ends on the row above it.
+    let Anchor { x, y } = anchor;
+    let (x, y, flags) = if y >= work.bottom && work.bottom < monitor.bottom {
+        (x, work.bottom, horizontal | TPM_BOTTOMALIGN)
+    } else if y < work.top && work.top > monitor.top {
+        (x, work.top, horizontal | TPM_TOPALIGN)
+    } else if x < work.left && work.left > monitor.left {
+        (work.left, y, TPM_LEFTALIGN | vertical)
+    } else if x >= work.right && work.right < monitor.right {
+        (work.right, y, TPM_RIGHTALIGN | vertical)
+    } else {
+        (x, y, horizontal | vertical)
+    };
+    Placement {
+        at: Anchor { x, y },
+        flags,
+    }
 }
 
-/// The DPI and the rect of the anchor's monitor. The DPI is the monitor's, never the system DPI fixed at sign-in
+/// The DPI and the area of the anchor's monitor. The DPI is the monitor's, never the system DPI fixed at sign-in
 /// (research, "`LoadIconMetric` follows the system DPI"); that one stands in only when the read fails.
-fn monitor_at(anchor: Anchor) -> (u32, RECT) {
+fn monitor_at(anchor: Anchor) -> (u32, MonitorArea) {
     let point = POINT {
         x: anchor.x,
         y: anchor.y,
@@ -704,13 +745,16 @@ fn monitor_at(anchor: Anchor) -> (u32, RECT) {
         ..Default::default()
     };
     // SAFETY: `info` is live with `cbSize` set.
-    let rect = if unsafe { GetMonitorInfoW(monitor, &mut info) }.as_bool() {
-        info.rcMonitor
+    let area = if unsafe { GetMonitorInfoW(monitor, &mut info) }.as_bool() {
+        MonitorArea {
+            monitor: info.rcMonitor,
+            work: info.rcWork,
+        }
     } else {
-        // An empty rect at the origin opens the menu above the click, as from a bottom taskbar.
-        RECT::default()
+        // Empty rects at the origin open the menu above the click, as from a bottom taskbar.
+        MonitorArea::default()
     };
-    (dpi, rect)
+    (dpi, area)
 }
 
 /// `PreferredAppMode` (uxtheme, undocumented): the 1903 and later values from `ysc3839/win32-darkmode` `DarkMode.h`,
@@ -1120,39 +1164,139 @@ mod tests {
         assert_eq!(post_pick(&failing, &commands, 1), Err(error));
     }
 
-    #[test]
-    fn alignment_follows_the_setting_and_the_anchor() {
-        let screen = RECT {
+    fn rect(left: i32, top: i32, right: i32, bottom: i32) -> RECT {
+        RECT {
+            left,
+            top,
+            right,
+            bottom,
+        }
+    }
+
+    fn at(x: i32, y: i32, flags: TRACK_POPUP_MENU_FLAGS) -> Placement {
+        Placement {
+            at: Anchor { x, y },
+            flags,
+        }
+    }
+
+    /// Haik's DELL at 150%: 3840 by 2160, the taskbar 72 px high at the bottom.
+    const DELL: MonitorArea = MonitorArea {
+        monitor: RECT {
             left: 0,
             top: 0,
-            right: 1920,
-            bottom: 1200,
-        };
-        let taskbar = Anchor { x: 1800, y: 1180 };
-        assert_eq!(
-            alignment(false, taskbar, screen),
-            TPM_LEFTALIGN | TPM_BOTTOMALIGN
-        );
-        assert_eq!(
-            alignment(true, taskbar, screen),
-            TPM_RIGHTALIGN | TPM_BOTTOMALIGN
-        );
-        let top = Anchor { x: 1800, y: 10 };
-        assert_eq!(alignment(false, top, screen), TPM_LEFTALIGN | TPM_TOPALIGN);
-        // A screen above the primary has negative coordinates.
-        let above = RECT {
+            right: 3840,
+            bottom: 2160,
+        },
+        work: RECT {
             left: 0,
-            top: -1440,
-            right: 2560,
-            bottom: 0,
-        };
+            top: 0,
+            right: 3840,
+            bottom: 2088,
+        },
+    };
+
+    #[test]
+    fn a_bottom_taskbar_menu_sits_on_the_taskbar_top_edge() {
+        // A click in the middle of the icon (Haik's run): the menu's bottom goes on the taskbar's top edge, not on
+        // the click, so it covers no taskbar icon. The key select's anchor (`p5-tray-icon`) gets the same.
         assert_eq!(
-            alignment(false, Anchor { x: 100, y: -20 }, above),
-            TPM_LEFTALIGN | TPM_BOTTOMALIGN
+            placement(false, Anchor { x: 3336, y: 2124 }, DELL),
+            at(3336, 2088, TPM_LEFTALIGN | TPM_BOTTOMALIGN)
         );
         assert_eq!(
-            alignment(false, Anchor { x: 100, y: -1400 }, above),
-            TPM_LEFTALIGN | TPM_TOPALIGN
+            placement(false, Anchor { x: 3347, y: 2124 }, DELL),
+            at(3347, 2088, TPM_LEFTALIGN | TPM_BOTTOMALIGN)
+        );
+        // On the taskbar's first row and its last.
+        assert_eq!(
+            placement(false, Anchor { x: 10, y: 2088 }, DELL).at,
+            Anchor { x: 10, y: 2088 }
+        );
+        assert_eq!(
+            placement(false, Anchor { x: 10, y: 2159 }, DELL).at,
+            Anchor { x: 10, y: 2088 }
+        );
+        // Right-handed drop alignment keeps its side; only the edge moves.
+        assert_eq!(
+            placement(true, Anchor { x: 3336, y: 2124 }, DELL),
+            at(3336, 2088, TPM_RIGHTALIGN | TPM_BOTTOMALIGN)
+        );
+    }
+
+    #[test]
+    fn top_and_side_taskbars_anchor_to_the_edge_facing_the_work_area() {
+        let top = MonitorArea {
+            monitor: rect(0, 0, 1920, 1200),
+            work: rect(0, 48, 1920, 1200),
+        };
+        assert_eq!(
+            placement(false, Anchor { x: 1800, y: 20 }, top),
+            at(1800, 48, TPM_LEFTALIGN | TPM_TOPALIGN)
+        );
+        let left = MonitorArea {
+            monitor: rect(0, 0, 1920, 1200),
+            work: rect(62, 0, 1920, 1200),
+        };
+        // The tray sits low on a side taskbar: the menu goes up from the click, beside the taskbar.
+        assert_eq!(
+            placement(true, Anchor { x: 30, y: 1150 }, left),
+            at(62, 1150, TPM_LEFTALIGN | TPM_BOTTOMALIGN)
+        );
+        assert_eq!(
+            placement(false, Anchor { x: 30, y: 100 }, left),
+            at(62, 100, TPM_LEFTALIGN | TPM_TOPALIGN)
+        );
+        let right = MonitorArea {
+            monitor: rect(0, 0, 1920, 1200),
+            work: rect(0, 0, 1858, 1200),
+        };
+        assert_eq!(
+            placement(false, Anchor { x: 1890, y: 1150 }, right),
+            at(1858, 1150, TPM_RIGHTALIGN | TPM_BOTTOMALIGN)
+        );
+    }
+
+    #[test]
+    fn a_point_inside_the_work_area_is_kept() {
+        // The overflow flyout sits above the taskbar, inside the work area.
+        assert_eq!(
+            placement(false, Anchor { x: 3300, y: 1900 }, DELL),
+            at(3300, 1900, TPM_LEFTALIGN | TPM_BOTTOMALIGN)
+        );
+        // An auto-hidden taskbar leaves the work area the whole monitor, so the click point stays.
+        let hidden = MonitorArea {
+            monitor: rect(0, 0, 1920, 1200),
+            work: rect(0, 0, 1920, 1200),
+        };
+        assert_eq!(
+            placement(false, Anchor { x: 1800, y: 1180 }, hidden),
+            at(1800, 1180, TPM_LEFTALIGN | TPM_BOTTOMALIGN)
+        );
+        assert_eq!(
+            placement(true, Anchor { x: 1800, y: 10 }, hidden),
+            at(1800, 10, TPM_RIGHTALIGN | TPM_TOPALIGN)
+        );
+        // A failed monitor read gives empty rects: above the click, as from a bottom taskbar.
+        assert_eq!(
+            placement(false, Anchor { x: 50, y: 50 }, MonitorArea::default()),
+            at(50, 50, TPM_LEFTALIGN | TPM_BOTTOMALIGN)
+        );
+    }
+
+    #[test]
+    fn a_monitor_above_the_primary_keeps_its_negative_edges() {
+        let above = MonitorArea {
+            monitor: rect(0, -1440, 2560, 0),
+            work: rect(0, -1440, 2560, -48),
+        };
+        assert_eq!(
+            placement(false, Anchor { x: 2400, y: -20 }, above),
+            at(2400, -48, TPM_LEFTALIGN | TPM_BOTTOMALIGN)
+        );
+        assert_eq!(
+            placement(false, Anchor { x: 100, y: -1400 }, above),
+            at(100, -1400, TPM_LEFTALIGN | TPM_TOPALIGN)
         );
     }
 

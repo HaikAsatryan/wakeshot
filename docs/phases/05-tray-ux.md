@@ -190,7 +190,7 @@ own Windows settings switched and put back.
 | `p5-menu-view` | no (menu look answered 17:32) | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | done (11:51: Part A 10 tests; Part B on screen; memory flat over 20 opens) |
 | `p5-notices` | no | screen, settings (Do not disturb) | Part A: contracts change card; Part B: `p5-tray-icon`, `p5-text`, `p5-icon-art` | done (12:06: Part A 10 tests; Part B on screen; 4 notices cut after five lines) |
 | `p5-sounds` | no (the "No sounds" question: honor it, Haik 2026-11-03 18:09) | sound | contracts change card | done (committed 02:41): Part B in a locked session: all nine chimes seen in loopback at full length; reads equal |
-| `p5-haik-check` | yes, about 25 minutes: eyes, ears, hands | screen, sound, settings | every card above, `p4-cli-commands` | blocked: Part A done (11:49, `ux_all`); Part B needs Haik at the screen |
+| `p5-haik-check` | yes, about 25 minutes: eyes, ears, hands | screen, sound, settings | every card above, `p4-cli-commands` | done (16:40: Haik's check; the menu opens above the taskbar; banner header "Wakeshot") |
 
 Sizes, one worker's context: `p5-theme` about 40K tokens, `p5-icon-art` 120K, `p5-text` 80K, `p5-menu-paint` 110K,
 `p5-tray-icon` 140K, `p5-menu-view` 130K, `p5-notices` 110K, `p5-sounds` 120K, `p5-haik-check` 80K. Total about 930K.
@@ -326,3 +326,10 @@ Bundle (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p5-th
   notice is lost; in `--pair` a click on the first banner gives no click message. Open: the 125% size check (Haik's
   optional scale step). Nothing left on the laptop. Next in the slot: the `p6-int-tray-mode` and
   `p6-int-dry-run-e2e` pictures (started 12:07, stop 12:28).
+- 2026-11-04 16:42 (orchestrator `wakeshot-27`): `p5-haik-check` Part B done with Haik. Icon (Sunrise) and words
+  kept. His two comments fixed and seen by him: the menu now opens with its bottom on the taskbar's top edge (4
+  placement tests); the demo banner header said `ux_all.exe` (no version resource), now "Wakeshot" (the tray exe
+  already has it; the installed app inferred, not checked on an install). Locked notice: reached the lock screen,
+  content hidden by Windows. Chimes heard docked and undocked, on the laptop speakers after the replug. Fast banners:
+  Windows' "Dismiss notifications after" (5 s on his laptop); a missed banner is not kept in Win+N (Microsoft docs).
+  Product call for Haik: keep `Shell_NotifyIcon` notices, or registered toasts (not verified that they stay).

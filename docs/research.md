@@ -4216,3 +4216,62 @@ words fails with the exact recorded message on the code before this card, and it
   under 5 minutes counts as a skip for input. **Verified** (named test and one scenario fail without the fix).
 - **After the fixes: the whole core test binary at 4096 cases, 10 of 10 runs passed; at 256 cases (CI's count), 50 of
   50 passed** (release, one test thread, a random `PROPTEST_RNG_SEED` per run, logged). **Verified** (the runs).
+
+## Tray UX: Haik's check
+
+Card `docs/tasks/p5-haik-check.md`, 2026-11-04 15:48 to 16:30. Haik ran the demo `ux_all` (debug x64 from the repo
+tree, at Medium, icon pinned on the DELL taskbar at 150%) his own way, not step by step, and answered: "I checked demo
+in my way and everything seems ok besides 2 comments below: 1. Notification header has weird name ux_all.exe 2. When
+you click tray icon the the panel opens on click place but it should open above taskbar for not hiding taskbar
+icons." Icon (Sunrise) and words: kept as they are. Not checked step by step (Haik saw no problem): the banner on the
+lock screen, the chimes and their device after a dock replug, the first-run click, high contrast, the 100% scale and
+an Explorer restart. The demo's log shows what he did run: all 15 notices, the icon states, Light mode and back, Open
+log, the menu picks.
+
+- **The banner header names the exe by its version info, else by its file name.** `ux_all.exe` had no version
+  resource: the shell wrote `DisplayName` "ux_all.exe" under
+  `HKCU\Software\Classes\AppUserModelId\NotifyIconGeneratedAumid_12880751163260563509`, and the header said
+  "ux_all.exe". Rebuilt with the tray exe's `VERSIONINFO` (`FileDescription` and `ProductName` "Wakeshot", linked as a
+  `.res`) and that key deleted, the next banner's header read "Wakeshot" and the key's `DisplayName` was "Wakeshot".
+  Explorer's own icon key of this kind shows as "Windows Explorer" in Settings > Notifications: `explorer.exe`'s
+  `FileDescription`, while its `ProductName` is "Microsoft® Windows® Operating System". So `FileDescription` is the
+  likely source: inferred from that one case (both fields are "Wakeshot" in our exes). No Microsoft page found that
+  says where the header name comes from (web search 2026-11-04). **Verified** for our demo (screen grab and registry
+  read, 16:28).
+- **What the tray exe shows.** `wakeshot-tray.exe` embeds that version info from `crates/build-resources.rs`, and the
+  dry-run tray's header said "Wakeshot" on screen (`p6-int-dry-run-e2e`, above). The installed exe is the same build
+  with the same resource and gets its own key for the product GUID, so its header should read "Wakeshot" too:
+  inferred, not checked on an installed copy. Velopack's Start menu shortcut plays no part in the name as far as seen
+  here (the key is the shell's own `NotifyIconGeneratedAumid_` one; not verified on an install).
+- **The menu covered the taskbar.** It was aligned with `TPM_BOTTOMALIGN` to the click point, which lies inside the
+  taskbar, so the menu's lower part hid the taskbar's upper half next to the icon. Now a point outside the monitor's
+  work area moves to the work area's edge facing the taskbar. Run 2, a synthetic click at 3336,2124: aligned to
+  3335,2088; the menu window `#32768` sat at 3327,1772 to 3840,2088, its bottom on the taskbar's top edge (2088), and
+  Windows slid it 8 px left to keep it on the monitor. **Verified** (window rect and screen grab).
+- **A tee keeps a console demo's keys.** `ux-all.cmd` runs `ux_all.exe ... 2>&1 | tee.exe -a -i <log>` (Git's GNU
+  tee 8.32): the demo's stdin stays the console, and `ReadConsoleInputW` got every key Haik pressed. Three stray
+  keys came in that nobody asked for (`m` at the start, then `k` and `s`); cause not checked. **Verified** (the log).
+- **Today's display scales:** the DELL 3840 by 2160 at 150% (primary, the tray) and the laptop screen 2304 by 1440
+  physical at 150% (`GetDpiForMonitor` effective DPI 144 in a per-monitor v2 process). Earlier notes in this file and
+  in the cards say the laptop screen ran 1920 by 1200 at 125%; whether it changed since or was misread then: not
+  verified. Undocked (run 2, 16:32:53) the demo's icon redrew at 20 px, which is 125% on the laptop taskbar, and at
+  24 px again once docked: so the laptop screen likely has 125% alone and 150% docked (inferred from the icon size).
+
+Run 2 (16:27 to 16:34) and run 3 (16:37), after the fixes. Haik: "It's perfect fixed the place", and he ran steps 5
+and 6 too.
+
+- **A notice shown while locked reaches the lock screen, content hidden.** `l`, then `IdleLocked` 10 s later
+  (`Ok`): Haik saw the banner on the lock screen with its content hidden as private, and no sound (the notice is
+  silent by design). His "Show notifications on the lock screen" is On. **Verified** (Haik's eyes, the log).
+- **The chimes take the laptop speakers.** Undocked: "on speakers (the default device)". After the dock replug, with
+  the DELL screen audio the default again: "on speakers (speakers instead of the default screen audio)". Haik heard
+  all three both ways. **Verified** (log lines, Haik's ears).
+- **A dock replug can make a new default output device.** Before: "4 - DELL U2723QE" at 20%; after Haik's unplug and
+  replug: "3 - DELL U2723QE", a new endpoint id, at 18%, still the default. **Verified** (Core Audio reads 15:52 and
+  16:39); why Windows made a new endpoint: not checked.
+- **Banners go after about 6 s while the user is active, and a second one waits.** Haik's "Dismiss notifications
+  after this amount of time" is 5 s (`SPI_GETMESSAGEDURATION` and `HKCU\Control Panel\Accessibility`
+  `MessageDuration`, read only); third-party guides give 5 s as Windows' default, and Microsoft's
+  `SystemParametersInfoW` page names none. Run 3, two notices 1.7 s apart, grabs every 0.4 s: the first banner stayed
+  about 6 s, the second did not replace it and showed after it for about 6 s. A four-line body is hard to read in
+  that time, and the banner is not kept in the notification centre (above). **Verified** (grabs, reads).

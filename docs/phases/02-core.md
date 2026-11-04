@@ -377,6 +377,6 @@ Where each item this track owns is built. "Integration" is planned after the tra
   external screen). The hibernate property found a core gap: a sleep check pass that came after input still wrote
   the 1-minute timeouts or sent `Hibernate` 10 s after input; now input under 5 minutes old skips it. Core props at
   4096 cases 10 of 10 runs, at 256 cases 50 of 50.
-- 2026-11-04 16:38 (orchestrator `wakeshot-27`): Haik kept the defaults (recorded in `product.md`): a restore during a
+- 2026-11-04 16:22 (orchestrator `wakeshot-27`): Haik kept the defaults (recorded in `product.md`): a restore during a
   closed-lid work-end countdown (`wakeshot restore` from a script) does not cancel the fallback hibernate; a hold
   that starts with the lid already closed does not lock (`p2-6-props-rare` worker decision).

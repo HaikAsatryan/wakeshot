@@ -3,6 +3,13 @@
 //!
 //! `ux_all [--minutes N] [--logs <dir>]`
 //!
+//! Without a version resource, Windows heads each balloon's banner with the file name, `ux_all.exe`. For the tray
+//! exe's header, "Wakeshot", link the same version info `crates/build-resources.rs` gives that exe: an `.rc` with its
+//! `VERSIONINFO` compiled by `rc.exe`, then `cargo rustc -p wakeshot-windows --example ux_all -- -C
+//! link-arg=<ux_all.res>`. Windows writes the name it read as `DisplayName` under
+//! `HKCU\Software\Classes\AppUserModelId\NotifyIconGeneratedAumid_<id>`; delete that key after a run without the
+//! resource, so the name is read again.
+//!
 //! Start it at Medium (Phase 5 track note 4). The menu is the product's, built by `present::build` from a sample
 //! state, and a pick acts as the product would look: Automatic and Keep awake change the icon and the status line,
 //! Restore shows its notice, Open log opens the sample log, Quit quits. Keys in the console window:
