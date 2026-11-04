@@ -1,6 +1,7 @@
 # Haik's checks for the power track
 
-Phase: 3. Status: blocked: waiting for Haik (2026-11-04 01:08; steps under "Steps for Haik"). Needs Haik: **yes**:
+Phase: 3. Status: blocked: waiting for Haik (2026-11-04 16:46; worker prep done, ready for step A; steps under "Steps
+for Haik"). Needs Haik: **yes**:
 about 60 minutes elapsed, about 15 minutes of his hands (lid, charger, sign-out, Task Manager, lock); the two battery
 runs need the laptop unplugged for about 20 minutes each (now D about 12 and E about 25 minutes). Real laptop:
 **yes**: battery, lid, sign-out, lock, a plan copy made active. **Runs alone on the whole laptop** (cross-track
@@ -88,7 +89,7 @@ Paths: `<S2>` is `C:\Users\haika\AppData\Local\Temp\claude\C--Users-haika-code-w
 (build, scripts); the step files are in `%LocalAppData%\Wakeshot-harness\haik`; logs in
 `%LocalAppData%\Wakeshot-harness` and `%LocalAppData%\Wakeshot\logs`. The scripts are `<S2>\scripts\check.ps1`,
 `kill.ps1`, `C2-lock.ps1`, `requests-log.ps1`; `<S2>\make-cmd.py` writes the step files (all written 2026-11-04 and
-smoke-tested; not yet run with the build).
+smoke-tested; the build of 2026-11-04 16:44, on today's code, is in `<S2>\target`).
 
 ### Before Haik starts (orchestrator, then this card's worker)
 
@@ -226,7 +227,9 @@ B2, restore at the next sign-in:
    - B2: `B2-kill.txt` READY; after sign-in (Winlogon 7001) the restore process's lines: the copy's entries written
      back, journal deleted, RunOnce removed. Checklist 5.
    - `requests.log`: any DISPLAY, SYSTEM or EXECUTION entry other than `power_check.exe` during D or E spoils that
-     check (redo only that one).
+     check (redo only that one). Except a SYSTEM `[DRIVER] Legacy Kernel Caller` in the one sample right after a
+     resume that is gone by the next sample: the prep saw one 1 s after a Modern Standby exit (16:44:40), gone 11 s
+     later. A driver entry still there through D's screen off, or at any time in E, spoils the check.
 3. `power_check cleanup`, then `check.ps1`: Haik's values against the baseline; put back any difference and read
    again. No "Wakeshot test" plan, no journal, no `WakeshotRestore` value.
 4. Copy the logs to the worker's scratchpad; delete `%LocalAppData%\Wakeshot-harness`, `%LocalAppData%\Wakeshot` and
@@ -264,12 +267,65 @@ Problems seen but not fixed.
   Balanced active and the only plan, lid AC 1 and DC 1, sleep AC 18000 and DC 18000, energy saver DC 30. The prep reads
   them again live as the baseline. The laptop was on battery and undocked from 00:30 (see `p3-real-checks` Found
   outside scope 1).
+- 2026-11-04 16:42, worker (prep): started "Worker prep" steps 1 to 7. Orchestrator steps 1 to 3 done (no other
+  agent or build; battery 99% on AC; Haik signed in, lid open). Prep step 1: `powercfg /requests` at 16:42:08 says
+  None for DISPLAY, SYSTEM, AWAYMODE, EXECUTION, PERFBOOST, ACTIVELOCKSCREEN. Next: the builds, and a check of the
+  harness and step files against today's code (commits up to e819f4b).
+- 2026-11-04 16:44, worker (prep): step 2, the three builds into `<S2>\target` (host x64, debug, no `RUSTFLAGS`) all
+  exit 0 (16:42:22 to 16:44:02): `power_check.exe`, `wakeshot-tray.exe`, test binary
+  `deps\wakeshot_windows-a7dbc494c7637936.exe` (the only `wakeshot_windows-*.exe` in `deps`, so `C2-lock.ps1` finds
+  it). Step 3, `check.ps1 -Save` at 16:44:18, baseline: active Balanced `381b4222-f694-41f0-9685-ff5bb260df2e` (the
+  only plan), lid AC 1 and DC 1, sleep AC 18000 and DC 18000, energy saver DC 30; no journal; no RunOnce
+  `WakeshotRestore`. `HKCU\...\Run` has no Wakeshot value (7 values: OneDrive, Chrome, LenovoVantage, TrafficMonitor,
+  Docker Desktop, GoogleDriveFS, Edge); RunOnce empty; `WAKESHOT_DATA_DIR` unset (user, machine, process). Display
+  off DC 180 s (D's "about 3 minutes" holds); console lock display off 30 s.
+- 2026-11-04 16:44, worker (prep): step texts against today's `power_check.rs` (changed 11:54) and `recovery.rs`,
+  `power\journal.rs`: every line Haik waits for is still printed word for word (`holding:`, `integrity ... elevation
+  type ...`, `registered for session notices`, `SYSTEM and EXECUTION power requests set`, `tick <n>`, `requests
+  retaken after the resume`, `GAP`, `the copy <guid> is the active plan now`, `lid closed`, `lid open`, `hidden
+  top-level window up: sign out to run check 6`); the guard command line is still `--guard <pid> <start> <event>`
+  (`kill.ps1` matches it); the after-reading lines `tray pid ... is gone`, `journal deleted`, `RunOnce value
+  WakeshotRestore removed` still exist; `session::tests::real_lock_locks` unchanged (session.rs last changed
+  2026-11-03 20:45). The step files' arguments all parse in today's `cli::parse`.
+- 2026-11-04 16:44, worker (prep): step 4, `python -I <S2>\make-cmd.py` (real `LOCALAPPDATA`) wrote the 12 step files
+  to `%LocalAppData%\Wakeshot-harness\haik`. Step 5, `requests-log.ps1 -Minutes 150` started hidden and elevated at
+  16:44:39: **pwsh PID 33660** (its own `requests-log.pid` says the same; ends by itself about 19:14, or at B1's
+  sign-out). Its first sample (16:44:40) showed SYSTEM `[DRIVER] Legacy Kernel Caller` twice and PERFBOOST entries,
+  1 s after a Modern Standby exit; read again at 16:44:51: None for every type.
+- 2026-11-04 16:44, worker (prep), power source: Kernel-Power 105 at 16:44:25, the laptop is on battery since then
+  (99%, `PowerOnline` False at 16:44:51; Haik or the DELL cable, not known). At 16:44:26 it entered Modern Standby
+  ("Idle Timeout": input idle was already past the 180 s DC display timeout when DC began) and left it at 16:44:39
+  ("Input Keyboard"). The prep's writes were done or not started then; nothing of it was cut.
+- 2026-11-04 16:45, worker (prep): step 6, `power_check fake-tray --plan-only` (elevated, so its line says
+  `integrity High (0x3000), elevation type Full`; Haik's Explorer runs say Medium) exit 0: values at start and exit
+  the same (Balanced, lid 1 and 1, sleep 18000 and 18000, energy saver DC 30), RunOnce command and guard path are
+  `<S2>\target\debug\wakeshot-tray.exe`, data folder `%LocalAppData%\Wakeshot`; afterwards no `Wakeshot` data folder,
+  no RunOnce value, no test plan, the harness folder unchanged.
+- 2026-11-04 16:46, worker (prep): step 7, `explorer.exe %LocalAppData%\Wakeshot-harness\haik` from the elevated
+  shell opened the folder in a new Explorer folder host (pid 17292, `/factory,{75dff2b7-...} -Embedding`); its token
+  reads Medium (0x2000), like the shell Explorer 12528, so a double-click there runs Medium (token read with
+  `GetTokenInformation(TokenIntegrityLevel)`). `requests.log` samples every 30 s (16:44:40 to 16:46:10, battery 98%).
+  Prep done, no cargo command from here on; nothing of this worker runs except `requests-log.ps1` (PID 33660).
+  Status `blocked: waiting for Haik`.
+- 2026-11-04 (orchestrator `wakeshot-27`, before B): Haik's notes from A, C, D and E, his words: "A. 2. Yes process
+  has > and 1 row with no icon as the process itself and no name no usage. So basically it's group with something
+  empty. 3. Wakeshot is 1 process with icon. all checks were ok. C. everything seems ok D. everything seems ok E.
+  everything seems ok". Not said: "Apps" or "Background processes" in A2; GAP lines in D and E (read the logs).
+  Haik swapped the DELL dock for the charger at 16:44 (the prep worker's battery note). B comes next; the
+  sign-outs end the orchestrator, so the "After Haik's steps" worker reads this line.
 
 ## Result
 
-Status: blocked: waiting for Haik (2026-11-04 01:08). Deliverable 1 is done: "Steps for Haik" (A, C, D, E, B1, B2;
+Status: blocked: waiting for Haik (2026-11-04 16:46). Deliverable 1 is done: "Steps for Haik" (A, C, D, E, B1, B2;
 about 60 minutes, about 15 hands-on), the orchestrator's and the worker's prep before them, and the reading after them.
 No check has run yet; deliverable 2 and the acceptance checks wait for Haik's steps.
+
+Worker prep done 2026-11-04 16:42 to 16:46 (Log): builds on today's code pass; baseline saved (Balanced only and
+active, lid 1 and 1, sleep 18000 and 18000, energy saver DC 30, no journal, no RunOnce value, no Wakeshot Run value);
+step files written; `requests-log.ps1` runs as pwsh PID 33660; `fake-tray --plan-only` exit 0 with nothing changed;
+the step folder is open in a Medium Explorer window. Step texts still match today's harness output; one change to the
+reading after the steps (a resume's short driver request in `requests.log` does not spoil D). The laptop is on
+battery since 16:44:25.
 
 Files changed: this card. Scratch: `<S2>\make-cmd.py` and `<S2>\scripts\` (`check.ps1`, `kill.ps1`, `C2-lock.ps1`,
 `requests-log.ps1`). Nothing on the laptop changed: Haik's values read at 01:09:12 are the same as at 00:52:26
