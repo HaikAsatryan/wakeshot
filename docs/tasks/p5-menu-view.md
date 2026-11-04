@@ -1,6 +1,6 @@
 # Build the tray menu: owner-drawn Win32 menu with round corners
 
-Phase: 5. Status: blocked: waiting for the screen slot (Part A done 2026-11-04 02:26). Needs Haik: no.
+Phase: 5. Status: done (Part A 2026-11-04 02:26; Part B screen run 11:47 to 11:51). Needs Haik: no.
 His menu look answer (2026-11-03 17:32): "I like your new ui, you might need some icons for each row as examples are
 using. Everything else is good." The pick stands; every item gets the icon that `p5-menu-paint` draws. Agent:
 `wakeshot-worker`. Size: about 130K tokens.
@@ -119,6 +119,8 @@ Problems seen but not fixed.
 
 - `docs/phases/05-tray-ux.md` track note 5 writes `TrayIcon::new(kind, Box::new(OwnerDrawnMenu::new(sink)))`, but
   `OwnerDrawnMenu::new` returns a `Result` (as the card asks), so the wiring card needs a `?` there. A doc line only.
+- Part B (11:48): the "Keep awake" row still draws a cup glyph, while the brand (2026-11-04 11:15) replaced the Cup
+  with the Sunrise for the tray icon. Maybe intended (a row glyph, not the brand); not checked against `docs/brand.md`.
 
 ## Log
 
@@ -141,12 +143,54 @@ Problems seen but not fixed.
   Build folder (2,068 MB) deleted and checked gone.
 - 2026-11-04 02:26: Part A done. Status `blocked: waiting for the screen slot`.
 
+- 2026-11-04 11:47, Part B worker (session `wakeshot-12`): started the screen run (session unlocked, orchestrator's
+  DISPLAY request held). `ux_menu` debug x64 built from the f47391d export (debug only, orchestrator rule).
+- 2026-11-04 11:47, Part B worker: plain grey backdrop window (own pwsh, PID 10452) behind the menu area.
+  `explorer.exe menu1.cmd`: token line Medium (S-1-16-8192), demo PID 36200, `Added { attempt: 1 }`; the
+  `NotifyIconSettings` id was `12880751163260563509` again (the id follows the GUID, not the exe); `IsPromoted` = 1.
+- 2026-11-04 11:47 to 11:49, Part B worker: MSAA (`AccessibleObjectFromWindow`, `OBJID_CLIENT`) on the open `#32768`
+  windows: main menu names "Holding awake: Claude Code (2 sessions), <Armenian> & <Armenian>" (one literal `&`,
+  unavailable), "Automatic" (checked), "Keep awake" (has popup), "Restore my power settings", "Open log", "Quit";
+  submenu "Off" (checked), "30 minutes", "1 hour", "2 hours", "4 hours", "Until I turn it off", "Keep screen on"
+  (unavailable). No `&` access mark in any name. Opens: left, right, keyboard (Win+B, Right, Enter) each opened one
+  menu; outside clicks on the backdrop closed it 4 of 4; Esc closes the submenu, then the menu. `a` gave
+  `event: Menu(Automatic(false))`; Down x4 then Enter gave `Menu(Restore)` (arrows also stop on the greyed status
+  line, so the 4th Down is Restore); `k` opens the submenu, `s` (disabled) keeps it open, `1` gave
+  `Menu(KeepAwake(Minutes(60)))`; `r` gave `Menu(Restore)`; Down x3 then Right opened the submenu, Left closed it.
+  Memory (debug build) before 20 opens: working set 17,227,776, private 2,433,024 bytes; after: 17,272,832 and
+  2,408,448. 31 `Opened`, 31 `Closed`. `Styled` came `at: Idle` on most main-menu opens, `at: FirstPaint` on the
+  first open and on submenus; `corners` and `border` `Ok(())` every time.
+- 2026-11-04 11:49 to 11:50, Part B worker: Light through Settings 11:49:52, menu opened 11:49:57 with `theme: light:
+  true` (no restart), pictures; Dark back 11:50:01. Reads before 11:49:50 and after 11:50:06 equal
+  (`AppsUseLightTheme=0 ColorPrevalence=0 EnableTransparency=1 SystemUsesLightTheme=0`). `taskkill /PID 36200`:
+  quit, `icon removed`, exit 0.
+
 ## Result
 
 What was done, files changed, checks and outcomes, open items. Include the public API as built.
 
-**Part A done (2026-11-04 02:26). Part B not run** (orchestrator's scope for this round): a fresh worker runs steps 6
-to 11 in a screen slot, reading this Log and Result.
+**Done (2026-11-04 12:07).** Part A 02:26; Part B in the screen slot of 11:47 to 11:51 (session `wakeshot-12`,
+unlocked, orchestrator's DISPLAY request; debug build of the f47391d export). No code change. Facts in
+`docs/research.md` "Tray UX: menu on screen".
+
+| Step | Outcome |
+| --- | --- |
+| 6. Medium start, pictures | Passed. Token line Medium; icon promoted. `menu-screen-{dark,light}-{main,sub}.png` on a plain grey window. Against Explorer's new menu: same style; row pitch 50 px at 150% (33 DIP) against about 32 DIP; small rounded corner. Font and glyph sizes not measured in pixels (time); the pictures are there to measure. Measured at 150%, not 125%: the taskbar is on the 150% screen. |
+| 7. Opens, closes, keys, MSAA | Passed. Left, right and keyboard opens; outside click closed 4 of 4; Esc closes submenu then menu; Down, Right, Left, Enter and access keys `a`, `k`, `1`, `r` work (`s` disabled: nothing); picks arrive as `Event::Menu(...)`. MSAA: every name without `&` marks, the status line's literal `&` kept; checked, unavailable and has-popup states right. |
+| 8. Theme, Armenian | Passed. The next open after the Light switch drew light (`theme: light: true`), no restart. Armenian status line in real glyphs, cut with an ellipsis. Reads before (11:49:50) and after (11:50:06) equal. |
+| 9. Cost | Working set and private bytes flat over 20 opens (debug: 17.2 MB and 2.4 MB). Release sizes: Part A's (`ux_menu` 361,472, `ux_icon` 264,192 bytes); no release build in this slot (orchestrator rule). |
+| 10. Leftovers, stop by PID | Passed. Demo 36200 stopped by `taskkill /PID` (exit 0); backdrop window (own pwsh 10452) stopped by PID. Shared entry removed after `p5-notices`; reads 12:04:02, 12:04:58 and 12:05:36 equal to before, no demo process. |
+| 11. Research | Done (new section). |
+
+Notes from the run, for Haik's review: arrow keys also stop on the greyed status line (normal Win32 behaviour); the
+menu's bottom sits at the click point, so it overlaps the taskbar by 36 px, like Windows' own tray menus; in light mode
+the check mark is drawn in the accent colour (reddish on this laptop), in dark it is grey; `Styled` mostly arrives
+`at: Idle` with the corners applied (`Ok(())`) and every picture has the rounded frame.
+
+Acceptance: `cargo` checks not rerun (no code change since Part A). Files changed in Part B: this card,
+`docs/research.md`, 4 new `docs/research/img/ux/menu-screen-*.png`.
+
+Part A record:
 
 Files: `crates/wakeshot-windows/src/tray/menu.rs` (new body), `crates/wakeshot-windows/examples/ux_menu.rs` (new),
 this card. Nothing else changed; no `docs/research.md` section yet (step 11 is Part B).

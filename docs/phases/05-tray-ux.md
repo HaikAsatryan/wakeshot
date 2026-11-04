@@ -186,9 +186,9 @@ own Windows settings switched and put back.
 | `p5-icon-art` | one look at the icon sheet, not blocking | no | contracts change card | done (committed 01:29): three glyph sets (Cup, Eye, Sky) with holding, idle and off; app icon; ICO 16 to 64; 12 tests |
 | `p5-text` | one read of the text list, not blocking | no | contracts change card | done (00:02): every word in `text.rs`, 552 core tests; the text list for Haik is in its Result |
 | `p5-menu-paint` | no (menu look answered 17:32: an icon per item) | no | `p5-theme` | done (00:50): 15 tests; colours and row sizes match the Phase 1 renders by pixel; nine renders in `docs/research/img/ux/` |
-| `p5-tray-icon` | no | screen, settings (light and dark mode) | `p5-theme`, `p5-icon-art` | blocked: waiting for the screen slot (Part A done, 16 tests; Part B partly run 02:19: launch at Medium, TaskbarCreated, leftovers passed; the session was locked) |
-| `p5-menu-view` | no (menu look answered 17:32) | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | blocked: waiting for the screen slot (Part A done, committed 02:27: 10 tests) |
-| `p5-notices` | no | screen, settings (Do not disturb) | Part A: contracts change card; Part B: `p5-tray-icon`, `p5-text`, `p5-icon-art` | blocked: waiting for the screen slot (Part A done, committed 02:07: 10 tests) |
+| `p5-tray-icon` | no | screen, settings (light and dark mode) | `p5-theme`, `p5-icon-art` | done (11:46: Part A 16 tests; Part B on screen: light and dark, 24 px 1:1 at 150%) |
+| `p5-menu-view` | no (menu look answered 17:32) | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | done (11:51: Part A 10 tests; Part B on screen; memory flat over 20 opens) |
+| `p5-notices` | no | screen, settings (Do not disturb) | Part A: contracts change card; Part B: `p5-tray-icon`, `p5-text`, `p5-icon-art` | done (12:06: Part A 10 tests; Part B on screen; 4 notices cut after five lines) |
 | `p5-sounds` | no (the "No sounds" question: honor it, Haik 2026-11-03 18:09) | sound | contracts change card | done (committed 02:41): Part B in a locked session: all nine chimes seen in loopback at full length; reads equal |
 | `p5-haik-check` | yes, about 25 minutes: eyes, ears, hands | screen, sound, settings | every card above, `p4-cli-commands` | blocked: Part A done (11:49, `ux_all`); Part B needs Haik at the screen |
 
@@ -318,3 +318,11 @@ Bundle (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p5-th
   real menu from `present::build`; keys n, f, 1, 2, 3, l, q and `a`), built and tested on an export of f47391d, since
   the tree did not compile mid `p2-6-sleep-route`; the in-repo checks rerun after that card. Haik's 11 steps are in the
   card (step 11: confirm the Sunrise or pick another, then the text list). 8 worker decisions for Haik's review.
+- 2026-11-04 12:07 (orchestrator `wakeshot-12`): the screen slot (Haik away 11:50 to about 12:30, a DISPLAY request
+  held by the orchestrator): `p5-tray-icon`, `p5-menu-view` and `p5-notices` Part B done 11:39 to 12:06, built from
+  an export of f47391d (the Sunrise). Found: after the first switch to Light the taskbar stayed dark once (the next
+  switch was fine); four notices are cut after five lines (restored by user, lock failed, update Wakeshot, journal
+  lost: `text.rs` wording, a small card after `p2-6-sleep-route`, which owns `text.rs` now); with Do not disturb on a
+  notice is lost; in `--pair` a click on the first banner gives no click message. Open: the 125% size check (Haik's
+  optional scale step). Nothing left on the laptop. Next in the slot: the `p6-int-tray-mode` and
+  `p6-int-dry-run-e2e` pictures (started 12:07, stop 12:28).

@@ -1,6 +1,6 @@
 # Show notices as tray balloons
 
-Phase: 5. Status: blocked: waiting for the screen slot (Part A done 2026-11-04 02:03). Needs Haik: no (the locked-session check is in `p5-haik-check`). Agent: `wakeshot-worker`.
+Phase: 5. Status: done (Part A 2026-11-04 02:03; Part B screen run 11:51 to 12:04). Needs Haik: no (the locked-session check is in `p5-haik-check`). Agent: `wakeshot-worker`.
 Size: about 110K tokens.
 Real laptop: **screen** in Part B (one screen or sound card at a time, across all tracks), and **settings**: Do not
 disturb is switched on and back. Build folder: `CARGO_TARGET_DIR=<scratchpad>\p5-notices\target`.
@@ -112,6 +112,9 @@ None blocking. Part A's open calls were decided by the worker (Result, "Decision
 
 Problems seen but not fixed.
 
+0. Part B (12:03): Haik's notification centre still holds two "Wakeshot tray spike" toasts from Tuesday ("Toast with a
+   registered app id", Phase 0 spike, registered AUMID). Left alone (not this card's; Haik's centre). Whoever owns the
+   Phase 0 leftovers can clear them, or Haik with "Clear all".
 1. `docs/phases/05-tray-ux.md` track note 5 says "`BalloonNotifier::new(icon.identity(), ..)` runs `Command::Notify`".
    As built, `new` takes only the identity, and the notifier must be shared by two threads: `Arc::new(...)`, one
    clone boxed as the IO thread's `Box<dyn Notifier>`, one in the balloon click hook (Result, "API"). For the
@@ -136,10 +139,58 @@ None from Part A. Wording that reads badly on the banner can only show in Part B
 - 2026-11-04 02:03: every Part A check passed (Result). `docs/research.md` section "Tray UX: notices" added (Part A
   facts: the two Microsoft pages, `CreateIconFromResourceEx` alpha). Part A done; Status set to blocked, waiting for
   the screen slot. Build folder kept for Part B.
+- 2026-11-04 11:51, Part B worker (session `wakeshot-12`): started the screen run (unlocked, orchestrator's DISPLAY
+  request; debug build of the f47391d export; grey backdrop window behind the banner area). `--all --icon user` at
+  Medium (token line Medium, PID 42456, `icon App`), icon promoted; each banner grabbed 2.5 s after its `notice <name>:
+  Ok(())` line (12 of 14; first-run and user-changed came before the watcher and were grabbed in later runs).
+  Four bodies cut by Windows at five lines (Result). Stopped by PID, exit 0.
+- 2026-11-04 11:56, Part B worker: banner clicks (synthetic left click on the body): restore-failed ->
+  `balloon click: OpenLog` (PID 40652); first-run -> `balloon click: OpenTaskbarSettings` (PID 37004). Each demo
+  stopped by PID.
+- 2026-11-04 11:57 to 12:01, Part B worker: icon compare. Banners from a demo that had quit still showed later (no
+  input, so no timeout), so the first light grabs showed stale banners; redone with stale banners closed by their X
+  and one `--all` run per icon (a new balloon of the same icon replaces the old). Valid pairs: dark closed-lid-report
+  app (`--all`) and info (PID 30080); light first-run info (PID 41264) and app (PID 27380). Mode reads before 11:57:13
+  and after 12:00:59 equal (`AppsUseLightTheme=0 ColorPrevalence=0 EnableTransparency=1 SystemUsesLightTheme=0`).
+- 2026-11-04 12:01, Part B worker: `--pair` (PID 22952): first-run at 12:01:43.366, restore-failed 1.0 s later. Grabs
+  every 0.7 s for 8 s: only the first-run banner. Click on it 12:01:53: no balloon click logged, the banner closed;
+  the restore-failed banner then showed; click 12:01:57 -> `balloon click: OpenLog`.
+- 2026-11-04 12:02, Part B worker: Do not disturb read Off (Settings toggle
+  `SystemSettings_Notifications_QuietHours_MuteNotification_Enabled_ToggleSwitch`), turned On 12:02:54; restore-failed
+  sent `Ok(())` 12:02:58 (PID 22348): no banner; Win+N centre: "Do not disturb is on", no entry for the demo; DND Off
+  12:03:07; 8 grabs over 8 s with the demo running: no banner. DND read Off at 12:03:19. Demo stopped by PID.
+- 2026-11-04 12:04, Part B worker: Settings window (opened by my script) closed; backdrop (own pwsh 10452) stopped by
+  PID; entry `12880751163260563509` and `NotifyIconGeneratedAumid_12880751163260563509` (made by the balloons:
+  `PeriodicNotificationCount` 30) exported to `<scratchpad>\p5-screen\` and deleted. Reads 12:04:02, 12:04:58,
+  12:05:36: icon ids equal to before, only the two old `NotifyIconGeneratedAumid_` keys, no demo process.
+- 2026-11-04 12:06, Part B worker: build folder `<scratchpad>\p5-screen\target` deleted (checked gone); no demo
+  process. Scripts and raw grabs stay in `<scratchpad>\p5-screen\`. Status `done`.
 
 ## Result
 
-Part A: done (2026-11-04 02:03). Part B: not started, waiting for the screen slot.
+**Done (2026-11-04 12:08).** Part A 02:03; Part B in the screen slot of 11:51 to 12:04 (session `wakeshot-12`). No
+code change. Facts in `docs/research.md` "Tray UX: notices" (Part B block). Pictures `docs/research/img/ux/notice-*.png`
+(19).
+
+| Step | Outcome |
+| --- | --- |
+| 4. Medium start, promote | Passed (token line Medium; `IsPromoted` = 1). |
+| 5. `--all` pictures | Done, with a finding: 4 of 14 bodies are cut by Windows after five lines: `restored-by-user`, `lock-failed`, `update-wakeshot`, `journal-lost` (`notice-dark-<name>.png`). Warnings show the warning triangle. Silent ones sent with `NIIF_NOSOUND` (flag line), no sound check. |
+| 6. App icon or info icon | Pick: the app icon (`IconChoice::PRODUCT = App` stays). Both read clearly in light and dark; the app icon tells who speaks, the info "i" adds nothing. Change it when Haik finds the violet square too loud next to Windows' own banners. Mode reads before and after equal. |
+| 7. Banner click | Passed. `NIN_BALLOONUSERCLICK` arrives: `OpenLog` for restore-failed, `OpenTaskbarSettings` for first-run. |
+| 8. `--pair` | The second does not replace the first: it waits until the first is gone (no input, so the first stayed). A click on the first gave no click message at all (its action is lost); the second's click gave its own action. No wrong action seen. |
+| 9. Do not disturb | Lost: no banner, no centre entry, nothing after DND off. Trigger to move to registered toasts (stored in the centre; Phase 6 uninstall must clear them): if Haik wants notices kept through Do not disturb. DND read Off before and after. |
+| 10. Leftovers, stop by PID | Passed (Log 12:04). |
+| 11. Research | Done. |
+
+For Haik / the next text pass (not fixed here: `text.rs` is not this card's file): shorten the four cut notices to
+fit five lines at this width (about 45 characters a line), or move the rest of the words to the log. Banners wait
+for real input before they time out, so a banner of a run that has ended can still show later.
+
+Acceptance: `cargo` checks not rerun (no code change since Part A). Files changed in Part B: this card,
+`docs/research.md`, 19 new `docs/research/img/ux/notice-*.png`.
+
+Part A record:
 
 ### What was done
 

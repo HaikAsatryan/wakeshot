@@ -1,6 +1,6 @@
 # Build the tray icon: add, update, clicks, re-add, theme and display changes
 
-Phase: 5. Status: blocked: waiting for the screen slot (session locked). Needs Haik: no. Agent: `wakeshot-worker`. Size: about 140K
+Phase: 5. Status: done (Part B screen run 2026-11-04 11:39 to 11:46). Needs Haik: no. Agent: `wakeshot-worker`. Size: about 140K
 tokens. Split trigger (review m13): if Part A ends above about 100K, the worker stops there (Status `blocked: waiting for the screen slot`, as
 usual) and the orchestrator runs Part B as its own card with a fresh worker, which reads this card's Log and Result.
 Real laptop: **screen** in Part B (one screen or sound card at a time, across all tracks), and **settings**: the
@@ -213,16 +213,63 @@ Problems seen but not fixed.
 - 2026-11-04 02:18:48, Part B worker: build folder deleted, checked gone. Scripts kept for the next run in
   `<scratchpad>\p5-tray-icon\` (`lockstate.ps1`, `p5-lib.ps1`, `run1.cmd`). Status `blocked: waiting for the screen
   slot (session locked)`.
+- 2026-11-04 11:39, Part B worker (session `wakeshot-12`): started the screen run. Session unlocked: a screen grab of
+  the DELL taskbar strip shows the live desktop, `LogonUI` not running, input desktop `Default`, idle 88 s at 11:38:27
+  (Haik's last input). `lockstate.ps1` said `SessionFlags 0` all the same, so that read is not a lock test (it said 0
+  in the locked run too). The orchestrator holds DISPLAY and SYSTEM requests (`powercfg /requests`). Taskbar DPI 144,
+  rect 0,2088 to 3840,2160. Debug build of `ux_icon`, `ux_menu`, `ux_notices` from the f47391d export started.
+- 2026-11-04 11:40, Part B worker: build clean (45 s, debug, x64). Reads before: 18 `NotifyIconSettings` ids (list in
+  `<scratchpad>\p5-screen\ids-before.txt`), `NotifyIconGeneratedAumid_` keys `11595054434325676090` and
+  `15983757285637097514` (not ours), theme `AppsUseLightTheme=0 ColorPrevalence=0 EnableTransparency=1
+  SystemUsesLightTheme=0`. `explorer.exe icon1.cmd` (`--cycle --minutes 15`): token line Medium (S-1-16-8192), demo PID
+  28028 (cmd 31304), `Added { attempt: 1 }` at 11:40:36. New entry `12880751163260563509` had only `IconSnapshot`;
+  `IsPromoted` = 1 written 11:41:07; icon on the taskbar at 3323,2088 to 3371,2160 (48x72).
+- 2026-11-04 11:41, Part B worker: dark pictures from a 1 s burst matched to the demo's `Redrawn` lines. Light switch by
+  UI Automation (Settings opened by the script, pid 27148): `ThemeChanged(light)` 11:41:50.604, `Redrawn` with colour
+  26,26,26 at 11:41:50.774 (under 1 s from the select). **Finding:** the DELL taskbar's background stayed dark after the
+  switch (shots at 2, 23, 38 and 67 s), while Explorer's own chevron and search glyphs turned dark, then partly light
+  again; so the near-black glyph sat on a dark taskbar, as Explorer's own glyphs did. Values read 1 and 1. Dark switch
+  back 11:43:15: `ThemeChanged(dark)` 11:43:15.356, white redraw 11:43:15.722. Read after 11:43:19: equal to before.
+- 2026-11-04 11:43, Part B worker: clicks (`clicks.ps1`): left 11:43:56.470 -> `menu: anchor (3346, 2124)`; right
+  11:43:58.748 -> `(3346, 2124)`; Win+B, Right, Enter 11:44:02.134 -> `(3347, 2124)`; Shift+F10 11:44:04.367 -> `(3347,
+  2124)`. Tooltip: `SetCursorPos` alone showed none; with injected `mouse_event` moves it showed "Wakeshot demo / Idle:
+  the PC sleeps as usual" (11:44:25). `TaskbarCreated` posted 11:44:41.872: `TaskbarCreated`, `Added { attempt: 1 }`
+  11 ms later, icon back on the taskbar (same rect, picture). `taskkill /PID 28028`: quit, `icon removed`, exit 0.
+- 2026-11-04 11:45, Part B worker: `--pattern` (PID 11440, Medium): slot grab 48x72 holds a 24x24 box with a pure 255
+  one-pixel border and a 255/32 checker: drawn 1:1 at 150% (taskbar DPI 144, `SM_CXSMICON` 24). No size change.
+  Stopped by PID (exit 0). Entry `12880751163260563509` exported to `<scratchpad>\p5-screen\leftover-icon-entry.reg`
+  and deleted; no `NotifyIconGeneratedAumid_` key was made. Read 1 at 11:45:47: ids equal to before; no `ux_icon`.
+- 2026-11-04 12:04, Part B worker: after `p5-menu-view` and `p5-notices` (same GUID, same entry id): final entry and
+  `NotifyIconGeneratedAumid_12880751163260563509` exported and deleted; reads 12:04:02 and 12:04:58 (and 12:06 in
+  `p5-notices`): ids equal to before, only the two old `NotifyIconGeneratedAumid_` keys, no demo process. Settings
+  window (opened by the script) closed by its Close button; theme read 12:04:59 equal to before. Status `done`.
 
 ## Result
 
 What was done, files changed, checks and outcomes, open items. Include the public API as built and the three GUIDs.
 
-**Part A done (2026-11-04 01:48). Part B partly done (2026-11-04 02:18), blocked: the session was locked** (Windows
-locked it 5 minutes after Haik's last input, when the display turned off), so no picture, click or theme switch could
-run. Haik's steps are in "Steps for Haik (Part B)". Next: a worker runs the rest of Part B in an unlocked screen slot.
+**Done (2026-11-04 12:06).** Part A 01:48; Part B finished in the screen slot of 11:39 to 11:46 (session
+`wakeshot-12`, unlocked, orchestrator's DISPLAY request; debug build of the f47391d export). No code change.
 
-Part B so far (Log 02:14 to 02:18; facts in `docs/research.md` "Tray UX: tray icon"):
+Part B screen run (Log 11:39 to 11:45; facts in `docs/research.md` "Tray UX: tray icon", "Screen run"):
+
+| Step | Outcome |
+| --- | --- |
+| 4. Start at Medium, promote | Passed. Token line Medium (S-1-16-8192); `IsPromoted` = 1 on `12880751163260563509` put the icon on the taskbar. |
+| 5. Pictures | Passed. `taskbar-dark-{holding,idle,off}.png`, `taskbar-light-{holding,idle,off}.png`. |
+| 5. Theme switch | Passed: redraw 0.17 s (to light) and 0.37 s (to dark) after `ThemeChanged`, no restart. Reads before (11:40:24) and after (11:43:19) equal: `AppsUseLightTheme=0 ColorPrevalence=0 EnableTransparency=1 SystemUsesLightTheme=0`. Finding: in this first Light switch the taskbar background stayed dark (Explorer's own glyphs went dark too), so the `taskbar-light-*` pictures show the near-black glyph on a dark taskbar; in the next switch (`p5-menu-view`, 11:49) the taskbar turned light and the dark glyph shows on it (`menu-screen-light-sub.png`). |
+| 5. `--pattern` | Passed at 150% (the only screen with a taskbar): 24x24 shown 1:1, crisp border (`taskbar-pattern-150.png`). Size pick kept. 125%: not checked (for `p5-haik-check`). |
+| 6. Tooltip, clicks, keys | Passed. Tooltip shows (`taskbar-tooltip-dark.png`; needs real mouse moves, not `SetCursorPos`); left, right, Win+B Right Enter, Shift+F10 each reached the `MenuView` with an anchor on the icon; `TaskbarCreated` re-added in 11 ms. |
+| 7. Leftovers, stop by PID | Passed. Demos 28028 and 11440 stopped by `taskkill /PID` (exit 0). After the last demo of all three cards: entry and `NotifyIconGeneratedAumid_12880751163260563509` exported to `<scratchpad>\p5-screen\` and deleted; reads 12:04:02 and 12:04:58: ids equal to before, no demo process. |
+| 8. Research | Done ("Screen run" block). |
+
+Acceptance: `cargo` checks not rerun (no code change since Part A; the repo tree is mid-change by `p2-6-sleep-route`).
+Files changed in Part B: this card, `docs/research.md`, 9 new `docs/research/img/ux/taskbar-*.png`.
+
+Open, for Haik (`p5-haik-check`): the 125% size check; whether the taskbar staying dark after a Light switch is a
+one-off (if it repeats, the glyph colour should follow the taskbar's real colour, not `SystemUsesLightTheme`).
+
+Part B, locked-session run (Log 02:14 to 02:18):
 
 | Step | Outcome |
 | --- | --- |
