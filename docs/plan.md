@@ -243,8 +243,12 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   table round 3 (his comments), `p5-haik-check` (done: the menu opens above the taskbar; the demo banner names
   Wakeshot), his answers on a restore during the countdown and a hold that starts with the lid closed (`product.md`). CI
   green through 2016893.
-- Next (orchestrator): `p3-haik-checks` with Haik, alone on the laptop (its "Before Haik starts"; the sign-outs in B
-  end the session: after sign-in Haik runs `/orchestrate` and says "Haik checks done" with his notes from A, D and
-  E; then a new worker runs the card's "After Haik's steps"). Then: `p6-int-haik-checks` (about 45 min, with its
-  2026-11-04 changes), `p6-media` Part B, the README and Pages finish. Product call open for Haik: banners that go
-  in 5 s (Windows' setting) and are not kept in Win+N: keep `Shell_NotifyIcon`, or registered toasts.
+- 2026-11-04 18:37: `p3-haik-checks` done (90794e2): A, C, D, E and B1 pass; Haik's values same. B2 (restore at the
+  next sign-in) not shown: B2 started before Explorer's RunOnce pass of that sign-in, which ran restore mode at once
+  and Windows deleted the value. The same gap is real in the product (a hold that starts in the first minute after
+  sign-in loses its RunOnce value). Orchestrator decision, for Haik's review: fix card `p2-6-runonce-keep`. Running:
+  its Part A (the fix).
+- Next (orchestrator): when Part A ends, a narrow power safety check of the change (`wakeshot-reviewer`), fixes, then
+  Part B (B2 redo with Haik, about 5 minutes, one sign-out, the laptop alone). Then: `p6-int-haik-checks` (about 45
+  min, with its 2026-11-04 changes), `p6-media` Part B, the README and Pages finish. Product call open for Haik:
+  banners that go in 5 s (Windows' setting) and are not kept in Win+N: keep `Shell_NotifyIcon`, or registered toasts.
