@@ -425,11 +425,11 @@ impl Core {
         tick: bool,
         out: &mut Vec<Command>,
     ) -> Option<Deadline> {
-        // The first plan read tells the user's own lid actions: the countdown rules that met the lid closed before it
-        // decide now, before the cancels below.
+        // A plan read tells the user's own lid actions: the countdown rules that met the lid closed before it decide
+        // now, before the cancels below.
         if self.state.plan.is_some() {
             if let Some(sources) = self.state.lock.work_end_waits.take() {
-                self.work_ended_on(sources);
+                self.work_end_waited(sources);
             }
             if std::mem::take(&mut self.state.lock.floor_waits) && self.state.stepped_back {
                 self.floor_countdown_wanted();
@@ -617,20 +617,22 @@ impl Core {
         self.work_ended_on(sources);
     }
 
-    /// [`Core::work_ended`] on the power sources the PC was on when work ended. Before the first plan read the user's
-    /// own lid actions are not known: with nothing owned, nothing was applied and Wakeshot changed nothing; else a
-    /// crashed tray's values from the `Started` journal may keep the closed laptop running, and the read decides
-    /// (power safety verify minor 3). A guess from the journal would take a key it does not name, often the user's own
-    /// Do nothing, for Sleep.
-    fn work_ended_on(&mut self, sources: &'static [bool]) {
+    /// [`Core::work_ended`] on the power sources the PC was on when work ended; gives whether it wants the countdown.
+    /// Before the first plan read the user's own lid actions are not known: with nothing owned, nothing was applied and
+    /// Wakeshot changed nothing; else a crashed tray's values from the `Started` journal may keep the closed laptop
+    /// running, and the read decides (power safety verify minor 3). A guess from the journal would take a key it does
+    /// not name, often the user's own Do nothing, for Sleep. While the journal is unknown ([`Core::journal_unknown`]) a
+    /// Do nothing in force may be a crashed tray's, so it tells nothing either: the want waits
+    /// ([`Core::work_end_waited`]).
+    fn work_ended_on(&mut self, sources: &'static [bool]) -> bool {
         if self.state.lid_closed != Some(true) {
-            return;
+            return false;
         }
         let Some((plan, journal)) = self.in_force() else {
             if self.may_own() {
                 self.state.lock.work_end_waits = Some(sources);
             }
-            return;
+            return false;
         };
         let work_end = WorkEnd {
             own_lid_ac: lid::user_action(&plan, true, &journal),
@@ -642,12 +644,27 @@ impl Core {
             .any(|&ac| ending::starts_at_work_end(true, work_end.own_action(ac)));
         if starts {
             self.state.work_end = Some(work_end);
+        } else if self.journal_unknown() {
+            self.state.lock.work_end_waits = Some(sources);
+        }
+        starts
+    }
+
+    /// A work-end want that waited ([`Core::work_ended_on`]), at each settle pass once a plan read worked. After the
+    /// retry's restore of a journal that did not read, the plan copy still shows the crashed tray's Do nothing until
+    /// the next read lands, and no entry puts the `original` back ([`Core::plan_copy`]); a restore at a hold end has no
+    /// read right behind it at all. No pass can tell that read from an older one, so a Do nothing ends nothing: the
+    /// want stays until a read shows the user's own action for its power source as not Do nothing, or the lid opens or
+    /// a hold starts ([`Core::cancel_countdowns`]) (`p2-6-unread-lid-countdown`).
+    fn work_end_waited(&mut self, sources: &'static [bool]) {
+        if !self.work_ended_on(sources) {
+            self.state.lock.work_end_waits = Some(sources);
         }
     }
 
     /// Ends the wants that `cancel` ends (`policy::ending::cancels`), with a log line when a countdown ran.
     fn cancel_countdowns(&mut self, cancel: Cancel, why: &str, out: &mut Vec<Command>) {
-        // A want still waiting for the first plan read ends the same way.
+        // A want still waiting for a plan read ends the same way.
         if ending::cancels(CountdownReason::WorkEnded, cancel) {
             self.state.lock.work_end_waits = None;
         }

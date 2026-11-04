@@ -136,7 +136,7 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | `p2-core-lid` | no | `p2-core-settings` | done (21:46): 57 scenarios, 19 of 19 mutants caught; fixed a lid lock gap in the first seconds of a hold |
 | `p2-core-props` | no | `p2-core-lid`, `p2-ownership-apply` | done (23:29): 13 properties at 10,000 cases; two findings kept as ignored tests |
 | `p2-6-unread-journal` | no | core round B (Log in `p2-core-settings`); runs alone among cards that build | done (committed 02:51): findings 3 and 6, the newer `config.json` write check; 1256 workspace tests |
-| `p2-6-unread-lid-countdown` | no | `p6-int-wiring-fixes` | in progress (started 04:38; beside `p6-int-dry-run-e2e`) |
+| `p2-6-unread-lid-countdown` | no | `p6-int-wiring-fixes` | done (05:28: 3 new scenarios, `startup_unread` drawn in the props, 22 props at 4096 cases 3 of 3) |
 
 No card touches the real laptop (no power settings, screen, sound or installs) or needs Haik's hands. "Contracts
 card": the one card the orchestrator runs alone before the track builds.
@@ -285,3 +285,12 @@ Where each item this track owns is built. "Integration" is planned after the tra
   (free RAM 0 GB from about 05:20); Claude Code ended the keep-awake holders of `wakeshot-46` and `wakeshot-9d` for low
   memory. The worker ended the run by pid on request; free RAM back to 36 GB, the `wakeshot-12` holder still runs. Rule
   for later mutants runs: one job, a low timeout, memory watched; skip them if memory cannot be capped.
+- 2026-11-04 05:28: `p2-6-unread-lid-countdown` done: while the journal is unknown, a Do nothing in force decides
+  nothing and the work-end countdown waits; a want that waited starts once a read shows the user's own action as
+  not Do nothing, and ends when the lid opens or a hold starts. 3 new scenarios (2 failed before the fix). The
+  flaky lock property is fixed in the property (it failed 6 of 60 runs before, also with the change off): it now
+  excuses the unknown journal case that `p6-int-wiring-fixes` decision 7 chose (a lock and chime on a user's own
+  Do nothing while the journal is unknown; this also covers a restore that fails to load the journal mid-run, not
+  only the start). Mutants: 5 of 7 caught; one mutant grew to 35 GB and was stopped; not rerun. For Haik's review:
+  that decision 7; a user's own later change to Sleep starts a waited countdown. Left: the `Floor` countdown has
+  the same gap, and two `state.rs` doc lines (`LockWatch`, `work_end_waits`) are stale: a follow-up card.

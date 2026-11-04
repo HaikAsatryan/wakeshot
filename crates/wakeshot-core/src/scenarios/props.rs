@@ -31,7 +31,7 @@ use crate::policy::ending::IDLE_MS;
 use crate::policy::lid::{DO_NOTHING, SOURCE_SETTLE_MS};
 use crate::policy::{floor, hold_files};
 use crate::process::Alive;
-use crate::settings::{PlanValues, SettingKey};
+use crate::settings::{Guid, JournalEntry, PlanValues, SettingKey};
 use crate::sim::{
     self, AgentNow, End, Entry, FaultOn, FileNow, KEYS, PLANS, Truth, World, WorldStart, WorldStep,
 };
@@ -117,6 +117,13 @@ struct Model {
     /// the core may have stepped back (it also needs its own view that our Do nothing is in force), so the model may
     /// say "does not apply" when the core does; never the other way.
     lock_stepped_back: bool,
+    /// The journal mirror's keys (section 3): what `Started`, `Done(Applied)` and `Done(Restored)` carry, less the keys
+    /// `UserChanged` names. An apply or restore that failed with none read nothing and leaves it.
+    mirror: BTreeSet<(Guid, SettingKey)>,
+    /// A restore is still wanted (section 5, "A failed `Restore`"): `Started` brought a journal or one that did not
+    /// read, or a restore failed. A restore of every plan that worked ends it; one of one plan leaves it, the side
+    /// that excuses more.
+    retry: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -242,6 +249,49 @@ impl Model {
             .is_some_and(|e| e.released.contains(&key))
     }
 
+    /// The mirror may not know `journal.json` (section 3): a restore is still wanted and the mirror names nothing. The
+    /// lock rules then count a Do nothing in force as maybe ours, the user's own too (`p6-int-wiring-fixes` decision
+    /// 7, "errs toward a lock").
+    fn journal_unknown(&self) -> bool {
+        self.retry && self.mirror.is_empty()
+    }
+
+    /// The mirror and the restore retry through one answer or user change.
+    fn take_journal(&mut self, event: &Event) {
+        let keys = |journal: &[JournalEntry]| journal.iter().map(|e| (e.plan, e.key)).collect();
+        match event {
+            Event::Done(Outcome::Applied {
+                result, journal, ..
+            }) => {
+                let read_nothing =
+                    matches!(result, Err(ApplyError::SafetyNet(_) | ApplyError::Write(_)))
+                        && journal.is_empty();
+                if !read_nothing {
+                    self.mirror = keys(journal);
+                }
+            }
+            Event::Done(Outcome::Restored {
+                plan,
+                result,
+                journal,
+                ..
+            }) => {
+                if result.is_ok() || !journal.is_empty() {
+                    self.mirror = keys(journal);
+                }
+                match result {
+                    Ok(()) if plan.is_none() => self.retry = false,
+                    Ok(()) => {}
+                    Err(_) => self.retry = true,
+                }
+            }
+            Event::UserChanged(changed) => {
+                self.mirror.remove(&(changed.plan, changed.key));
+            }
+            _ => {}
+        }
+    }
+
     /// One core step: the event's facts, then what follows at its time, in the design's order (the floor, then the
     /// start and end of holding).
     fn take(&mut self, step: &sim::Step) -> Edges {
@@ -252,6 +302,8 @@ impl Model {
         match &step.event {
             Event::Started {
                 config,
+                journal,
+                journal_unread,
                 owner,
                 on_console,
                 ..
@@ -263,6 +315,12 @@ impl Model {
                 self.automatic = config.automatic;
                 self.owner = *owner;
                 self.on_console = *on_console;
+                self.mirror = journal
+                    .iter()
+                    .flat_map(|j| &j.entries)
+                    .map(|e| (e.plan, e.key))
+                    .collect();
+                self.retry = !self.mirror.is_empty() || *journal_unread;
             }
             Event::ConfigChanged(config) => self.automatic = config.automatic,
             Event::Menu(MenuCommand::Automatic(on)) => self.automatic = *on,
@@ -314,6 +372,7 @@ impl Model {
             Event::Lid { closed } => self.lid_closed = *closed,
             _ => {}
         }
+        self.take_journal(&step.event);
         self.take_lock(step);
         let was = self.stepped_back;
         if let Some(ac) = self.ac {
@@ -663,13 +722,16 @@ fn core_can_know(seen: &Seen<'_>) -> bool {
 }
 
 /// The lid-close and source lock (a `Lock` with the chime) never goes out while the lid action in force for the
-/// current power source is the user's own Do nothing (decision 18). Judged only where [`core_can_know`].
+/// current power source is the user's own Do nothing (decision 18). Judged only where [`core_can_know`] and the mirror
+/// knows the journal: while it may not, a Do nothing in force may be a crashed tray's, and the lock rules lock on it
+/// by design ([`Model::journal_unknown`]).
 fn no_lock_on_the_users_own_do_nothing(world: &World) -> Result<(), String> {
     for seen in replay(world) {
         let truth = seen.truth();
         let lid_lock =
             seen.sent(&Command::Lock) && seen.sent(&Command::Play(Cue::LidClosedHolding));
-        if !lid_lock || !core_can_know(&seen) {
+        let guessed = seen.before.journal_unknown() || seen.after.journal_unknown();
+        if !lid_lock || !core_can_know(&seen) || guessed {
             continue;
         }
         let (value, by) = truth.lid();
@@ -1079,6 +1141,7 @@ fn world_start() -> impl Strategy<Value = WorldStart> {
         battery(),
         prop::bool::weighted(0.2),
         any::<bool>(),
+        prop::bool::weighted(0.2),
         prop::bool::weighted(0.65),
     )
         .prop_map(
@@ -1093,6 +1156,7 @@ fn world_start() -> impl Strategy<Value = WorldStart> {
                 battery_pct,
                 leftover,
                 startup_fails,
+                startup_unread,
                 keep_up,
             )| WorldStart {
                 active,
@@ -1105,9 +1169,7 @@ fn world_start() -> impl Strategy<Value = WorldStart> {
                 battery_pct,
                 leftover,
                 startup_fails,
-                // Not drawn: the core cannot know a crashed tray's values while the file does not read, so the
-                // lock rules here would need that excuse (`p2-6-unread-journal`); the named cases below cover it.
-                startup_unread: false,
+                startup_unread,
                 keep_up,
             },
         )

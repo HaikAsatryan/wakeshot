@@ -582,6 +582,124 @@ fn an_unread_journal_keeps_the_guess_until_a_retry_reads_it() {
     assert_eq!(plays(&out), 0, "{}", sim.trace());
 }
 
+// `p6-int-wiring-fixes` Found outside scope 3: with nothing holding, the lid closes on a Do nothing that may be a
+// crashed tray's. Once the retry puts the user's own Sleep back, the closed laptop must count down as with a journal
+// that read; with their own Do nothing it must not.
+
+/// Do nothing on battery: the crashed tray's or the user's own.
+fn do_nothing_dc() -> PlanValues {
+    PlanValues {
+        lid_dc: 0,
+        ..plan(BALANCED)
+    }
+}
+
+/// An unread journal, a plan read with Do nothing on battery, then the lid closes with nothing holding: the lock
+/// (the unread guess), and the session reports it. Gives the time of the last input.
+fn closed_on_an_unread_do_nothing(sim: &mut Sim) -> Now {
+    sim.send(unread_start());
+    sim.send(power(false, 80));
+    sim.send(read(do_nothing_dc()));
+    sim.send(lid(false));
+    sim.input();
+    let at = sim.now();
+    let out = sim.send(lid(true));
+    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+    sim.send(session(SessionChange::Locked));
+    at
+}
+
+/// The first `Hibernate` came at `IDLE_MS` after `at`, for work that ended.
+fn hibernated_after_idle(sim: &Sim, at: Now) {
+    let trace = sim.trace();
+    assert_eq!(hibernate_times(sim, at), [i128::from(IDLE_MS)], "{trace}");
+    assert_eq!(
+        hibernates(&all(sim)),
+        [&hibernate(CountdownReason::WorkEnded, None)],
+        "{trace}"
+    );
+}
+
+#[test]
+fn with_an_unread_journal_a_closed_lid_counts_down_once_the_retry_puts_the_users_sleep_back() {
+    // The tick sends the retry, then a read; the plan copy shows the Do nothing until that read lands. A loop timer
+    // and a battery reading come in between, and decide nothing.
+    let mut sim = Sim::new();
+    let at = closed_on_an_unread_do_nothing(&mut sim);
+    let out = sim.run(SAFETY_TICK_MS);
+    let retry = Command::Restore {
+        plan: None,
+        why: RestoreWhy::Leftover,
+    };
+    assert_eq!(count(&out, &retry), 1, "{}", sim.trace());
+    assert!(
+        position(&out, &retry) < position(&out, &Command::ReadPlan),
+        "{}",
+        sim.trace()
+    );
+    sim.send(restored(None, RestoreWhy::Leftover, Ok(()), vec![]));
+    sim.run(SECOND);
+    sim.send(Event::Tick);
+    sim.send(power(false, 79));
+    sim.send(read(plan(BALANCED)));
+    sim.run(IDLE_MS);
+    hibernated_after_idle(&sim, at);
+
+    // The lid closed before any plan read: that read, taken after the restore, decides as well.
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(false, 80));
+    sim.send(lid(false));
+    sim.input();
+    let at = sim.now();
+    let out = sim.send(lid(true));
+    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+    sim.send(restored(None, RestoreWhy::Leftover, Ok(()), vec![]));
+    sim.send(read(plan(BALANCED)));
+    sim.run(IDLE_MS + MINUTE);
+    hibernated_after_idle(&sim, at);
+}
+
+#[test]
+fn with_an_unread_journal_the_countdown_waits_through_failed_retries() {
+    // A retry whose load fails reads nothing, and the reads in between still show the Do nothing: still unknown.
+    let mut sim = Sim::new();
+    let at = closed_on_an_unread_do_nothing(&mut sim);
+    sim.send(restored(
+        None,
+        RestoreWhy::Leftover,
+        Err(RESTORE_FAILED),
+        vec![],
+    ));
+    sim.send(read(do_nothing_dc()));
+    let out = sim.run(MINUTE);
+    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    sim.send(restored(None, RestoreWhy::Leftover, Ok(()), vec![]));
+    sim.send(read(plan(BALANCED)));
+    sim.run(IDLE_MS);
+    hibernated_after_idle(&sim, at);
+}
+
+#[test]
+fn with_an_unread_journal_the_users_own_do_nothing_gives_no_countdown() {
+    // The read behind the retry shows the Do nothing again: the user's own, so Wakeshot only lets go (decision 18).
+    let mut sim = Sim::new();
+    closed_on_an_unread_do_nothing(&mut sim);
+    sim.send(restored(None, RestoreWhy::Leftover, Ok(()), vec![]));
+    let mut out = sim.send(read(do_nothing_dc()));
+    out.extend(sim.run(20 * MINUTE));
+    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+
+    // The lid opens: the waiting want ends as a countdown would. Closed again, nothing of ours keeps it running, so a
+    // Sleep the user sets later is Windows' to act on.
+    sim.send(lid(false));
+    let out = sim.send(lid(true));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    let mut out = sim.send(read(plan(BALANCED)));
+    out.extend(sim.run(20 * MINUTE));
+    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+}
+
 // Item 2: the power source changes with the lid closed.
 
 #[test]

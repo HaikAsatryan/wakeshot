@@ -324,7 +324,7 @@ plan, `lid_closed_since`, labels of what held); a mirror of the journal, a copy 
 `session_ending`; `ending: Option<Countdown>`; `last_resume_mono`; notices already shown; and the lid side's own
 memory (`lock: LockWatch`): the lock watch (a closed-lid `Lock` until `Session(Locked)` confirms it), the lock step
 back, the lock after a hibernate that did not happen, notices kept for the user's return, countdown rules waiting for
-the first plan read, and the journal mirror as the last settle pass saw it.
+a plan read that tells the user's own lid action, and the journal mirror as the last settle pass saw it.
 
 The lid, lock and countdown rules read the plan as in force now (`Core::in_force`), not the last plan read, which an
 apply leaves up to 10 s behind: each mirror entry on the active plan sets its key to `written`, and an `Apply` with no
@@ -334,7 +334,12 @@ plan copy behind the other way, showing what Wakeshot wrote until the next read 
 entry that left the mirror, whose key the copy still shows at `written`, puts its `original` back in the copy, and a
 later read replaces it (power safety review finding 5). Before the first plan read, a countdown rule that meets the lid
 closed while the `Started` journal holds entries (a crashed tray's values) waits for that read and decides on it
-(power safety verify minor 3).
+(power safety verify minor 3). A work-end countdown also waits while the mirror may not know `journal.json` (it did
+not read at start, or a restore failed to load it, and no read of the file since): a Do nothing in force may be a
+crashed tray's, and once a restore puts the user's value back, the copy shows the Do nothing until a later read, since
+no mirror entry names the key. So a work-end countdown that waited takes no Do nothing as final: it starts once a read
+shows the user's own action for its power source as not Do nothing, and ends when the lid opens or a hold starts
+(`p2-6-unread-lid-countdown`).
 
 ### Clocks
 
