@@ -164,6 +164,7 @@ those one at a time across all tracks.
 | `p6-pages` | yes: one look before it goes live at v1 | `p6-readme`; the tray track's `p5-icon-art` and `p5-haik-check` (Haik's icon pick rewrites `assets/wakeshot.ico`; review m3) | ready |
 | `p6-startup-switch-check` | no | `p6-install-e2e` | done (06:23: the off choice survives Setup over the install by the keys; uninstall leaves the StartupApproved value) |
 | `p6-tray-size` | no (stop 2, a dependency change, waits for the orchestrator) | `p6-int-update-wiring` | in progress (started 06:13: stop 1, read only) |
+| `p6-uninstall-startup-approval` | no (orchestrator decision for his review) | `p6-startup-switch-check` | in progress (started 06:24) |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
 dependency 110K, pack and release 110K, install e2e 130K, winget 60K, README 70K, Pages 60K. About 880K in all.
@@ -357,3 +358,5 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   worker's own check (a write of the same data does not move the key time). Orchestrator decision, for Haik's
   review: uninstall removes that value too (an uninstall leaves nothing; a reinstall starts as on a new PC):
   new card `p6-uninstall-startup-approval`.
+- 2026-11-04 06:24 (orchestrator `wakeshot-12`): `p6-uninstall-startup-approval` started (store `AutoStart`, the
+  uninstall hook, `e2e.ps1` step 7, one `e2e.ps1` run alone on the laptop), beside `p6-tray-size` stop 1.
