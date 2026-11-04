@@ -3759,3 +3759,47 @@ builds only), packed as 0.0.1, 0.0.2 and 0.0.3 by `pack.ps1`. Every hold wrote a
   `<root>\current\wakeshot-tray.exe`; Windows keeps one entry per GUID and moves it to the next exe that starts
   (phase file note 7). Velopack's own logs in `%LocalAppData%\velopack` grew by 13,412 and 15,992 bytes. **Verified**
   (test).
+
+## Start at login switch check
+
+Checked 2026-11-04 between 06:15 and 06:21 for card `docs/tasks/p6-startup-switch-check.md`, on this laptop: an x64
+release build of commit f33bf50 packed as 0.1.0, installed, installed again over itself and uninstalled, all silent and
+at Medium (a `.cmd` opened with `explorer.exe`; its `whoami /groups` "Mandatory Label\Medium Mandatory Level"). The
+session was locked the whole time, so nobody used the real Settings switch. "Test" means seen on this laptop.
+
+- **Where Windows keeps the switch.** `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run`,
+  one value per `Run` value, with the same name. No Microsoft page documents it (Learn search, 2026-11-04: no hit).
+  The UTF-16 string `Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved` is in
+  `SettingsHandlers_Startup.dll` (the Settings > Apps > Startup page) and `Taskmgr.exe` (both 10.0.26100.9549),
+  `explorer.exe` (10.0.26100.8117), `Startupscan.dll` and `twinui.pcshell.dll`; not in `shell32.dll`,
+  `windows.storage.dll` or `twinui.dll`. So the Settings page, Task Manager and Explorer all use the key. **Verified**
+  (string search in the binaries); what each of them does with it: **not verified**.
+- **The value's format.** REG_BINARY, 12 bytes: a DWORD state, 02 (or 06) on, 03 off, then the FILETIME of the
+  switch-off, zero when on. A missing value counts as on. Sources: windowsir.blogspot.com, 2022-07-09 (Task
+  Manager's switch); the `auto-launch` Rust crate (`src/windows.rs`, used by Tauri's autostart plugin) writes
+  `02` and 11 zero bytes to turn it on and reads "the last 8 bytes all zero" as on. **Not verified** with the real
+  Settings switch: this laptop's `StartupApproved\Run` and `StartupApproved\StartupFolder` keys are empty (no startup
+  app was ever switched here), so there was no switch-written value to compare with.
+- **A fresh install writes no switch value.** After `Setup.exe --silent` the Run value `Wakeshot` is REG_SZ
+  `"%LocalAppData%\HaikAsatryan.Wakeshot\current\wakeshot-tray.exe"` (158 bytes) and there is no
+  `StartupApproved\Run\Wakeshot` value, so start at login is on by the keys. **Verified** (test).
+- **Setup over the install keeps the switch off, by the keys.** With `StartupApproved\Run\Wakeshot` set to
+  `03 00 00 00` and a FILETIME (the documented off form), `Setup.exe --silent` over the install (what `winget upgrade`
+  runs) exited 0 in 0.4 s; the install hook logged "Run value Wakeshot set to ..."; the Run value read the same; the
+  `StartupApproved\Run\Wakeshot` value kept the same 12 bytes and the `StartupApproved\Run` key's last write time did
+  not move. Neither Velopack nor the hook touches that key (Velopack's log; `hooks.rs` writes only `Run`, `RunOnce`
+  and the Path). **Verified** (test). That Explorer then skips Wakeshot at the next sign-in: **not verified** (no
+  sign-out was possible).
+- **Uninstall leaves the switch value.** `Update.exe --uninstall --silent` removed the Run value, but
+  `StartupApproved\Run\Wakeshot` stayed with the same off bytes. So a later fresh install writes the Run value again
+  and, by the keys, starts with start at login off. **Verified** (test) for the leftover; the reinstall case follows
+  from the step above, **not run**. windowsir.blogspot.com (2022-07-17) saw the same for a Run value deleted in
+  RegEdit.
+- **A registry write with the same data is not a write.** The hook's second `RegSetValueExW` of the same Run value did
+  not move the `Run` key's last write time. On a scratch key (`HKCU\Software\WakeshotSwitchCheckScratch`, made and
+  deleted): a second write of the same string kept the key's time, a write of other text moved it. **Verified**
+  (test). So a key's last write time cannot show that an installer wrote a value again.
+- **AFTER equals BEFORE.** Run (7 values, same hashes), RunOnce (empty), every `StartupApproved` subkey and value
+  (hash `E9B25BDF1FD8AC4E`), Path REG_EXPAND_SZ 332 bytes hash `A8FDC61D7FFE5745`; no install trace or data folder.
+  The test value was deleted at the end. The `Run` and `StartupApproved\Run` keys' last write times moved (any write
+  moves them; nothing puts them back). **Verified** (test; an elevated read at 06:16 and 06:20 matched).

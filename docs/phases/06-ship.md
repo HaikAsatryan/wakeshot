@@ -39,8 +39,10 @@ sign-off):
 - Start menu shortcut only (`--shortcuts StartMenuRoot`), no desktop shortcut: the tray starts at login anyway.
 - Run value `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Wakeshot`: the quoted path of
   `current\wakeshot-tray.exe` if `p6-velopack-facts` shows that `current` keeps its path across updates, else the root
-  stub. The user turns start at login off in Settings > Apps > Startup; Windows keeps that choice in its own key, so a
-  reinstall that writes the Run value again does not turn it back on (not verified).
+  stub. The user turns start at login off in Settings > Apps > Startup; Windows keeps that choice in its own key
+  (`Explorer\StartupApproved\Run\Wakeshot`), which `Setup.exe` over the install leaves off while it writes the Run
+  value again (`p6-startup-switch-check`: by the keys; the off value written by script, not the real switch; sign-in
+  not verified). Uninstall left that value: `p6-uninstall-startup-approval` removes it.
 - Path entry: the `current` folder, so `wakeshot` works in every new terminal.
 - `velopack` pinned exactly (`=1.2.161`), the same version as the `vpk` that packs it.
 
@@ -160,7 +162,7 @@ those one at a time across all tracks.
 | `p6-readme` | yes: a read at the Phase 6 sign-off; the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3, sign-off item 12) are in, all defaults | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-claude`; the tray track's `p5-haik-check` (review m2); `p6-launch-research` (its scope grows from that Result, Haik 2026-11-04); `p6-media` | blocked: draft done 04:22 (474 lines, 10 media spots, product words from the code as it is); waits for `p5-haik-check` and `p6-media` |
 | `p6-media` | yes: watches the video and the loop and says yes or what to change; about 10 min off the PC for the captures | `p6-launch-research` (tool, storyboard, shot list); `p5-haik-check` (final icon); integration's `p6-int-real-e2e` (the real app) | ready |
 | `p6-pages` | yes: one look before it goes live at v1 | `p6-readme`; the tray track's `p5-icon-art` and `p5-haik-check` (Haik's icon pick rewrites `assets/wakeshot.ico`; review m3) | ready |
-| `p6-startup-switch-check` | no | `p6-install-e2e` | in progress (started 06:13; alone on the laptop: installs) |
+| `p6-startup-switch-check` | no | `p6-install-e2e` | done (06:23: the off choice survives Setup over the install by the keys; uninstall leaves the StartupApproved value) |
 | `p6-tray-size` | no (stop 2, a dependency change, waits for the orchestrator) | `p6-int-update-wiring` | in progress (started 06:13: stop 1, read only) |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
@@ -348,3 +350,10 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   `p6-startup-switch-check` (does start at login stay off after `Setup.exe` over the install, and what uninstall
   leaves of the switch; alone on the laptop) and `p6-tray-size` (why the release tray grew from 2.0 to 3.95 MB;
   stop 1 read only, a dependency change only after the orchestrator's go).
+- 2026-11-04 06:23: `p6-startup-switch-check` done (one install cycle at Medium, 06:19): with the off value written
+  (`03` and a FILETIME; community sources, no Microsoft doc; not the real switch, the session was locked), `Setup.exe`
+  over the install wrote Run again and left the off value as it was. Uninstall removed Run but left
+  `StartupApproved\Run\Wakeshot` (deleted by the worker; AFTER equals BEFORE). 24 of 25 checks; the fail was the
+  worker's own check (a write of the same data does not move the key time). Orchestrator decision, for Haik's
+  review: uninstall removes that value too (an uninstall leaves nothing; a reinstall starts as on a new PC):
+  new card `p6-uninstall-startup-approval`.
