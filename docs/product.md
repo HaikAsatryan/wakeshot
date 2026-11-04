@@ -265,6 +265,8 @@ The two Codex and Copilot answers apply when they are built, after v1.
 - Chimes honor the Windows sound scheme: with "No sounds", no chime, one log line.
 - Notices raised while the session is locked or another user is on the screen wait until the user is back.
   Sounds never wait.
+- Notices stay tray banners (`Shell_NotifyIcon`), not registered toasts (Haik, 2026-11-04). They close after Windows'
+  "Dismiss notifications after" time and a missed one is not kept in Win+N.
 - After `winget upgrade`, Wakeshot is off until the next sign-in or a manual start; the README says so.
 - Uninstall: after a good restore the data folder is deleted; after a failed one only the journal and logs stay.
 - After Wakeshot updates itself, one notice says so ("Wakeshot updated to <version>"), no sound.

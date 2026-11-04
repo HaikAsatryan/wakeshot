@@ -250,5 +250,5 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   its Part A (the fix).
 - Next (orchestrator): when Part A ends, a narrow power safety check of the change (`wakeshot-reviewer`), fixes, then
   Part B (B2 redo with Haik, about 5 minutes, one sign-out, the laptop alone). Then: `p6-int-haik-checks` (about 45
-  min, with its 2026-11-04 changes), `p6-media` Part B, the README and Pages finish. Product call open for Haik:
-  banners that go in 5 s (Windows' setting) and are not kept in Win+N: keep `Shell_NotifyIcon`, or registered toasts.
+  min, with its 2026-11-04 changes), `p6-media` Part B, the README and Pages finish. Haik's call on banners
+  (2026-11-04): keep `Shell_NotifyIcon` banners (`product.md`).

@@ -333,3 +333,5 @@ Bundle (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p5-th
   content hidden by Windows. Chimes heard docked and undocked, on the laptop speakers after the replug. Fast banners:
   Windows' "Dismiss notifications after" (5 s on his laptop); a missed banner is not kept in Win+N (Microsoft docs).
   Product call for Haik: keep `Shell_NotifyIcon` notices, or registered toasts (not verified that they stay).
+- 2026-11-04 18:45 (orchestrator): Haik's call: keep the `Shell_NotifyIcon` banners, no registered toasts
+  (`product.md`). No code change.
