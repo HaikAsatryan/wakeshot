@@ -236,10 +236,15 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   docs passes 5 and 6, the README comparison (PowerToys Awake, Caffeine, Don't Sleep), drafts of `p6-pages` and
   `p6-media` Part A. Nothing runs now. GitHub refused the SSH key 13:50 to about 14:30 (cause not verified); pushes
   work again.
-- Next (orchestrator): check CI on the last push; one core property failed once in docs pass round 6
-  (`a_released_key_is_never_ours_in_force_again_in_its_episode`, on `SleepDc`; reruns passed; input lost): a small
-  card to find it. Then Haik, in order: read the README table; `p5-haik-check` Part B (about 25 min; the new notice
-  words are in `text.rs`); `p3-haik-checks` (about 60 min, alone on the laptop); `p6-int-haik-checks` (about 45
-  min, with its 2026-11-04 changes); `p6-media` Part B (speed numbers with the laptop idle, captures, his look);
-  then the README and Pages finish.
-
+- 2026-11-04 16:45 (session `wakeshot-27`, after the handover from `wakeshot-12`): done and pushed:
+  `p2-6-props-flake` (a core bug: a sleep route apply kept a key the user took back), `p4-watch-tick-flake` (two Windows test flakes),
+  `p2-6-reset-gaps` (two rare core gaps, both real), `p2-6-props-rare` (a core gap: no hibernate or short timeouts
+  right after input; two props model gaps). Core props pass 10 of 10 runs at 4096 cases and 50 of 50 at 256. With
+  Haik: README table round 3 (his comments), `p5-haik-check` (done: the menu opens above the taskbar; the demo banner
+  names Wakeshot), his answers on a restore during the countdown and a hold that starts with the lid closed
+  (`product.md`). CI green through 2016893.
+- Next (orchestrator): `p3-haik-checks` with Haik, alone on the laptop (its "Before Haik starts"; the sign-outs in B
+  end the session: after sign-in Haik runs `/orchestrate` and says "Haik checks done" with his notes from A, D and
+  E; then a new worker runs the card's "After Haik's steps"). Then: `p6-int-haik-checks` (about 45 min, with its
+  2026-11-04 changes), `p6-media` Part B, the README and Pages finish. Product call open for Haik: banners that go
+  in 5 s (Windows' setting) and are not kept in Win+N: keep `Shell_NotifyIcon`, or registered toasts.
