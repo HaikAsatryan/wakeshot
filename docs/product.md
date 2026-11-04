@@ -136,8 +136,9 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   slept 5 minutes later, with the lid still closed and no input since, Wakeshot hibernates it, so a lid close's sleep
   is matched even when another app holds the PC awake: `SetSuspendState(TRUE)` after `IsPwrHibernateAllowed` and
   enabling SeShutdownPrivilege, with the lid checked right before the call. If hibernate is not allowed or the call
-  fails: notify; the short sleep timeout stays until the lid opens, so Windows sleeps the laptop once nothing holds
-  it. Until the lid opens, Wakeshot then locks the laptop, with the lid-close
+  fails: notify; the short timeouts stay in force, so Windows sleeps the laptop once nothing holds it; they go back
+  at input or an unlock as above, and come again, with the sound, after the next 5 minutes with no input (review
+  minor 8 of `p2-6-sleep-route`). Until the lid opens, Wakeshot then locks the laptop, with the lid-close
   chime, whenever it has had no input for 5 minutes and is unlocked, at most every 5 minutes, so it does not run
   unlocked for hours (worker's call 2026-11-04, for Haik's review; power safety verify minor 1). A notice shown while
   the lid was closed and the session unlocked, which nobody may have seen, is shown again when the user is back at

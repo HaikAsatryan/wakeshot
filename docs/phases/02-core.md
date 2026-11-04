@@ -140,6 +140,7 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | `p2-6-unread-floor-countdown` | no | `p2-6-unread-lid-countdown` | done (05:58: 4 new scenarios; 1284 workspace tests; 8 of 10 mutants caught) |
 | `p2-6-record-lost` | no (Haik's rule of 2026-11-04 in `product.md`) | nothing | done (11:13: 1312 workspace tests; 14 of 14 mutants killed; 12 worker decisions) |
 | `p2-6-sleep-route` | no (Haik's rule of 2026-11-04; his lid test is in `p6-int-haik-checks`) | `p2-6-record-lost`, `p3-idle-sleep-check` | done (12:16: 1340 workspace tests; 13 of 13 mutants killed; 17 worker decisions) |
+| `p2-6-sleep-route-fixes` | no | `p2-6-sleep-route` | ready |
 
 No card touches the real laptop (no power settings, screen, sound or installs) or needs Haik's hands. "Contracts
 card": the one card the orchestrator runs alone before the track builds.
@@ -342,3 +343,9 @@ Where each item this track owns is built. "Integration" is planned after the tra
   f47391d too, CI passed it there; cause not verified): to the small fixes card. Gap for a follow-up card
   (orchestrator default, for Haik's review): rule 7's reset should also put back the 60 s timeouts when they hold
   exactly Wakeshot's value, and the uninstall hook should reset a corrupt or unreadable journal's values.
+- 2026-11-04 12:35 (orchestrator `wakeshot-12`): review of `p2-6-record-lost` and `p2-6-sleep-route` done
+  (`docs/reviews/p2-6-sleep-route-review.md`): 0 blockers, 3 majors (a closed lid in the unknown window then a hold:
+  no lock ever; a lost journal leaves the 60 s timeouts; uninstall with a damaged journal resets nothing), 5 minors.
+  New card `p2-6-sleep-route-fixes` (starts now): the findings, plus four notices that are cut after five lines, and
+  the watch test that fails in agent shells. Orchestrator decision, for Haik's review: rule 7's reset also covers
+  the short timeouts at exactly Wakeshot's value. Review minor 8 fixed in `product.md`.
