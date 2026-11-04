@@ -1,6 +1,6 @@
 # Make real-settings tests refuse to run beside an installed Wakeshot
 
-Phase: 6 (ship). Status: later (start before Haik installs the first release). Needs Haik: no.
+Phase: 6 (ship). Status: ready (promoted 2026-11-05 by the orchestrator, before the first release; for Haik's review). Needs Haik: no.
 Agent: `wakeshot-worker`. Size: about 60K tokens.
 Written by the orchestrator, 2026-11-04 18:43, from Haik's question: once the real Wakeshot is installed, do dev tests
 clash with it?
@@ -32,6 +32,10 @@ settings, so a full dev edition is not the fix.
 2. `power_check` real-settings commands and `packaging/e2e.ps1` call it first and stop on a hit, changing nothing.
 3. A line in `CLAUDE.md` "Test laptop": quit the installed Wakeshot before real-settings tests (the same rule as
    for any other keep-awake app).
+4. Added 2026-11-05 (`p6-int-haik-checks` finding 8): the real Startup switch writes `01` (off) and `00` (on) as the
+   first byte, not `03` and `02` (Haik's block 8; Windows honoured `01`). Fix `docs/research.md` "Where Windows keeps
+   the switch" (correct the bytes in place, with the date and how it was seen) and `packaging/e2e.ps1` step 5 (its
+   comments, and seed the `01` form the real switch writes). Re-read `research.md` right before the edit.
 
 ## Acceptance checks
 
@@ -54,6 +58,8 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-04 18:43: card written by the orchestrator.
+- 2026-11-05: promoted to ready by the orchestrator; deliverable 4 added. `p6-notice-app-icon` runs after this card
+  (both own `packaging/e2e.ps1`); `p2-6-floor-grace` runs beside it.
 
 ## Result
 
