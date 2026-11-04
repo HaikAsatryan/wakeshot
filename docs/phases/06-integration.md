@@ -208,8 +208,8 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | `p6-int-wiring-fixes` | no | no | `p6-int-tray-mode` Part A, `p6-velopack-dependency`, `p6-int-update-wiring` | done (04:29; 1276 tests; smoke test passed) |
 | `p6-int-log-wording` | no | no | `p6-int-wiring-fixes` | done (05:16) |
 | `p6-int-dry-run-e2e` | no | screen (dry-run icon, balloons, pictures); agent-session lane (one Claude Code test session) | `p6-int-update-wiring`, `p4-cli-args`, `p4-cli-run`, `p4-cli-commands`, `p4-cli-restore`, `p4-live-claude` | blocked: waiting for the screen slot (12 of 12 suite tests passed twice, no fix needed; Claude session check and clean-up done 04:51; pictures left) |
-| `p6-int-real-e2e` | no | global: power settings on active plan copies, RunOnce, a guard | `p6-int-dry-run-e2e`, `p3-real-checks` | in progress (started 04:39; suite committed 0932c60; stop 2, the run, alone on the laptop from 05:06) |
-| `p6-int-update-e2e` | no | global: installs, Run, RunOnce, Path, a user environment value, an active plan copy | `p6-int-real-e2e`, `p6-install-e2e`, `p6-pack-and-release`, `p6-hooks` | ready |
+| `p6-int-real-e2e` | no | global: power settings on active plan copies, RunOnce, a guard | `p6-int-dry-run-e2e`, `p3-real-checks` | done (05:25: 10 of 10 on an active copy; AFTER equals BEFORE; no product fix) |
+| `p6-int-update-e2e` | no | global: installs, Run, RunOnce, Path, a user environment value, an active plan copy | `p6-int-real-e2e`, `p6-install-e2e`, `p6-pack-and-release`, `p6-hooks` | in progress (started 05:16: stop 1, the script and the packs only; the run waits for `p6-int-real-e2e`) |
 | `p6-int-haik-checks` | yes: about 42 min (27, 18 of hands, plus 15 with the dock) | whole laptop: lid, lock, hibernate, switch user, battery; no other agent or cargo command | `p6-int-update-e2e`, `p3-haik-checks`, `p5-haik-check` | ready |
 
 Sizes, one worker's context: skeleton 50K, io-thread 120K, window 100K, dispatch 140K, startup 100K, tray-mode 140K,
@@ -376,3 +376,14 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   before, 0 of 100 after). x64 clippy, ARM64 windows and cli, 1280 workspace tests. The worker saw one
   `scenarios::props` lid lock over a user's own Do nothing while `p2-6-unread-lid-countdown` was mid-edit; relayed
   to that card.
+- 2026-11-04 05:16 (orchestrator `wakeshot-12`): `p6-int-update-e2e` started for stop 1 only (`packaging/e2e-update.ps1`,
+  parse checks, the debug build and the three packs; nothing installed). Its run (installs, a plan copy made active)
+  waits until `p6-int-real-e2e` ends; then it is alone on the laptop.
+- 2026-11-04 05:25: `p6-int-real-e2e` done: suite run 2 (05:18 to 05:20) 10 of 10; run 1 failed only the user-change
+  test (a test bug: the core holds notices while the session is locked). `real_e2e_cleanup` first and last; AFTER
+  equals BEFORE (Balanced only and active, lid 1/1, sleep 18000/18000, saver DC 30, RunOnce empty). Apply 60 to
+  90 ms after the CLI; plan switch settled in 162 to 573 ms; session-end send back in 39 to 56 ms, restored; the
+  guard restored 63 to 87 ms after the tray was killed. `e2e/mod.rs` generalized; the dry-run suite still 12 of 12.
+  Orchestrator decision: no final record run (the lid card changes only lid handling, which the suite never
+  drives). Its dry-run check recreated the dry-run icon keys: left for `p6-int-dry-run-e2e`'s clean-up after its
+  pictures.

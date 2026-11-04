@@ -29,62 +29,47 @@
 //! `lid_ac`, `lid_dc`, `sleep_ac`, `sleep_dc`, `saver_ac` and `saver_dc` (its values by `powercfg /qh`, decimal), one
 //! `plan` line per plan `powercfg /l` lists, and one `run_once` line per value of the user's RunOnce key, as `reg
 //! query` prints it with the spaces squeezed to one. `#` starts a comment.
+//!
+//! Log lines are matched only where their text belongs to the tray, the core, the guard or the CLI; the journal's own
+//! lines (`power/journal.rs`) are printed, never matched, so a wording change there cannot fail a test.
 
-// This file uses only part of the shared helpers; the dry-run suite uses the rest.
-#[allow(dead_code)]
 mod e2e;
 
 use std::ffi::c_void;
 use std::fmt::Write as _;
-use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, fs, thread};
 
 use e2e::{
-    EXIT_WITHIN, FOLLOW_WITHIN, SAFETY_TICK, START_WITHIN, Said, TRAY_EXE, skip,
-    trays_of_this_build, wait_until,
+    Claude, EXIT_WITHIN, FOLLOW_WITHIN, LogMark, REAL_PREFIX, SAFETY_TICK, TRAY_EXE, TempData,
+    Tray, assert_medium, exit_code_within, full_path, loop_window, skip, terminate,
+    trays_of_this_build, wait_for, wait_for_result, wait_until,
 };
-use wakeshot_core::files::{self, JournalFile, JournalKey, Read, StateFile};
-use wakeshot_core::ownership::io::{JournalRead, SafetyNet};
+use wakeshot_core::files::{JournalFile, JournalKey, StateFile};
 use wakeshot_core::process::{Alive, ProcessRef};
 use wakeshot_core::settings::{Guid, SettingKey};
 use wakeshot_core::text;
 use wakeshot_core::view::KeepAwake;
 use wakeshot_windows::app::window::ask_quit;
-use wakeshot_windows::power::journal::{FileNet, RUN_ONCE_NAME};
+use wakeshot_windows::power::journal::RUN_ONCE_NAME;
 use wakeshot_windows::process::{self as winproc, Liveness, ProcessHandle, SystemLiveness};
-use wakeshot_windows::store::{AutoStart, DataDir, StartKey};
-use wakeshot_windows::testing::MemoryLog;
+use wakeshot_windows::session;
+use wakeshot_windows::store::{AutoStart, StartKey};
 use wakeshot_windows::tray::icon::IconKind;
-use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, WPARAM};
+use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::System::Power::{
     CallNtPowerInformation, POWER_INFORMATION_LEVEL, SYSTEM_POWER_POLICY, SystemPowerPolicyAc,
     SystemPowerPolicyDc,
 };
-use windows::Win32::System::Threading::{
-    GetExitCodeProcess, OpenProcess, PROCESS_TERMINATE, TerminateProcess,
-};
 use windows::Win32::UI::WindowsAndMessaging::{
-    ENDSESSION_LOGOFF, FindWindowW, GetWindowThreadProcessId, SMTO_ABORTIFHUNG,
-    SendMessageTimeoutW, WM_ENDSESSION, WM_QUERYENDSESSION,
+    ENDSESSION_LOGOFF, SMTO_ABORTIFHUNG, SendMessageTimeoutW, WM_ENDSESSION, WM_QUERYENDSESSION,
 };
-use windows::core::{PCWSTR, w};
 
 const BEFORE_ENV: &str = "WAKESHOT_REAL_E2E_BEFORE";
-/// Read by debug builds of both exes only (`store::DataDir::real`); the real tray keeps its files right in it.
-const DATA_DIR_ENV: &str = "WAKESHOT_DATA_DIR";
-/// Claude Code's own folder variable, which the tray follows.
-const CLAUDE_DIR_ENV: &str = "CLAUDE_CONFIG_DIR";
-const CLI_NAME: &str = "wakeshot.exe";
-/// The real tray's loop window class (`app::window`).
-const LOOP_CLASS: PCWSTR = w!("Wakeshot.Loop");
-/// `whoami /groups` names the Medium level by this SID.
-const MEDIUM_SID: &str = "S-1-16-8192";
 const RUN_ONCE_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce";
 const NOTIFY_KEY: &str = r"HKCU\Control Panel\NotifyIconSettings";
 
@@ -92,8 +77,6 @@ const NOTIFY_KEY: &str = r"HKCU\Control Panel\NotifyIconSettings";
 /// `p6-int-haik-checks` and `Wakeshot test <pid>` to the power harness: neither is ever touched here.
 const NAME_A: &str = "Wakeshot int A";
 const NAME_B: &str = "Wakeshot int B";
-/// Each test's data folder under `%TEMP%` starts with this, so the clean-up finds the ones a cut-off run left.
-const TEMP_PREFIX: &str = "wakeshot-real-e2e-";
 /// In each data folder: the ids handed to `powercfg /duplicatescheme`, written before it runs, so a copy that never
 /// got its name is still known to be this card's.
 const MADE_FILE: &str = "copy-ids.txt";
@@ -124,8 +107,6 @@ const PLAN_SWITCH_WITHIN: Duration = Duration::from_secs(15);
 const NO_WRITE_FOR: Duration = Duration::from_secs(SAFETY_TICK.as_secs() + 5);
 /// Explorer and `cmd` take about a second before a `.cmd` runs.
 const MEDIUM_CMD_WITHIN: Duration = Duration::from_secs(20);
-/// `powercfg` takes about 15 ms per setting read here.
-const POLL: Duration = Duration::from_millis(200);
 
 #[test]
 #[ignore = "real power settings, RunOnce and guard: global lane only, alone on the laptop"]
@@ -212,7 +193,7 @@ fn real_e2e_hold_start_applies_and_hold_end_restores() {
     }
     let bench = Bench::new("hold", &[NAME_A]);
     let a = bench.copy(0);
-    let mut tray = RealTray::start(&bench);
+    let mut tray = bench.start_tray();
     let guard = bench.hold(&tray, a);
     assert!(
         system_request_of_this_build().expect("powercfg /requests"),
@@ -232,32 +213,42 @@ fn real_e2e_user_change_drops_the_entry_and_stays() {
     let bench = Bench::new("user-change", &[NAME_A]);
     let a = bench.copy(0);
     assert_ne!(a.original.lid_dc, USER_LID_DC, "pick another user value");
-    let mut tray = RealTray::start(&bench);
+    let mut tray = bench.start_tray();
     let guard = bench.hold(&tray, a);
 
-    let mark = bench.log_mark();
+    let mark = bench.data.log_mark();
     let changed = Instant::now();
     set_lid_dc(a, USER_LID_DC);
     let left = [SettingKey::LidAc, SettingKey::SleepDc];
     wait_for(USER_CHANGE_WITHIN, "the journal drops lid DC", || {
-        let journal = bench.journal()?.ok_or("no journal")?;
+        let journal = bench.data.journal()?.ok_or("no journal")?;
         check_journal(&journal, &tray, a, &left)
     });
     println!(
         "lid DC entry dropped {} ms after the change",
         changed.elapsed().as_millis()
     );
-    let line = bench.wait_log(
+    let line = bench.data.wait_log(
         mark,
-        &format!("ownership check: the user changed LidDc on {}", a.id),
+        &format!("for this episode: the user changed it on plan {}", a.id),
         FOLLOW_WITHIN,
     );
     println!("{line}");
-    let notice = bench.wait_log(mark, "UserChanged", FOLLOW_WITHIN);
-    println!("{notice}");
-    bench.wait_state(FOLLOW_WITHIN, "lid DC no longer overridden", |s| {
-        s.overridden.len() == 2 && s.overridden.iter().all(|k| k.key != SettingKey::LidDc)
-    });
+    // The core keeps notices while the session is locked and shows them at the unlock (`Core::notify`).
+    match session::locked_now() {
+        Some(false) => {
+            let notice = bench.data.wait_log(mark, "UserChanged", FOLLOW_WITHIN);
+            println!("{notice}");
+        }
+        locked => {
+            println!("session locked: {locked:?}, so the UserChanged notice waits for the unlock")
+        }
+    }
+    bench
+        .data
+        .wait_state(FOLLOW_WITHIN, "lid DC no longer overridden", |s| {
+            s.overridden.len() == 2 && s.overridden.iter().all(|k| k.key != SettingKey::LidDc)
+        });
 
     let mut want = a.original;
     want.lid_dc = USER_LID_DC;
@@ -278,30 +269,26 @@ fn real_e2e_plan_switch_moves_the_writes_to_the_new_plan() {
     }
     let bench = Bench::new("plan-switch", &[NAME_A, NAME_B]);
     let (a, b) = (bench.copy(0), bench.copy(1));
-    let mut tray = RealTray::start(&bench);
+    let mut tray = bench.start_tray();
     let guard = bench.hold(&tray, a);
 
-    let mark = bench.log_mark();
+    let mark = bench.data.log_mark();
     let switched = Instant::now();
     powercfg(&["/setactive", &b.id.to_string()]);
     let all = [SettingKey::LidAc, SettingKey::LidDc, SettingKey::SleepDc];
     wait_for(PLAN_SWITCH_WITHIN, "A restored and B applied", || {
         plan_has(a, a.original)?;
         plan_has(b, b.original.applied())?;
-        let journal = bench.journal()?.ok_or("no journal")?;
+        let journal = bench.data.journal()?.ok_or("no journal")?;
         check_journal(&journal, &tray, b, &all)
     });
     println!(
         "A restored and B applied {} ms after the switch",
         switched.elapsed().as_millis()
     );
-    let lines = bench.log_since(mark);
-    assert!(
-        lines
-            .iter()
-            .any(|l| l.contains(&format!("apply to plan {} done", b.id))),
-        "{lines:#?}"
-    );
+    for line in bench.data.log_since(mark) {
+        println!("after the switch: {line}");
+    }
     // The restore of A may empty the journal, which stops the guard, and the apply to B then starts a new one.
     let old = guard.process().pid;
     let guard = bench.one_guard(&tray);
@@ -324,12 +311,12 @@ fn real_e2e_restore_my_power_settings_keeps_requests_only() {
     }
     let bench = Bench::new("restore-mine", &[NAME_A]);
     let a = bench.copy(0);
-    let mut tray = RealTray::start(&bench);
+    let mut tray = bench.start_tray();
     let guard = bench.hold(&tray, a);
 
-    let mark = bench.log_mark();
+    let mark = bench.data.log_mark();
     let started = Instant::now();
-    let said = bench.cli("restore");
+    let said = bench.data.cli("restore");
     println!("wakeshot restore took {} ms", started.elapsed().as_millis());
     assert_eq!(
         (said.code, said.out.as_str()),
@@ -343,13 +330,15 @@ fn real_e2e_restore_my_power_settings_keeps_requests_only() {
     );
     let code = wait_gone(&guard, GUARD_WITHIN);
     println!("guard ended with {code:?} after the restore");
-    let line = bench.wait_log(
+    let line = bench.data.wait_log(
         mark,
         "Released every key for this episode: Restore my power settings",
         Duration::ZERO,
     );
     println!("{line}");
-    let line = bench.wait_log(mark, "restore: owner pid", Duration::ZERO);
+    let line = bench
+        .data
+        .wait_log(mark, "restore: owner pid", Duration::ZERO);
     assert!(
         line.ends_with(&format!(
             "owner pid {} alive, asked the tray: restored",
@@ -358,7 +347,7 @@ fn real_e2e_restore_my_power_settings_keeps_requests_only() {
         "{line}"
     );
     // The hold goes on with power requests only.
-    let state = bench.state().expect("state.json");
+    let state = bench.data.state().expect("state.json");
     assert!(
         keep_awake_only(&state) && state.overridden.is_empty(),
         "{state:?}"
@@ -379,19 +368,21 @@ fn real_e2e_restore_my_power_settings_keeps_requests_only() {
         }
         thread::sleep(Duration::from_secs(1));
     }
-    let lines = bench.log_since(mark);
-    let writes: Vec<&String> = lines
+    let lines = bench.data.log_since(mark);
+    let guards_started = lines
         .iter()
-        .filter(|l| {
-            (l.contains("apply to plan") && !l.contains("wrote []"))
-                || l.contains("RunOnce value WakeshotRestore set")
-        })
-        .collect();
-    assert!(writes.is_empty(), "writes after the restore: {writes:#?}");
+        .filter(|l| l.contains("started for tray pid"))
+        .count();
+    assert_eq!(
+        guards_started, 0,
+        "a guard started after the restore: {lines:#?}"
+    );
 
-    let said = bench.cli("keep-awake off");
+    let said = bench.data.cli("keep-awake off");
     assert_eq!(said.code, 0, "{said:?}");
-    bench.wait_state(FOLLOW_WITHIN, "idle after off", |s| s.holding.is_empty());
+    bench
+        .data
+        .wait_state(FOLLOW_WITHIN, "idle after off", |s| s.holding.is_empty());
     bench.restored(a, a.original).expect("A after the hold end");
 
     // The next hold is a new episode: it applies again.
@@ -409,21 +400,23 @@ fn real_e2e_quit_during_a_hold_restores_and_exits() {
     }
     let bench = Bench::new("quit", &[NAME_A]);
     let a = bench.copy(0);
-    let mut tray = RealTray::start(&bench);
+    let mut tray = bench.start_tray();
     let guard = bench.hold(&tray, a);
-    assert!(bench.keep_awake_file().exists());
+    assert!(bench.data.keep_awake().exists());
 
-    let mark = bench.log_mark();
+    let mark = bench.data.log_mark();
     assert_eq!(tray.quit(), 0);
     // The quit restores before the tray exits.
     bench.restored(a, a.original).expect("A after the quit");
     assert!(
-        !bench.keep_awake_file().exists(),
+        !bench.data.keep_awake().exists(),
         "the Keep awake hold file is left"
     );
     let code = wait_gone(&guard, GUARD_WITHIN);
     println!("guard ended with {code:?} after the quit");
-    bench.wait_log(mark, "Wakeshot ends with code 0", Duration::ZERO);
+    bench
+        .data
+        .wait_log(mark, "Wakeshot ends with code 0", Duration::ZERO);
     bench.finish();
 }
 
@@ -435,10 +428,10 @@ fn real_e2e_session_end_restores_before_the_send_returns() {
     }
     let bench = Bench::new("session-end", &[NAME_A]);
     let a = bench.copy(0);
-    let tray = RealTray::start(&bench);
+    let tray = bench.start_tray();
     let guard = bench.hold(&tray, a);
 
-    let (hwnd, pid) = loop_window().expect("the real loop window");
+    let (hwnd, pid) = loop_window(false).expect("the real loop window");
     assert_eq!(pid, tray.pid(), "the real loop window is not this tray's");
     let lparam = LPARAM(ENDSESSION_LOGOFF as isize);
     let (sent, answer) = send(hwnd, WM_QUERYENDSESSION, WPARAM(0), lparam);
@@ -456,11 +449,10 @@ fn real_e2e_session_end_restores_before_the_send_returns() {
     bench
         .restored(a, a.original)
         .expect("A when the send returned");
-    let lines = bench.log();
+    let log = bench.data.log();
     println!(
         "{}",
-        lines
-            .lines()
+        log.lines()
             .find(|l| l.contains("Session end: the restore"))
             .unwrap_or("no session end line yet")
     );
@@ -483,9 +475,9 @@ fn real_e2e_killed_tray_guard_restores() {
     }
     let bench = Bench::new("killed", &[NAME_A]);
     let a = bench.copy(0);
-    let tray = RealTray::start(&bench);
+    let tray = bench.start_tray();
     let guard = bench.hold(&tray, a);
-    let mark = bench.log_mark();
+    let mark = bench.data.log_mark();
 
     let killed = Instant::now();
     tray.kill();
@@ -498,7 +490,7 @@ fn real_e2e_killed_tray_guard_restores() {
     );
     let code = wait_gone(&guard, GUARD_WITHIN.saturating_sub(killed.elapsed()));
     println!("guard ended with {code:?}");
-    let line = bench.wait_log(
+    let line = bench.data.wait_log(
         mark,
         &format!("guard for tray pid {}:", tray.pid()),
         Duration::ZERO,
@@ -542,8 +534,9 @@ fn real_e2e_cli_restore_with_a_dead_owner() {
          \"restored\": false }}\n  ]\n}}\n",
         owner.pid, owner.start, a.id, a.original.lid_dc
     );
-    fs::write(bench.root.join("journal.json"), journal).expect("write journal.json");
+    fs::write(bench.data.file("journal.json"), journal).expect("write journal.json");
     let read = bench
+        .data
         .journal()
         .expect("read journal.json")
         .expect("journal.json");
@@ -551,9 +544,9 @@ fn real_e2e_cli_restore_with_a_dead_owner() {
         (read.owner.pid, read.owner.proc_start, read.entries.len()),
         (owner.pid, owner.start, 1)
     );
-    assert!(trays_of_this_build().is_empty() && loop_window().is_none());
+    assert!(trays_of_this_build().is_empty() && loop_window(false).is_none());
 
-    let said = bench.cli("restore");
+    let said = bench.data.cli("restore");
     assert_eq!(
         (said.code, said.out.as_str()),
         (0, "Your power settings are restored.\n"),
@@ -562,7 +555,9 @@ fn real_e2e_cli_restore_with_a_dead_owner() {
     bench
         .restored(a, a.original)
         .expect("A after wakeshot restore");
-    let line = bench.wait_log(0, "restore: owner pid", Duration::ZERO);
+    let line = bench
+        .data
+        .wait_log(LogMark::START, "restore: owner pid", Duration::ZERO);
     assert!(
         line.ends_with(&format!("owner pid {} gone, restored here", owner.pid)),
         "{line}"
@@ -578,7 +573,7 @@ fn real_e2e_icon_settings_entry_names_the_product_guid() {
     }
     let bench = Bench::new("icon", &[NAME_A]);
     let earlier: Vec<String> = notify_entries().into_iter().map(|e| e.id).collect();
-    let mut tray = RealTray::start(&bench);
+    let mut tray = bench.start_tray();
     let look = || {
         let entries = notify_entries();
         let found: Vec<NotifyEntry> = entries
@@ -731,7 +726,7 @@ impl Before {
         if !ours.is_empty() {
             found.push(format!("processes of this build run: {ours:?}"));
         }
-        if let Some((_, pid)) = loop_window() {
+        if let Some((_, pid)) = loop_window(false) {
             found.push(format!("a real tray (pid {pid}) runs in this session"));
         }
         match wakeshot_restore() {
@@ -990,12 +985,12 @@ fn plan_has(plan: PlanCopy, want: Values) -> Result<(), String> {
 /// (not marked).
 fn check_journal(
     journal: &JournalFile,
-    tray: &RealTray,
+    tray: &Tray,
     plan: PlanCopy,
     keys: &[SettingKey],
 ) -> Result<(), String> {
     let owner = journal.owner;
-    let me = tray.handle.process();
+    let me = tray.process();
     let session = winproc::current_session().map_err(|e| format!("{e:?}"))?;
     if (owner.pid, owner.proc_start, owner.session) != (me.pid, me.start, session) {
         return Err(format!(
@@ -1068,12 +1063,6 @@ fn points_into_target(value: &str) -> bool {
     run_once_exe(value).is_some_and(|exe| full_path(Path::new(exe)).starts_with(&folder))
 }
 
-fn full_path(path: &Path) -> String {
-    let full = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let text = full.to_string_lossy().to_lowercase();
-    text.strip_prefix(r"\\?\").unwrap_or(&text).to_owned()
-}
-
 /// `powercfg /requests` (admin) lists a SYSTEM request of this build's tray. It names the exe by its device path,
 /// so the path after the drive is compared.
 fn system_request_of_this_build() -> Result<bool, String> {
@@ -1089,16 +1078,6 @@ fn system_request_of_this_build() -> Result<bool, String> {
         }
     }
     Ok(false)
-}
-
-/// The real loop window of this session and its pid.
-fn loop_window() -> Option<(HWND, u32)> {
-    // SAFETY: a static, NUL-terminated class name and no window name.
-    let hwnd = unsafe { FindWindowW(LOOP_CLASS, PCWSTR::null()) }.ok()?;
-    let mut pid = 0u32;
-    // SAFETY: `pid` is a live local the call writes once.
-    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
-    (pid != 0).then_some((hwnd, pid))
 }
 
 /// `SendMessageTimeoutW` as Windows sends the end-of-session messages: it waits for the answer. Gives whether it was
@@ -1120,37 +1099,10 @@ fn send(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> (bool, usize) {
     (sent.0 != 0, answer)
 }
 
-/// `TerminateProcess` on the pid the open handle keeps from reuse; the new handle is closed here.
-fn terminate(handle: &ProcessHandle) {
-    let pid = handle.process().pid;
-    // SAFETY: plain calls on a pid this test's open handle keeps from reuse; the new handle is closed once.
-    unsafe {
-        if let Ok(kill) = OpenProcess(PROCESS_TERMINATE, false, pid) {
-            let _ = TerminateProcess(kill, 1);
-            let _ = CloseHandle(kill);
-        }
-    }
-}
-
-fn millis(limit: Duration) -> u32 {
-    u32::try_from(limit.as_millis()).unwrap_or(u32::MAX)
-}
-
-/// The exit code once the process ended within `limit`.
-fn exit_within(handle: &ProcessHandle, limit: Duration) -> Option<u32> {
-    if !matches!(handle.wait(millis(limit)), Ok(true)) {
-        return None;
-    }
-    let mut code = 0;
-    // SAFETY: the handle has QUERY_LIMITED_INFORMATION; `code` is a live local.
-    unsafe { GetExitCodeProcess(handle.raw(), &mut code) }.ok()?;
-    Some(code)
-}
-
 /// Waits for a guard to end by itself and gives its exit code.
 fn wait_gone(guard: &ProcessHandle, limit: Duration) -> Option<u32> {
     let started = Instant::now();
-    let code = exit_within(guard, limit);
+    let code = exit_code_within(guard, limit);
     assert!(
         code.is_some(),
         "guard pid {} still runs {limit:?} later",
@@ -1175,13 +1127,13 @@ fn guards(tray: u32) -> Vec<ProcessHandle> {
 /// Ends every process of this build: a tray quits first, so it restores and stops its guard; a guard then ends by
 /// itself once its tray is gone and its restore ran; whatever still runs after that is ended by pid. Never panics.
 fn end_this_build(notes: &mut Vec<String>) {
-    if let Some((_, pid)) = loop_window()
+    if let Some((_, pid)) = loop_window(false)
         && let Some(tray) = trays_of_this_build()
             .into_iter()
             .find(|h| h.process().pid == pid)
     {
         let _ = ask_quit(false);
-        match exit_within(&tray, EXIT_WITHIN) {
+        match exit_code_within(&tray, EXIT_WITHIN) {
             Some(code) => notes.push(format!("tray pid {pid} quit with {code}")),
             None => {
                 terminate(&tray);
@@ -1205,29 +1157,7 @@ fn end_this_build(notes: &mut Vec<String>) {
             }
             return;
         }
-        thread::sleep(POLL);
-    }
-}
-
-/// Polls `look` until it gives `Ok`, at most `limit`; a timeout names the last thing seen.
-fn wait_for<T>(limit: Duration, what: &str, look: impl FnMut() -> Result<T, String>) -> T {
-    match wait_for_result(limit, look) {
-        Ok(found) => found,
-        Err(last) => panic!("not within {limit:?}: {what}; last seen: {last}"),
-    }
-}
-
-fn wait_for_result<T>(
-    limit: Duration,
-    mut look: impl FnMut() -> Result<T, String>,
-) -> Result<T, String> {
-    let started = Instant::now();
-    loop {
-        match look() {
-            Ok(found) => return Ok(found),
-            Err(last) if started.elapsed() >= limit => return Err(last),
-            Err(_) => thread::sleep(POLL),
-        }
+        thread::sleep(Duration::from_millis(200));
     }
 }
 
@@ -1257,13 +1187,14 @@ fn mix(mut z: u64) -> u64 {
     z ^ (z >> 31)
 }
 
+/// The real-run data folders under `%TEMP%`; a run that was cut off leaves its own.
 fn temp_folders() -> Vec<PathBuf> {
     let Ok(entries) = fs::read_dir(env::temp_dir()) else {
         return Vec::new();
     };
     entries
         .flatten()
-        .filter(|e| e.file_name().to_string_lossy().starts_with(TEMP_PREFIX))
+        .filter(|e| e.file_name().to_string_lossy().starts_with(REAL_PREFIX))
         .map(|e| e.path())
         .filter(|p| p.is_dir())
         .collect()
@@ -1277,57 +1208,24 @@ fn made_ids(folder: &Path) -> Vec<Guid> {
         .collect()
 }
 
-/// Writes a `.cmd` and hands it to Explorer, so it runs at Medium as a user's own start would, with the data folder
-/// and an empty Claude folder set for it alone. Gives the file `whoami /groups` writes.
-fn launch(root: &Path, name: &str, tail: &[String]) -> PathBuf {
-    let groups = root.join(format!("{name}-groups.txt"));
-    let script = root.join(format!("{name}.cmd"));
-    let mut lines = vec![
-        "@echo off".to_owned(),
-        format!("set \"{DATA_DIR_ENV}={}\"", root.display()),
-        format!("set \"{CLAUDE_DIR_ENV}={}\"", root.join("claude").display()),
-        format!("whoami /groups > \"{}\"", groups.display()),
-    ];
-    lines.extend(tail.iter().cloned());
-    let text: String = lines.iter().map(|line| format!("{line}\r\n")).collect();
-    fs::write(&script, text).expect("write the .cmd");
-    // Explorer hands the file to the running shell and its exit code says nothing; the caller's wait is the check.
-    let _ = Command::new("explorer.exe").arg(&script).status();
-    groups
-}
-
-fn assert_medium(groups: &Path) {
-    let text = wait_until(FOLLOW_WITHIN, "the .cmd's whoami output", || {
-        fs::read(groups)
-            .ok()
-            .map(|b| String::from_utf8_lossy(&b).into_owned())
-            .filter(|t| t.contains("S-1-16-"))
-    });
-    assert!(
-        text.contains(MEDIUM_SID),
-        "the .cmd did not run at Medium:\n{text}"
-    );
-}
-
 fn keep_awake_only(state: &StateFile) -> bool {
     state.holding == [text::keep_awake_group(KeepAwake::UntilOff)]
 }
 
-/// One test's world: the BEFORE record, a temp data folder, and the plan copies it made, the first one active. The
-/// test ends it with `finish`, which asserts the PC is as recorded; a failed test's drop does the same clean-up and
-/// prints what it found.
+/// One test's world: the BEFORE record, a real temp data folder, and the plan copies it made, the first one active.
+/// The test ends it with `finish`, which asserts the PC is as recorded; a failed test's drop does the same clean-up
+/// and prints what it found. The data folder goes last, with the log printed (`TempData`'s drop).
 struct Bench {
     before: Before,
-    root: PathBuf,
     copies: Vec<PlanCopy>,
     /// Every id handed to `powercfg /duplicatescheme`, named or not.
     made: Vec<Guid>,
     finished: bool,
+    data: TempData,
 }
 
 impl Bench {
     fn new(tag: &str, names: &[&'static str]) -> Self {
-        static N: AtomicU32 = AtomicU32::new(0);
         let before = Before::load();
         let unclean = before.unclean();
         assert!(
@@ -1335,22 +1233,12 @@ impl Bench {
             "the PC is not as recorded; run real_e2e_cleanup first:\n{}",
             unclean.join("\n")
         );
-        let n = N.fetch_add(1, Ordering::Relaxed);
-        let root = env::temp_dir().join(format!("{TEMP_PREFIX}{tag}-{}-{n}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(root.join("claude")).expect("make the data folder");
-        // Not a first run: no first-run balloon.
-        fs::write(
-            root.join("config.json"),
-            r#"{ "version": 1, "automatic": true }"#,
-        )
-        .expect("write config.json");
         let mut bench = Self {
             before,
-            root,
             copies: Vec::new(),
             made: Vec::new(),
             finished: false,
+            data: TempData::real(tag),
         };
         bench.make_copies(names);
         let first = bench.copy(0);
@@ -1360,7 +1248,7 @@ impl Bench {
             "{} active ({}), data folder {}",
             first.name,
             first.id,
-            bench.root.display()
+            bench.data.root().display()
         );
         bench
     }
@@ -1370,10 +1258,11 @@ impl Bench {
         let user = self.before.active;
         let ids: Vec<Guid> = names.iter().map(|_| fresh_guid()).collect();
         self.made.clone_from(&ids);
+        let root = self.data.root();
         let list: String = ids.iter().map(|id| format!("{id}\n")).collect();
-        fs::write(self.root.join(MADE_FILE), list).expect("write the copy ids");
-        let out = self.root.join("copies-out.txt");
-        let temp = self.root.join("copies-out.tmp");
+        fs::write(root.join(MADE_FILE), list).expect("write the copy ids");
+        let out = root.join("copies-out.txt");
+        let temp = root.join("copies-out.tmp");
         let mut tail = Vec::new();
         for (id, name) in ids.iter().zip(names) {
             for command in [
@@ -1381,7 +1270,10 @@ impl Bench {
                 format!("powercfg /changename {id} \"{name}\""),
             ] {
                 tail.push(format!("{command} >> \"{}\" 2>&1", temp.display()));
-                tail.push(format!("echo exit %ERRORLEVEL% >> \"{}\"", temp.display()));
+                tail.push(format!(
+                    "echo [exit %ERRORLEVEL%] >> \"{}\"",
+                    temp.display()
+                ));
             }
         }
         // Written under a temp name and moved, so the test never reads half of it.
@@ -1390,16 +1282,18 @@ impl Bench {
             temp.display(),
             out.display()
         ));
-        let groups = launch(&self.root, "copies", &tail);
+        let groups = self.data.launch(Claude::Empty, &tail, "copies");
         let text = wait_until(MEDIUM_CMD_WITHIN, "the .cmd that makes the copies", || {
             fs::read(&out)
                 .ok()
                 .map(|b| String::from_utf8_lossy(&b).into_owned())
         });
         assert_medium(&groups);
+        // `powercfg /duplicatescheme` ends its line without a newline, so a marker may share a line.
         let codes: Vec<&str> = text
-            .lines()
-            .filter_map(|l| l.trim().strip_prefix("exit "))
+            .split("[exit ")
+            .skip(1)
+            .filter_map(|rest| rest.split_once(']').map(|(code, _)| code))
             .collect();
         assert_eq!(codes, vec!["0"; 2 * names.len()], "{text}");
         let plans = list_plans();
@@ -1430,55 +1324,26 @@ impl Bench {
         self.copies[at]
     }
 
-    fn keep_awake_file(&self) -> PathBuf {
-        self.root.join("holds").join("keep-awake.json")
-    }
-
-    fn state(&self) -> Option<StateFile> {
-        let bytes = fs::read(self.root.join("state.json")).ok()?;
-        match files::read::<StateFile>(&bytes) {
-            Read::Value(state) => Some(state),
-            Read::Newer(_) | Read::Bad => None,
-        }
-    }
-
-    fn wait_state(
-        &self,
-        limit: Duration,
-        what: &str,
-        done: impl Fn(&StateFile) -> bool,
-    ) -> StateFile {
-        let started = Instant::now();
-        let state = wait_until(limit, what, || self.state().filter(|s| done(s)));
-        println!(
-            "state {what} after {} ms: holding {:?}, overridden {}",
-            started.elapsed().as_millis(),
-            state.holding,
-            state.overridden.len()
+    /// The real tray at Medium on this bench's folder, on an empty Claude folder. Refuses while the active plan is
+    /// not one of this bench's copies, since a holding tray applies to the active plan.
+    fn start_tray(&self) -> Tray {
+        let active = active_plan();
+        assert!(
+            self.copies.iter().any(|c| c.id == active),
+            "the active plan {active} is not a copy of this test"
         );
-        state
-    }
-
-    /// `journal.json` through the reader every process uses. Its load touches no registry value, so the real RunOnce
-    /// key it is given is never written here.
-    fn journal(&self) -> Result<Option<JournalFile>, String> {
-        let mut net = FileNet::restore_only(
-            DataDir::at(self.root.clone()),
-            AutoStart::real(),
-            Arc::new(MemoryLog::default()),
-        );
-        match net.load_journal() {
-            JournalRead::Missing => Ok(None),
-            JournalRead::Read(file) => Ok(Some(file)),
-            JournalRead::Corrupt => Err("journal.json does not parse".to_owned()),
-            JournalRead::Failed(f) => Err(format!("journal.json not read: {f:?}")),
-        }
+        let tray = Tray::start(&self.data, Claude::Empty);
+        let line = self
+            .data
+            .wait_log(LogMark::START, "starts: tray", FOLLOW_WITHIN);
+        println!("{line}");
+        tray
     }
 
     /// `want` on `plan`, no journal and no RunOnce value: what every restore leaves.
     fn restored(&self, plan: PlanCopy, want: Values) -> Result<(), String> {
         plan_has(plan, want)?;
-        if let Some(journal) = self.journal()? {
+        if let Some(journal) = self.data.journal()? {
             return Err(format!("journal left: {journal:?}"));
         }
         if let Some(value) = wakeshot_restore()? {
@@ -1487,55 +1352,20 @@ impl Bench {
         Ok(())
     }
 
-    fn log(&self) -> String {
-        fs::read_to_string(self.root.join("logs").join("wakeshot.log")).unwrap_or_default()
-    }
-
-    /// The log's line count now, so a check looks only at the lines after it.
-    fn log_mark(&self) -> usize {
-        self.log().lines().count()
-    }
-
-    fn log_since(&self, mark: usize) -> Vec<String> {
-        self.log().lines().skip(mark).map(str::to_owned).collect()
-    }
-
-    fn wait_log(&self, mark: usize, part: &str, limit: Duration) -> String {
-        wait_until(limit, &format!("a log line with {part:?}"), || {
-            self.log_since(mark).into_iter().find(|l| l.contains(part))
-        })
-    }
-
-    /// Runs `wakeshot.exe <args>` (real, not a dry run) on this data folder and waits for it.
-    fn cli(&self, args: &str) -> Said {
-        let output = Command::new(Path::new(TRAY_EXE).with_file_name(CLI_NAME))
-            .raw_arg(args)
-            .env(DATA_DIR_ENV, &self.root)
-            .stdin(Stdio::null())
-            .output()
-            .expect("run wakeshot.exe");
-        let said = Said {
-            code: output.status.code().expect("Windows always gives a code"),
-            out: String::from_utf8_lossy(&output.stdout).into_owned(),
-            err: String::from_utf8_lossy(&output.stderr).into_owned(),
-        };
-        println!("wakeshot {args} -> {said:?}");
-        said
-    }
-
     /// Keep awake until off through the CLI. Within 10 s: Wakeshot's three values on `plan`, stored and in force; a
     /// journal of three entries owned by `tray`; the RunOnce value naming this build; one guard, the one the log
     /// names. Gives the guard.
-    fn hold(&self, tray: &RealTray, plan: PlanCopy) -> ProcessHandle {
+    fn hold(&self, tray: &Tray, plan: PlanCopy) -> ProcessHandle {
         let started = Instant::now();
-        let said = self.cli("keep-awake on");
+        let said = self.data.cli("keep-awake on");
         assert_eq!(said.code, 0, "{said:?}");
-        self.wait_state(APPLY_WITHIN, "Keep awake until off", keep_awake_only);
+        self.data
+            .wait_state(APPLY_WITHIN, "Keep awake until off", keep_awake_only);
         let all = [SettingKey::LidAc, SettingKey::LidDc, SettingKey::SleepDc];
         let left = APPLY_WITHIN.saturating_sub(started.elapsed());
         wait_for(left, &format!("Wakeshot's values on {}", plan.name), || {
             plan_has(plan, plan.original.applied())?;
-            let journal = self.journal()?.ok_or("no journal")?;
+            let journal = self.data.journal()?.ok_or("no journal")?;
             check_journal(&journal, tray, plan, &all)
         });
         println!(
@@ -1553,7 +1383,7 @@ impl Bench {
 
     /// The one guard of `tray`, the one the log names. A guard told to stop may still be on its way out, so this
     /// waits until only one runs.
-    fn one_guard(&self, tray: &RealTray) -> ProcessHandle {
+    fn one_guard(&self, tray: &Tray) -> ProcessHandle {
         let guard = wait_until(FOLLOW_WITHIN, "one guard", || {
             let mut list = guards(tray.pid());
             (list.len() == 1).then(|| list.remove(0))
@@ -1563,7 +1393,7 @@ impl Bench {
             guard.process().pid,
             tray.pid()
         );
-        assert!(self.log().contains(&line), "no log line {line:?}");
+        assert!(self.data.log().contains(&line), "no log line {line:?}");
         guard
     }
 
@@ -1571,9 +1401,10 @@ impl Bench {
     /// 10 s, and the guard gone within 15 s.
     fn release(&self, plan: PlanCopy, want: Values, guard: &ProcessHandle) {
         let started = Instant::now();
-        let said = self.cli("keep-awake off");
+        let said = self.data.cli("keep-awake off");
         assert_eq!(said.code, 0, "{said:?}");
-        self.wait_state(FOLLOW_WITHIN, "idle after off", |s| s.holding.is_empty());
+        self.data
+            .wait_state(FOLLOW_WITHIN, "idle after off", |s| s.holding.is_empty());
         wait_for(FOLLOW_WITHIN, &format!("{} restored", plan.name), || {
             self.restored(plan, want)
         });
@@ -1597,17 +1428,11 @@ impl Bench {
         );
     }
 
-    /// Every process of this build ends before the user's plan is active again; then the copies, the data folder and
-    /// a RunOnce value of this build go. Gives what was not as it should be. Never panics: a drop calls it.
+    /// Every process of this build ends before the user's plan is active again; then the copies and a RunOnce value
+    /// of this build go. Gives what was not as it should be. Never panics: a drop calls it.
     fn teardown(&mut self) -> Vec<String> {
         let mut problems = Vec::new();
-        let mut notes = Vec::new();
-        end_this_build(&mut notes);
-        problems.extend(notes);
-        let log = self.log();
-        if !log.is_empty() {
-            println!("--- the log ---\n{log}--- end of the log ---");
-        }
+        end_this_build(&mut problems);
         match try_active_plan() {
             Ok(active) if active == self.before.active => {}
             Ok(active) if self.made.contains(&active) => {
@@ -1640,9 +1465,6 @@ impl Bench {
             Ok(_) => {}
             Err(e) => problems.push(e),
         }
-        if let Err(e) = fs::remove_dir_all(&self.root) {
-            problems.push(format!("{} not removed: {e}", self.root.display()));
-        }
         problems.extend(self.before.differences());
         problems
     }
@@ -1656,118 +1478,6 @@ impl Drop for Bench {
         for problem in self.teardown() {
             eprintln!("clean-up after a failed test: {problem}");
         }
-    }
-}
-
-/// The real tray this test started, found by its exe path in this target folder. Holding the handle keeps the pid
-/// from being reused, so an end by pid can never hit another process.
-struct RealTray {
-    handle: ProcessHandle,
-    quit_sent: bool,
-}
-
-impl RealTray {
-    /// Starts the real tray at Medium on the bench's data folder and waits for its first `state.json`. Refuses while
-    /// the active plan is not one of the bench's copies.
-    fn start(bench: &Bench) -> Self {
-        let active = active_plan();
-        assert!(
-            bench.copies.iter().any(|c| c.id == active),
-            "the active plan {active} is not a copy of this test, and a holding tray applies to the active plan"
-        );
-        assert!(
-            trays_of_this_build().is_empty(),
-            "a tray of this build runs"
-        );
-        if let Some((_, pid)) = loop_window() {
-            panic!("a real tray (pid {pid}) runs in this session: this tray would exit at once");
-        }
-        let launched = Instant::now();
-        let tail = [format!("start \"\" \"{TRAY_EXE}\"")];
-        let groups = launch(&bench.root, "launch", &tail);
-        let handle = wait_until(START_WITHIN, "a tray of this build", || {
-            trays_of_this_build().into_iter().next()
-        });
-        let tray = Self {
-            handle,
-            quit_sent: false,
-        };
-        let pid = tray.pid();
-        let left = START_WITHIN.saturating_sub(launched.elapsed());
-        let state = wait_until(left, "the new tray's first state.json", || {
-            if let Some(code) = tray.exit_within(Duration::ZERO) {
-                panic!("tray pid {pid} ended with {code} before its first state.json");
-            }
-            bench.state().filter(|s| s.pid == pid)
-        });
-        assert_eq!(
-            state.proc_start,
-            tray.handle.process().start,
-            "state.json names another start"
-        );
-        assert_medium(&groups);
-        let line = bench.wait_log(0, "starts: tray", FOLLOW_WITHIN);
-        println!(
-            "tray pid {pid} started; state.json after {} ms; {line}",
-            launched.elapsed().as_millis()
-        );
-        tray
-    }
-
-    fn pid(&self) -> u32 {
-        self.handle.process().pid
-    }
-
-    fn exit_within(&self, limit: Duration) -> Option<u32> {
-        exit_within(&self.handle, limit)
-    }
-
-    /// Quit as the menu does, through `ask_quit`, once the real loop window is checked to be this tray's. Gives the
-    /// exit code.
-    fn quit(&mut self) -> u32 {
-        assert_eq!(
-            loop_window().map(|(_, pid)| pid),
-            Some(self.pid()),
-            "the real loop window is not this tray's"
-        );
-        assert!(
-            ask_quit(false).expect("post WM_CLOSE"),
-            "no real loop window found"
-        );
-        self.quit_sent = true;
-        let code = self.exit_within(EXIT_WITHIN);
-        println!("tray pid {} quit with {code:?}", self.pid());
-        code.unwrap_or_else(|| {
-            panic!(
-                "tray pid {} still runs {EXIT_WITHIN:?} after the quit",
-                self.pid()
-            )
-        })
-    }
-
-    /// Ends the tray by its pid, as a crash, Task Manager or the end of a session would: no restore, no clean-up.
-    fn kill(&self) {
-        terminate(&self.handle);
-        let code = self.exit_within(Duration::from_secs(5));
-        assert_eq!(code, Some(1), "tray pid {} not ended by pid", self.pid());
-        println!("tray pid {} ended by pid", self.pid());
-    }
-}
-
-impl Drop for RealTray {
-    /// A failed assert still leaves no tray: Quit first (it restores and stops the guard), then an end by pid.
-    fn drop(&mut self) {
-        if self.exit_within(Duration::ZERO).is_some() {
-            return;
-        }
-        if !self.quit_sent && loop_window().map(|(_, pid)| pid) == Some(self.pid()) {
-            let _ = ask_quit(false);
-        }
-        if self.exit_within(EXIT_WITHIN).is_some() {
-            return;
-        }
-        terminate(&self.handle);
-        eprintln!("tray pid {} did not quit; ended by pid", self.pid());
     }
 }
 

@@ -1,29 +1,39 @@
 //! Process tests of the real exes (`docs/phases/06-integration.md` note 7): the tray starts at Medium through
 //! `explorer.exe <launch .cmd>`, as a user's start would, on a temp data folder (`WAKESHOT_DATA_DIR`, read by debug
-//! builds only), and `wakeshot.exe` runs next to it with the same folder. Dry run only for now: the tray runs with
-//! `--dry-run` and the CLI with `--dry-run`, so both use `<temp>\dry-run` and no power setting is written.
+//! builds only), and `wakeshot.exe` runs next to it with the same folder. A dry run (`TempData::new`,
+//! `TempData::with_config`) starts both exes with `--dry-run`, so they use `<temp>\dry-run` and no power setting is
+//! written; a real run (`TempData::real`) starts them without it, so they use `<temp>` itself and write real power
+//! settings, which `e2e_real.rs` allows only on its own plan copies.
 //!
-//! Owner: `p6-int-dry-run-e2e`; passes to `p6-int-real-e2e` after that card.
+//! Owner: `p6-int-real-e2e`, from `p6-int-dry-run-e2e`.
 //!
 //! The CLI runs as this test's own child, so its output and exit code come back directly. In an agent shell that is
 //! High, while a user's terminal is Medium; the tray stays Medium either way, so files the CLI writes are read and
 //! deleted across the two levels. Change it when a check needs a Medium CLI: then run it through
 //! `process::spawn_outside_tree` under `cmd /c` with its output sent to files.
 
+// Each suite uses only part of these helpers, and each compiles this module on its own.
+#![allow(dead_code)]
+
 use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 use std::{fs, thread};
 
-use wakeshot_core::files::{self, Read, StateFile};
+use wakeshot_core::files::{self, JournalFile, Read, StateFile};
+use wakeshot_core::ownership::io::{JournalRead, SafetyNet};
 use wakeshot_core::process::{Lookup, ProcessRef};
 use wakeshot_windows::app::window::ask_quit;
+use wakeshot_windows::power::journal::FileNet;
 use wakeshot_windows::process::{Liveness, ProcessHandle, SystemLiveness};
-use windows::Win32::Foundation::CloseHandle;
+use wakeshot_windows::store::DataDir;
+use wakeshot_windows::testing::MemoryLog;
+use windows::Win32::Foundation::{CloseHandle, HWND};
 use windows::Win32::System::Threading::{
     GetExitCodeProcess, OpenProcess, PROCESS_NAME_WIN32, PROCESS_TERMINATE,
     QueryFullProcessImageNameW, TerminateProcess,
@@ -38,10 +48,13 @@ const CLI_NAME: &str = "wakeshot.exe";
 const DATA_DIR_ENV: &str = "WAKESHOT_DATA_DIR";
 /// Claude Code's own folder variable, which the tray follows.
 const CLAUDE_DIR_ENV: &str = "CLAUDE_CONFIG_DIR";
-/// The dry-run loop window's class (`app::window`), which `ask_quit(true)` looks for.
-const LOOP_CLASS: PCWSTR = w!("Wakeshot.Loop.DryRun");
+/// The loop window's classes (`app::window`), which `ask_quit` looks for.
+const LOOP_CLASS: PCWSTR = w!("Wakeshot.Loop");
+const DRY_RUN_LOOP_CLASS: PCWSTR = w!("Wakeshot.Loop.DryRun");
 /// `whoami /groups` names the Medium level by this SID.
 const MEDIUM_SID: &str = "S-1-16-8192";
+/// A real run's temp folder starts with this, so a clean-up finds the ones a cut-off run left.
+pub const REAL_PREFIX: &str = "wakeshot-e2e-real-";
 
 /// The card's limit for the first `state.json`, counted from the launch.
 pub const START_WITHIN: Duration = Duration::from_secs(10);
@@ -77,47 +90,75 @@ fn cli_exe() -> PathBuf {
     Path::new(TRAY_EXE).with_file_name(CLI_NAME)
 }
 
-/// A fresh data folder under `%TEMP%`, removed with everything in it when the test ends. The tray's own data is in
-/// its `dry-run` subfolder; the launch files sit beside it.
+/// A fresh data folder under `%TEMP%`, removed with everything in it when the test ends. A dry run keeps its data in
+/// the `dry-run` subfolder, a real run in the folder itself; the launch files sit in the folder.
 pub struct TempData {
     root: PathBuf,
+    dry_run: bool,
 }
 
 impl TempData {
-    /// Empty: a tray started on it makes its first run.
+    /// Dry run, empty: a tray started on it makes its first run.
     pub fn new(tag: &str) -> Self {
+        Self::make(tag, true)
+    }
+
+    /// Dry run with `config.json`, so the start is not a first run: no first-run balloon for tests that do not check
+    /// it.
+    pub fn with_config(tag: &str) -> Self {
+        let data = Self::new(tag);
+        data.write_config();
+        data
+    }
+
+    /// Real, with `config.json`. The exes write real power settings and the real RunOnce value from it, so only a
+    /// test that guards the user's plan may use it (`e2e_real.rs`).
+    pub fn real(tag: &str) -> Self {
+        let data = Self::make(&format!("real-{tag}"), false);
+        data.write_config();
+        data
+    }
+
+    fn make(tag: &str, dry_run: bool) -> Self {
         static N: AtomicU32 = AtomicU32::new(0);
         let n = N.fetch_add(1, Ordering::Relaxed);
         let root =
             std::env::temp_dir().join(format!("wakeshot-e2e-{tag}-{}-{n}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).expect("make the temp folder");
-        Self { root }
+        Self { root, dry_run }
     }
 
-    /// With `config.json`, so the start is not a first run: no first-run balloon for tests that do not check it.
-    pub fn with_config(tag: &str) -> Self {
-        let data = Self::new(tag);
-        fs::create_dir_all(data.dry_run()).expect("make the dry-run folder");
+    fn write_config(&self) {
+        fs::create_dir_all(self.data_dir()).expect("make the data folder");
         fs::write(
-            data.file("config.json"),
+            self.file("config.json"),
             r#"{ "version": 1, "automatic": true }"#,
         )
         .expect("write config.json");
-        data
     }
 
-    pub fn dry_run(&self) -> PathBuf {
-        self.root.join("dry-run")
+    /// The folder `WAKESHOT_DATA_DIR` names, where the launch files also go.
+    pub fn root(&self) -> &Path {
+        &self.root
     }
 
-    /// A file in the dry-run folder, such as `journal.json`.
+    /// Where the exes keep their files: `<root>\dry-run` in a dry run, `<root>` in a real one.
+    pub fn data_dir(&self) -> PathBuf {
+        if self.dry_run {
+            self.root.join("dry-run")
+        } else {
+            self.root.clone()
+        }
+    }
+
+    /// A file in the data folder, such as `journal.json`.
     pub fn file(&self, name: &str) -> PathBuf {
-        self.dry_run().join(name)
+        self.data_dir().join(name)
     }
 
     pub fn holds(&self) -> PathBuf {
-        self.dry_run().join("holds")
+        self.data_dir().join("holds")
     }
 
     pub fn keep_awake(&self) -> PathBuf {
@@ -165,8 +206,21 @@ impl TempData {
         state
     }
 
+    /// `journal.json` through the reader every process uses. A dry-run net is enough for a read and can never touch
+    /// the RunOnce value.
+    pub fn journal(&self) -> Result<Option<JournalFile>, String> {
+        let mut net =
+            FileNet::dry_run(DataDir::at(self.data_dir()), Arc::new(MemoryLog::default()));
+        match net.load_journal() {
+            JournalRead::Missing => Ok(None),
+            JournalRead::Read(file) => Ok(Some(file)),
+            JournalRead::Corrupt => Err("journal.json does not parse".to_owned()),
+            JournalRead::Failed(f) => Err(format!("journal.json not read: {f:?}")),
+        }
+    }
+
     fn log_path(&self) -> PathBuf {
-        self.dry_run().join("logs").join("wakeshot.log")
+        self.data_dir().join("logs").join("wakeshot.log")
     }
 
     /// The whole log, every process's lines; empty while there is none.
@@ -190,8 +244,8 @@ impl TempData {
         })
     }
 
-    /// Runs `wakeshot.exe --dry-run <args>` on this folder and waits for it. `args` is the raw command line text after
-    /// `--dry-run`, as a user types it.
+    /// Runs `wakeshot.exe <args>` on this folder (with `--dry-run` first in a dry run) and waits for it. `args` is the
+    /// raw command line text, as a user types it.
     pub fn cli(&self, args: &str) -> Said {
         let output = self
             .cli_command(args)
@@ -207,7 +261,8 @@ impl TempData {
         said
     }
 
-    /// Starts `wakeshot.exe --dry-run <args>` and leaves it running; its output is collected for `wait_with_output`.
+    /// Starts `wakeshot.exe <args>` as `cli` does and leaves it running; its output is collected for
+    /// `wait_with_output`.
     pub fn cli_spawn(&self, args: &str) -> Child {
         let child = self
             .cli_command(args)
@@ -222,10 +277,22 @@ impl TempData {
 
     fn cli_command(&self, args: &str) -> Command {
         let mut command = Command::new(cli_exe());
+        let line = if self.dry_run {
+            format!("--dry-run {args}")
+        } else {
+            args.to_owned()
+        };
+        command.raw_arg(line).env(DATA_DIR_ENV, &self.root);
         command
-            .raw_arg(format!("--dry-run {args}"))
-            .env(DATA_DIR_ENV, &self.root);
-        command
+    }
+
+    /// The tray's command line as a `.cmd` line: the quoted exe, then `--dry-run` in a dry run.
+    fn tray_line(&self) -> String {
+        if self.dry_run {
+            format!("\"{TRAY_EXE}\" --dry-run")
+        } else {
+            format!("\"{TRAY_EXE}\"")
+        }
     }
 
     /// Starts the tray through Explorer and waits for its exit, for a start that should end at once. Gives its exit
@@ -237,7 +304,7 @@ impl TempData {
         // A batch file waits for a GUI exe it runs (unlike the prompt), so the next line sees its exit code. Written
         // under a temp name and moved, so the test never reads half a number.
         let tail = [
-            format!("\"{TRAY_EXE}\" --dry-run"),
+            self.tray_line(),
             format!("> \"{}\" echo %ERRORLEVEL%", temp.display()),
             format!(
                 "move /y \"{}\" \"{}\" > nul",
@@ -260,9 +327,10 @@ impl TempData {
         (code, took)
     }
 
-    /// Writes the launch `.cmd` and hands it to Explorer, so it runs at Medium as a user's start would (05-tray-ux.md
-    /// note 4), with the data folder and the Claude folder set for it alone. Gives the file `whoami /groups` writes.
-    fn launch(&self, claude: Claude, tail: &[String], name: &str) -> PathBuf {
+    /// Writes `<name>.cmd` and hands it to Explorer, so it runs at Medium as a user's start would (05-tray-ux.md
+    /// note 4), with the data folder and the Claude folder set for it alone, then the `tail` lines. Gives the file
+    /// `whoami /groups` writes.
+    pub fn launch(&self, claude: Claude, tail: &[String], name: &str) -> PathBuf {
         let groups = self.root.join(format!("{name}-groups.txt"));
         let launch = self.root.join(format!("{name}.cmd"));
         let claude_line = match claude {
@@ -321,7 +389,7 @@ pub struct Said {
 /// The Claude folder the tray watches.
 #[derive(Clone, Copy, Debug)]
 pub enum Claude {
-    /// An empty folder, so the agent sessions on this PC (this test runs inside one) never hold the dry run.
+    /// An empty folder, so the agent sessions on this PC (this test runs inside one) never hold the tray.
     Empty,
     /// The user's own `~\.claude`: every Claude Code session on this PC counts.
     Home,
@@ -332,18 +400,19 @@ pub enum Claude {
 pub struct Tray {
     handle: ProcessHandle,
     quit_sent: bool,
+    dry_run: bool,
 }
 
 impl Tray {
-    /// Starts a dry-run tray on `data` and waits for its first `state.json`.
+    /// Starts a tray on `data`, dry run or real as `data` is, and waits for its first `state.json`.
     pub fn start(data: &TempData, claude: Claude) -> Self {
-        assert_no_dry_run_tray();
+        assert_no_tray(data.dry_run);
         let before: Vec<ProcessRef> = trays_of_this_build()
             .iter()
             .map(ProcessHandle::process)
             .collect();
         let launched = Instant::now();
-        let tail = [format!("start \"\" \"{TRAY_EXE}\" --dry-run")];
+        let tail = [format!("start \"\" {}", data.tray_line())];
         let groups = data.launch(claude, &tail, "launch");
         let handle = wait_until(START_WITHIN, "a new tray from this target folder", || {
             trays_of_this_build()
@@ -353,6 +422,7 @@ impl Tray {
         let tray = Self {
             handle,
             quit_sent: false,
+            dry_run: data.dry_run,
         };
         let pid = tray.pid();
         let left = START_WITHIN.saturating_sub(launched.elapsed());
@@ -380,29 +450,27 @@ impl Tray {
         self.handle.process().pid
     }
 
-    /// The exit code once the tray ended within `limit`.
-    pub fn exit_within(&self, limit: Duration) -> Option<u32> {
-        let ms = u32::try_from(limit.as_millis()).unwrap_or(u32::MAX);
-        if !matches!(self.handle.wait(ms), Ok(true)) {
-            return None;
-        }
-        let mut code = 0;
-        // SAFETY: the handle has QUERY_LIMITED_INFORMATION; `code` is a live local.
-        unsafe { GetExitCodeProcess(self.handle.raw(), &mut code) }.ok()?;
-        Some(code)
+    /// Its pid and start time, as the journal's owner names it.
+    pub fn process(&self) -> ProcessRef {
+        self.handle.process()
     }
 
-    /// Quit as the menu does, through `ask_quit`, once the dry-run loop window is checked to be this tray's. Gives the
-    /// exit code.
+    /// The exit code once the tray ended within `limit`.
+    pub fn exit_within(&self, limit: Duration) -> Option<u32> {
+        exit_code_within(&self.handle, limit)
+    }
+
+    /// Quit as the menu does, through `ask_quit`, once the loop window is checked to be this tray's. Gives the exit
+    /// code.
     pub fn quit(&mut self) -> u32 {
         assert_eq!(
-            loop_window_pid(),
+            loop_window_pid(self.dry_run),
             Some(self.pid()),
-            "the dry-run loop window is not this tray's"
+            "the loop window is not this tray's"
         );
         assert!(
-            ask_quit(true).expect("post WM_CLOSE"),
-            "no dry-run loop window found"
+            ask_quit(self.dry_run).expect("post WM_CLOSE"),
+            "no loop window found"
         );
         self.quit_sent = true;
         let code = self.exit_within(EXIT_WITHIN);
@@ -415,7 +483,7 @@ impl Tray {
         })
     }
 
-    /// Ends the tray by its pid, as a crash or Task Manager would: no restore, no clean-up.
+    /// Ends the tray by its pid, as a crash, Task Manager or the end of a session would: no restore, no clean-up.
     pub fn kill(&self) {
         terminate(&self.handle);
         let code = self.exit_within(Duration::from_secs(5));
@@ -430,8 +498,8 @@ impl Drop for Tray {
         if self.exit_within(Duration::ZERO).is_some() {
             return;
         }
-        if !self.quit_sent && loop_window_pid() == Some(self.pid()) {
-            let _ = ask_quit(true);
+        if !self.quit_sent && loop_window_pid(self.dry_run) == Some(self.pid()) {
+            let _ = ask_quit(self.dry_run);
         }
         if self.exit_within(EXIT_WITHIN).is_some() {
             return;
@@ -490,7 +558,7 @@ impl Drop for Started {
 }
 
 /// `TerminateProcess` on the pid the open handle keeps from reuse; the new handle is closed here.
-fn terminate(handle: &ProcessHandle) {
+pub fn terminate(handle: &ProcessHandle) {
     let pid = handle.process().pid;
     // SAFETY: plain calls on a pid this test's open handle keeps from reuse; the new handle is closed once.
     unsafe {
@@ -501,7 +569,19 @@ fn terminate(handle: &ProcessHandle) {
     }
 }
 
-/// Every running `wakeshot-tray.exe` whose full path is this target folder's exe.
+/// The exit code once the process ended within `limit`.
+pub fn exit_code_within(handle: &ProcessHandle, limit: Duration) -> Option<u32> {
+    let ms = u32::try_from(limit.as_millis()).unwrap_or(u32::MAX);
+    if !matches!(handle.wait(ms), Ok(true)) {
+        return None;
+    }
+    let mut code = 0;
+    // SAFETY: the handle has QUERY_LIMITED_INFORMATION; `code` is a live local.
+    unsafe { GetExitCodeProcess(handle.raw(), &mut code) }.ok()?;
+    Some(code)
+}
+
+/// Every running `wakeshot-tray.exe` whose full path is this target folder's exe: trays and their guards.
 pub fn trays_of_this_build() -> Vec<ProcessHandle> {
     let list = SystemLiveness.list().expect("the process list");
     list.into_iter()
@@ -514,7 +594,7 @@ pub fn trays_of_this_build() -> Vec<ProcessHandle> {
             .ok()
             .flatten()
         })
-        .filter(|h| image_path(h).is_some_and(|p| same_file(&p, Path::new(TRAY_EXE))))
+        .filter(|h| image_path(h).is_some_and(|p| full_path(&p) == full_path(Path::new(TRAY_EXE))))
         .collect()
 }
 
@@ -534,40 +614,49 @@ fn image_path(handle: &ProcessHandle) -> Option<PathBuf> {
     Some(PathBuf::from(OsString::from_wide(&buffer[..size as usize])))
 }
 
-fn same_file(a: &Path, b: &Path) -> bool {
-    let full = |p: &Path| {
-        fs::canonicalize(p)
-            .unwrap_or_else(|_| p.to_path_buf())
-            .to_string_lossy()
-            .to_lowercase()
-    };
-    full(a) == full(b)
+/// A path in one form for comparing: the full path, lowercase, without the `\\?\` that `canonicalize` adds.
+pub fn full_path(path: &Path) -> String {
+    let full = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let text = full.to_string_lossy().to_lowercase();
+    text.strip_prefix(r"\\?\").unwrap_or(&text).to_owned()
 }
 
-/// The pid of this session's dry-run loop window, if one exists.
-fn loop_window_pid() -> Option<u32> {
+/// This session's loop window of that kind and its pid, if one exists.
+pub fn loop_window(dry_run: bool) -> Option<(HWND, u32)> {
+    let class = if dry_run {
+        DRY_RUN_LOOP_CLASS
+    } else {
+        LOOP_CLASS
+    };
     // SAFETY: a static, NUL-terminated class name and no window name.
-    let hwnd = unsafe { FindWindowW(LOOP_CLASS, PCWSTR::null()) }.ok()?;
+    let hwnd = unsafe { FindWindowW(class, PCWSTR::null()) }.ok()?;
     let mut pid = 0u32;
     // SAFETY: `pid` is a live local the call writes once.
     unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
-    (pid != 0).then_some(pid)
+    (pid != 0).then_some((hwnd, pid))
 }
 
-/// Only a look: another card's dry-run tray (its smoke test) would make this test's tray exit at once, and
-/// `ask_quit` would close it.
-fn assert_no_dry_run_tray() {
-    if let Some(pid) = loop_window_pid() {
+fn loop_window_pid(dry_run: bool) -> Option<u32> {
+    loop_window(dry_run).map(|(_, pid)| pid)
+}
+
+/// Only a look: another tray of the same kind in this session (another card's smoke test, or an installed Wakeshot)
+/// would make this test's tray exit at once, and `ask_quit` would close it.
+fn assert_no_tray(dry_run: bool) {
+    if let Some(pid) = loop_window_pid(dry_run) {
+        let kind = if dry_run { "dry-run" } else { "real" };
         panic!(
-            "a dry-run tray (pid {pid}) already runs in this session; wait for it to end and run again"
+            "a {kind} tray (pid {pid}) already runs in this session; wait for it to end and run again"
         );
     }
 }
 
-fn assert_medium(groups: &Path) {
+/// The `.cmd` that wrote `groups` ran at Medium.
+pub fn assert_medium(groups: &Path) {
     let text = wait_until(FOLLOW_WITHIN, "the .cmd's whoami output", || {
-        fs::read_to_string(groups)
+        fs::read(groups)
             .ok()
+            .map(|b| String::from_utf8_lossy(&b).into_owned())
             .filter(|t| t.contains("S-1-16-"))
     });
     assert!(
@@ -585,6 +674,30 @@ pub fn wait_until<T>(limit: Duration, what: &str, mut look: impl FnMut() -> Opti
         }
         assert!(started.elapsed() < limit, "not within {limit:?}: {what}");
         thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// Polls `look` every 200 ms until it gives `Ok`, at most `limit`; a timeout names the last thing seen, so a failed
+/// wait says what it found instead.
+pub fn wait_for<T>(limit: Duration, what: &str, look: impl FnMut() -> Result<T, String>) -> T {
+    match wait_for_result(limit, look) {
+        Ok(found) => found,
+        Err(last) => panic!("not within {limit:?}: {what}; last seen: {last}"),
+    }
+}
+
+/// `wait_for` that gives the last `Err` back instead of failing.
+pub fn wait_for_result<T>(
+    limit: Duration,
+    mut look: impl FnMut() -> Result<T, String>,
+) -> Result<T, String> {
+    let started = Instant::now();
+    loop {
+        match look() {
+            Ok(found) => return Ok(found),
+            Err(last) if started.elapsed() >= limit => return Err(last),
+            Err(_) => thread::sleep(Duration::from_millis(200)),
+        }
     }
 }
 

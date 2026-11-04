@@ -3626,3 +3626,68 @@ card's scratchpad folder (`run1.txt`, `run2.txt`, `claude-timeline.txt`).
   made the exit wait test flaky: with 8 copies at once, 5 of 40 runs failed before the fix (the test now waits a
   quiet spell before it changes the fake). After it, none failed: 40 runs with the probe, 60 runs (12 at once)
   without. **Verified** (a temporary probe that printed each wake, removed after; repeated runs of the test binary).
+
+## Integration real e2e
+
+Card `p6-int-real-e2e`, 2026-11-04 05:14 to 05:21, code at 0932c60 plus this card's test changes, x64 debug, in
+a locked session. The suite `crates/wakeshot-tray/tests/e2e_real.rs` ran the real tray, not a dry run, at Medium
+through Explorer on a temp data folder, with real holds. Each test made its own `Wakeshot int A` (and `B`) as a
+Medium `powercfg /duplicatescheme` of the Balanced plan, made A active, and only then started the tray. Stored
+values were read with `powercfg /qh`. Values in force were read with `CallNtPowerInformation`
+`SystemPowerPolicyAc` and `Dc`. Haik's Balanced plan was never active while a tray ran and never written. His
+values, the plan list and the RunOnce key equalled the BEFORE record (read 04:39) after every test and at the end.
+Outputs are in the card's scratchpad folder (`out\suite-1.txt`, `out\suite-2.txt`).
+
+- **Every path that writes or restores settings works on an active plan.** Run 2: 10 of 10 passed in 92.3 s. Run 1
+  had 9 of 10; the one failure was a test bug (below). No product fix was needed. **Verified** (test).
+- **Hold start and end.** On Keep awake on, the tray set the RunOnce value, started the guard, saved the journal
+  (marked), wrote lid AC, lid DC and sleep DC to 0, and called `PowerSetActiveScheme`, all within 60 to 90 ms of the
+  CLI's log line. In force after it: lid action 0 on AC and DC, DC idle timeout 2147483647 (Never). On Keep awake off, the
+  originals came back stored and in force: lid 1 (policy 2, Sleep) and sleep DC 18000. The journal and the RunOnce
+  value were gone and the guard ended with exit code 0. The journal's three entries named the tray's pid, start time
+  and session. `powercfg /requests` listed the tray's SYSTEM request during the hold. **Verified** (test).
+- **The test's "applied after about 1 s" is mostly the state file.** The tests wait for `state.json` first, which
+  follows in about 1 s (the view's hold-back), so "applied after 986 to 1099 ms" is that wait. The log shows the apply
+  done 60 to 90 ms after the CLI's line. The first `wakeshot.exe` start of a fresh build took 3.3 s before its log
+  line (a scan of the new exe is likely; not verified). **Verified** (test output and log times).
+- **A user change is seen by the next ownership check, and the restore leaves it.** `powercfg` set A's lid DC to 2
+  (Hibernate) and activated A again. The 10 s check dropped the entry 8.9 to 9.1 s later. The core logged "Released
+  the lid action on battery for this episode: the user changed it on plan ..." and the state listed 2 keys. At the
+  hold end, lid AC and sleep DC came back and lid DC stayed 2. **Verified** (test).
+- **Notices wait while the session is locked.** The `UserChanged` notice did not reach the log: `Core::notify` keeps
+  notices while the session is locked or off the console and shows them at the unlock. `session::locked_now()` read
+  `Some(true)`. Run 1's test waited for the notice line and failed on this; the test now waits for it only when the
+  session is unlocked. The unlock showing the notice was not seen (nobody unlocked). **Verified** (test, source).
+- **Plan switch (checklist 9).** With a hold on A, `powercfg /setactive B` gave A its originals back and B the three
+  writes, stored and in force, within 162 ms (run 1) and 573 ms (run 2). The journal then held three entries on B
+  only. The restore of A emptied the journal, so the old guard was told to stop and the apply to B started a new one.
+  At the hold end B was restored and A stayed as it was. **Verified** (test).
+- **Restore my power settings keeps the hold on with requests only.** `wakeshot restore` with the tray alive
+  answered in 138 to 343 ms: "Your power settings are restored." A was restored stored and in force, with no journal
+  and no RunOnce value, and the guard ended. The core logged "Released every key for this episode: Restore my power
+  settings". `state.json` still held Keep awake with nothing overridden, and `powercfg /requests` still listed the
+  SYSTEM request. For 35 s after (one safety tick and more), A stayed as restored, no journal came back and no guard
+  started. After Keep awake off and on again, the new episode applied again. **Verified** (test).
+- **Quit during a hold.** `ask_quit` (`WM_CLOSE`): exit code 0, A restored stored and in force, the Keep awake file
+  deleted, no journal, no RunOnce value, and the guard ended with 0. **Verified** (test).
+- **End of session (checklist 6, the agent's part).** `SendMessageTimeoutW` with `WM_QUERYENDSESSION`
+  (`ENDSESSION_LOGOFF`) was answered TRUE. The `WM_ENDSESSION` TRUE send returned after 39 ms (run 1) and 56 ms (run
+  2), with A already restored stored and in force, no journal and no RunOnce value. The core logged "Session end: the
+  restore ran in 56 ms". The tray was then ended by pid, as Windows would, and the guard, already told to stop, was
+  gone. A real sign-out was not done (Haik's checklist). **Verified** (test).
+- **A killed tray's guard restores (checklist 4, the agent's part).** The tray was ended by pid during a hold. The
+  guard logged "tray pid ... is gone; looking at the journal" and 40 ms later "restored the journal's entries". A was
+  back stored and in force, with no journal and no RunOnce value, 63 to 87 ms after the end, and the guard exited 0.
+  How Task Manager's End task groups the guard was not checked (Haik's checklist). **Verified** (test).
+- **`wakeshot restore` with a dead owner restores by itself.** The test hand-wrote a journal: owner a `ping` the
+  test started and ended, one `lidDc` entry on A with `original` 1 and `written` 0. A's lid DC was set to 0 and
+  activated, and no tray ran. The CLI printed "Your power settings are restored." and exited 0, and logged "restore:
+  owner pid ... gone, restored here". A's lid DC was 1 again, stored and in force, and the journal was gone.
+  **Verified** (test).
+- **The product GUID's `NotifyIconSettings` entry.** The entry is `2334163346184210159`, with `IconGuid`
+  `{7db9403e-d4b9-4165-a99e-a69b8ea56744}` as text (`REG_SZ`), `ExecutablePath` this card's x64 debug
+  `wakeshot-tray.exe`, and `IconSnapshot`. It existed before the run, so Windows points one entry per GUID at the
+  newest exe path. Left in place (phase file note 7). No AUMID key was made for it, since every notice was held.
+  **Verified** (test, `Get-ItemProperty`).
+- **`powercfg /duplicatescheme` ends its output without a newline.** A `.cmd` that appends `echo` lines after it puts
+  the next text on the same line. **Verified** (test output: "...(Balanced)exit 0").

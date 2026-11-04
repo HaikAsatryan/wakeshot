@@ -1,6 +1,6 @@
 # Integration: the real tray on active plan copies
 
-Phase: 6. Status: in progress. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 130K tokens.
+Phase: 6. Status: done. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 130K tokens.
 Real laptop: **global lane** (power settings, one card at a time across all tracks): two plan copies made active in
 turn, the real RunOnce value, a real guard process. Haik's own plan is never written; his values are read before and
 after and must match. No sign-out, no sleep, no lid. Build folder:
@@ -81,6 +81,16 @@ None.
 
 Problems seen but not fixed.
 
+1. The dry-run icon's keys are back. This card ran the dry-run suite once (05:21) to check the shared `mod.rs`.
+   That run made the keys `p6-int-dry-run-e2e` had deleted at 04:46:
+   - `HKCU\Control Panel\NotifyIconSettings\15983757285637097514` (only `IconSnapshot`);
+   - `NotifyIconGeneratedAumid_15983757285637097514` under `HKCU\Software\Classes\AppUserModelId` (`DisplayName`
+     "Wakeshot") and under `...\CurrentVersion\Notifications\Settings`.
+
+   Left in place, decided by the worker, for Haik's review: the dry-run card still has its pictures to take with a
+   dry-run tray, and its export-and-delete clean-up (phase file note 7) covers these keys after that. Change it when
+   the orchestrator says no dry-run tray runs again; then export and delete them as that card's Log describes.
+
 ## Log
 
 - 2026-11-03: card written by `p6-plan-integration`.
@@ -118,7 +128,88 @@ Problems seen but not fixed.
      `WM_ENDSESSION` send.
   8. Icon entry: one whose `IconGuid` is the product GUID (bytes or text), else a new one naming this build's exe;
      looked for 10 s while the tray runs, then 10 s after its quit.
+- 2026-11-04 05:07: stop 2 started (suite committed in 0932c60; `e2e/mod.rs` handed over; the laptop lane is this
+  card's alone). No `wakeshot-tray.exe` or `wakeshot.exe` runs; Balanced active and the only plan.
+- 2026-11-04 05:14: helpers moved into `tests/e2e/mod.rs` as a generalization, not as copies: `TempData::real`
+  (data in the folder itself, CLI and tray without `--dry-run`), `Tray` for both kinds (loop window class and
+  `ask_quit` by kind), `journal()`, `launch`, `assert_medium`, `terminate`, `exit_code_within`, `loop_window`,
+  `full_path`, `wait_for` made public; `#![allow(dead_code)]` in `mod.rs`, since each suite uses part of it. The dry
+  run's API is unchanged. Power-test logic (BEFORE record, copies, `Bench`) stays in `e2e_real.rs`. Log matches on
+  `power/journal.rs` text (`p6-int-log-wording` may reword it) are now print-only: apply and ownership lines.
+  rustfmt and clippy x64 both ways clean; `wakeshot-cli` built x64 into the target folder.
+- 2026-11-04 05:14 to 05:20: runs with `WAKESHOT_REAL_E2E_BEFORE` = `before.env`, output in
+  `<scratchpad>\p6-int-real-e2e\out\`. `real_e2e_cleanup` first: nothing to do, AFTER equals BEFORE. Hold test alone,
+  try 1: test bug (`powercfg /duplicatescheme` ends its line without a newline, so the `.cmd`'s exit marker shared
+  the line and was not counted); its teardown deleted the copy, nothing left. Fixed (marker `[exit N]` found anywhere);
+  try 2 passed. Suite run 1 (05:16 to 05:17): 9 passed, 1 failed: the user-change test waited for a "UserChanged"
+  notice line, but the core holds notices while the session is locked and shows them at the unlock (`Core::notify`;
+  Haik's session was locked). Test bug: the notice line is now required only when `session::locked_now()` is
+  `Some(false)`. Suite run 2 (05:18:53 to 05:20:25): **10 passed, 0 failed** in 92.3 s ("session locked: Some(true)").
+  `real_e2e_cleanup` last: nothing to do, AFTER equals BEFORE. No product fix was needed.
+- 2026-11-04 05:21 to 05:24: the dry-run suite run once as a check of the shared `mod.rs` (dry run only, nothing
+  written): 12 of 12 passed in 38.3 s (`out\dry-run-suite.txt`). Then rustfmt check on both suites, clippy x64 both
+  ways and plain `cargo test --locked -p wakeshot-tray` (8 + 5 pass, 25 ignored): all clean. Research section
+  "Integration real e2e" added. After: no `wakeshot-tray.exe`, `wakeshot.exe` or `PING.EXE` runs; no
+  `%TEMP%\wakeshot-e2e-*` folder; no `%LocalAppData%\Wakeshot`; Balanced the only plan and active; no Wakeshot value
+  in Run or RunOnce. Build folder kept for the final record run, on the orchestrator's word. Decided by the worker,
+  for Haik's review:
+  9. `#![allow(dead_code)]` at the top of `tests/e2e/mod.rs`: each suite compiles the module on its own and uses
+     part of it. Change it when a helper is unused by both suites: then delete the helper.
+  10. The `UserChanged` notice line is required only in an unlocked session (the core holds notices while locked).
+  11. The dry-run icon keys this card's check run made again are left for the dry-run card (Found outside scope 1).
+- 2026-11-04 05:25: the orchestrator says no final record run is needed. Build folder, run outputs (`out\`) and
+  scratch scripts deleted; only `before.txt` and `before.env` kept in `<scratchpad>\p6-int-real-e2e\`.
 
 ## Result
 
-What was done, files changed, checks and outcomes, open items.
+Status: done (2026-11-04 05:24), with one run still to come: the orchestrator asked for a final full suite run as the
+record once `p2-6-unread-lid-countdown` and `p6-int-log-wording` end. The build folder is kept for it and deleted
+after that.
+
+The real tray works on an active plan for every path the card names, and no product fix was needed. Suite run 2:
+10 of 10 passed. Run 1 had 9 of 10; the one failure was a test bug (a notice held in a locked session). Haik's plan
+was never active while a tray ran and never written. AFTER equals BEFORE: Balanced active and the only plan; lid AC 1
+and DC 1; sleep AC 18000 and DC 18000; energy saver AC 0 and DC 30; no RunOnce value.
+
+### Files changed
+
+- `crates/wakeshot-tray/tests/e2e_real.rs`: the suite (10 tests, all `#[ignore]`, all `real_e2e_*`). Plan copies
+  are made at Medium; the BEFORE record is named by `WAKESHOT_REAL_E2E_BEFORE`; a teardown per test, also on a
+  failure.
+- `crates/wakeshot-tray/tests/e2e/mod.rs`: generalized for real runs, with the dry run's API unchanged.
+  - `TempData::real`, and `Tray` for both kinds.
+  - Now shared: `journal`, `launch`, `assert_medium`, `terminate`, `exit_code_within`, `loop_window`, `full_path`
+    and `wait_for`.
+- `docs/research.md`: section "Integration real e2e".
+- This card.
+- No `app/*` file changed.
+
+### Checks and outcomes
+
+| Check | Outcome |
+|---|---|
+| BEFORE recorded (04:39, 04:59) | `<scratchpad>\p6-int-real-e2e\before.txt` (raw) and `before.env` (the record) |
+| Tests first | Suite written and committed (0932c60) before any run |
+| `real_e2e_cleanup` first and last | Nothing to do both times; AFTER equals BEFORE |
+| Hold start and end | Applied 60 to 90 ms after the CLI; values stored and in force; 3 journal entries owned by the tray; RunOnce and one guard; restored on off, guard gone: pass |
+| User change | Entry dropped 8.9 s after the change; core logged the release; lid DC stayed 2 at the hold end: pass |
+| Plan switch (checklist 9) | A restored and B applied in 162 and 573 ms; new guard; B restored at the hold end: pass |
+| Restore my power settings | CLI answered in 138 ms; A restored; hold kept with the SYSTEM request; no write for 35 s; next hold applies: pass |
+| Quit | Exit 0, restored, Keep awake file gone, guard gone: pass |
+| End of session (checklist 6, agent's part) | `WM_ENDSESSION` send returned in 39 and 56 ms with A restored: pass |
+| Killed tray (checklist 4, agent's part) | Guard restored A 63 and 87 ms after the end by pid, cleared RunOnce, exited 0: pass |
+| CLI restore, owner dead | "Your power settings are restored.", exit 0, A back, journal gone: pass |
+| Icon entry | `NotifyIconSettings\2334163346184210159`, `IconGuid` the product GUID (text), `ExecutablePath` this card's x64 debug exe; left in place |
+| No `Wakeshot int` or `Wakeshot test` plan left; no process of this card left | Pass |
+| `rustfmt --edition 2024 --check` (both suites) | Exit 0 |
+| Clippy x64 `-p wakeshot-tray`, with and without `--all-targets` | Clean. ARM64: not run here (no clang; CI) |
+| Plain `cargo test --locked -p wakeshot-tray` | 8 + 5 pass, 25 ignored |
+| Dry-run suite (check of the shared `mod.rs`) | 12 of 12 pass |
+| Build folder deleted | Not yet: kept for the final record run, on the orchestrator's word |
+
+### Open items
+
+- The final record run on the orchestrator's word, then delete the build folder.
+- Found outside scope 1: the dry-run icon keys, left for the dry-run card's clean-up.
+- Not tested here, by the card: a real sign-out, End task in Task Manager (checklists 4 and 6, Haik's part), and the
+  `UserChanged` notice at an unlock.

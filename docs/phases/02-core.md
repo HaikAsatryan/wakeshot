@@ -281,3 +281,7 @@ Where each item this track owns is built. "Integration" is planned after the tra
   Found outside scope 3 and 5: with an unread startup journal, a lid closed before the `Leftover` restore lands starts
   no countdown, so a closed laptop runs on until the user's battery sleep timeout. Started beside
   `p6-int-dry-run-e2e` (core files only; that card fixes `wakeshot-windows` `app/*`, tray tests and CLI files).
+- 2026-11-04 05:24 (orchestrator `wakeshot-12`): a cargo-mutants test binary of `p2-6-unread-lid-countdown` grew to 32 GB
+  (free RAM 0 GB from about 05:20); Claude Code ended the keep-awake holders of `wakeshot-46` and `wakeshot-9d` for low
+  memory. The worker ended the run by pid on request; free RAM back to 36 GB, the `wakeshot-12` holder still runs. Rule
+  for later mutants runs: one job, a low timeout, memory watched; skip them if memory cannot be capped.
