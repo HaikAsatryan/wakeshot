@@ -255,7 +255,12 @@ tests, Haik's checklist) starts when the tracks it needs are done.
 - 2026-11-04 22:50: `p2-6-runonce-keep` done: Haik's B2 redo passed (restore at the next sign-in on the fixed code;
   his values same). README: Haik's trim (dd72a4d), the gap bullet, the flat contents list under Details. Haik:
   `p6-media` Part B waits until his design review of the final software. Pushed 0c7bc26: CI green on all three jobs.
-- Next (orchestrator): `p6-int-haik-checks` (about 42 min with Haik at the laptop, nothing else runs), then Haik's
-  design review of the final software, then `p6-media` Part B, the README and Pages finish. Haik's review of the
-  RunOnce fix decisions (`p2-6-runonce-keep` Decisions, finding 6) is open. `p6-real-install-guard` before he
-  installs the first release.
+- 2026-11-05 ~02:30: `p6-int-haik-checks` done (decfd5a): blocks 1, 2, 3, 5, 7, 8 pass; 4 safe with findings; 6
+  step 3 not shown. Haik: a 30 s grace on battery before the floor step back (`product.md`). Haik's Nightcrew
+  cleanup committed (a47d03f). Running: `p2-6-floor-grace`, `p6-real-install-guard` (promoted from later). Haik is
+  asleep (dock in, lid open): orchestrator decisions go to the `06-integration.md` work log for his review.
+- Next (orchestrator): after `p2-6-floor-grace`, a narrow power safety check of it (one `wakeshot-reviewer`); after
+  `p6-real-install-guard`, `p6-notice-app-icon` Part A (Part B needs Haik's eyes, about 5 min). Then the whole-
+  workspace checks, push, CI. With Haik: findings 4, 9 and 10 of `p6-int-haik-checks`, `p6-notice-app-icon` Part B,
+  his design review of the final software, then `p6-media` Part B, the README and Pages finish. Haik's review of the
+  RunOnce fix decisions (`p2-6-runonce-keep` Decisions, finding 6) is open.
