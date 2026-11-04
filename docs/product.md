@@ -111,8 +111,10 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   while signed in), a notification says how long the PC kept running with the lid closed and what held it. A docked
   user who signs in on the external screen with the lid still closed gets it when the lid opens (Haik, 2026-11-03).
 - **Battery floor**: the Windows energy saver threshold; 20% when it is Never or Always. No Wakeshot setting. On
-  battery below the floor, Wakeshot steps back at once: it releases every request, restores settings and notifies,
-  so Windows rules apply. If the lid is closed, it then puts the laptop to sleep the same way as at work end (below;
+  battery below the floor, Wakeshot steps back once the PC has been on battery for 30 seconds: it releases every
+  request, restores settings and notifies, so Windows rules apply. If AC comes back within the 30 seconds, nothing
+  happens: no step back, no chime, no notice (Haik, 2026-11-05: in his checks every short dock AC drop gave a chime
+  and a notice, and one notice showed late, on AC; the same 30 seconds as the lock after an unplug). If the lid is closed, it then puts the laptop to sleep the same way as at work end (below;
   sleep, not hibernate, Haik 2026-11-04), after the same 5 minutes with no input, so someone typing on an external
   screen with the lid closed is not put to sleep. If the user's own battery lid action is Do nothing, it does not act,
   the same rule as at work end (Haik, 2026-11-03). Right before it acts, it checks again that the lid is closed and

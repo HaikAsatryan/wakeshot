@@ -210,7 +210,10 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | `p6-int-dry-run-e2e` | no | screen (dry-run icon, balloons, pictures); agent-session lane (one Claude Code test session) | `p6-int-update-wiring`, `p4-cli-args`, `p4-cli-run`, `p4-cli-commands`, `p4-cli-restore`, `p4-live-claude` | done (12:18: four pictures; the old dry-run icon entry is left for Haik's call) |
 | `p6-int-real-e2e` | no | global: power settings on active plan copies, RunOnce, a guard | `p6-int-dry-run-e2e`, `p3-real-checks` | done (05:25: 10 of 10 on an active copy; AFTER equals BEFORE; no product fix) |
 | `p6-int-update-e2e` | no | global: installs, Run, RunOnce, Path, a user environment value, an active plan copy | `p6-int-real-e2e`, `p6-install-e2e`, `p6-pack-and-release`, `p6-hooks` | done (05:51: 125 checks passed, 1 skipped: the update notice, held while the session was locked) |
-| `p6-int-haik-checks` | yes: about 42 min (27, 18 of hands, plus 15 with the dock) | whole laptop: lid, lock, hibernate, switch user, battery; no other agent or cargo command | `p6-int-update-e2e`, `p3-haik-checks`, `p5-haik-check` | ready |
+| `p6-int-haik-checks` | yes: about 42 min (27, 18 of hands, plus 15 with the dock) | whole laptop: lid, lock, hibernate, switch user, battery; no other agent or cargo command | `p6-int-update-e2e`, `p3-haik-checks`, `p5-haik-check` | done (2026-11-05 ~02:00): blocks 1, 2, 3, 5, 7, 8 pass; 4 safe, with findings; 6 steps 1 and 2 pass, step 3 not shown (lid opened at 4 min 51 s); AFTER equals BEFORE; findings 3 to 11 in the card |
+| `p2-6-floor-grace` | no | no | `p6-int-haik-checks` | ready: 30 s on battery before the floor step back (Haik 2026-11-05), docs of finding 6; then a narrow power safety check |
+| `p6-real-install-guard` | no | no (read-only checks) | `p2-6-runonce-keep` | ready (orchestrator 2026-11-05, before the first release): plus finding 8 (Startup switch bytes) |
+| `p6-notice-app-icon` | Part B: about 5 min, a look at the screen | Part A: test installs (HKCU keys); Part B: screen | `p6-real-install-guard` (both own `packaging/e2e.ps1`) | ready: the white square in the notice header (finding 5), plus finding 11 |
 
 Sizes, one worker's context: skeleton 50K, io-thread 120K, window 100K, dispatch 140K, startup 100K, tray-mode 140K,
 update-wiring 90K, dry-run-e2e 130K, real-e2e 130K, update-e2e 120K, haik-checks 70K. About 1.19M tokens in all.
@@ -253,8 +256,8 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
 | 4 | End task on the tray, then its group: the guard restores | `p3-haik-checks` (Task Manager); also `p6-int-real-e2e` (the real tray killed by pid during a hold) |
 | 5 | Tray and guard killed, sign out and in: RunOnce restores | `p3-haik-checks` B2 (not shown there); shown by the `p2-6-runonce-keep` B2 redo (2026-11-04) |
 | 6 | Sign out during a hold: restored before the session ends | `p3-haik-checks`; also `p6-int-real-e2e` (end-of-session messages sent to the real tray) |
-| 7 | Work ends with the lid closed: hibernate after 5 min; not while typing on an external screen | `p6-int-haik-checks` block 4; the external screen part in block 6 (dock) |
-| 8 | Battery floor with a dock AC drop; dock lid cases, unplugged | `p6-int-haik-checks` block 5 (floor, no dock) and block 6 (dock; Haik's is always plugged in) |
+| 7 | Work ends with the lid closed: hibernate after 5 min; not while typing on an external screen | `p6-int-haik-checks` block 5 (sleep; hibernate only as the fallback); the external screen part in block 6 step 3 (dock) |
+| 8 | Battery floor with a dock AC drop; dock lid cases, unplugged | `p6-int-haik-checks` block 4 (floor, the lid closed under the floor, the dock's short AC drop) and block 6 steps 1 and 2 (dock; Haik's is always plugged in) |
 | 9 | Plan switch during a hold | `p6-int-real-e2e` (two active plan copies; no hands needed) |
 | 10 | Unlock after a closed-lid hold: the report notice | `p6-int-haik-checks` block 2 |
 | 11 | `Global\` mutex; fast user switching; Remote Desktop | mutex: `p3-real-checks`; lock and unlock notices: `p3-haik-checks`; console left and back: `p6-int-haik-checks` block 3 (Switch user, one account); Remote Desktop: not tested before v1 (Haik 2026-11-03; needs a second PC; Phase 7 if one is at hand) |
@@ -410,3 +413,16 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   `%TEMP%\NotifyIconGeneratedAumid_15983757285637097514.png` is left (Windows writes it again). The README keeps
   "Codex CLI and Copilot CLI next". `CLAUDE.md` notes that the Bash tool's shell has the backup and restore
   privileges enabled (checked).
+- 2026-11-05 (orchestrator): `p6-int-haik-checks` Part B under way. Block 1 restarted once (Haik missed the first-run
+  notice: Quit, `config.json` deleted, started again). Haik reached block 8 and signs out; no agent runs. His block
+  results come with his "done". Next: a Part C worker (logs, cleanup, the checklist map's block numbers).
+- 2026-11-05 (orchestrator): Haik's "done" with his notes; `p6-int-haik-checks` Part C done (worker ~312K tokens):
+  findings 3 to 11 in the card, facts in `research.md` "Integration checklist with Haik". Haik's answer: a 30 s grace
+  on battery before the floor step back (yes; `product.md` "Battery floor"). New cards: `p2-6-floor-grace` (findings
+  6 and 7 b), `p6-notice-app-icon` (findings 5 and 11); `p6-real-install-guard` promoted from later to ready, with
+  finding 8. Orchestrator decisions, for Haik's review: finding 6 docs only (no code keeps the lid key until the
+  5-minute check; with the lid closed under the floor Windows' own lid action may sleep the laptop at once, safe);
+  finding 7 a not done (no code withdraws the step back balloon when AC comes back: with the grace it needs a drop
+  over 30 s and a pointer on the banner; change it when a user reports a stale battery balloon); finding 3 is an OS
+  limit (only `ms-settings:taskbar`). Waits for Haik: finding 4 (delete the stale Settings icon key on this laptop),
+  finding 9 (rerun block 6 step 3, about 10 min), finding 10 (`%TEMP%` test leftovers).

@@ -90,7 +90,7 @@ settings by hand (and forget to change them back) or use a keep-awake tool that 
     - On the SDK path, closing stdin does not end the process while a background shell runs. Seen live once.
 - **Hooks.** `UserPromptSubmit`, `PreToolUse`, `Stop`, `SessionEnd` in `~/.claude/settings.json`. Exact, but means
   editing the user's settings. Insomnia does this.
-- **Transcripts.** `~/.claude/projects/**/*.jsonl` grow while a session works. Nightcrew watches their size.
+- **Transcripts.** `~/.claude/projects/**/*.jsonl` grow while a session works.
 
 ### Reading elevated Claude Code sessions from an unelevated process
 
@@ -149,13 +149,12 @@ Checked 2026-11-03 (card `p0-unelevated-liveness`, Claude Code 2.1.316) with `sp
 | PowerToys Awake (microsoft/PowerToys) | Windows | C#, .NET 10, part of PowerToys | No: manual, timer or process id | Not checked | No | 140,491 (all of PowerToys) |
 | LidGuard (airtaxi/LidGuard) | Windows, Linux, macOS | C#, .NET 10 NativeAOT, a `dotnet tool` | Codex, Claude Code, Copilot CLI, OpenCode (hooks; officially tested: Codex on Windows) | Not checked | Yes, optional | 13 |
 | Agents Don't Sleep (itsmbaqer/agents-dont-sleep) | macOS, Windows, Linux | Rust, Tauri 2, web UI | 8 agents through hooks, others by process name (tested: Claude Code) | Not checked | Yes | 10 |
-| Nightcrew (leikauskas/nightcrew) | Windows | C#, .NET Framework 4.8, WPF | Claude Code, Codex | Yes | Yes | 9 |
 | Insomnia (stanley-projects/Insomnia) | Windows | Electron | Claude Code, Codex (hooks); apps by process | No (see Electron above) | No | 7 |
 | Insomnia (krishhgg/Insomnia) | macOS | | | | Yes | 1,894 (2026-11-02) |
 
 Stars read with `gh api` on 2026-11-04 (`docs/research/launch.md`, part 1, which has the facts and links per tool),
-except the macOS Insomnia (2026-11-02). Rivals for the README: PowerToys Awake, LidGuard and Agents Don't Sleep;
-Nightcrew is the reserve, one star behind (same file, "Pick: three rivals"; decided by the worker, for Haik's review).
+except the macOS Insomnia (2026-11-02). Rivals for the README: PowerToys Awake, LidGuard and Agents Don't Sleep
+(same file, "Pick: three rivals"; decided by the worker, for Haik's review).
 Many more tiny tools exist (0 to 30 stars): LidKeeper (a PowerShell script, no release), LidAwake, lidwake, LidGuard
 (macOS), wakekeeper (Windows and macOS), StayLit, WideAwake, Caffeinator, DozeGuard, a claude-kit keep-awake plugin,
 the claudfeine wrapper.
@@ -163,52 +162,6 @@ the claudfeine wrapper.
 **Demand:** real on macOS (1.9k stars for a lid keep-awake app). On Windows every agent-aware tool found is small (7 to
 13 stars) and young. The space is busy with small projects. Simple, native and correct on Modern Standby is the open
 spot.
-
-### Nightcrew review (code read 2026-11-02, v0.3.1 installed and tested on this laptop)
-
-What it does: every 10 s it checks Claude Code status files, transcript growth, CPU of processes an agent started,
-and GPU use. While work runs it holds SYSTEM and EXECUTION requests, sets lid action to Do nothing on AC and DC, sets
-sleep after to Never on AC and to "lid-closed limit + 1 h + 7 s" on DC. After 5 minutes with no work it puts the
-user's values back. Tested here: it armed within a second of start and wrote exactly these values. Uninstalled 2026-11-03; nothing of it is left (checked 2026-11-03: `Test-Path` false for `%LOCALAPPDATA%\Programs\Nightcrew`, `%LOCALAPPDATA%\Nightcrew` and `HKCU:\Software\Nightcrew`; no Nightcrew entry in the HKCU Run key or in `Get-ScheduledTask`).
-
-Worth copying:
-
-- A pure state machine (`Controller`: inputs in, commands out) and a separate `Engine` that runs the commands. All
-  Windows calls behind small interfaces, so it has 404 tests. Dry run by swapping implementations.
-- Restore safety: atomic file plus registry copy; a field the user changes while armed is kept as theirs; follows a
-  power plan switch; checks policy locks; restores on quit, sign-out and next start.
-- A watchdog scheduled task (`schtasks` XML, logon trigger plus every 5 minutes, runs `exe --watchdog`) that restores
-  settings if the app was killed.
-- Marks its own battery timer value with "+7 seconds" so it can tell its values from the user's after both saved
-  copies are lost. Windows offers only whole minutes.
-- With the lid closed: locks the PC (unless the user's own lid action is Do nothing, which means docked use);
-  hibernates at 20% battery or after 8 hours with no input.
-- When work ends with the lid closed: waits for 5 minutes with no input, turns the screen off, and hibernates if the
-  PC is still awake 5 minutes later.
-- Clock that ignores sleep time (`QueryUnbiasedInterruptTime`). Handles `PBT_APMSUSPEND` so a late tick after wake
-  cannot hibernate the PC in front of the user.
-- WPF set to software rendering, which saves about 75 MB (their comment).
-
-Weak spots:
-
-- Edits the user's real power plan in place. The safety net for that is complex (368 line journal, registry copy,
-  the +7 s trick, which does not work when the lid-closed limit is off).
-- Scope creep: about 800 lines of "Efficiency mode" that slows other apps, a GPU signal, a loopback connection scan,
-  a custom drawn panel with bundled fonts.
-- CPU based detection: a background dev server started by an agent and using over 10% CPU likely keeps the PC awake
-  as long as it runs. Not tested.
-- Rules for any process exist only as a JSON hack (add the name as an "agent"), and need a restart.
-- One author, created 2026-10-13, about 100 commits in 10 days, unsigned. About 80 MB RAM with the panel open.
-- UI: tray icon is WinForms `NotifyIcon`, panel is a borderless WPF window. Not WinUI 3 (cannot run on .NET
-  Framework 4.8).
-
-UX problems (product owner view, agreed with Haik):
-
-- Too many modes: "Hold awake" and "Pause". Pause is kept in memory only, so a reboot turns it back on.
-- Tray icon style choice (removed upstream after v0.3.1).
-- "Lock when lid closes" is optional. It should not be: closing the lid normally means sleep and a password on wake.
-- "Stay awake for approvals" and "Battery floor" are settings that should be fixed behavior. "Lid-closed limit" should not exist at all (decision 3, 2026-11-03).
-- Look is borrowed from Wispr Flow's design language (their credits) with serif fonts. Does not look like Windows.
 
 ### Insomnia review (code read 2026-11-02)
 
@@ -607,8 +560,8 @@ started by Explorer) unless marked. Raw logs: `spikes/lid-sleep/out/`. Haik's mo
   `out/read-explorer.log`). Under `limited` (parent process spoofing) `OpenProcessToken(TOKEN_ADJUST_PRIVILEGES)`
   fails with 5, so `limited` cannot test `SetSuspendState`; that failure is an artifact of the launch. Both
   `SetSuspendState(FALSE)` and `(TRUE)` hibernate this laptop (morning results).
-- **Hibernate off.** Not tested: the card forbids turning hibernate off. The rivals check `SystemS4` and
-  `HiberFilePresent` first (`rivals-nightcrew-lidguard.md`); `IsPwrHibernateAllowed` is the documented single call.
+- **Hibernate off.** Not tested: the card forbids turning hibernate off. `IsPwrHibernateAllowed` is the
+  documented single call.
 - **Lid notification.** `PowerSettingRegisterNotification(GUID_LIDSWITCH_STATE_CHANGE, DEVICE_NOTIFY_CALLBACK)` works
   with the Medium token, no window. The first callback came within 1 ms of the call with the current state (1, open).
   The same holds for `GUID_CONSOLE_DISPLAY_STATE`, `GUID_SESSION_DISPLAY_STATUS`, power source, battery percent and
@@ -1464,8 +1417,7 @@ NTFS, files in `%TEMP%`, test keys under `HKCU\Software\Wakeshot-test`), unless 
 - **Write-through.** Microsoft, `MoveFileExW` (updated 2025-07-01): `MOVEFILE_WRITE_THROUGH` "The function does not
   return until the file is actually moved on the disk. Setting this value guarantees that a move performed as a copy
   and delete operation is flushed to disk before the function returns." The temp file sits beside the target, so the
-  move is never a copy and delete. What a power cut right after the move leaves: not tested by us. Nightcrew writes
-  the same way (temp file, flush, `MoveFileEx(REPLACE | WRITE_THROUGH)`; `docs/research/rivals-nightcrew-lidguard.md`).
+  move is never a copy and delete. What a power cut right after the move leaves: not tested by us.
 - **Missing versus error on read.** `CreateFileW(OPEN_EXISTING)` gave "missing" (2 or 3) for a missing file and for a
   file in a missing folder; a folder path (no `FILE_FLAG_BACKUP_SEMANTICS`) failed with another error
   (`read_whole_tells_missing_from_error`; the code was not printed).
@@ -2784,12 +2736,12 @@ Checked 2026-11-04 for card `docs/tasks/p6-launch-research.md`; details, quotes 
 `docs/research/launch.md`. Nothing installed or run.
 
 - **Rival stars** (`gh api repos/<o>/<r>`, 2026-11-04 00:45): PowerToys 140,491 (all of PowerToys), LidGuard 13,
-  Agents Don't Sleep (`itsmbaqer/agents-dont-sleep`, new) 10, LidKeeper 10 (no release), Nightcrew 9, Insomnia 7.
-  Picked for the README table: PowerToys Awake, LidGuard, Agents Don't Sleep; Nightcrew in reserve.
+  Agents Don't Sleep (`itsmbaqer/agents-dont-sleep`, new) 10, LidKeeper 10 (no release), Insomnia 7.
+  Picked for the README table: PowerToys Awake, LidGuard, Agents Don't Sleep.
 - **Rival download sizes** (release and NuGet APIs): PowerToys user setup x64 323.9 MB (v0.102.3001); LidGuard
   `lidguard.win-x64` 2.1.7 25.3 MB (a .NET tool, needs the .NET SDK to install); Agents Don't Sleep v0.4.0 x64 setup
-  1.9 MB (Tauri, no ARM64); Nightcrew v0.3.1 exe 1.8 MB. None publishes idle RAM or CPU, except a PowerToys PR
-  harness (C# Awake 14.3 MB private memory, PR #51181, closed) and Nightcrew's "less than 1% of one CPU core".
+  1.9 MB (Tauri, no ARM64). None publishes idle RAM or CPU, except a PowerToys PR harness (C# Awake 14.3 MB
+  private memory, PR #51181, closed).
 - **winget and self-updating apps**: winget compares the ARP `DisplayVersion` with the manifest version
   (winget-cli #1239, PM comment 2026-07-28). `RequireExplicitUpgrade: true` keeps a package out of `winget upgrade
   --all`, but only when winget installed it (`PackageTrackingCatalog.cpp`, `UpdateFlow.cpp`). The 2026 loops came from
@@ -4359,3 +4311,118 @@ to the 16:44 baseline after every check and at the end (18:26, `powercfg`).
   closes (a hold that starts before its sign-in's pass gets the value back at its next plan read) was not run here:
   shown only by tests (`run_once_comes_back_with_the_real_net` over a scratch HKCU key); on a real sign-in **not
   verified**.
+
+## Integration checklist with Haik: preparation
+
+`p6-int-haik-checks` Part A, 2026-11-04 22:59 to 23:17, on the test laptop. Card Log has every step.
+
+- **Release install, sizes and times.** Release x64 of the tree at 23:01 (91 s cold build into a new target folder):
+  `wakeshot-tray.exe` 2,740,224 bytes, `wakeshot.exe` 558,080. `pack.ps1` 0.1.0 with the icon, 4 s: `Setup.exe`
+  11,763,094 bytes, full nupkg 4,205,462, portable zip 4,200,315. `Setup.exe --silent` at Medium (a `.cmd` opened with
+  `explorer.exe`): exit 0 in 3.3 s, then 1.1 s on a second install; no process from the install folder 3 s after it,
+  so a silent install does not start the tray. Measured with the script's own clock; **verified**.
+- **A plan copy keeps every setting.** A Medium `powercfg /duplicatescheme` of Balanced: its 1,736 `powercfg /qh`
+  setting lines equal Balanced's but the "GUID Alias: SCHEME_BALANCED" line, which the copy lacks. Compared line by
+  line with `Compare-Object`; **verified**.
+- **A copy can be made again under the same id.** At Medium, `powercfg /duplicatescheme <plan> <new id>` made a copy
+  under the given id after the first copy with that id was deleted, and `/changename` and `/setactive` worked on it.
+  So helper scripts that name a copy's id keep working after an undo and a redo. **Verified** once (23:07:49).
+- **Undo of an install with an active copy.** `Update.exe --uninstall --silent`, then `/setactive` of the own plan,
+  then `/delete` of the copy, at Medium: 7 s in all; a read of Run, RunOnce, `StartupApproved\Run`, the user Path
+  (type, bytes, hash), the plan list, the active plan and its values, the data and install folders, the uninstall key,
+  the shortcut and the `NotifyIconSettings` entries equal to the read before the install. **Verified** (23:07).
+- **Battery saver after a short floor test.** With the copy active, on battery at 98%, the copy's energy saver
+  threshold sat at 99% for 3 s (23:14:57 to 23:15:00) and was set back to 30%; `GetSystemPowerStatus` gave
+  `SystemStatusFlag` 0 (battery saver off) at 23:15:10. Whether battery saver turned on in those 3 s: **not
+  verified**.
+
+## Integration checklist with Haik
+
+`p6-int-haik-checks` Parts B and C, 2026-11-04 23:30 to 2026-11-05 01:57: the installed release x64 0.1.0, the plan
+copy active. Sources: the tray log (copied before the uninstall), the System log (Kernel-Power 105, 506, 507, 566),
+Haik's words as the orchestrator relayed them, his photo, registry reads. The Kernel-Power `Reason` field is read as
+`POWER_MONITOR_REQUEST_REASON`: 12 idle timeout, 15 lid, 31 keyboard, 32 mouse (the SDK enum as ntdoc.m417z.com lists
+it, read 2026-11-05; that the event uses this enum is inferred: every lid open logged 15). Kernel-Power 566
+`NextSessionType` 0, 1, 2 read as screen on, screen off, sleep: inferred from the order and 507's `SleepEntered`.
+The card's Result has the per-block table; these are the facts.
+
+- **The first-run click cannot open "Other system tray icons" itself.** The click opened Settings > Taskbar (log
+  00:23:46) with that section closed. Haik: "Clicking the notification moves to the correct section in Settings but
+  not directly Other system tray icons." Microsoft's `ms-settings:` list ("Launch Windows Settings", Learn, updated
+  2026-11-02, read 2026-11-05) has only `ms-settings:taskbar` for the page and no way to open a section; a web search
+  found none either. An OS limit. **Verified** (docs, log).
+- **Settings shows the old Cup for Wakeshot.** Settings draws each tray icon from
+  `HKCU\Control Panel\NotifyIconSettings\<id>\IconSnapshot`. The product GUID's entry `2334163346184210159` holds a 24 px PNG of the idle
+  Cup: a white outline in rows 9 to 23 of 24, low because the idle Cup leaves room for the steam it draws while
+  holding, so it looks "not centred". An earlier run of the product GUID made the entry before the Sunrise replaced
+  the Cup (2026-11-04), and Windows did not renew the picture while the Sunrise build ran from 00:20 to 01:33 (still
+  the Cup at 01:5x); it only points the entry at the newest exe path. A fresh install gets a new entry with the first
+  icon Windows sees, the Sunrise: inferred from "First add lands in the overflow" above (the snapshot is written at
+  the first `NIM_ADD`), not checked on another PC. **Verified** for this laptop (registry read, PNG saved and seen).
+- **The balloon header's white square.** Started from the Start menu, the tray carries the shortcut's
+  AppUserModelID `velopack.HaikAsatryan.Wakeshot` (Velopack sets it on the `.lnk`; read as `System.AppUserModel.ID`).
+  Windows filed the session's 14 balloons under it (`HKCU\...\Notifications\Settings\velopack.HaikAsatryan.Wakeshot`:
+  `PeriodicNotificationCount` 14, last added 01:33:03, the Restore notice), not under the shell's own
+  `NotifyIconGeneratedAumid_2334163346184210159` (no such key, no such PNG in `%TEMP%`). There is no
+  `HKCU\Software\Classes\AppUserModelId\velopack.HaikAsatryan.Wakeshot` key, so no `IconUri`. The exe's icon is right:
+  violet plate and gold sun at 16 to 256 px (`PrivateExtractIconsW`). The header in Haik's photo is a plain white
+  rounded square, the plate's shape in one colour. Why Windows draws it so: **not verified**. With the generated id
+  (dry-run runs, above) the header showed the tray glyph PNG. A start from the Run value at sign-in has no shortcut,
+  so its balloons most likely use the generated id: inferred, not checked.
+- **Lid close and report (block 2).** Lid close 00:28:56.0: lock; chime audible 1.1 s later. Screen off at 00:29:27
+  (506 reason 12: the lock screen's display timeout, 31.5 s after the close). Lid open 00:31:28 (507 reason 15), so
+  closed 2 min 32 s, not the 90 s of the step. Report balloon 00:31:30.8. **Verified** (logs).
+- **Console left and back (block 3).** Switch user at 00:32:50.4: "Another session has the PC's screen", keys put
+  back; back at 00:33:18.9: keys applied again. **Verified** (log).
+- **The floor, lid open (block 4 steps 1 to 3).** `floor-on` at 00:34:42 (battery 91%, floor 99%); the tray stepped
+  back 2 s later with nothing held. Keep awake at 00:35:17.8: step back balloon at once, chime audible 1.1 s later.
+  Charger in at 00:35:40.43 (Kernel-Power 105): hold in force again 00:35:40.88. **Verified** (logs).
+- **The floor with the lid closed: Windows slept at once (block 4 step 4).** Lid close 00:36:47.8 (lock, chime).
+  Unplug 00:37:07.47. Step back 00:37:07.50; the user's lid actions (Sleep) and battery sleep written back at
+  00:37:08.49; during the plan re-apply (it returned at 00:37:08.88) Windows turned the screen off for the lid (506
+  reason 15, 00:37:08.80) and slept (566 to sleep, 00:37:08.89), 1.4 s after the unplug. Wakeshot's 5-minute
+  countdown started 5 ms before the suspend and was cancelled at the lid open: no sleep check, no sound, no 1-minute
+  timeouts. The floor chime's audio call was cut by the suspend (WARN `GetCurrentPadding` failed with 1460 at
+  resume). Asleep 10 min 42 s, disconnected standby, 140 mWh used. Lid open 00:47:50 (507 reason 15); the step back
+  balloon and the report ("less than a minute", text from `text.rs`) at 00:47:52. Haik: "after 5 min I did not hear
+  the sleep sound, but I think it slept". Phase 0 test E ("Screen off is not suspend", above) put the lid action back
+  with the lid closed and the PC did not sleep; there no power source change came with it. Which of the two made
+  Windows act here, the re-apply or the AC loss 1 s before it (an AC to DC switch with the lid closed,
+  `research/rivals-others.md` trap 12): **not verified**. The order of events: **verified** (logs).
+- **A dock drop under the floor (block 4 step 6).** Dock in 00:49:37.83, hold again 00:49:38.45. Pull and replug
+  "within 2 s": AC gone from 00:50:01.89 to 00:50:11.55, 9.65 s. Step back 23 ms after the loss, chime audible 1.4 s
+  after it, step back balloon at 00:50:03.76. AC back: hold in force again at 00:50:12.63, no sound, no balloon, and
+  the step back balloon is not taken away. Haik's photo (taskbar clock 12:50) shows that balloon on the external
+  screen with the battery charging at 92% and the pointer resting on it. It was the only balloon sent in that minute,
+  so no queue of late balloons. That Windows keeps a banner up while the pointer is on it: common behaviour, **not
+  verified** in Microsoft docs. The dock's AC drops this night lasted 4.3, 4.4, 4.5, 4.7 and 9.65 s (Kernel-Power 105
+  pairs) for pulls of about 2 s; only the 9.65 s one came with the floor on and the lid open. **Verified** (logs).
+- **Work end with the lid closed (block 5, AC).** `ping -n 91`; lid close 00:54:59.9 (a first try from 00:54:12 was
+  stopped with Ctrl+C at 00:54:50); screen off 00:55:31.4 (506 reason 12, 31.5 s after the close); work end
+  00:56:24.6; countdown due 00:59:53.7 ("300 s without input": it counts from the last input, here 3.5 min after the
+  work end); sound 00:59:55.5 (Haik heard it); 1-minute timeouts written 00:59:55.6; Windows slept 01:00:13.6, 18 s
+  later; lid open 01:12:20.8 (asleep 12 min 7 s); timeouts back 01:12:22.3. No hibernate (no Kernel-Power 42, no
+  `SetSuspendState`). `values.cmd` 01:12:50: both plans hold their own values. **Verified** (logs).
+- **The dim timeout played no part.** In blocks 2 and 5 the screen went off 31.5 s after the lid close at the lock
+  screen's own display timeout (506 reason 12), before any 1-minute timeout; in block 4 Windows slept at once.
+  **Verified** for these runs.
+- **Dock lid cases (block 6 steps 1 and 2).** The own AC lid action Do nothing (`dock-on` 01:19:16): Keep awake wrote
+  only lidDc and sleepDc, the lid close gave no chime and no lock; dock pulled 01:21:25.4, lock and chime at
+  01:21:55.4, 30 s later. Signed in on the external screen: lid close 01:23:50.3 lock and chime; a pull of 4.7 s
+  (01:25:38.3 to 01:25:43.0) gave nothing; a pull left out (01:26:00.2) gave lock and chime at 01:26:30.2.
+  **Verified** (logs).
+- **Typing on the external screen (block 6 step 3).** `ping -n 61`; lid close 01:27:26.3; work end 01:28:21.7; lid
+  open 01:32:17.0 cancelled the countdown. Open again 4 min 51 s after the close, before 5 minutes without input could
+  have passed even with no typing (due about 01:32:21 to 01:32:26). So no sleep came, but this run does not show that
+  typing holds the sleep off. **Verified** (log).
+- **Restore and Quit (block 7).** Restore my power settings at 01:33:03.2: keys back, still holding by request.
+  Quit 01:33:18.4: no journal left, exit 0. `values.cmd` 01:33:28: both plans their own values. **Verified** (log).
+- **The real Startup switch writes `01` and `00`, not `03` and `02`.** Settings > Apps > Startup, off at 01:34:04:
+  `StartupApproved\Run\Wakeshot` = `01-00-00-00-9D-AA-39-37-A4-6C-DD-01` (state 1, then the FILETIME of the change);
+  on again: 12 zero bytes (read 01:56). "Where Windows keeps the switch" above names `03` and `02`, from web sources
+  and a script. Windows honoured `01`: no tray started at the 01:38:35 sign-in (no log line after the 01:33:18 quit,
+  no process at 01:43). Build 26300. **Verified** (registry reads, tray log, Winlogon 7001 and 7002).
+- **Teardown.** `undo-part-a.ps1` at Medium, 01:56:37 to 01:56:43: uninstall exit 0, Balanced active, copy deleted.
+  AFTER equals BEFORE on every field but the icon entry's `IsPromoted` = 1 (Haik's own block 1 choice). Windows'
+  `Notifications\Settings\velopack.HaikAsatryan.Wakeshot` key stays after the uninstall, like `NotifyIconSettings`.
+  **Verified** (`state.ps1` reads compared field by field).
