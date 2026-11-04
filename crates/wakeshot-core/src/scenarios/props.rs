@@ -1969,6 +1969,59 @@ fn a_damaged_journal_met_as_a_hold_starts_over_the_one_minute_timeouts_ends_at_t
     check(&world, every_action_is_explained);
 }
 
+// `p2-6-reset-gaps`: two rare paths `p2-6-props-flake` found by reading the core.
+
+/// Each hold key of Balanced, as in force and who set it.
+fn hold_keys_in_force(world: &World) -> Vec<(SettingKey, Option<u32>, Option<SetBy>)> {
+    let state = world.plans().state();
+    KEYS.iter()
+        .map(|&key| {
+            (
+                key,
+                state.in_force(sim::BALANCED, key),
+                state.in_force_by(sim::BALANCED, key),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn a_lost_journals_reset_over_a_running_holds_values_applies_the_hold_again() {
+    // Gap A: `journal.json` did not read at start, so the reset goes out 2 minutes later. The hold's apply ran before
+    // it and wrote its values, its answer late; then the reset's own load fails, so it writes the defaults over the
+    // hold's values and sets the file aside, by design (rule 7). The hold still runs and must hold its values again.
+    let start = WorldStart {
+        startup_unread: true,
+        keep_up: false,
+        ..WorldStart::default()
+    };
+    let mut world = World::new(&start);
+    world.play(&WorldStep::Agent {
+        pid: 1,
+        now: AgentNow::Working,
+    });
+    world.play(&WorldStep::Io);
+    world.play(&WorldStep::IoLate);
+    world.play(&WorldStep::Run(2 * MINUTE + SECOND));
+    world.play(&WorldStep::Fault {
+        on: FaultOn::Restore,
+        at: 0,
+        code: 32,
+    });
+    world.play(&WorldStep::Flush);
+    world.play(&WorldStep::Run(MINUTE));
+    world.play(&WorldStep::Flush);
+    let held = KEYS
+        .iter()
+        .map(|&key| (key, Some(0), Some(SetBy::Override)))
+        .collect::<Vec<_>>();
+    assert_eq!(hold_keys_in_force(&world), held, "{}", world.trace());
+    world.end(End::LastHold);
+    check(&world, restored_at_the_end);
+    check(&world, released_keys_are_not_ours_in_force);
+    check(&world, every_action_is_explained);
+}
+
 proptest! {
     // A regression file would be a file outside this card; a shrunk case that finds a bug becomes a named test.
     #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]

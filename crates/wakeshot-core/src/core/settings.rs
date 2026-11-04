@@ -224,7 +224,8 @@ impl Core {
     /// What a restore retry takes now. While the core applies, only the entries on other plans, one restore per
     /// plan: the hold's apply takes over the active plan's entries, or restores those whose key is released (track
     /// note 3), so a retry never undoes a running hold (power verify minor 4). Otherwise every entry, so after a
-    /// failed apply it does not wait for an apply that never comes.
+    /// failed apply it does not wait for an apply that never comes; the countdown's short timeouts go too, and out
+    /// again once it worked ([`Core::rewrite_short`]).
     fn restore_scope(&self) -> Vec<Option<Guid>> {
         match self.state.plan.filter(|_| self.applies()) {
             Some(PlanValues { active, .. }) => {
@@ -310,8 +311,9 @@ impl Core {
     /// A key just released may still be ours somewhere: an apply on its way writes it (a plan switch's read posts
     /// `Plan` before its check's `UserChanged`), or another plan's entry holds it (`p2-core-props` finding 1). The next
     /// apply leaves the key out and restores this plan's entry for it (track note 3); with every key released no apply
-    /// comes, so a restore takes them back. The sleep route's apply races the same way (`p2-6-props-flake`): the
-    /// switch's, or one sent while the user's change waited for its check, and it runs while no hold applies.
+    /// comes, so a restore takes them back, and with them the short timeouts, which go out again once it worked
+    /// ([`Core::rewrite_short`]). The sleep route's apply races the same way (`p2-6-props-flake`): the switch's, or one
+    /// sent while the user's change waited for its check, and it runs while no hold applies.
     fn take_back(&mut self, key: SettingKey, out: &mut Vec<Command>) {
         let ours =
             !self.state.applying.is_empty() || self.state.journal.iter().any(|e| e.key == key);
@@ -347,7 +349,8 @@ impl Core {
     /// before. Otherwise the journal is known and empty, whatever the result: a reset that failed leaves values only
     /// the user can tell apart, and the notice says so; with the lid closed since the window it also locks
     /// ([`Core::lost_reset_failed`]). One notice when anything was reset or a call failed; nothing reset is the log's
-    /// only. A read follows, since the plan copy still shows the values from before.
+    /// only. A running hold and the countdown's short timeouts apply again, since the reset may have taken their values
+    /// too. A read follows, since the plan copy still shows the values from before.
     ///
     /// Entries after a damaged file went aside are this tray's own apply, when this tray owns the settings: nothing
     /// else writes entries, and only the owner applies. It ran between the set-aside and this reset (the IO queue had
@@ -410,6 +413,14 @@ impl Core {
             if result.is_err() {
                 self.lost_reset_failed(now, out);
             }
+            // Its own load may fail right after a running hold's apply wrote, and then it puts the hold's values to the
+            // defaults too (`p2-6-reset-gaps`, gap A): what a hold or the countdown still wants applies again. An
+            // apply finds nothing to write where nothing was reset; settle drops the hold's when the core does not
+            // apply. One still out was sent after this reset, since answers come in order, so it writes already.
+            if !self.state.applying.iter().any(|a| !a.short) {
+                self.want_apply();
+            }
+            self.rewrite_short(out);
         } else {
             out.push(Command::Log(format!(
                 "Journal reset not needed: journal.json reads now, with {} entries",
@@ -609,6 +620,12 @@ impl Core {
         }
         if why == RestoreWhy::UserAsked && std::mem::take(&mut self.state.restore_request) {
             self.state.finish_restore_request = true;
+        }
+        // A retry, or the take back of a released hold key, takes every plan's entries, the short timeouts' too
+        // (`p2-6-reset-gaps`, gap B). A plan switch's restore of one plan goes out before their apply to the new plan,
+        // which is then still out. The user's own restore wins.
+        if result.is_ok() && why != RestoreWhy::UserAsked {
+            self.rewrite_short(out);
         }
     }
 }

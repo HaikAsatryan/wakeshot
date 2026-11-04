@@ -494,6 +494,8 @@ in force), in that order on the IO queue; once only, so a second find keeps the 
 The bad file goes aside afterwards (a failed move is logged, nothing more), and the executor marks it seen, so the next
 start does not reset again. The log has a line per key with its old and new value, or why it stayed. The answer makes
 the journal known and empty, also when a call failed; then a read goes out, since the plan copy shows the old values.
+A running hold and the short timeouts apply again: a reset whose own load failed right after their apply wrote put
+their values to the defaults too; an apply still out runs after the reset, so none goes out twice (`p2-6-reset-gaps`).
 One `JournalLost` notice when a key was reset or a call failed, kept for the user's return like `HibernateFailed`;
 nothing reset is the log's only. A reset whose answer never comes goes out again two minutes later. Only the plan in
 use is reset: a lost journal's values on another plan stay (rare: a crash after a plan switch whose restore failed,
@@ -532,7 +534,10 @@ the step back after a failed lock:
    minutes again), the lid open, a hold start (before its apply, which also takes battery sleep over), the countdown's
    end (AC back for Floor, a pause, a resumed hibernate) and every other restore point (quit, sign-out, next start,
    uninstall, guard). Not at a wake alone: a laptop that wakes with the lid closed sleeps again. A user's change to a
-   short key is released as a hold's is. A plan switch moves them to the new plan.
+   short key is released as a hold's is. A plan switch moves them to the new plan. A restore of every plan meant for
+   other entries (a retry, the take back of a released hold key) takes them too: once it worked, they go out again
+   while the countdown wants them, unless their apply is still out; not after the user's own restore
+   (`p2-6-reset-gaps`).
 
 While the lid stays closed after a hibernate that did not happen, the core locks the laptop, `Lock` with
 `Play(LidClosedHolding)`, at an input reading 5 minutes idle with the session unlocked and on the PC's screen, at most

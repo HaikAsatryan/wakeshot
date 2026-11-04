@@ -1225,6 +1225,28 @@ fn a_damaged_files_reset_that_finds_this_trays_own_apply_redoes_it_once() {
 }
 
 #[test]
+fn a_reset_that_answers_before_the_apply_behind_it_sends_no_second_apply() {
+    // `p2-6-reset-gaps`: a reset with no entries asks a running hold to apply again, since its own load may have failed
+    // right after the hold's apply wrote. The damaged file's second reset answers while the apply the first one sent
+    // behind it is still out: that apply runs after it, so none goes out again.
+    let mut sim = holding();
+    sim.send(Event::JournalCorrupt);
+    sim.send(Event::Done(Outcome::ResetLost {
+        reset: vec![],
+        result: Ok(()),
+        journal: entries(BALANCED, &KEYS),
+    }));
+    sim.send(restored(None, RestoreWhy::WorkEnded, Ok(()), vec![]));
+    let out = sim.send(sim::reset_done(&KEYS, Ok(())));
+    let trace = sim.trace();
+    assert!(
+        !out.iter().any(|c| matches!(c, Command::Apply { .. })),
+        "{trace}"
+    );
+    assert_eq!(count(&out, &Command::ReadPlan), 1, "{trace}");
+}
+
+#[test]
 fn a_reset_that_finds_the_journal_readable_keeps_the_retry() {
     let mut sim = unread_at_start();
     run_failing(&mut sim, LOST);

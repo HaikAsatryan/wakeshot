@@ -4177,3 +4177,22 @@ test on a throwaway plan copy that was never active.
   reset key `Default` (`FakeState::mark_reset`). **Verified** (seeds 29 and 33; named test).
 - **After both fixes: seeds 1 to 100 at 4096 cases, 100 passed; the whole core test binary at 4096 cases, 3 of 3
   passed** (random seeds, 4 threads, about 26 s each). **Verified** (the runs).
+
+## Two rare core gaps next to the release property fix
+
+`p2-6-reset-gaps`, 2026-11-04 14:47 to 15:20, scenarios over the core: `sim::World` for gap A, hand-fed `Sim` for the
+rest; each fails on the code before the card and passes now.
+
+- **Gap A is real: a lost journal's reset whose own load fails right after a running hold's apply wrote puts the
+  hold's values to the defaults, and nothing applied them again.** World: journal unread at start, a hold whose apply
+  answers late, the reset at 120 s with its load failing: lid Sleep and battery sleep 180 s in force while the agent
+  still works, and still 60 s later. Now the reset's answer with no entries asks for the hold's apply and the short
+  timeouts again; an apply still out runs after the reset, so none goes out twice. **Verified** (the scenarios).
+- **Gap B is real, and the tick's restore retry has the same shape:** a restore of every plan sent while the
+  countdown's 1-minute timeouts are on takes them too, and nothing wrote them again: no idle sleep, the fallback
+  hibernate 5 minutes after the write. Both need a failed restore whose retries keep failing through the 5 minutes of
+  the countdown. Now a restore that worked (not the user's own), with the short timeouts wanted and no short apply out,
+  writes them again. **Verified** (the scenarios).
+- **The core tests at 4096 random cases failed in 3 of 6 runs on three other properties**, each shrunk case failing
+  the same with this card's change taken out (the card's "Found outside scope" 2 and 3). The release property alone,
+  seeds 1 to 100 at 4096: 100 passed. **Verified** (the runs).

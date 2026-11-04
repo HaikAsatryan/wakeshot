@@ -2481,6 +2481,176 @@ fn every_short_key_released_while_a_short_apply_is_on_its_way_restores() {
         !out.iter().any(|c| matches!(c, Command::Apply { .. })),
         "{trace}"
     );
+
+    // All answered in order (the first apply, then one per key until the last): nothing is left to write again.
+    let mut out = Vec::new();
+    for _ in 0..SettingKey::SHORT.len() {
+        out.extend(sim.send(applied(BALANCED, Ok(()), vec![])));
+    }
+    out.extend(sim.send(restored(None, RestoreWhy::ShortTimeouts, Ok(()), vec![])));
+    assert!(
+        !out.iter().any(|c| matches!(c, Command::Apply { .. })),
+        "{}",
+        sim.trace()
+    );
+}
+
+#[test]
+fn a_hold_key_released_while_the_floor_short_apply_is_out_keeps_the_short_timeouts() {
+    // `p2-6-reset-gaps`, gap B: the floor step back's restore failed and its retries keep failing, so the hold's
+    // entries stay. The user takes back the AC lid action and battery sleep, then, while the countdown's short apply is
+    // out, the battery lid action. Every hold key is the user's now, so a restore takes back what Wakeshot may still
+    // hold, which takes the short timeouts too. The countdown still wants them: without them Windows' idle sleep never
+    // comes, and the fallback hibernates.
+    let mut sim = holding(false);
+    sim.send(lid(true));
+    sim.send(session(SessionChange::Locked));
+    sim.send(power(false, 19));
+    sim.send(restored(
+        None,
+        RestoreWhy::Floor,
+        Err(RESTORE_FAILED),
+        entries(BALANCED, &KEYS),
+    ));
+    for key in [SettingKey::LidAc, SettingKey::SleepDc] {
+        sim.send(Event::UserChanged(OwnedKey {
+            plan: BALANCED,
+            key,
+        }));
+    }
+    sim.run_failing_restores(IDLE_MS + MINUTE, RESTORE_FAILED);
+    let short = short_apply_without(&[SettingKey::SleepDc]);
+    let out = sim.send(checked(Ok(())));
+    assert_eq!(count(&out, &short), 1, "{}", sim.trace());
+    let out = sim.send(Event::UserChanged(OwnedKey {
+        plan: BALANCED,
+        key: SettingKey::LidDc,
+    }));
+    let every = Command::Restore {
+        plan: None,
+        why: RestoreWhy::WorkEnded,
+    };
+    assert_eq!(count(&out, &every), 1, "{}", sim.trace());
+
+    // In order: the short apply, then the restore, which takes them back.
+    let mut left = short_entries(BALANCED);
+    left.retain(|e| e.key != SettingKey::SleepDc);
+    sim.send(applied(BALANCED, Ok(()), left));
+    let out = sim.send(restored(None, RestoreWhy::WorkEnded, Ok(()), vec![]));
+    let trace = sim.trace();
+    assert_eq!(count(&out, &short), 1, "{trace}");
+    assert_eq!(count(&out, &SHORT_BACK), 0, "{trace}");
+}
+
+#[test]
+fn a_restore_retry_that_works_while_the_short_timeouts_are_on_writes_them_again() {
+    // `p2-6-reset-gaps`, the same shape as gap B: the work end's restore failed and its retries failed until the
+    // countdown wrote the short timeouts. The next retry takes every entry, theirs too.
+    let failed_work_end = || {
+        let mut sim = holding(false);
+        sim.send(lid(true));
+        sim.send(session(SessionChange::Locked));
+        sim.send(idle(1));
+        sim.send(restored(
+            None,
+            RestoreWhy::WorkEnded,
+            Err(RESTORE_FAILED),
+            entries(BALANCED, &KEYS),
+        ));
+        sim
+    };
+    let mut sim = failed_work_end();
+    sim.run_failing_restores(IDLE_MS + MINUTE, RESTORE_FAILED);
+    short_written(&mut sim);
+    let retry = Command::Restore {
+        plan: None,
+        why: RestoreWhy::WorkEnded,
+    };
+    let sent = sim.run(SAFETY_TICK_MS);
+    assert!(count(&sent, &retry) >= 2, "{}", sim.trace());
+    // One that fails took nothing, or not all: the next decides.
+    let out = sim.send(restored(
+        None,
+        RestoreWhy::WorkEnded,
+        Err(RESTORE_FAILED),
+        vec![],
+    ));
+    assert!(
+        !out.iter().any(|c| matches!(c, Command::Apply { .. })),
+        "{}",
+        sim.trace()
+    );
+    let mut out = Vec::new();
+    for _ in 1..count(&sent, &retry) {
+        out.extend(sim.send(restored(None, RestoreWhy::WorkEnded, Ok(()), vec![])));
+    }
+    assert_eq!(count(&out, &short_apply()), 1, "{}", sim.trace());
+
+    // The user's own restore wins: nothing goes out again after it.
+    sim.send(applied(BALANCED, Ok(()), short_entries(BALANCED)));
+    sim.send(Event::Menu(MenuCommand::Restore));
+    let out = sim.send(restored(None, RestoreWhy::UserAsked, Ok(()), vec![]));
+    let trace = sim.trace();
+    assert!(
+        !out.iter().any(|c| matches!(c, Command::Apply { .. })),
+        "{trace}"
+    );
+
+    // A retry sent before the short apply runs before it: the apply writes them, and no second one goes out.
+    let mut sim = failed_work_end();
+    sim.run_failing_restores(IDLE_MS - SAFETY_TICK_MS, RESTORE_FAILED);
+    let sent = sim.run(MINUTE);
+    assert_eq!(sleep_checks(&sent).len(), 1, "{}", sim.trace());
+    let out = sim.send(checked(Ok(())));
+    assert_eq!(count(&out, &short_apply()), 1, "{}", sim.trace());
+    let mut out = Vec::new();
+    for _ in 0..count(&sent, &retry) {
+        out.extend(sim.send(restored(None, RestoreWhy::WorkEnded, Ok(()), vec![])));
+    }
+    out.extend(sim.send(applied(BALANCED, Ok(()), short_entries(BALANCED))));
+    let trace = sim.trace();
+    assert!(count(&sent, &retry) >= 1, "{trace}");
+    assert!(
+        !out.iter()
+            .any(|c| matches!(c, Command::Apply { .. } | Command::Restore { .. })),
+        "{trace}"
+    );
+}
+
+#[test]
+fn a_lost_journals_reset_over_the_short_timeouts_writes_them_again() {
+    // `p2-6-reset-gaps`, gap A for the sleep route: the short timeouts move to a new plan, and the old plan's restore
+    // fails to load the journal before any of their applies answered, so the journal is unknown. The reset goes out 2
+    // minutes later, behind the new plan's apply, and its own load fails, so it puts them to the defaults too.
+    let mut sim = work_ended_closed(true);
+    sim.run(IDLE_MS + MINUTE);
+    let out = sim.send(checked(Ok(())));
+    assert_eq!(count(&out, &short_apply()), 1, "{}", sim.trace());
+    sim.send(read(plan(sim::OTHER_PLAN)));
+    sim.send(applied(BALANCED, Err(ApplyError::PlanChanged), vec![]));
+    sim.send(restored(
+        Some(BALANCED),
+        RestoreWhy::PlanSwitch,
+        Err(RESTORE_FAILED),
+        vec![],
+    ));
+    let out = sim.run_failing_restores(2 * MINUTE + 5 * SECOND, RESTORE_FAILED);
+    let reset = Command::ResetLost { damaged: false };
+    assert_eq!(count(&out, &reset), 1, "{}", sim.trace());
+    sim.send(applied(
+        sim::OTHER_PLAN,
+        Ok(()),
+        short_entries(sim::OTHER_PLAN),
+    ));
+    let out = sim.send(reset_done(&SettingKey::SHORT, Ok(())));
+    let again = Command::Apply {
+        plan: sim::OTHER_PLAN,
+        writes: SettingKey::SHORT
+            .iter()
+            .map(|&k| (k, crate::settings::SHORT_TIMEOUT_S))
+            .collect(),
+    };
+    assert_eq!(count(&out, &again), 1, "{}", sim.trace());
 }
 
 #[test]

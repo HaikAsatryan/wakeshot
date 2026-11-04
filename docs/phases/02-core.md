@@ -142,6 +142,7 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | `p2-6-sleep-route` | no (Haik's rule of 2026-11-04; his lid test is in `p6-int-haik-checks`) | `p2-6-record-lost`, `p3-idle-sleep-check` | done (12:16: 1340 workspace tests; 13 of 13 mutants killed; 17 worker decisions) |
 | `p2-6-sleep-route-fixes` | no | `p2-6-sleep-route` | done (13:49: 1355 workspace tests; 13 of 13 mutants killed; 10 worker decisions) |
 | `p2-6-props-flake` | no | `p2-6-sleep-route-fixes` | done (14:45: a core bug and a test world fix; seeds 1 to 100 pass at 4096 cases; 6 of 6 mutants killed) |
+| `p2-6-reset-gaps` | no | `p2-6-props-flake` | done (15:20: both gaps real and fixed; 671 core tests; 10 of 10 hand mutants killed) |
 
 No card touches the real laptop (no power settings, screen, sound or installs) or needs Haik's hands. "Contracts
 card": the one card the orchestrator runs alone before the track builds.
@@ -362,3 +363,10 @@ Where each item this track owns is built. "Integration" is planned after the tra
   goes out again without it (also in a work-end countdown). Cause 2: the sim labeled a lost journal's reset default
   as ours. Three named tests, two lid scenarios. Two rare gaps inferred by the worker (not verified) and a stale
   comment go to the small card `p2-6-reset-gaps`.
+- 2026-11-04 15:22 (orchestrator `wakeshot-27`): `p2-6-reset-gaps` done; both gaps real. A: a lost journal's reset
+  whose own load fails after a hold's apply left the hold on Windows defaults; the reset's empty answer now asks for
+  the apply and the short timeouts again. B: a restore of every plan (a take back, or the tick's retry) also took the
+  countdown's short timeouts; after a restore that works (not the user's own) they are written again
+  (`rewrite_short`; worker decision, for Haik's review). Found: a product question (the menu restore during a
+  work-end countdown) and three more rare props failures not from this card (3 of 6 core runs at 4096 cases):
+  next card `p2-6-props-rare`.

@@ -558,6 +558,25 @@ impl Core {
         }
     }
 
+    /// A restore of every plan (a retry, or the take back of a released hold key) or a lost journal's reset put the
+    /// short timeouts back while the countdown still wants them, or Windows' idle sleep never comes and only the
+    /// fallback hibernates (`p2-6-reset-gaps`): they go out again, less the keys the user took back. A short apply
+    /// still out was sent after that run, since answers come in order, so it writes them already.
+    pub(super) fn rewrite_short(&mut self, out: &mut Vec<Command>) {
+        let out_already = self.state.applying.iter().any(|a| a.short);
+        if self.state.short.is_none() || out_already || !self.can_write_short() {
+            return;
+        }
+        if let Some(plan) = self.state.plan.map(|p| p.active) {
+            out.push(Command::Log(
+                "The 1-minute timeouts went back with a restore or a reset while the countdown still wants them: \
+                 again"
+                    .to_owned(),
+            ));
+            self.send_short(plan, out);
+        }
+    }
+
     /// The sleep check passed: the short timeouts, with the fallback 5 minutes on. One that cannot be written (the
     /// check took seconds, and the facts may have changed) leaves the fallback due at once.
     fn write_short(&mut self, now: Now, out: &mut Vec<Command>) {

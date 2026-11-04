@@ -32,7 +32,8 @@ pub const FAKE_DEFAULT_LID: u32 = 1;
 pub const FAKE_DEFAULT_SLEEP_DC: u32 = 180;
 
 /// `read_default` of the other timeouts (AC sleep, screen off) on a plan with no entry in `FakeState::defaults`: the
-/// fake's own choice, 5 minutes; no routine reads them today, since a lost journal resets only the hold keys.
+/// fake's own choice, 5 minutes. The reset of a lost journal reads them for a key at the sleep route's 1 minute, since
+/// it covers all six keys (`p2-6-sleep-route-fixes`).
 pub const FAKE_DEFAULT_OTHER: u32 = 300;
 
 /// A new fake plan's screen-off timeouts, AC then DC, which `PlanValues` does not carry: the fake's own choice, longer
