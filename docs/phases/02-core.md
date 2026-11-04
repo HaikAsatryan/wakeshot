@@ -137,7 +137,7 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | `p2-core-props` | no | `p2-core-lid`, `p2-ownership-apply` | done (23:29): 13 properties at 10,000 cases; two findings kept as ignored tests |
 | `p2-6-unread-journal` | no | core round B (Log in `p2-core-settings`); runs alone among cards that build | done (committed 02:51): findings 3 and 6, the newer `config.json` write check; 1256 workspace tests |
 | `p2-6-unread-lid-countdown` | no | `p6-int-wiring-fixes` | done (05:28: 3 new scenarios, `startup_unread` drawn in the props, 22 props at 4096 cases 3 of 3) |
-| `p2-6-unread-floor-countdown` | no | `p2-6-unread-lid-countdown` | in progress (started 05:29) |
+| `p2-6-unread-floor-countdown` | no | `p2-6-unread-lid-countdown` | done (05:58: 4 new scenarios; 1284 workspace tests; 8 of 10 mutants caught) |
 
 No card touches the real laptop (no power settings, screen, sound or installs) or needs Haik's hands. "Contracts
 card": the one card the orchestrator runs alone before the track builds.
@@ -302,3 +302,12 @@ Where each item this track owns is built. "Integration" is planned after the tra
   the flaky property that `p2-6-unread-lid-countdown` found (6 of 60 local runs) and fixed in 2181c12 (not pushed then).
   Pushed 2181c12 to check it in CI.
 - 2026-11-04 05:35: CI green on abd3061 (with the property fix 2181c12), all three jobs.
+- 2026-11-04 05:58: `p2-6-unread-floor-countdown` done: the `Floor` countdown waits while the journal is unknown, the
+  same shape as the work-end fix (`floor_countdown_waited`); with the user's own battery Do nothing none starts.
+  `state.rs` doc lines only; one paragraph in `architecture.md` section 3. The empty-copy retry stays at the 30 s
+  tick (it moves a hibernate by at most 20 s, only while the journal stays unreadable). Mutants with a 4 GB cap: 8 of
+  10 caught, one stopped at the cap, M10 survives (the `may_own()` wait, older than this card). For Haik's review:
+  a journal that stays unreadable keeps both countdowns waiting (the same trade-off as `p6-int-wiring-fixes`
+  decision 7); before the first plan read a step back with the lid closed and nothing owned never counts down,
+  after it it does (orchestrator default: leave it; with nothing owned the user's own lid action was in force at
+  the close, so Windows already acted on it).

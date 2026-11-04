@@ -293,7 +293,7 @@ pub(crate) struct WorkEnd {
 
 /// The lid side's memory (`core::lid`): a closed-lid lock until the session reports it, the step back when it never
 /// does, the lock after a hibernate that did not happen, the notices kept for the user's return, the countdown rules
-/// that wait for the first plan read, and the journal copy the last settle pass saw.
+/// that wait for a plan read that tells the user's own lid action, and the journal copy the last settle pass saw.
 #[derive(Debug, Default)]
 pub(crate) struct LockWatch {
     /// A closed-lid `Lock` the session has not confirmed with `Session(Locked)` yet.
@@ -307,9 +307,13 @@ pub(crate) struct LockWatch {
     pub relock: Option<u64>,
     /// Notices a closed laptop showed on a screen nobody may look at: they go out again with the closed-lid report.
     pub kept: Vec<Notice>,
-    /// Work ended with the lid closed before the first plan read, on these power sources: the read decides.
+    /// Work ended with the lid closed while the user's own lid action was not known (no plan read yet, or the journal
+    /// unknown), on these power sources: it starts the countdown once a read shows their own action as not Do nothing
+    /// (`core::lid::work_end_waited`).
     pub work_end_waits: Option<&'static [bool]>,
-    /// A step back met the lid closed before the first plan read: the read decides the `Floor` countdown.
+    /// A step back met the lid closed while the user's own battery lid action was not known (no plan read yet, or the
+    /// journal unknown): it starts the `Floor` countdown once a read shows their own action as not Do nothing
+    /// (`core::lid::floor_countdown_waited`).
     pub floor_waits: bool,
     /// The journal copy as the last settle pass ended, so the next one sees which entries a restore took away.
     pub journal_seen: Vec<JournalEntry>,

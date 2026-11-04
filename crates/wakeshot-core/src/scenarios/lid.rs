@@ -609,15 +609,11 @@ fn closed_on_an_unread_do_nothing(sim: &mut Sim) -> Now {
     at
 }
 
-/// The first `Hibernate` came at `IDLE_MS` after `at`, for work that ended.
-fn hibernated_after_idle(sim: &Sim, at: Now) {
+/// The one `Hibernate` came at `IDLE_MS` after `at`, for `reason`.
+fn hibernated_after_idle(sim: &Sim, at: Now, reason: CountdownReason) {
     let trace = sim.trace();
     assert_eq!(hibernate_times(sim, at), [i128::from(IDLE_MS)], "{trace}");
-    assert_eq!(
-        hibernates(&all(sim)),
-        [&hibernate(CountdownReason::WorkEnded, None)],
-        "{trace}"
-    );
+    assert_eq!(hibernates(&all(sim)), [&hibernate(reason, None)], "{trace}");
 }
 
 #[test]
@@ -643,7 +639,7 @@ fn with_an_unread_journal_a_closed_lid_counts_down_once_the_retry_puts_the_users
     sim.send(power(false, 79));
     sim.send(read(plan(BALANCED)));
     sim.run(IDLE_MS);
-    hibernated_after_idle(&sim, at);
+    hibernated_after_idle(&sim, at, CountdownReason::WorkEnded);
 
     // The lid closed before any plan read: that read, taken after the restore, decides as well.
     let mut sim = Sim::new();
@@ -657,7 +653,7 @@ fn with_an_unread_journal_a_closed_lid_counts_down_once_the_retry_puts_the_users
     sim.send(restored(None, RestoreWhy::Leftover, Ok(()), vec![]));
     sim.send(read(plan(BALANCED)));
     sim.run(IDLE_MS + MINUTE);
-    hibernated_after_idle(&sim, at);
+    hibernated_after_idle(&sim, at, CountdownReason::WorkEnded);
 }
 
 #[test]
@@ -677,7 +673,7 @@ fn with_an_unread_journal_the_countdown_waits_through_failed_retries() {
     sim.send(restored(None, RestoreWhy::Leftover, Ok(()), vec![]));
     sim.send(read(plan(BALANCED)));
     sim.run(IDLE_MS);
-    hibernated_after_idle(&sim, at);
+    hibernated_after_idle(&sim, at, CountdownReason::WorkEnded);
 }
 
 #[test]
@@ -698,6 +694,123 @@ fn with_an_unread_journal_the_users_own_do_nothing_gives_no_countdown() {
     let mut out = sim.send(read(plan(BALANCED)));
     out.extend(sim.run(20 * MINUTE));
     assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+}
+
+// `p2-6-unread-lid-countdown` Found outside scope 2: the same for a step back with the lid closed. Once a restore puts
+// the user's own Sleep back, the closed laptop on battery under the floor must count down as with a journal that read;
+// with their own battery Do nothing it must not (power safety review finding 7).
+
+/// An unread journal, on battery under the floor, a plan read with Do nothing on battery, the tray's first lid reading
+/// closed, then a hold counts: the step back, and its restore goes out. Gives the time of the last input.
+fn stepped_back_closed_on_an_unread_do_nothing(sim: &mut Sim) -> Now {
+    sim.send(unread_start());
+    sim.send(power(false, 19));
+    sim.send(read(do_nothing_dc()));
+    sim.send(lid(true));
+    sim.input();
+    let at = sim.now();
+    let out = sim.send(working(1));
+    let restore = Command::Restore {
+        plan: None,
+        why: RestoreWhy::Floor,
+    };
+    assert_eq!(count(&out, &restore), 1, "{}", sim.trace());
+    assert_eq!(count(&out, &FLOOR_CHIME), 1, "{}", sim.trace());
+    at
+}
+
+#[test]
+fn with_an_unread_journal_a_closed_step_back_counts_down_once_the_users_sleep_is_back() {
+    // The step back's own restore reads the file; the plan copy shows the Do nothing until a later read. A loop timer
+    // and a battery reading come in between, and decide nothing.
+    let mut sim = Sim::new();
+    let at = stepped_back_closed_on_an_unread_do_nothing(&mut sim);
+    sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
+    sim.run(SECOND);
+    sim.send(power(false, 18));
+    sim.send(read(plan(BALANCED)));
+    sim.run(IDLE_MS);
+    hibernated_after_idle(&sim, at, CountdownReason::Floor);
+
+    // Resumed with the lid still closed: the countdown is done, and the want that waited does not start another.
+    sim.send(hibernated(HibernateEnd::Resumed));
+    sim.run(20 * MINUTE);
+    assert_eq!(hibernates(&all(&sim)).len(), 1, "{}", sim.trace());
+}
+
+#[test]
+fn with_an_unread_journal_a_close_after_the_step_back_counts_down_once_a_retry_works() {
+    // The step back's restore fails to load the file, so the lid close locks on the unread guess. A retry that fails
+    // again, and the reads in between, still tell nothing.
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(false, 19));
+    sim.send(read(do_nothing_dc()));
+    sim.send(lid(false));
+    sim.send(working(1));
+    sim.send(restored(
+        None,
+        RestoreWhy::Floor,
+        Err(RESTORE_FAILED),
+        vec![],
+    ));
+    sim.input();
+    let at = sim.now();
+    let out = sim.send(lid(true));
+    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+    sim.send(session(SessionChange::Locked));
+    sim.send(restored(
+        None,
+        RestoreWhy::Floor,
+        Err(RESTORE_FAILED),
+        vec![],
+    ));
+    sim.send(read(do_nothing_dc()));
+    let out = sim.run(MINUTE);
+    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
+    sim.send(read(plan(BALANCED)));
+    sim.run(IDLE_MS);
+    hibernated_after_idle(&sim, at, CountdownReason::Floor);
+}
+
+#[test]
+fn with_an_unread_journal_the_users_own_battery_do_nothing_gives_no_floor_countdown() {
+    // The read behind the restore shows the Do nothing again: the user's own, so the step back only lets go.
+    let mut sim = Sim::new();
+    stepped_back_closed_on_an_unread_do_nothing(&mut sim);
+    sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
+    let mut out = sim.send(read(do_nothing_dc()));
+    out.extend(sim.run(20 * MINUTE));
+    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+
+    // The lid opens: the waiting want ends as a countdown would. Closed again, nothing of ours keeps it running, so a
+    // Sleep the user sets later is Windows' to act on.
+    sim.send(lid(false));
+    let out = sim.send(lid(true));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    let mut out = sim.send(read(plan(BALANCED)));
+    out.extend(sim.run(20 * MINUTE));
+    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+}
+
+#[test]
+fn with_an_unread_journal_a_step_back_with_the_lid_open_wants_no_countdown() {
+    // The step back's restore has not landed, so the journal is still unknown, but the lid is open: no want. The close
+    // meets the user's own Sleep, which Windows acts on itself.
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(false, 19));
+    sim.send(read(plan(BALANCED)));
+    sim.send(lid(false));
+    let out = sim.send(working(1));
+    assert_eq!(count(&out, &FLOOR_CHIME), 1, "{}", sim.trace());
+    sim.input();
+    let mut out = sim.send(lid(true));
+    out.extend(sim.run(20 * MINUTE));
+    let trace = sim.trace();
+    assert_eq!(count(&out, &LOCK), 0, "{trace}");
+    assert!(hibernates(&out).is_empty(), "{trace}");
 }
 
 // Item 2: the power source changes with the lid closed.

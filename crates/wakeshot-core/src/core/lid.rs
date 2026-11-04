@@ -198,14 +198,28 @@ impl Core {
             })
     }
 
-    /// The `Floor` countdown at a step back with the lid closed. Before the first plan read the user's own battery lid
-    /// action is not known, yet a crashed tray's values from the `Started` journal may keep the laptop running: then the
-    /// read decides (power safety verify minor 3).
-    fn floor_countdown_wanted(&mut self) {
-        if self.floor_countdown_starts() {
+    /// The `Floor` countdown at a step back with the lid closed; gives whether it starts. It waits as a work end does
+    /// ([`Core::work_ended_on`]): before the first plan read the user's own battery lid action is not known, yet a
+    /// crashed tray's values from the `Started` journal may keep the laptop running (power safety verify minor 3); and
+    /// while the journal is unknown ([`Core::journal_unknown`]) a Do nothing in force may be a crashed tray's.
+    fn floor_countdown_wanted(&mut self) -> bool {
+        let starts = self.floor_countdown_starts();
+        if starts {
             self.state.floor_countdown = true;
-        } else if self.state.plan.is_none() && self.state.lid_closed == Some(true) && self.may_own()
+        } else if self.state.lid_closed == Some(true)
+            && self.may_own()
+            && (self.state.plan.is_none() || self.journal_unknown())
         {
+            self.state.lock.floor_waits = true;
+        }
+        starts
+    }
+
+    /// A `Floor` want that waited, at each settle pass once a plan read worked. For the reasons at work end
+    /// ([`Core::work_end_waited`]) a Do nothing ends nothing: the want stays until a read shows the user's own battery
+    /// lid action as not Do nothing, or AC or the lid opening ends it ([`Core::cancel_countdowns`]).
+    fn floor_countdown_waited(&mut self) {
+        if !self.floor_countdown_wanted() {
             self.state.lock.floor_waits = true;
         }
     }
@@ -425,14 +439,14 @@ impl Core {
         tick: bool,
         out: &mut Vec<Command>,
     ) -> Option<Deadline> {
-        // A plan read tells the user's own lid actions: the countdown rules that met the lid closed before it decide
-        // now, before the cancels below.
+        // A plan read tells the user's own lid actions: the countdown wants that wait for one decide at each pass once
+        // one worked, before the cancels below.
         if self.state.plan.is_some() {
             if let Some(sources) = self.state.lock.work_end_waits.take() {
                 self.work_end_waited(sources);
             }
             if std::mem::take(&mut self.state.lock.floor_waits) && self.state.stepped_back {
-                self.floor_countdown_wanted();
+                self.floor_countdown_waited();
             }
         }
         // Once per step back, at the first moment a hold counts in it: a step back with nothing held changes nothing.

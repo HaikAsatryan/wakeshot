@@ -334,12 +334,12 @@ plan copy behind the other way, showing what Wakeshot wrote until the next read 
 entry that left the mirror, whose key the copy still shows at `written`, puts its `original` back in the copy, and a
 later read replaces it (power safety review finding 5). Before the first plan read, a countdown rule that meets the lid
 closed while the `Started` journal holds entries (a crashed tray's values) waits for that read and decides on it
-(power safety verify minor 3). A work-end countdown also waits while the mirror may not know `journal.json` (it did
-not read at start, or a restore failed to load it, and no read of the file since): a Do nothing in force may be a
-crashed tray's, and once a restore puts the user's value back, the copy shows the Do nothing until a later read, since
-no mirror entry names the key. So a work-end countdown that waited takes no Do nothing as final: it starts once a read
-shows the user's own action for its power source as not Do nothing, and ends when the lid opens or a hold starts
-(`p2-6-unread-lid-countdown`).
+(power safety verify minor 3). A work-end or Floor countdown also waits while the mirror may not know `journal.json`
+(it did not read at start, or a restore failed to load it, and no read of the file since): a Do nothing in force may
+be a crashed tray's, and once a restore puts the user's value back, the copy shows the Do nothing until a later read,
+since no mirror entry names the key. So a countdown that waited takes no Do nothing as final: it starts once a read
+shows the user's own action for its power source (battery for Floor) as not Do nothing, and ends when the lid opens, a
+hold starts or, for Floor, AC comes back (`p2-6-unread-lid-countdown`, `p2-6-unread-floor-countdown`).
 
 ### Clocks
 
