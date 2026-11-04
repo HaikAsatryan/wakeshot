@@ -3553,3 +3553,65 @@ Checked 2026-11-04 04:22 to 04:25 for card `docs/tasks/p6-int-wiring-fixes.md`, 
   change under way, and the journal line now says "being changed". **Verified** (test, and source:
   `ownership/apply.rs` marks a new entry "until our value is in force", `ownership/restore.rs` marks an entry before
   it writes the original).
+
+## Integration dry-run e2e
+
+Card `p6-int-dry-run-e2e`, 2026-11-04 04:37 to 04:49, code at 7b6d076, x64 debug. The suite
+`crates/wakeshot-tray/tests/e2e_dry_run.rs` ran twice in a locked session: the dry-run tray started at Medium through
+Explorer, and `wakeshot.exe` ran as the elevated test's child. No power setting was written. Outputs are in the
+card's scratchpad folder (`run1.txt`, `run2.txt`, `claude-timeline.txt`).
+
+- **The two exes work together in dry run, end to end.** 12 of 12 passed in both runs (44.2 s, then 36.2 s), before
+  any fix. The tests cover every CLI command but `log` against a running tray, Keep awake with and without the
+  screen, `wakeshot run`, Automatic, restore, quit, a crash and the next start, the first run, and the log format.
+  **Verified** (test).
+- **Timings.** The first `state.json` came 0.51 to 0.60 s after the Explorer launch. The first launch of a run took
+  longer: 5.5 s in run 1 and 1.1 s in run 2 (a cold Explorer is likely; not verified). `state.json` follows a hold
+  change in 0.9 to 1.0 s, the view's one-second hold-back. A `run-<pid>.json` hold existed 58 ms after `wakeshot run`
+  started. `wakeshot restore` with a live tray answered in 136 ms in both runs. A second start through Explorer
+  exited 0, 2.5 s after the launch with Explorer and `cmd` included, and logged nothing. **Verified** (test, times
+  printed).
+- **A Gone hold drops in about 60 ms, not at the safety tick.** After the `wakeshot run` wrapper was ended by pid,
+  its child `ping` and the hold stayed, since the file names the child. When `ping` was ended by pid, `state.json` was
+  idle 62 ms (run 1) and 63 ms (run 2) later, and the tray deleted the file. The process exit wait does it, not the
+  30 s tick. **Verified** (test).
+- **A Medium tray deletes hold files that the elevated CLI wrote.** `keep-awake.json` written by `wakeshot keep-awake`
+  was gone after Quit, and the crashed tray's Keep awake file was gone after the next start. The CLI ran as the child
+  of the elevated test, so High; its level was not read in this run (inferred from `CLAUDE.md`, "Agents here run
+  elevated"). **Verified** (test) for the deletes; the CLI's level is inferred.
+- **When a hold ends, `state.json` still lists the overridden keys for a moment.** It was seen 59 ms after a run ended:
+  holding empty, 3 keys overridden. The next write, after the restore's answer, lists none. So a `wakeshot status`
+  in that instant says "Nothing holds the PC awake" and "Changed by Wakeshot: ...", which is true then. **Verified**
+  (test output).
+- **A dry run cannot show a leftover restore's writes.** After the tray was ended by pid during a hold, its dry-run
+  journal stayed (the dry run starts no guard). The next start logged "journal deleted", "restore of every plan:
+  found journal entries; 0 entries left" and "startup restore done: no journal entry is left" before its first state
+  write. No "would write" line came: the new process's `DryRunPower` reads the real value, which is still the
+  original. The real path is for `p6-int-real-e2e`. No "the last tray of this session ended without quitting" line
+  came either. Windows destroys a named mutex when its last handle closes, so a later start never sees it abandoned
+  (inferred from that rule; not verified). **Verified** (test, log) for the lines.
+- **The log keeps to the section 8 format and logs no file content or command line.** The log test's 42 lines (tray
+  34, cli 8) all parse into wall time with offset, monotonic seconds, process, level, area and text; none is WARN or
+  ERROR. None holds JSON, a Rust debug wrapper or an escaped path. None holds the `run` arguments, which carried a
+  marker. Read by eye: `wrote [LidAc, LidDc, SleepDc]` in the apply line is a Rust debug list. **Verified** (test,
+  and read).
+- **A quit while a hold file changes can log a false WARN.** The watch thread logged "an event could not be posted to
+  the loop (PostMessageW error 1400); the next tick posts everything again". That happened at 1 of 11 quits in run 1
+  and 3 of 12 in run 2. Each time, a hold file changed at the quit: Keep awake's file (the quit deletes it) or a
+  short `run`. The IO thread logs the same case as Info, "as after a quit". **Verified** (test log); the cause is read
+  in the code (the watch thread stops after `IoThread::finish`, once the window is gone).
+- **The dry-run tray holds for a Claude Code session and lets go after it.** Claude Code 2.1.318 ran with `claude -p
+  --model haiku` (`claude-haiku-5-5`), CLAUDE* variables dropped, in a throwaway folder. Its status file appeared
+  0.65 s after the start and was gone at the exit. With three other sessions on the laptop holding all along, the
+  tray went from 3 to 4 sessions at 00:42:01Z, 1 s after the session started. It went back to 3 at 00:43:07Z, 1 s
+  before the process ended 66.6 s later. **Verified** (test timeline against the session's own times).
+- **Claude Code refuses a foreground `sleep` in its Bash tool.** Asked to run `sleep 60`, it blocked the command and
+  told the model to use a background task, so the session ended in 12 s. `ping -n 61 127.0.0.1 > /dev/null` ran in
+  the foreground. So a test that needs a long foreground tool call must not use `sleep`. **Verified** (live, the
+  result text).
+- **The dry-run balloon's AUMID key names the app "Wakeshot".** The runs (first-run and restore notices) made
+  `HKCU\Software\Classes\AppUserModelId\NotifyIconGeneratedAumid_15983757285637097514` with `DisplayName`
+  "Wakeshot" and `IconUri` `%TEMP%\NotifyIconGeneratedAumid_15983757285637097514.png`, a PNG the shell wrote there.
+  The `NotifyIconSettings` entry with that id held only `IconSnapshot`. Both keys were exported and deleted, and were
+  still gone 2 minutes later. The PNG is left. The balloon header on screen was not seen: the session was locked.
+  **Verified** (`reg export`, `Get-ItemProperty`, ids listed before and after).

@@ -206,8 +206,8 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | `p6-int-tray-mode` | no | Part B: screen, about 10 min (a dry-run icon) | `p6-int-io-thread`, `p6-int-window`, `p6-int-dispatch`, `p6-int-startup`, `p3-requests`, `p3-system-events`, `p3-hibernate`, `p3-recovery`, `p4-watch-thread`, `p4-claude-transcript`, `p4-cron`, `p5-tray-icon`, `p5-menu-view`, `p5-notices`, `p5-sounds` | blocked: waiting for the screen slot (Part A done, 11 tests; smoke test passed 02:58 in the locked session; the picture waits for Haik) |
 | `p6-int-update-wiring` | no | no | `p6-int-tray-mode`, `p6-velopack-dependency`, `p6-update-schedule` | done (committed 03:54): 15 `tray_mode` tests; smoke passed; ARM64 tray CI only |
 | `p6-int-wiring-fixes` | no | no | `p6-int-tray-mode` Part A, `p6-velopack-dependency`, `p6-int-update-wiring` | done (04:29; 1276 tests; smoke test passed) |
-| `p6-int-dry-run-e2e` | no | screen (dry-run icon, balloons, pictures); agent-session lane (one Claude Code test session) | `p6-int-update-wiring`, `p4-cli-args`, `p4-cli-run`, `p4-cli-commands`, `p4-cli-restore`, `p4-live-claude` | in progress (started 04:01; suite committed 666f05b; stop 2, the run, from 04:37) |
-| `p6-int-real-e2e` | no | global: power settings on active plan copies, RunOnce, a guard | `p6-int-dry-run-e2e`, `p3-real-checks` | ready |
+| `p6-int-dry-run-e2e` | no | screen (dry-run icon, balloons, pictures); agent-session lane (one Claude Code test session) | `p6-int-update-wiring`, `p4-cli-args`, `p4-cli-run`, `p4-cli-commands`, `p4-cli-restore`, `p4-live-claude` | blocked: waiting for the screen slot (12 of 12 suite tests passed twice, no fix needed; Claude session check and clean-up done 04:51; pictures left) |
+| `p6-int-real-e2e` | no | global: power settings on active plan copies, RunOnce, a guard | `p6-int-dry-run-e2e`, `p3-real-checks` | in progress (started 04:39: stop 1, the suite and the BEFORE record only; the run waits for `p6-int-dry-run-e2e`) |
 | `p6-int-update-e2e` | no | global: installs, Run, RunOnce, Path, a user environment value, an active plan copy | `p6-int-real-e2e`, `p6-install-e2e`, `p6-pack-and-release`, `p6-hooks` | ready |
 | `p6-int-haik-checks` | yes: about 42 min (27, 18 of hands, plus 15 with the dock) | whole laptop: lid, lock, hibernate, switch user, battery; no other agent or cargo command | `p6-int-update-e2e`, `p3-haik-checks`, `p5-haik-check` | ready |
 
@@ -354,3 +354,12 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   (`a_process_exit_posts_the_session_and_the_hold_as_gone_at_once`) failed once under load, then passed 5 of 5.
 - 2026-11-04 04:37: `p6-int-dry-run-e2e` stop 2 started (same worker): the suite run, fixes, the Claude Code test
   session, clean-up. The laptop lane is free (`p6-install-e2e` rerun done). Pictures stay for Haik.
+- 2026-11-04 04:39 (orchestrator `wakeshot-12`): `p6-int-real-e2e` started for stop 1 only (`e2e_real.rs` and a read-only
+  BEFORE record), beside `p6-int-dry-run-e2e` stop 2 and `p2-6-unread-lid-countdown`. Its run (global lane: plan
+  copies made active, RunOnce, a guard) waits until `p6-int-dry-run-e2e` ends; then it is alone on the laptop.
+- 2026-11-04 04:51: `p6-int-dry-run-e2e` stop 2 done except the pictures (session locked): 12 of 12 `real_e2e_` tests
+  passed before any fix and again (44 s, 36 s), so no app, CLI or tray file changed. A Haiku Claude Code session
+  with a 60 s tool call: the dry-run tray went 3 to 4 sessions and back, the orchestrator's 3 left alone. Icon
+  entry found by comparing ids, exported, deleted, gone a minute later. Found outside scope (minor, log text):
+  `journal.rs` prints keys as a debug list; `watch/thread.rs` logs a false WARN (1400) when a hold file changes at
+  a quit (4 of 23 quits), e.g. a quit during Keep awake. Both go to a small log wording card.
