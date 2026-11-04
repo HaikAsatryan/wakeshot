@@ -21,9 +21,9 @@ does. Each rival cell links to the tool's own page or repo; all were read on 202
 
 | | Wakeshot | PowerToys Awake | Caffeine | Don't Sleep |
 |---|---|---|---|---|
-| Keep the PC awake for a set time, or until I turn it off? | yes | [yes: until you turn it off, until a date and time, or for hours and minutes you set in Settings](https://learn.microsoft.com/en-us/windows/powertoys/awake); [the tray menu lists 30 min, 1 h and 2 h](https://github.com/microsoft/PowerToys/blob/v0.102.3001/src/modules/awake/Awake/Core/Manager.cs#L508-L517) | [yes](https://www.zhornsoftware.co.uk/caffeine/) | [yes](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
+| Keep the PC awake for a set time, or until I turn it off? | yes | [yes](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [yes](https://www.zhornsoftware.co.uk/caffeine/) | [yes](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
 | Keep the screen on too? | yes, if you ask | [yes, if you ask](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [yes, by default: it fakes a key press](https://www.zhornsoftware.co.uk/caffeine/) | [yes, if you ask](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
-| **Stay awake on its own while my AI agent works, then sleep as usual?** | yes: Claude Code today; Codex CLI and Copilot CLI next | [no](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [no](https://www.zhornsoftware.co.uk/caffeine/) | [no](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
+| **Stay awake on its own while my AI agent works, then sleep as usual?** | yes | [no](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [no](https://www.zhornsoftware.co.uk/caffeine/) | [no](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
 | Stay awake while a build or a script runs? | yes: `wakeshot run -- <command>`, or a hold file from any script | [until a process ends, from the command line (`--pid`)](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [while a window with a given title is open, or until CPU use drops](https://www.zhornsoftware.co.uk/caffeine/) | [until CPU or network use drops; then it can also sleep or shut down the PC](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
 | **Keep a laptop working with the lid closed?** | yes, while something needs it, and locked; it sleeps once the work is done | [no](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [no](https://www.zhornsoftware.co.uk/caffeine/) | [no](https://www.softwareok.com/?seite=faq-DontSleep&faq=1) |
 | **Does my PC still lock when I walk away?** | yes: Windows locks it as usual; with the lid closed or Keep screen on, Wakeshot locks it | [not listed; its page says to lock the PC yourself](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [no, by default: its key presses stop the lock](https://www.zhornsoftware.co.uk/caffeine/) | [not listed](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
@@ -77,16 +77,21 @@ No window, no settings page, nothing to learn: a tray icon, one menu, a few noti
 
 ## Details
 
-- [Install](#install)
-- [What keeps the PC awake](#what-keeps-the-pc-awake)
-- [What it changes on your PC](#what-it-changes-on-your-pc)
-- [Lid closed, lock and battery](#lid-closed-lock-and-battery)
-- [The menu, notices and start at login](#the-menu-notices-and-start-at-login)
-- [Commands](#commands)
-- [Updates and privacy](#updates-and-privacy)
-- [Limits](#limits)
-- [Uninstall](#uninstall)
-- [Credits and license](#credits-and-license)
+- [Wakeshot](#wakeshot)
+  - [How it compares](#how-it-compares)
+  - [See it work](#see-it-work)
+    - [A night with Wakeshot](#a-night-with-wakeshot)
+  - [Details](#details)
+    - [Install](#install)
+    - [What keeps the PC awake](#what-keeps-the-pc-awake)
+    - [What it changes on your PC](#what-it-changes-on-your-pc)
+    - [Lid closed, lock and battery](#lid-closed-lock-and-battery)
+    - [The menu, notices and start at login](#the-menu-notices-and-start-at-login)
+    - [Commands](#commands)
+    - [Updates and privacy](#updates-and-privacy)
+    - [Limits](#limits)
+    - [Uninstall](#uninstall)
+  - [Credits and license](#credits-and-license)
 
 ### Install
 
