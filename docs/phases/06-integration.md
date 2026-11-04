@@ -426,3 +426,9 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   over 30 s and a pointer on the banner; change it when a user reports a stale battery balloon); finding 3 is an OS
   limit (only `ms-settings:taskbar`). Waits for Haik: finding 4 (delete the stale Settings icon key on this laptop),
   finding 9 (rerun block 6 step 3, about 10 min), finding 10 (`%TEMP%` test leftovers).
+- 2026-11-05 ~03:20 (orchestrator): `p6-real-install-guard` done (03415b6); worker decisions for Haik's review in its
+  card (an installed but quit Wakeshot is only a note for `power_check`; start at login on stops only the sign-in
+  checks; `cleanup` still runs over its own leftovers). `p2-6-floor-grace` done (e82389f); worker decisions for Haik's
+  review in its card (a tray start under the floor steps back at once; with the lid closed the lock goes out before
+  the restore, floor chime only; the 30 s restart at each AC loss and count run time). Running: its narrow power
+  safety check, `p6-notice-app-icon` Part A (it also fixes the old switch bytes in `hooks.rs` tests).
