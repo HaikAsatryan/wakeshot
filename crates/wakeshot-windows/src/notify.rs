@@ -493,7 +493,11 @@ mod tests {
         assert_eq!(n.take_click(), NoticeClick::Nothing);
 
         // A notice Windows refused never showed, so the click stays with the one that did.
-        n.show(&Notice::JournalCorrupt).unwrap();
+        n.show(&Notice::JournalLost {
+            reset: Vec::new(),
+            failed: true,
+        })
+        .unwrap();
         let refused = WinError {
             call: "Shell_NotifyIconW",
             code: 0,

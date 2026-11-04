@@ -3923,3 +3923,42 @@ temporary scratchpad (`p3-idle-sleep-check\run\`).
   "It did not sleep" can only be a deadline with no `Event::Suspending`; from this run the sleep waits for the
   display timeout, so a deadline of release plus the 60 s timeout is too short when the display is still on
   (inference from one run).
+
+## Windows defaults of the three keys
+
+`p2-6-record-lost`, 2026-11-04, on the test laptop (Balanced active, Modern Standby). For the reset of a lost journal,
+which puts a key at Wakeshot's value back to "Windows' default for that plan". Reads only on Haik's plan; one write
+test on a throwaway plan copy that was never active.
+
+- **The API takes the plan's kind, not the plan.** `PowerReadACDefaultIndex` and `PowerReadDCDefaultIndex` take
+  `SchemePersonalityGuid`: "The identifier of the scheme personality for this power setting. A power setting can have
+  different default values depending on the power scheme personality" (Microsoft, `PowerReadDCDefaultIndex`, read
+  2026-11-04). **Verified** (docs).
+- **A plan's kind is a hidden setting.** `powercfg /qh SCHEME_CURRENT SUB_NONE 245d8541-3943-4422-b025-13a784f679b7`
+  ("Power plan type", alias `PERSONALITY`, in `NO_SUBGROUP_GUID`): possible values 0 Power saver, 1 High performance,
+  2 Balanced; Balanced reads 2 on AC and DC. Each possible value's `SettingValue` in
+  `HKLM\SYSTEM\CurrentControlSet\Control\Power\PowerSettings\245d8541-...\<index>` begins with the bytes of that
+  personality's GUID (index 0: `08 13 84 a1`, `GUID_MAX_POWER_SAVINGS` a1841308; 1: 8c5e7fda,
+  `GUID_MIN_POWER_SAVINGS`; 2: 381b4222, `GUID_TYPICAL_POWER_SAVINGS`, the Balanced plan's own GUID). A copy made with
+  `PowerDuplicateScheme` of Balanced reads 2 too (test `real_reset_on_a_copy_puts_the_balanced_defaults`). **Verified**
+  (`powercfg`, `reg query`, the test). `power::plan` maps the index to the GUID with these three; any other index is an
+  error, never a guess.
+- **The registry's default table is old.** `...\PowerSettings\<sub>\<setting>\DefaultPowerSchemeValues\<personality>`
+  holds, for Balanced: lid AC 1, lid DC 1 (Sleep), sleep AC 1800, sleep DC 900; High performance: lid 1 and 1, sleep
+  0 and 0; Power saver: lid 1 and 1, sleep 900 and 600. But `PowerReadDCDefaultIndex` of Balanced's battery sleep gives
+  **180**, and no key for that setting under `HKLM\...\Control\Power` holds an `ACSettingIndex` or `DCSettingIndex` of
+  180 (searched with PowerShell, read only; where Windows keeps the new value: not found). Microsoft's support page
+  "Power settings in Windows 11" (read 2026-11-04), "New default settings for modern standby devices": "On battery,
+  make my device sleep after" adjusted from 4 to 3 minutes (plugged in: 10 to 5); S3 devices: battery sleep 15 to 10.
+  So the API gives Windows' current default and the registry table does not. **Verified** (test
+  `real_defaults_of_the_active_plan_read`: lid AC 1, lid DC 1, sleep DC 180). Not tested: an S3 PC, a plan of another
+  kind.
+- **A plan that does not exist** fails the kind read with 2 (`ERROR_FILE_NOT_FOUND`), so its reset leaves every key.
+  **Verified** (same test).
+- **The reset on a copy.** Copy of Balanced, lid AC and battery sleep set to 0 on the copy, the reset through
+  `CopyAsActive` with a fake journal that does not read: lid AC 0 to 1, lid DC 1 kept (not Wakeshot's value), sleep DC
+  0 to 180; `powercfg /qh` of the copy agrees; Windows never switched plans; Haik's Balanced read the same before and
+  after (lid 1 and 1, sleep 18000 and 18000) and the copy was gone after. **Verified** (one run, 2026-11-04).
+- **What it means for a user.** A lost journal's reset of battery sleep gives 3 minutes on this laptop, not the 15 an
+  older table names; a user whose own value was Never (rule 7's accepted cost) gets 3 minutes and the notice. Whether
+  Settings' "Restore default settings for this plan" gives the same values: not tested (it would write Haik's plan).

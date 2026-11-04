@@ -79,7 +79,7 @@ fn name(notice: &Notice) -> &'static str {
         Notice::LockFailed => "lock-failed",
         Notice::ClosedLidReport { .. } => "closed-lid-report",
         Notice::UpdateWakeshot { .. } => "update-wakeshot",
-        Notice::JournalCorrupt => "journal-corrupt",
+        Notice::JournalLost { .. } => "journal-lost",
         Notice::IdleLocked => "idle-locked",
         Notice::Updated { .. } => "updated",
     }
@@ -104,7 +104,10 @@ fn samples() -> Vec<Notice> {
         Notice::UpdateWakeshot {
             agent: "Claude Code",
         },
-        Notice::JournalCorrupt,
+        Notice::JournalLost {
+            reset: vec![SettingKey::LidAc, SettingKey::LidDc, SettingKey::SleepDc],
+            failed: false,
+        },
         Notice::IdleLocked,
         Notice::Updated {
             version: "1.1.0".to_owned(),

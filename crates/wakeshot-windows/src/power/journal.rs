@@ -14,6 +14,7 @@ use wakeshot_core::ownership::apply::{Applied, apply};
 use wakeshot_core::ownership::check::{Checked, check};
 use wakeshot_core::ownership::io::{JournalRead, PlanIo, SafetyNet};
 use wakeshot_core::ownership::journal::JournalParts;
+use wakeshot_core::ownership::reset::{Found as ResetFound, KeyReset, Reset, reset_lost};
 use wakeshot_core::ownership::restore::{Found, Restored, restore};
 use wakeshot_core::settings::{Guid, JournalEntry, JournalOwner, OwnedKey, SettingKey};
 use windows::Win32::Foundation::{
@@ -78,6 +79,24 @@ pub fn apply_locked(
     apply_within(plans, net, me, plan, writes, lock)
 }
 
+/// `ownership::reset::reset_lost` under `Local\Wakeshot.Journal` (`p2-6-record-lost`), with one log line per key: its
+/// old and new value, or why it was left. A lock not taken within the wait comes back as a failed `result`, and nothing
+/// was done; `journal` then holds the file's known entries, read without the lock.
+pub fn reset_locked(
+    plans: &mut impl PlanIo,
+    net: &mut impl SafetyNet,
+    damaged: bool,
+    names: &Names,
+    log: &dyn Log,
+) -> Reset {
+    let lock = JournalLock {
+        names,
+        log,
+        wait_ms: JOURNAL_WAIT_MS,
+    };
+    reset_within(plans, net, damaged, lock)
+}
+
 /// `ownership::check` under `Local\Wakeshot.Journal`. A lock not taken within the wait comes back in `failures`, and
 /// no entry was dropped; `journal` then holds the file's known entries, read without the lock.
 pub fn check_locked(
@@ -138,6 +157,34 @@ fn apply_within(
             result: Err(ApplyError::SafetyNet(failure)),
             journal: entries_unlocked(net),
         },
+    }
+}
+
+fn reset_within(
+    plans: &mut impl PlanIo,
+    net: &mut impl SafetyNet,
+    damaged: bool,
+    lock: JournalLock<'_>,
+) -> Reset {
+    match lock.run("lost journal reset", || reset_lost(plans, net, damaged)) {
+        Ok(done) => {
+            log_reset(lock.log, &done);
+            done
+        }
+        Err(failure) => {
+            let journal = entries_unlocked(net);
+            Reset {
+                found: match journal.is_empty() {
+                    true => ResetFound::Lost,
+                    false => ResetFound::Entries,
+                },
+                plan: None,
+                keys: Vec::new(),
+                set_aside: None,
+                result: Err(failure),
+                journal,
+            }
+        }
     }
 }
 
@@ -476,10 +523,12 @@ impl<G: GuardControl> SafetyNet for FileNet<G> {
             self.path(DataFile::JournalCorrupt),
         )
         .map_err(|e| Failure::from(io_error("MoveFileExW", &e)))?;
+        // The tray's reset puts what looks like Wakeshot's back to Windows' defaults (`p2-6-record-lost`); a guard,
+        // restore mode or a hook leaves that to the tray's next start.
         self.note(
             Level::Warn,
-            "journal.json moved to journal.json.corrupt: the values it held stay as they are until set by hand; \
-             the journal saves earlier in this log name them",
+            "journal.json moved to journal.json.corrupt; the journal saves earlier in this log name the values it \
+             held",
         );
         Ok(())
     }
@@ -655,6 +704,81 @@ fn log_applied(log: &dyn Log, plan: Guid, done: &Applied) {
         "apply to plan {plan} {how}; wrote {}; {left} journal entries",
         key_list(written)
     );
+    log.line(level, AREA, &text);
+}
+
+/// Each key with its old and new value, or why it was left: the notice sends the user here for the values they had.
+fn log_reset(log: &dyn Log, done: &Reset) {
+    match done.found {
+        ResetFound::Entries => {
+            let text = format!(
+                "lost journal reset not run: journal.json reads now, with {} known entries",
+                done.journal.len()
+            );
+            log.line(Level::Info, AREA, &text);
+            return;
+        }
+        ResetFound::Nothing => {
+            log.line(
+                Level::Info,
+                AREA,
+                "lost journal reset not run: journal.json is gone or names nothing, so it was restored elsewhere",
+            );
+            return;
+        }
+        ResetFound::Lost => {}
+    }
+    let plan = done
+        .plan
+        .map_or_else(|| "the plan in use".to_owned(), |p| format!("plan {p}"));
+    for &(key, outcome) in &done.keys {
+        let name = key_name(key);
+        let (level, text) = match outcome {
+            KeyReset::Reset { old, default } => (
+                Level::Warn,
+                format!(
+                    "lost journal: {name} on {plan} was {old}, Wakeshot's value: set to the Windows default {default}"
+                ),
+            ),
+            KeyReset::Theirs(value) => (
+                Level::Info,
+                format!("lost journal: {name} on {plan} is {value}, not Wakeshot's value: kept"),
+            ),
+            KeyReset::AlreadyDefault(value) => (
+                Level::Info,
+                format!(
+                    "lost journal: {name} on {plan} is {value}, which is also the Windows default: kept"
+                ),
+            ),
+            KeyReset::Failed(f) => (
+                Level::Warn,
+                format!(
+                    "lost journal: {name} on {plan} not reset: {}",
+                    error_text(f)
+                ),
+            ),
+        };
+        log.line(level, AREA, &text);
+    }
+    if let Some(Err(f)) = done.set_aside {
+        let text = format!(
+            "lost journal: journal.json not set aside: {}; the next journal save replaces it",
+            error_text(f)
+        );
+        log.line(Level::Warn, AREA, &text);
+    }
+    let set = key_list(&done.reset_keys());
+    let text = match done.result {
+        Ok(()) => format!("lost journal reset on {plan} done; keys set to Windows defaults: {set}"),
+        Err(f) => format!(
+            "lost journal reset on {plan} failed: {}; keys set to Windows defaults: {set}",
+            error_text(f)
+        ),
+    };
+    let level = match done.result {
+        Ok(()) => Level::Info,
+        Err(_) => Level::Warn,
+    };
     log.line(level, AREA, &text);
 }
 
@@ -1599,6 +1723,126 @@ mod tests {
             }
         );
 
+        release.send(()).unwrap();
+        holder.join().unwrap();
+    }
+
+    #[test]
+    fn a_lost_journal_reset_logs_each_key_and_a_busy_lock_does_nothing() {
+        use wakeshot_core::ownership::fake::{FAKE_DEFAULT_LID, FAKE_DEFAULT_SLEEP_DC};
+
+        let names = Names::test("journal::reset");
+        let fake = FakePlans::new(PlanValues {
+            lid_ac: 0,
+            sleep_dc: 0,
+            ..VALUES
+        });
+        fake.state().journal = FakeJournal::Unreadable(32);
+        let log = MemoryLog::default();
+        let done = reset_within(
+            &mut fake.clone(),
+            &mut fake.clone(),
+            false,
+            lock(&names, &log, 1_000),
+        );
+        assert_eq!(done.reset_keys(), [SettingKey::LidAc, SettingKey::SleepDc]);
+        assert_eq!(done.result, Ok(()));
+        assert_eq!(
+            lines(&log),
+            [
+                (
+                    Level::Warn,
+                    format!(
+                        "lost journal: lidAc on plan {BALANCED} was 0, Wakeshot's value: set to the Windows default \
+                         {FAKE_DEFAULT_LID}"
+                    )
+                ),
+                (
+                    Level::Info,
+                    format!(
+                        "lost journal: lidDc on plan {BALANCED} is 1, not Wakeshot's value: kept"
+                    )
+                ),
+                (
+                    Level::Warn,
+                    format!(
+                        "lost journal: sleepDc on plan {BALANCED} was 0, Wakeshot's value: set to the Windows default \
+                         {FAKE_DEFAULT_SLEEP_DC}"
+                    )
+                ),
+                (
+                    Level::Info,
+                    format!(
+                        "lost journal reset on plan {BALANCED} done; keys set to Windows defaults: lidAc, sleepDc"
+                    )
+                ),
+            ]
+        );
+
+        // A set-aside that fails is a warning, and the reset still counts.
+        let fake = FakePlans::new(PlanValues {
+            lid_dc: 0,
+            ..VALUES
+        });
+        fake.state().journal = FakeJournal::Corrupt;
+        // Load, active plan, three reads, one default read, one write, `set_active`, then the set-aside.
+        let set_aside_at = 8;
+        fake.script(set_aside_at, Action::Fail(32));
+        let log = MemoryLog::default();
+        let done = reset_within(
+            &mut fake.clone(),
+            &mut fake.clone(),
+            false,
+            lock(&names, &log, 1_000),
+        );
+        assert_eq!(fake.state().calls[set_aside_at], Call::SetAsideJournal);
+        assert_eq!(
+            (done.reset_keys(), done.result),
+            (vec![SettingKey::LidDc], Ok(()))
+        );
+        assert_eq!(
+            count_containing(
+                &log,
+                "journal.json not set aside: FakePlans::set_aside_journal failed with 32; the next journal save \
+                 replaces it"
+            ),
+            1
+        );
+
+        // Gone since the core's last try: one line, nothing else.
+        let log = MemoryLog::default();
+        fake.state().journal = FakeJournal::Missing;
+        let done = reset_within(
+            &mut fake.clone(),
+            &mut fake.clone(),
+            false,
+            lock(&names, &log, 1_000),
+        );
+        assert_eq!(done.found, ResetFound::Nothing);
+        assert_eq!(lines(&log).len(), 1, "{:?}", lines(&log));
+
+        // The mutex is not free: nothing is done, and the failure says why.
+        let (release, holder) = hold(&names);
+        fake.state().journal = FakeJournal::Unreadable(32);
+        let before = fake.state().calls.len();
+        let log = MemoryLog::default();
+        let done = reset_within(
+            &mut fake.clone(),
+            &mut fake.clone(),
+            false,
+            lock(&names, &log, 30),
+        );
+        assert_eq!(
+            (done.result, done.keys.len(), done.journal.len()),
+            (Err(LOCK_TIMEOUT), 0, 0)
+        );
+        assert_eq!(fake.state().calls[before..], [Call::LoadJournal]);
+        assert_eq!(
+            count_containing(&log, "lost journal reset failed: "),
+            1,
+            "{:?}",
+            lines(&log)
+        );
         release.send(()).unwrap();
         holder.join().unwrap();
     }

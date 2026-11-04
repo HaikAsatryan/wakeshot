@@ -72,6 +72,11 @@ pub(crate) struct State {
     pub retry: Option<RestoreWhy>,
     /// `Notice::RestoreFailed` was shown in this failure streak.
     pub retry_warned: bool,
+    /// When the journal became unknown (run time): a retry wanted with an empty copy, or a `ResetLost` out
+    /// (`core::settings`, product "User settings safety" 7). Two minutes on, a tick sends `ResetLost`.
+    pub unknown_since: Option<u64>,
+    /// A `ResetLost` went out and its `Done` has not come back: its `damaged`, so a reset sent again asks the same.
+    pub resetting: Option<bool>,
     /// `Notice::RequestsOnly` was shown since the last apply that worked.
     pub requests_only_warned: bool,
     /// The one restore for a journal the apply found corrupt went out; `JournalCorrupt` says the file is set aside.
@@ -171,6 +176,8 @@ impl State {
             applying: Vec::new(),
             retry: None,
             retry_warned: false,
+            unknown_since: None,
+            resetting: None,
             requests_only_warned: false,
             corrupt_restore_sent: false,
             restore_request: false,

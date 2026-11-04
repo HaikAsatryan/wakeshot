@@ -131,7 +131,7 @@ impl Core {
             Event::Plan(read) => self.take_plan(read, out),
             Event::ActivePlan(id) => self.take_active_plan(id, now, out),
             Event::UserChanged(changed) => self.take_user_changed(changed, out),
-            Event::JournalCorrupt => self.take_journal_corrupt(out),
+            Event::JournalCorrupt => self.take_journal_corrupt(now, out),
             Event::Session(change) => self.take_session(change, now, out),
             Event::Lid { closed } => self.take_lid(closed, now, out),
             Event::Power { ac, battery_pct } => self.take_power(ac, battery_pct, now, out),
@@ -266,6 +266,11 @@ impl Core {
                 result,
                 journal,
             } => self.done_restored(plan, why, result, journal, out),
+            Outcome::ResetLost {
+                reset,
+                result,
+                journal,
+            } => self.done_reset(reset, result, journal, now, out),
             Outcome::Locked(result) => self.done_locked(result, now, out),
             Outcome::Hibernate(end) => self.done_hibernate(end, now, out),
             Outcome::Update(result) => self.done_update(result, out),
@@ -313,6 +318,8 @@ impl Core {
             }
             _ => {}
         }
+        // Before the lid side, so a window that ends here sets its countdown want in this pass.
+        let journal_due = self.settle_journal(now);
         let lid_due = self.settle_lid(now, tick, out);
         self.send_apply(now, out);
         self.send_update(out);
@@ -320,7 +327,7 @@ impl Core {
         let state_due = view::show(&mut self.state, &found, now, out);
         let plan_due = self.plan_read_due(now);
         let next = nearest(nearest(found.next, state_due, now), plan_due, now);
-        self.state.next = nearest(next, lid_due, now);
+        self.state.next = nearest(nearest(next, lid_due, now), journal_due, now);
     }
 
     /// The first hold counts; the settle pass sends its apply after the requests (section 3, "Holding starts").

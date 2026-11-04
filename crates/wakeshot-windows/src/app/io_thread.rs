@@ -49,8 +49,8 @@ pub const FINISH_MS: u32 = 10_000;
 /// timer, since every timer wake costs battery.
 const IDLE_WAIT_MS: u32 = u32::MAX;
 
-/// What the IO thread runs `ReadPlan`, `Apply` and `Restore` on: `PowerExecutor`, so the real and the dry-run executor
-/// (two types) start the thread the same way, and a test may block one.
+/// What the IO thread runs `ReadPlan`, `Apply`, `Restore` and `ResetLost` on: `PowerExecutor`, so the real and the
+/// dry-run executor (two types) start the thread the same way, and a test may block one.
 pub trait PowerRunner: Send {
     /// The events for one command, in order (`PowerExecutor::run`).
     fn run(&mut self, command: &Command) -> Vec<Event>;
@@ -207,7 +207,10 @@ impl Runner {
 
     fn run(&mut self, command: &Command) {
         match command {
-            Command::ReadPlan | Command::Apply { .. } | Command::Restore { .. } => {
+            Command::ReadPlan
+            | Command::Apply { .. }
+            | Command::Restore { .. }
+            | Command::ResetLost { .. } => {
                 for event in self.power.run(command) {
                     self.post(event, command);
                 }
@@ -434,6 +437,8 @@ fn label(command: &Command) -> String {
         Command::ReadPlan => "ReadPlan".to_owned(),
         Command::Apply { .. } => "Apply".to_owned(),
         Command::Restore { why, .. } => format!("Restore ({why:?})"),
+        Command::ResetLost { damaged: true } => "ResetLost (damaged)".to_owned(),
+        Command::ResetLost { damaged: false } => "ResetLost".to_owned(),
         Command::Lock => "Lock".to_owned(),
         Command::Hibernate { .. } => "Hibernate".to_owned(),
         Command::Tray(_) => "Tray".to_owned(),
@@ -465,7 +470,7 @@ fn notice_name(notice: &Notice) -> &'static str {
         Notice::LockFailed => "LockFailed",
         Notice::ClosedLidReport { .. } => "ClosedLidReport",
         Notice::UpdateWakeshot { .. } => "UpdateWakeshot",
-        Notice::JournalCorrupt => "JournalCorrupt",
+        Notice::JournalLost { .. } => "JournalLost",
         Notice::IdleLocked => "IdleLocked",
         Notice::Updated { .. } => "Updated",
     }
@@ -727,7 +732,12 @@ mod tests {
         let data = rig.data();
         store::write_atomic(&data.file(DataFile::RestoreRequest), br#"{"version":1}"#).unwrap();
         store::write_atomic(&data.holds().join("run-42.json"), b"{}").unwrap();
-        let power = [Command::ReadPlan, apply(), restore(RestoreWhy::WorkEnded)];
+        let power = [
+            Command::ReadPlan,
+            apply(),
+            restore(RestoreWhy::WorkEnded),
+            Command::ResetLost { damaged: false },
+        ];
         let mut commands = power.to_vec();
         commands.extend([
             Command::WriteState(state(&["first"])),
@@ -753,6 +763,7 @@ mod tests {
                     Event::Plan(Ok(_)),
                     Event::Done(Outcome::Applied { result: Ok(()), .. }),
                     Event::Done(Outcome::Restored { result: Ok(()), .. }),
+                    Event::Done(Outcome::ResetLost { result: Ok(()), .. }),
                 ]
             ),
             "{expected:?}"

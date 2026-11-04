@@ -23,6 +23,14 @@ pub const FAKE_MISSING: u32 = 2;
 /// The code `can_write` returns for a key in `FakeState::blocked` (access denied, as policy gives it).
 pub const FAKE_BLOCKED: u32 = 5;
 
+/// `read_default` of a lid key on a plan with no entry in `FakeState::defaults`: Sleep, as Windows ships each plan
+/// on the test laptop (research, "Windows defaults of the three keys").
+pub const FAKE_DEFAULT_LID: u32 = 1;
+
+/// `read_default` of battery sleep on a plan with no entry in `FakeState::defaults`: 3 minutes, Balanced's on the
+/// Modern Standby test laptop (research, "Windows defaults of the three keys").
+pub const FAKE_DEFAULT_SLEEP_DC: u32 = 180;
+
 /// One call to either seam, with its arguments, in the order the routine made them.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Call {
@@ -33,6 +41,7 @@ pub enum Call {
     Write(Guid, SettingKey, u32),
     SetActive(Guid),
     Values,
+    ReadDefault(Guid, SettingKey),
     LoadJournal,
     SaveJournal(JournalFile),
     DeleteJournal,
@@ -92,6 +101,9 @@ pub enum SetBy {
     Override,
     /// A `write` of that entry's `original` (and not its `written`): Wakeshot putting the user's value back.
     Restore,
+    /// A `write` of the plan's Windows default (`read_default`) with no known entry for that plan and key: the reset of
+    /// a lost journal. Neither the user's own nor Wakeshot's to hold.
+    Default,
 }
 
 /// [`SetBy`] for each key Wakeshot writes.
@@ -160,6 +172,8 @@ pub struct FakeState {
     pub plans: BTreeMap<Guid, FakePlan>,
     /// Keys whose `can_write` fails with `FAKE_BLOCKED`.
     pub blocked: Vec<SettingKey>,
+    /// `read_default` of a plan and key; one not here reads [`FAKE_DEFAULT_LID`] or [`FAKE_DEFAULT_SLEEP_DC`].
+    pub defaults: BTreeMap<(Guid, SettingKey), u32>,
     pub journal: FakeJournal,
     /// How many journals were set aside as corrupt.
     pub set_aside: u32,
@@ -261,17 +275,33 @@ impl FakeState {
         held
     }
 
+    /// Windows' default of `key` on `plan`, as `read_default` gives it.
+    pub fn default_of(&self, plan: Guid, key: SettingKey) -> u32 {
+        self.defaults
+            .get(&(plan, key))
+            .copied()
+            .unwrap_or(match key {
+                SettingKey::LidAc | SettingKey::LidDc => FAKE_DEFAULT_LID,
+                SettingKey::SleepDc => FAKE_DEFAULT_SLEEP_DC,
+            })
+    }
+
     fn write_label(&self, plan: Guid, key: SettingKey, value: u32) -> SetBy {
-        let FakeJournal::File(file) = &self.journal else {
-            return SetBy::Override;
+        let entry = match &self.journal {
+            FakeJournal::File(file) => file
+                .entries
+                .iter()
+                .find(|e| e.plan == plan && e.key == JournalKey::Known(key))
+                .map(|e| (e.original, e.written)),
+            _ => None,
         };
-        let entry = file
-            .entries
-            .iter()
-            .find(|e| e.plan == plan && e.key == JournalKey::Known(key));
         match entry {
-            Some(e) if value == e.original && value != e.written => SetBy::Restore,
-            _ => SetBy::Override,
+            Some((original, written)) if value == original && value != written => SetBy::Restore,
+            Some(_) => SetBy::Override,
+            // Only the reset writes with no entry on purpose; any other value then is ours, so a routine that writes
+            // before it journals still shows.
+            None if value == self.default_of(plan, key) => SetBy::Default,
+            None => SetBy::Override,
         }
     }
 }
@@ -288,6 +318,7 @@ impl FakePlans {
             active: values.active,
             plans: BTreeMap::from([(values.active, FakePlan::new(values))]),
             blocked: Vec::new(),
+            defaults: BTreeMap::new(),
             journal: FakeJournal::Missing,
             set_aside: 0,
             run_once: false,
@@ -412,6 +443,15 @@ impl PlanIo for FakePlans {
         let state = self.begin(Call::Values, NAME)?;
         let p = state.plans.get(&state.active).ok_or(missing(NAME))?;
         Ok(p.stored)
+    }
+
+    fn read_default(&mut self, plan: Guid, key: SettingKey) -> Result<u32, Failure> {
+        const NAME: &str = "FakePlans::read_default";
+        let state = self.begin(Call::ReadDefault(plan, key), NAME)?;
+        match state.plans.contains_key(&plan) {
+            true => Ok(state.default_of(plan, key)),
+            false => Err(missing(NAME)),
+        }
     }
 }
 

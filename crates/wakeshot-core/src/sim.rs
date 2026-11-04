@@ -19,9 +19,9 @@
 //! care about input see only ticks.
 //!
 //! [`World`] puts a `Sim` in a whole world for the property tests: Windows' power plans on a `FakePlans`, the IO
-//! thread that answers `ReadPlan`, `Apply` and `Restore` through the real ownership routines, answers that come late,
-//! and the user, each change turned into the event Windows or a watch thread posts. It logs what Windows holds at each
-//! moment ([`Truth`]), so a property is checked against that, not only against the commands.
+//! thread that answers `ReadPlan`, `Apply`, `Restore` and `ResetLost` through the real ownership routines, answers
+//! that come late, and the user, each change turned into the event Windows or a watch thread posts. It logs what
+//! Windows holds at each moment ([`Truth`]), so a property is checked against that, not only against the commands.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt::Write as _;
@@ -39,6 +39,7 @@ use crate::ownership::apply::apply;
 use crate::ownership::check::check;
 use crate::ownership::fake::{Action, FakeJournal, FakePlans, SetBy};
 use crate::ownership::io::PlanIo;
+use crate::ownership::reset::{KeyReset, reset_lost};
 use crate::ownership::restore::{Found, Restored, restore};
 use crate::policy::ending::IDLE_MS;
 use crate::policy::requests::Requests;
@@ -138,6 +139,15 @@ pub fn restored(
         why,
         result,
         journal,
+    })
+}
+
+/// `Done(ResetLost)` for a reset that ran and set `reset` to Windows' defaults (the file did not read after all).
+pub fn reset_done(reset: &[SettingKey], result: Result<(), Failure>) -> Event {
+    Event::Done(Outcome::ResetLost {
+        reset: reset.to_vec(),
+        result,
+        journal: Vec::new(),
     })
 }
 
@@ -377,6 +387,24 @@ impl Sim {
         }
         out.extend(self.send(Event::Tick));
         Some(out)
+    }
+
+    /// [`Sim::run`] in steps of at most 15 s, each `Restore` the core sends answered at the end of its step as one
+    /// whose journal load failed with `failure`, as the executor posts it (no entries known). Gives every command.
+    pub fn run_failing_restores(&mut self, ms: u64, failure: Failure) -> Vec<Command> {
+        let end = self.clock.now().mono_ms.saturating_add(ms);
+        let mut all = Vec::new();
+        while self.clock.now().mono_ms < end {
+            let step = (end - self.clock.now().mono_ms).min(15_000);
+            let out = self.run(step);
+            for command in &out {
+                if let Command::Restore { plan, why } = *command {
+                    all.extend(self.send(restored(plan, why, Err(failure), Vec::new())));
+                }
+            }
+            all.extend(out);
+        }
+        all
     }
 
     /// The clock moves on to run time `end_mono` with no timer fired: call it only after [`Sim::fire_next`] said none
@@ -1056,9 +1084,10 @@ impl Entry {
     }
 }
 
-/// The core in its world: the power plans on a [`FakePlans`], the IO thread that runs `ReadPlan`, `Apply` and
-/// `Restore` through the real ownership routines as `p3-power-io`'s executor does, the loop's other runners (lock,
-/// hibernate, update, hold files), and the user, each change turned into the event Windows or a watch thread posts.
+/// The core in its world: the power plans on a [`FakePlans`], the IO thread that runs `ReadPlan`, `Apply`, `Restore`
+/// and `ResetLost` through the real ownership routines as `p3-power-io`'s executor does, the loop's other runners
+/// (lock, hibernate, update, hold files), and the user, each change turned into the event Windows or a watch thread
+/// posts.
 ///
 /// The IO thread runs its commands in order. With `keep_up` every command runs and every answer is handled after each
 /// step; without it, commands wait for [`WorldStep::Io`] and [`WorldStep::IoLate`], whose answers may wait for
@@ -1560,7 +1589,10 @@ impl World {
                         self.ending_front = false;
                         self.io.push_front(command);
                     }
-                    Command::ReadPlan | Command::Apply { .. } | Command::Restore { .. } => {
+                    Command::ReadPlan
+                    | Command::Apply { .. }
+                    | Command::Restore { .. }
+                    | Command::ResetLost { .. } => {
                         self.io.push_back(command);
                     }
                     Command::Lock => self.lock(&mut answers),
@@ -1757,19 +1789,27 @@ impl World {
                 })]
             }
             Command::Restore { plan, why } => {
-                let owner = match &self.plans.state().journal {
-                    FakeJournal::File(file) => Some(file.owner),
-                    _ => None,
-                };
+                let journal = self.plans.state().journal.clone();
                 // A leftover runs only for a Gone owner or this tray, with that owner checked; in this world every
-                // journal is this tray's or the crashed one's. With no file it answers without the routine.
-                let restored = match (*why, owner) {
-                    (RestoreWhy::Leftover, None) => Restored {
+                // journal is this tray's or the crashed one's. With no file, or one that does not read, it answers
+                // without the routine; a corrupt one goes to the routine, which sets it aside (`p3-power-io`).
+                let restored = match (*why, journal) {
+                    (RestoreWhy::Leftover, FakeJournal::Missing) => Restored {
                         found: Found::Nothing,
                         result: Ok(()),
                         journal: Vec::new(),
                     },
-                    (RestoreWhy::Leftover, owner) => restore(&mut io, &mut net, *plan, owner),
+                    (RestoreWhy::Leftover, FakeJournal::Unreadable(code)) => Restored {
+                        found: Found::Nothing,
+                        result: Err(Failure {
+                            call: "FakePlans::load_journal",
+                            code,
+                        }),
+                        journal: Vec::new(),
+                    },
+                    (RestoreWhy::Leftover, FakeJournal::File(file)) => {
+                        restore(&mut io, &mut net, *plan, Some(file.owner))
+                    }
                     _ => restore(&mut io, &mut net, *plan, None),
                 };
                 let mut events = vec![Event::Done(Outcome::Restored {
@@ -1782,6 +1822,23 @@ impl World {
                     events.push(Event::JournalCorrupt);
                 }
                 events
+            }
+            Command::ResetLost { damaged } => {
+                let reset = reset_lost(&mut io, &mut net, *damaged);
+                // What the reset put in force is now the user's own as far as the world goes: rule 7 gives the
+                // default in place of a value no record names.
+                if let Some(plan) = reset.plan {
+                    for (key, outcome) in &reset.keys {
+                        if let KeyReset::Reset { default, .. } = outcome {
+                            self.user.insert((plan, *key), *default);
+                        }
+                    }
+                }
+                vec![Event::Done(Outcome::ResetLost {
+                    reset: reset.reset_keys(),
+                    result: reset.result,
+                    journal: reset.journal,
+                })]
             }
             _ => Vec::new(),
         };

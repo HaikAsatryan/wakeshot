@@ -138,7 +138,7 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | `p2-6-unread-journal` | no | core round B (Log in `p2-core-settings`); runs alone among cards that build | done (committed 02:51): findings 3 and 6, the newer `config.json` write check; 1256 workspace tests |
 | `p2-6-unread-lid-countdown` | no | `p6-int-wiring-fixes` | done (05:28: 3 new scenarios, `startup_unread` drawn in the props, 22 props at 4096 cases 3 of 3) |
 | `p2-6-unread-floor-countdown` | no | `p2-6-unread-lid-countdown` | done (05:58: 4 new scenarios; 1284 workspace tests; 8 of 10 mutants caught) |
-| `p2-6-record-lost` | no (Haik's rule of 2026-11-04 in `product.md`) | nothing | ready |
+| `p2-6-record-lost` | no (Haik's rule of 2026-11-04 in `product.md`) | nothing | done (11:13: 1312 workspace tests; 14 of 14 mutants killed; 12 worker decisions) |
 | `p2-6-sleep-route` | no (Haik's rule of 2026-11-04; his lid test is in `p6-int-haik-checks`) | `p2-6-record-lost`, `p3-idle-sleep-check` | ready |
 
 No card touches the real laptop (no power settings, screen, sound or installs) or needs Haik's hands. "Contracts
@@ -323,3 +323,11 @@ Where each item this track owns is built. "Integration" is planned after the tra
   fallback, the built lock last; the battery floor and the failed-lock step back the same ("battery floor can use
   same"). The relock of `p2-core-lid` decision 1 stays as the last step. New cards `p2-6-record-lost` (now) and
   `p2-6-sleep-route` (after it and `p3-idle-sleep-check`); a narrow review after them.
+- 2026-11-04 11:13 (orchestrator `wakeshot-12`): `p2-6-record-lost` done: after 2 minutes of run time with an unreadable
+  journal (a damaged one at once) the new `ResetLost` command puts each key still at Wakeshot's value back to the
+  plan's Windows default, sets the bad file aside and shows one `JournalLost` notice (none when nothing was reset);
+  no lid lock and no countdown while the journal is unknown. Battery sleep's default on this laptop is 180 s, so a
+  lost journal gives 3 minutes. 12 worker decisions for Haik's review in the card. Two items moved to
+  `p2-6-sleep-route` as deliverables 8 and 9 (orchestrator decision, for Haik's review): a hold that runs through
+  the window with the lid closed now runs unlocked until it ends, so lock when the window ends; `power_check`'s
+  `Timed` wrapper. `p2-6-sleep-route` starts now.

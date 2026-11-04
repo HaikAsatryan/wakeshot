@@ -223,14 +223,41 @@ pub fn notice(notice: &Notice) -> NoticeText {
                  you update Wakeshot, it may not keep the PC awake for {agent} as it should."
             ),
         ),
-        Notice::JournalCorrupt => NoticeText {
+        // The log holds each value the reset found, and the journal saves before it the user's own.
+        Notice::JournalLost { failed: true, .. } => NoticeText {
             click: NoticeClick::OpenLog,
             ..warning(
                 "Check your lid and sleep settings",
-                "Wakeshot's record of your old power settings was damaged, so it cannot put them back. Set the lid \
-                 and sleep settings again by hand; click to see the old values in the log.",
+                "Wakeshot could not read its record of your settings, and could not set them all back to Windows \
+                 defaults. Set the lid and sleep settings by hand; click to see the old values in the log.",
             )
         },
+        Notice::JournalLost { reset, .. } => {
+            let lid = reset
+                .iter()
+                .any(|k| matches!(k, SettingKey::LidAc | SettingKey::LidDc));
+            let sleep = reset.contains(&SettingKey::SleepDc);
+            // Lid on AC and on battery are one setting to the user: "Closing the lid will make my PC".
+            let (what, default, it) = match (lid, sleep) {
+                (true, true) => (
+                    "the lid and battery sleep settings",
+                    "Windows defaults",
+                    "them",
+                ),
+                (false, true) => ("the battery sleep setting", "the Windows default", "it"),
+                _ => ("the lid setting", "the Windows default", "it"),
+            };
+            NoticeText {
+                click: NoticeClick::OpenLog,
+                ..warning(
+                    "Power settings set to Windows defaults",
+                    format!(
+                        "Wakeshot could not read its record of your settings, so it set {what} to {default}. If you \
+                         had your own, set {it} again. Click to see the old values in the log."
+                    ),
+                )
+            }
+        }
         // Silent: it comes when nobody has used the PC for a while, and a sound for an absent user helps nobody
         // (Phase 2 track note 11).
         Notice::IdleLocked => NoticeText {
@@ -496,13 +523,18 @@ mod tests {
             Notice::UpdateWakeshot {
                 agent: "Claude Code",
             },
-            Notice::JournalCorrupt,
+            Notice::JournalLost {
+                reset: KEYS.to_vec(),
+                failed: false,
+            },
             Notice::IdleLocked,
             Notice::Updated {
                 version: "1.1.0".to_owned(),
             },
         ]
     }
+
+    const KEYS: [SettingKey; 3] = [SettingKey::LidAc, SettingKey::LidDc, SettingKey::SleepDc];
 
     /// No wildcard: a new variant fails to compile here until `samples` and the flags table below name it.
     fn variant(notice: &Notice) -> usize {
@@ -518,7 +550,7 @@ mod tests {
             Notice::LockFailed => 8,
             Notice::ClosedLidReport { .. } => 9,
             Notice::UpdateWakeshot { .. } => 10,
-            Notice::JournalCorrupt => 11,
+            Notice::JournalLost { .. } => 11,
             Notice::IdleLocked => 12,
             Notice::Updated { .. } => 13,
         }
@@ -570,6 +602,22 @@ mod tests {
                 flags[variant(sample)],
                 "{sample:?}"
             );
+        }
+
+        // Each form of the lost-journal notice, not only the sample's, keeps to the English limits.
+        let lost_forms = [
+            (vec![SettingKey::LidAc], false),
+            (vec![SettingKey::LidAc, SettingKey::LidDc], false),
+            (vec![SettingKey::SleepDc], false),
+            (vec![SettingKey::LidDc, SettingKey::SleepDc], false),
+            (KEYS.to_vec(), true),
+            (Vec::new(), true),
+        ];
+        for (reset, failed) in lost_forms {
+            let text = notice(&Notice::JournalLost { reset, failed });
+            assert!(units(&text.title) <= TITLE_ENGLISH, "{:?}", text.title);
+            assert!(units(&text.body) <= BODY_ENGLISH, "{:?}", text.body);
+            assert_eq!(text.click, NoticeClick::OpenLog);
         }
 
         // The words around user-given and system-given values stay within the hard limits, whatever the values.
@@ -915,7 +963,16 @@ mod tests {
         let update = text(Notice::UpdateWakeshot {
             agent: "Claude Code",
         });
-        let corrupt = text(Notice::JournalCorrupt);
+        let lost = |reset: &[SettingKey], failed| {
+            text(Notice::JournalLost {
+                reset: reset.to_vec(),
+                failed,
+            })
+        };
+        let lost_all = lost(&KEYS, false);
+        let lost_lid = lost(&[SettingKey::LidDc], false);
+        let lost_sleep = lost(&[SettingKey::SleepDc], false);
+        let lost_failed = lost(&[SettingKey::LidAc], true);
         let idle_locked = text(Notice::IdleLocked);
         let updated = text(Notice::Updated {
             version: "1.1.0".to_owned(),
@@ -1109,11 +1166,27 @@ mod tests {
                 "Wakeshot cannot fully read what Claude Code is doing, most likely because Claude Code was updated. \
                  Until you update Wakeshot, it may not keep the PC awake for Claude Code as it should.",
             ),
-            (corrupt.title, "Check your lid and sleep settings"),
+            (lost_all.title, "Power settings set to Windows defaults"),
             (
-                corrupt.body,
-                "Wakeshot's record of your old power settings was damaged, so it cannot put them back. Set the lid \
-                 and sleep settings again by hand; click to see the old values in the log.",
+                lost_all.body,
+                "Wakeshot could not read its record of your settings, so it set the lid and battery sleep settings to \
+                 Windows defaults. If you had your own, set them again. Click to see the old values in the log.",
+            ),
+            (
+                lost_lid.body,
+                "Wakeshot could not read its record of your settings, so it set the lid setting to the Windows \
+                 default. If you had your own, set it again. Click to see the old values in the log.",
+            ),
+            (
+                lost_sleep.body,
+                "Wakeshot could not read its record of your settings, so it set the battery sleep setting to the \
+                 Windows default. If you had your own, set it again. Click to see the old values in the log.",
+            ),
+            (lost_failed.title, "Check your lid and sleep settings"),
+            (
+                lost_failed.body,
+                "Wakeshot could not read its record of your settings, and could not set them all back to Windows \
+                 defaults. Set the lid and sleep settings by hand; click to see the old values in the log.",
             ),
             (idle_locked.title, "Wakeshot locked the PC"),
             (

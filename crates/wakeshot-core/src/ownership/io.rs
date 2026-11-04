@@ -29,7 +29,9 @@ pub enum JournalRead {
 /// - `can_write` is `PowerSettingAccessCheckEx`: an error means policy blocks the write (codes 5 and 1260);
 /// - `write` takes only a `SettingKey`, so nothing else can be written, and stores the value only: it is in force
 ///   only after `set_active` of that plan (`PowerSetActiveScheme`);
-/// - `values` reads the active plan id and its five values in one go, for `Event::Plan`; the routines never call it.
+/// - `values` reads the active plan id and its five values in one go, for `Event::Plan`; the routines never call it;
+/// - `read_default` reads Windows' default of `key` for `plan`, as Windows ships it for the plan's kind (Balanced,
+///   High performance, Power saver); only the lost-journal reset calls it (`p2-6-record-lost`).
 pub trait PlanIo {
     fn active_plan(&mut self) -> Result<Guid, Failure>;
     fn plans(&mut self) -> Result<Vec<Guid>, Failure>;
@@ -38,7 +40,20 @@ pub trait PlanIo {
     fn write(&mut self, plan: Guid, key: SettingKey, value: u32) -> Result<(), Failure>;
     fn set_active(&mut self, plan: Guid) -> Result<(), Failure>;
     fn values(&mut self) -> Result<PlanValues, Failure>;
+
+    /// A form that cannot read defaults keeps this answer, so the reset leaves every value as it is. A wrapper around
+    /// another `PlanIo` must forward it, or its reset does nothing.
+    fn read_default(&mut self, plan: Guid, key: SettingKey) -> Result<u32, Failure> {
+        let _ = (plan, key);
+        Err(DEFAULT_NOT_READ)
+    }
 }
+
+/// `PlanIo::read_default` of a form that does not read defaults. 50 is `ERROR_NOT_SUPPORTED`.
+pub const DEFAULT_NOT_READ: Failure = Failure {
+    call: "PlanIo::read_default (not supported)",
+    code: 50,
+};
 
 /// The journal file, the RunOnce value and the guard process, one call per step, so the routine owns their order.
 ///

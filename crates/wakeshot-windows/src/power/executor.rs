@@ -19,7 +19,7 @@ use windows::Win32::Foundation::ERROR_BUSY;
 
 use crate::log::{Level, Log};
 use crate::power::journal::{
-    FileNet, NoGuard, apply_locked, check_locked, mark_corrupt_seen, restore_locked,
+    FileNet, NoGuard, apply_locked, check_locked, mark_corrupt_seen, reset_locked, restore_locked,
 };
 use crate::power::plan::{DryRunPower, Win32Power};
 use crate::process::Liveness;
@@ -64,7 +64,8 @@ pub struct Startup {
 ///
 /// Callers may rely on:
 ///
-/// - `run` answers `ReadPlan`, `Apply` and `Restore`; every other command gives no event and makes no call;
+/// - `run` answers `ReadPlan`, `Apply`, `Restore` and `ResetLost`; every other command gives no event and makes no
+///   call;
 /// - before each of those three, a journal that holds a known entry this tray owns gets a guard (`ensure_guard`), so a
 ///   guard that ended is replaced (architecture section 5, "Guard");
 /// - `Restore { why: Leftover }` runs only when the journal's owner is Gone or this tray; otherwise it answers a failed
@@ -128,6 +129,7 @@ impl<P: PlanIo, N: SafetyNet> PowerExecutor<P, N> {
     ///   note 10).
     /// - `Apply`: `Done(Applied)`.
     /// - `Restore`: `Done(Restored)`, then `JournalCorrupt` when this run set a corrupt journal aside.
+    /// - `ResetLost`: `Done(ResetLost)`.
     pub fn run(&mut self, command: &Command) -> Vec<Event> {
         match command {
             Command::ReadPlan => {
@@ -142,8 +144,30 @@ impl<P: PlanIo, N: SafetyNet> PowerExecutor<P, N> {
                 let before = self.keep_guard("restore");
                 self.restore(*plan, *why, &before)
             }
+            // No guard: a lost journal names no owner a guard could wait on.
+            Command::ResetLost { damaged } => vec![self.reset(*damaged)],
             _ => Vec::new(),
         }
+    }
+
+    /// A file the reset set aside is marked seen at once: its own notice tells of it, so the next start must not
+    /// report it as a damaged journal again (which would reset again, then over a value the user set since).
+    fn reset(&mut self, damaged: bool) -> Event {
+        let done = reset_locked(
+            &mut self.plans,
+            &mut self.net,
+            damaged,
+            &self.names,
+            self.log.as_ref(),
+        );
+        if done.set_aside == Some(Ok(())) {
+            self.mark_seen();
+        }
+        Event::Done(Outcome::ResetLost {
+            reset: done.reset_keys(),
+            result: done.result,
+            journal: done.journal,
+        })
     }
 
     /// Tray startup step 6, on the tray's main thread before any other thread starts. A journal whose owner is Gone is
@@ -848,6 +872,58 @@ mod tests {
         );
         assert_eq!(rig.calls()[at], Call::SetAsideJournal);
         assert_eq!(rig.fake.state().journal, FakeJournal::Corrupt);
+    }
+
+    #[test]
+    fn a_lost_journal_reset_answers_its_keys_and_marks_the_file_seen() {
+        use wakeshot_core::ownership::fake::{FAKE_DEFAULT_LID, FAKE_DEFAULT_SLEEP_DC};
+
+        let rig = Rig::new("reset");
+        let ours = |key: SettingKey| {
+            let mut state = rig.fake.state();
+            state.set_stored(BALANCED, key, 0, SetBy::Override);
+            state.set_in_force(BALANCED, key, 0, SetBy::Override);
+        };
+        let answer = |reset: Vec<SettingKey>| {
+            Event::Done(Outcome::ResetLost {
+                reset,
+                result: Ok(()),
+                journal: Vec::new(),
+            })
+        };
+        // A crashed tray's battery lid action, and a damaged journal that names it.
+        ours(SettingKey::LidDc);
+        fs::write(rig.dir.data().file(DataFile::Journal), b"{ not a journal").unwrap();
+        // The dry-run net renames real files and touches no registry key.
+        let mut executor = rig.executor_over(FileNet::dry_run(rig.dir.data(), rig.log.clone()));
+        let lost = Command::ResetLost { damaged: false };
+        assert_eq!(executor.run(&lost), [answer(vec![SettingKey::LidDc])]);
+        let state = rig.fake.state();
+        assert_eq!(
+            state.in_force(BALANCED, SettingKey::LidDc),
+            Some(FAKE_DEFAULT_LID)
+        );
+        assert!(state.held().is_empty());
+        drop(state);
+        // Set aside and marked seen, so the next start reports no damaged journal and resets nothing again.
+        assert_eq!(names_in(&rig.dir.0), ["journal.json.corrupt.seen"]);
+        assert!(rig.warned("journal.json moved to journal.json.corrupt"));
+
+        // The file is gone now: a journal that did not read was restored elsewhere, so nothing is reset.
+        ours(SettingKey::SleepDc);
+        assert_eq!(executor.run(&lost), [answer(Vec::new())]);
+        assert_eq!(
+            rig.fake.state().in_force(BALANCED, SettingKey::SleepDc),
+            Some(0)
+        );
+        // After a damaged one was set aside, its values are still in force: reset.
+        let damaged = Command::ResetLost { damaged: true };
+        assert_eq!(executor.run(&damaged), [answer(vec![SettingKey::SleepDc])]);
+        assert_eq!(
+            rig.fake.state().in_force(BALANCED, SettingKey::SleepDc),
+            Some(FAKE_DEFAULT_SLEEP_DC)
+        );
+        assert!(!rig.calls().contains(&Call::EnsureGuard));
     }
 
     #[test]

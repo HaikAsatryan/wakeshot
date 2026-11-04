@@ -31,25 +31,38 @@ sleep, with hibernate only as the fallback and the built lock as the last step.
 
 ## Deliverables
 
-1. `SettingKey::SleepAc` (journal key `sleepAc`): written, journaled and restored like the other three. An older
-   journal without it still loads.
+1. `SettingKey::SleepAc`, `VideoIdleAc`, `VideoIdleDc` (journal keys `sleepAc`, `videoIdleAc`, `videoIdleDc`):
+   written, journaled and restored like the other three. An older journal without them still loads.
 2. The step after the countdown. Where the work-end countdown (5 minutes with no input, the checks, the "going to
    sleep" sound) now sends `Hibernate`, it instead sets the sleep timeout of the plan in use to 60 s on AC and on DC,
    each only where the value in force (the user's own after the restore) is longer or Never, as Wakeshot-owned
-   journal entries. The same for the battery floor countdown and for the failed-lock step back.
-3. Fallback. If 5 minutes after that write the laptop has not slept (use what `p3-idle-sleep-check` found to tell),
-   the lid is still closed and no input came, send `Hibernate` as today (its own checks stay). If hibernate is not
-   allowed or fails: the built relock and notice. The short timeout stays in force, so Windows sleeps the laptop once
-   nothing holds it.
-4. Restore of the short timeout: at lid open, at the first unlock after a wake (the user is there), when a hold
+   journal entries. The same for the battery floor countdown and for the failed-lock step back. Added after
+   `p3-idle-sleep-check` (orchestrator decision 2026-11-04, for Haik's review): the screen timeout too
+   (`VideoIdleAc`, `VideoIdleDc`, 60 s, same rule), because on this laptop the sleep came only when the screen
+   timeout turned the screen off, not at the 60 s sleep timeout; a user with a long or Never screen timeout would
+   otherwise not sleep.
+3. Fallback. If 5 minutes after that write the laptop has not slept, the lid is still closed and no input came, send
+   `Hibernate` as today (its own checks stay). "Slept" means the suspend seen through the suspend-resume callback
+   (`p3-idle-sleep-check`: window messages did not show it), confirmed by the clock gap at the next tick. If
+   hibernate is not allowed or fails: the built relock and notice. The short timeouts stay in force, so Windows
+   sleeps the laptop once nothing holds it.
+4. Restore of the short timeouts: at lid open, at the first unlock after a wake (the user is there), when a hold
    starts, and at every other restore point (quit, sign-out, next start, uninstall, guard). Not at a wake alone: a
-   wake with the lid still closed must sleep again. A user's own change to the timeout wins as today.
+   wake with the lid still closed must sleep again. Input after the write (someone at an external screen): restore
+   and wait again for 5 minutes with no input. A user's own change to a timeout wins as today.
 5. Words: `text.rs` notices that say "hibernate" for this path now say what happens (sleep, or hibernate as the
    fallback). Keep `text.rs` rules.
 6. Tests first: core scenarios for work end, floor and failed lock (write, sleep seen, fallback, lid open, unlock
    after wake, a wake with the lid closed, a hold that starts, a user change); props updated; Windows unit tests with
    the fakes; journal round trip with `sleepAc`.
-7. `docs/architecture.md` sections 3, 5 and 6: the lines that state these rules.
+7. `docs/architecture.md` sections 3, 5 and 6: the lines that state these rules. Also sections 5 and 8, which still
+   say a damaged journal's values stay (`p2-6-record-lost` for the orchestrator 4).
+8. From `p2-6-record-lost` (orchestrator decision 2026-11-04, for Haik's review): a hold that runs through the
+   unknown window with the lid closed now keeps the laptop running unlocked until the hold ends, because the lid
+   close came while no lock was allowed. When the window ends (`Core::unknown_journal_ended`) with the lid closed
+   while Wakeshot holds on its own Do nothing, lock as at a lid close, with the chime ("Never lower security").
+9. `examples/power_check.rs`: its `Timed` wrapper does not pass the new default read through
+   (`p2-6-record-lost` for the orchestrator 3). Pass it through, or say why it never matters.
 
 ## Acceptance checks
 

@@ -563,6 +563,7 @@ fn call_text(call: &Call) -> String {
         Call::Write(p, k, v) => format!("write {} {} {v}", plan_name(*p), key_name(*k)),
         Call::SetActive(p) => format!("set_active {}", plan_name(*p)),
         Call::Values => "values".into(),
+        Call::ReadDefault(p, k) => format!("read default {} {}", plan_name(*p), key_name(*k)),
         Call::LoadJournal => "load".into(),
         Call::SaveJournal(file) => format!("save [{}]", entries_text(file)),
         Call::DeleteJournal => "delete".into(),
@@ -734,6 +735,11 @@ impl PlanIo for Probe {
 
     fn values(&mut self) -> Result<PlanValues, Failure> {
         let result = self.fake.values();
+        self.after(result)
+    }
+
+    fn read_default(&mut self, plan: Guid, key: SettingKey) -> Result<u32, Failure> {
+        let result = self.fake.read_default(plan, key);
         self.after(result)
     }
 }

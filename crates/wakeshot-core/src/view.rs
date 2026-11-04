@@ -85,26 +85,39 @@ pub enum MenuCommand {
 ///
 /// Owner: core track (Phase 2) decides when; tray track (Phase 5) words it in `text::notice` and shows it.
 /// `StepBack` carries the battery floor it stepped back at; `ClosedLidReport` how long the PC ran with the lid closed
-/// (`mono_ms`) and the labels of what held it; `UpdateWakeshot` the agent label. `JournalCorrupt`: a corrupt journal
-/// was set aside, so an override may be left. `IdleLocked`: Keep screen on locked the PC after the user's idle time.
-/// `Updated`: Wakeshot updated itself to `version` (ship Question 3, Haik 2026-11-03: yes); the answer to
-/// `Event::Updated`.
+/// (`mono_ms`) and the labels of what held it; `UpdateWakeshot` the agent label. `JournalLost`: the journal could not
+/// be read, so the keys in `reset` were set to Windows' default (product "User settings safety" 7); `failed`: a call of
+/// that reset failed, so a value of Wakeshot's may be left. `IdleLocked`: Keep screen on locked the PC after the
+/// user's idle time. `Updated`: Wakeshot updated itself to `version` (ship Question 3, Haik 2026-11-03: yes); the
+/// answer to `Event::Updated`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Notice {
     FirstRun,
     UserChanged(SettingKey),
     RestoredByUser,
-    StepBack { floor_pct: u8 },
+    StepBack {
+        floor_pct: u8,
+    },
     RequestsOnly,
     CannotHold,
     RestoreFailed,
     HibernateFailed,
     LockFailed,
-    ClosedLidReport { ran_ms: u64, held_by: Vec<String> },
-    UpdateWakeshot { agent: &'static str },
-    JournalCorrupt,
+    ClosedLidReport {
+        ran_ms: u64,
+        held_by: Vec<String>,
+    },
+    UpdateWakeshot {
+        agent: &'static str,
+    },
+    JournalLost {
+        reset: Vec<SettingKey>,
+        failed: bool,
+    },
     IdleLocked,
-    Updated { version: String },
+    Updated {
+        version: String,
+    },
 }
 
 /// The three sounds (decision 19). Each is one of Wakeshot's own chimes, built into the exe.

@@ -127,56 +127,46 @@ impl Core {
     /// in force on one stand-in plan, and any other lid key as Sleep. Only the lid keys are guessed, so only the
     /// lid-close and source lock rules read it; like the in-force view it errs toward a lock.
     ///
-    /// A journal the copy may not know ([`Core::journal_unknown`]: `journal.json` did not read at start, and no read
-    /// since) may hold a crashed tray's Do nothing on any lid key: then a lid key in force at Do nothing that no entry
-    /// names counts as ours, and before the first plan read both do (`p2-6-unread-journal` Found outside scope 3).
+    /// A journal the copy does not know ([`Core::journal_unknown`]) gets no guess: during its window Wakeshot does not
+    /// lock at a lid close (product "User settings safety" 7, Haik 2026-11-04), and the window ends in the reset or a
+    /// read, after which the countdown hook ([`Core::unknown_journal_ended`]) decides.
     fn lock_view(&self) -> Option<(PlanValues, Vec<JournalEntry>)> {
-        let unknown = self.journal_unknown();
-        let (plan, mut journal) = match self.in_force() {
-            Some(view) => view,
-            // No plan id is known either; the guessed entries below name this one.
-            None if unknown => (stand_in(Guid(0), DO_NOTHING), Vec::new()),
-            None => {
-                let active = self.state.journal.first()?.plan;
-                let mut plan = stand_in(active, SLEEP);
-                let mut journal = Vec::new();
-                for key in [SettingKey::LidAc, SettingKey::LidDc] {
-                    if let Some(&entry) = self.state.journal.iter().find(|e| e.key == key) {
-                        set(&mut plan, key, entry.written);
-                        journal.push(JournalEntry {
-                            plan: active,
-                            ..entry
-                        });
-                    }
-                }
-                (plan, journal)
-            }
-        };
-        if unknown {
-            for key in [SettingKey::LidAc, SettingKey::LidDc] {
-                let named = journal
-                    .iter()
-                    .any(|e| e.plan == plan.active && e.key == key);
-                if value(&plan, key) == DO_NOTHING && !named {
-                    // Any original but Do nothing: `policy::lid::ours` asks only that the two differ.
-                    journal.push(JournalEntry {
-                        plan: plan.active,
-                        key,
-                        original: SLEEP,
-                        written: DO_NOTHING,
-                        restored: false,
-                    });
-                }
+        if let Some(view) = self.in_force() {
+            return Some(view);
+        }
+        let active = self.state.journal.first()?.plan;
+        let mut plan = stand_in(active, SLEEP);
+        let mut journal = Vec::new();
+        for key in [SettingKey::LidAc, SettingKey::LidDc] {
+            if let Some(&entry) = self.state.journal.iter().find(|e| e.key == key) {
+                set(&mut plan, key, entry.written);
+                journal.push(JournalEntry {
+                    plan: active,
+                    ..entry
+                });
             }
         }
         Some((plan, journal))
     }
 
-    /// The journal may hold entries the copy does not know: a restore is still wanted and the copy names none. So it is
-    /// from a `Started` whose `journal.json` did not read until a restore or apply reads the file (a failed load reports
-    /// nothing, so the copy stays empty), and after any restore that failed to load a journal the copy knew as empty.
-    fn journal_unknown(&self) -> bool {
-        self.state.retry.is_some() && self.state.journal.is_empty()
+    /// The countdown hook at the end of an unknown journal's window, known or lost (`p2-6-record-lost` deliverable 4;
+    /// `p2-6-sleep-route` builds on it). With the lid closed and nothing holding, a closed laptop may run on a value of
+    /// Wakeshot's that the reset or a restore just took back, and putting the lid action back does not sleep a laptop
+    /// whose lid is already closed. So the work-end want waits for the next plan read, which tells the user's own lid
+    /// action (`work_end_waited`): the copy still shows the values from before the reset or restore. A step back with a
+    /// hold that holds nothing waits the same way for the `Floor` countdown.
+    pub(super) fn unknown_journal_ended(&mut self) {
+        if self.state.lid_closed != Some(true) {
+            return;
+        }
+        if self.state.episode.is_none() {
+            if self.state.work_end.is_none() {
+                let sources = self.sources();
+                self.state.lock.work_end_waits.get_or_insert(sources);
+            }
+        } else if self.state.stepped_back && !self.state.floor_countdown {
+            self.state.lock.floor_waits = true;
+        }
     }
 
     /// Our Do nothing keeps a closed laptop running on the current source (either one before the first `Power`).
@@ -374,7 +364,7 @@ impl Core {
 
     /// A notice raised with the lid closed and the session unlocked goes to a screen nobody may look at (the lid
     /// closed, no external screen): it goes out again when the user is back.
-    fn keep_for_return(&mut self, notice: Notice) {
+    pub(super) fn keep_for_return(&mut self, notice: Notice) {
         if self.state.lid_closed == Some(true)
             && !self.state.session_locked
             && !self.state.lock.kept.contains(&notice)

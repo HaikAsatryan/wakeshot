@@ -8,6 +8,11 @@
 //! applies now. Every edge that may make the core apply sets `Wanted`: a hold start, `SettingsOwner`, `ConsoleBack`,
 //! `EndCancelled`, a plan switch, the end of a step back (`core::lid`). A failed restore is kept as
 //! `retry` and sent again at each tick, scoped so it never takes an entry a running hold uses.
+//!
+//! A journal the copy does not know (product "User settings safety" 7, `p2-6-record-lost`): a retry wanted while the
+//! copy names no entry, or a damaged file just set aside. The retries go on for [`LOST_AFTER_MS`] of run time from the
+//! first failure; then the journal is lost and `ResetLost` puts what looks like Wakeshot's back to Windows' defaults.
+//! A damaged file is lost at once. Either way the window ends with `Core::unknown_journal_ended`.
 
 use std::collections::BTreeSet;
 
@@ -19,6 +24,10 @@ use crate::settings::{Guid, JournalEntry, OwnedKey, PlanValues, SettingKey};
 use crate::state::ApplyStep;
 use crate::time::{Deadline, Now};
 use crate::view::Notice;
+
+/// How long a journal may stay unknown before it is lost: Haik's 2 minutes (product "User settings safety" 7). Run
+/// time, so a PC that slept in between still gets its tries.
+pub(super) const LOST_AFTER_MS: u64 = 120_000;
 
 /// The keys an apply writes, less the released ones (decision 17).
 pub(super) const KEYS: [SettingKey; 3] =
@@ -63,12 +72,59 @@ impl Core {
             && !state.requests_only_run
     }
 
-    /// Something may be overridden: the copy holds an entry, an apply is not answered yet, or a restore failed and
-    /// the copy may not know what the journal holds.
+    /// Something may be overridden: the copy holds an entry, an apply is not answered yet, a restore failed and the
+    /// copy may not know what the journal holds, or a lost journal's reset has not answered.
     pub(super) fn may_own(&self) -> bool {
         !self.state.journal.is_empty()
             || !self.state.applying.is_empty()
             || self.state.retry.is_some()
+            || self.state.resetting.is_some()
+    }
+
+    /// The journal may hold entries the copy does not know: a restore is still wanted and the copy names none, or a
+    /// reset of a lost journal is out. So it is from a `Started` whose `journal.json` did not read until a restore or
+    /// apply reads the file (a failed load reports nothing, so the copy stays empty), after any restore that failed to
+    /// load a journal the copy knew as empty, and from a damaged file's `JournalCorrupt` to its reset's answer.
+    pub(super) fn journal_unknown(&self) -> bool {
+        self.state.resetting.is_some()
+            || (self.state.retry.is_some() && self.state.journal.is_empty())
+    }
+
+    /// The journal stayed unknown for [`LOST_AFTER_MS`], or a reset's answer did not come in that time (a post the
+    /// IO thread could not make): the next reset is due, asking what the lost one asked.
+    fn lost_due(&self, now: Now) -> bool {
+        self.journal_unknown()
+            && self
+                .state
+                .unknown_since
+                .is_some_and(|at| now.mono_ms >= at.saturating_add(LOST_AFTER_MS))
+    }
+
+    /// `ResetLost`; the clock starts again, so an answer that never comes gets a second reset, not none.
+    fn send_reset(&mut self, damaged: bool, now: Now, out: &mut Vec<Command>) {
+        let why = match damaged {
+            true => "journal.json was damaged and is set aside",
+            false => "journal.json did not read for 2 minutes",
+        };
+        out.push(Command::Log(format!(
+            "Journal lost ({why}): the lid and sleep values that look like Wakeshot's go to Windows defaults"
+        )));
+        out.push(Command::ResetLost { damaged });
+        self.state.resetting = Some(damaged);
+        self.state.unknown_since = Some(now.mono_ms);
+    }
+
+    /// The settle pass's part for a journal the copy does not know: when it became so, and when the reset is due. The
+    /// window's end, known or lost, goes to the countdown hook before the lid side settles.
+    pub(super) fn settle_journal(&mut self, now: Now) -> Option<Deadline> {
+        if self.journal_unknown() {
+            let since = *self.state.unknown_since.get_or_insert(now.mono_ms);
+            return Some(Deadline::Mono(since.saturating_add(LOST_AFTER_MS)));
+        }
+        if self.state.unknown_since.take().is_some() {
+            self.unknown_journal_ended();
+        }
+        None
     }
 
     fn may_own_on(&self, plan: Guid) -> bool {
@@ -123,8 +179,13 @@ impl Core {
     }
 
     /// At each tick, at most once per [`PLAN_READ_EVERY_MS`]: the restore retry, then a plan read, so the read's
-    /// ownership check sees the journal the retry left.
+    /// ownership check sees the journal the retry left. A lost journal's reset goes in place of the retry, on its own
+    /// clock, so the 2 minutes never wait for the read's 10 s; while it is out, its answer decides, so no retry.
     pub(super) fn tick(&mut self, now: Now, out: &mut Vec<Command>) {
+        if self.lost_due(now) {
+            let damaged = self.state.resetting.unwrap_or(false);
+            self.send_reset(damaged, now, out);
+        }
         let due = self
             .state
             .plan_read_mono
@@ -132,7 +193,9 @@ impl Core {
         if !due {
             return;
         }
-        if let Some(why) = self.state.retry {
+        if self.state.resetting.is_none()
+            && let Some(why) = self.state.retry
+        {
             out.extend(
                 self.restore_scope()
                     .into_iter()
@@ -261,10 +324,56 @@ impl Core {
         }
     }
 
-    /// A corrupt journal was set aside: a new corrupt file may get its own restore.
-    pub(super) fn take_journal_corrupt(&mut self, out: &mut Vec<Command>) {
+    /// A corrupt journal was set aside: lost at once (product "User settings safety" 7), and a new corrupt file may get
+    /// its own restore.
+    pub(super) fn take_journal_corrupt(&mut self, now: Now, out: &mut Vec<Command>) {
         self.state.corrupt_restore_sent = false;
-        self.notify(Notice::JournalCorrupt, out);
+        self.send_reset(true, now, out);
+    }
+
+    /// `ResetLost` answered. Entries mean the file read after all: the copy takes them, and the retry goes on as
+    /// before. Otherwise the journal is known and empty, whatever the result: a reset that failed leaves values only
+    /// the user can tell apart, and the notice says so. One notice when anything was reset or a call failed; nothing
+    /// reset is the log's only. A read follows, since the plan copy still shows the values from before.
+    pub(super) fn done_reset(
+        &mut self,
+        reset: Vec<SettingKey>,
+        result: Result<(), Failure>,
+        journal: Vec<JournalEntry>,
+        now: Now,
+        out: &mut Vec<Command>,
+    ) {
+        self.state.resetting = None;
+        if journal.is_empty() {
+            self.state.journal = journal;
+            self.state.retry = None;
+            self.state.retry_warned = false;
+            self.state.corrupt_restore_sent = false;
+            let what: Vec<&str> = reset.iter().map(|&k| key_words(k)).collect();
+            let mut line = match what.is_empty() {
+                true => "Journal reset: nothing held Wakeshot's values".to_owned(),
+                false => format!("Journal reset: Windows defaults for {}", what.join(", ")),
+            };
+            if let Err(Failure { call, code }) = result {
+                line.push_str(&format!("; failed ({call}, code {code})"));
+            }
+            out.push(Command::Log(line));
+            if result.is_err() || !reset.is_empty() {
+                let notice = Notice::JournalLost {
+                    reset,
+                    failed: result.is_err(),
+                };
+                self.keep_for_return(notice.clone());
+                self.notify(notice, out);
+            }
+        } else {
+            out.push(Command::Log(format!(
+                "Journal reset not needed: journal.json reads now, with {} entries",
+                journal.len()
+            )));
+            self.state.journal = journal;
+        }
+        self.read_plan(now, out);
     }
 
     /// "Restore my power settings": restore now, release every key for the episode, keep the requests (decision 26).
@@ -439,7 +548,10 @@ impl Core {
             Ok(()) => {}
             Err(_) => {
                 self.state.retry = Some(why);
-                if !std::mem::replace(&mut self.state.retry_warned, true) {
+                // A journal the copy does not know ends in a good read or in the reset, which has its own notice, so
+                // the user gets one word for it, not two (product "User settings safety" 7).
+                if !self.journal_unknown() && !std::mem::replace(&mut self.state.retry_warned, true)
+                {
                     self.notify(Notice::RestoreFailed, out);
                 }
             }

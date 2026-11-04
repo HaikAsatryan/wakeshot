@@ -26,7 +26,7 @@ use proptest::test_runner::{Config as ProptestConfig, TestCaseError};
 use crate::command::{ApplyError, Command, Outcome};
 use crate::event::{Event, SessionChange};
 use crate::holds::HoldFacts;
-use crate::ownership::fake::SetBy;
+use crate::ownership::fake::{FakeJournal, SetBy};
 use crate::policy::ending::IDLE_MS;
 use crate::policy::lid::{DO_NOTHING, SOURCE_SETTLE_MS};
 use crate::policy::{floor, hold_files};
@@ -122,8 +122,10 @@ struct Model {
     mirror: BTreeSet<(Guid, SettingKey)>,
     /// A restore is still wanted (section 5, "A failed `Restore`"): `Started` brought a journal or one that did not
     /// read, or a restore failed. A restore of every plan that worked ends it; one of one plan leaves it, the side
-    /// that excuses more.
+    /// that excuses more. A reset that found the journal lost ends it too.
     retry: bool,
+    /// A `ResetLost` went out and its answer has not come (section 3, "A journal that cannot be read").
+    resetting: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -249,11 +251,11 @@ impl Model {
             .is_some_and(|e| e.released.contains(&key))
     }
 
-    /// The mirror may not know `journal.json` (section 3): a restore is still wanted and the mirror names nothing. The
-    /// lock rules then count a Do nothing in force as maybe ours, the user's own too (`p6-int-wiring-fixes` decision
-    /// 7, "errs toward a lock").
+    /// The mirror may not know `journal.json` (section 3, "A journal that cannot be read"): a restore is still wanted
+    /// and the mirror names nothing, or a reset is out. Then Wakeshot neither locks at a lid close nor counts down,
+    /// and a failed restore gets no `RestoreFailed`: the window ends in a read or the reset (product rule 7).
     fn journal_unknown(&self) -> bool {
-        self.retry && self.mirror.is_empty()
+        self.resetting || (self.retry && self.mirror.is_empty())
     }
 
     /// The mirror and the restore retry through one answer or user change.
@@ -287,6 +289,14 @@ impl Model {
             }
             Event::UserChanged(changed) => {
                 self.mirror.remove(&(changed.plan, changed.key));
+            }
+            // Entries: the file read after all, and the retry goes on; none: known and empty.
+            Event::Done(Outcome::ResetLost { journal, .. }) => {
+                self.resetting = false;
+                self.mirror = keys(journal);
+                if journal.is_empty() {
+                    self.retry = false;
+                }
             }
             _ => {}
         }
@@ -373,6 +383,13 @@ impl Model {
             _ => {}
         }
         self.take_journal(&step.event);
+        if step
+            .commands
+            .iter()
+            .any(|c| matches!(c, Command::ResetLost { .. }))
+        {
+            self.resetting = true;
+        }
         self.take_lock(step);
         let was = self.stepped_back;
         if let Some(ac) = self.ac {
@@ -722,16 +739,14 @@ fn core_can_know(seen: &Seen<'_>) -> bool {
 }
 
 /// The lid-close and source lock (a `Lock` with the chime) never goes out while the lid action in force for the
-/// current power source is the user's own Do nothing (decision 18). Judged only where [`core_can_know`] and the mirror
-/// knows the journal: while it may not, a Do nothing in force may be a crashed tray's, and the lock rules lock on it
-/// by design ([`Model::journal_unknown`]).
+/// current power source is the user's own Do nothing (decision 18). Judged only where [`core_can_know`]. Since
+/// `p2-6-record-lost` no guess locks while the journal is unknown, so that window needs no excuse.
 fn no_lock_on_the_users_own_do_nothing(world: &World) -> Result<(), String> {
     for seen in replay(world) {
         let truth = seen.truth();
         let lid_lock =
             seen.sent(&Command::Lock) && seen.sent(&Command::Play(Cue::LidClosedHolding));
-        let guessed = seen.before.journal_unknown() || seen.after.journal_unknown();
-        if !lid_lock || !core_can_know(&seen) || guessed {
+        if !lid_lock || !core_can_know(&seen) {
             continue;
         }
         let (value, by) = truth.lid();
@@ -748,7 +763,8 @@ fn no_lock_on_the_users_own_do_nothing(world: &World) -> Result<(), String> {
 /// The other side of the lid rule (section 3, "Lid closes while the lid action in force is our Do nothing"): a lid
 /// close with our Do nothing in force for the current power source gives `Lock` and the chime in the same step, with
 /// or without a hold (`p2-core-lid` design choice 4). Judged only where [`core_can_know`], which also leaves out a
-/// close before the first plan read, which the strict form of [`closed_laptop_is_locked_in_time`] judges.
+/// close before the first plan read, which the strict form of [`closed_laptop_is_locked_in_time`] judges; and not while
+/// the journal is unknown, when Wakeshot does not lock by design (product "User settings safety" 7).
 fn a_lid_close_on_ours_locks(world: &World) -> Result<(), String> {
     let mut before: Option<&Truth> = None;
     let seen = replay(world);
@@ -759,7 +775,7 @@ fn a_lid_close_on_ours_locks(world: &World) -> Result<(), String> {
                 && before.is_some_and(|b| !b.lid_closed)
         });
         before = Some(truth);
-        if !closes || !core_can_know(s) || s.before.quit {
+        if !closes || !core_can_know(s) || s.before.quit || s.before.journal_unknown() {
             continue;
         }
         let ours = truth.lid() == (DO_NOTHING, SetBy::Override);
@@ -868,7 +884,18 @@ fn every_action_is_explained(world: &World) -> Result<(), String> {
         }
 
         let sent = notified(&Notice::RestoreFailed);
-        match step.event {
+        match &step.event {
+            // While the journal is unknown its window ends in a read or the reset, each with its own word.
+            Event::Done(Outcome::Restored { result: Err(_), .. })
+                if seen.after.journal_unknown() =>
+            {
+                if sent {
+                    return Err(format!(
+                        "a RestoreFailed while the journal is unknown, {}",
+                        seen.where_()
+                    ));
+                }
+            }
             Event::Done(Outcome::Restored { result: Err(_), .. }) => {
                 if !warned {
                     expect(Notice::RestoreFailed)?;
@@ -889,6 +916,21 @@ fn every_action_is_explained(world: &World) -> Result<(), String> {
                 sent_since_ok = false;
                 if plan.is_none() {
                     warned = false;
+                }
+            }
+            // A lost journal's reset: one notice when it reset a value or a call failed, the run of failures over.
+            Event::Done(Outcome::ResetLost {
+                reset,
+                result,
+                journal,
+            }) if journal.is_empty() => {
+                sent_since_ok = false;
+                warned = false;
+                if result.is_err() || !reset.is_empty() {
+                    expect(Notice::JournalLost {
+                        reset: reset.clone(),
+                        failed: result.is_err(),
+                    })?;
                 }
             }
             _ if sent && !returning => {
@@ -919,7 +961,8 @@ fn runs_closed_unlocked_on_ours(truth: &Truth) -> bool {
 /// restore lands, so a stretch is excused only by that step back done in time: the requests off and a `Restore` in the
 /// step that ends the retry's wait, one tick after its failure (section 8, "Lock fails"; verify minor 4). `strict`
 /// also judges a change before the core's first plan read (finding 2: a crashed tray's values in the first moments
-/// after the start).
+/// after the start). A change while the journal is unknown starts no stretch: Wakeshot does not lock then, by design
+/// (product "User settings safety" 7, whose cost names a closed laptop running unlocked until it sleeps).
 fn closed_laptop_is_locked_in_time(world: &World, strict: bool) -> Result<(), String> {
     let seen = replay(world);
     let mut stretch: Option<u64> = None;
@@ -958,7 +1001,8 @@ fn closed_laptop_is_locked_in_time(world: &World, strict: bool) -> Result<(), St
                 _ => false,
             };
             let knows = core_can_know(s) || (strict && truth.in_sync && s.before.plan.is_none());
-            if stretch.is_none() && runs && change && knows {
+            let window = s.before.journal_unknown() || s.after.journal_unknown();
+            if stretch.is_none() && runs && change && knows && !window {
                 stretch = Some(truth.at.mono_ms);
             }
         }
@@ -1560,6 +1604,108 @@ fn an_unread_journal_and_a_hold_before_the_first_tick() {
         End::LastHold,
         |world| restored_at_the_end(world).and_then(|()| retries_spare_the_running_hold(world)),
     );
+}
+
+// A journal that cannot be read (product "User settings safety" 7, `p2-6-record-lost`): through the real restore and
+// reset routines, the values that look like Wakeshot's end at the plan's Windows defaults, with one notice.
+
+/// The world after `start`, with `journal.json` gone bad right after the start, and `ms` of run time.
+fn lost_journal(start: &WorldStart, bad: FakeJournal, ms: u64) -> World {
+    let mut world = World::new(start);
+    world.plans().state().journal = bad;
+    world.play(&WorldStep::Run(ms));
+    world.end(End::LastHold);
+    world
+}
+
+/// The `JournalLost` notices the core sent.
+fn lost_notices(world: &World) -> Vec<Notice> {
+    world
+        .sim()
+        .notices()
+        .into_iter()
+        .filter(|n| matches!(n, Notice::JournalLost { .. }))
+        .cloned()
+        .collect()
+}
+
+fn check(world: &World, property: fn(&World) -> Result<(), String>) {
+    if let Err(why) = property(world) {
+        panic!("{why}\n\ntrace:\n{}", world.trace());
+    }
+}
+
+#[test]
+fn a_crashed_trays_journal_that_never_reads_ends_at_the_defaults() {
+    let world = lost_journal(&unread_leftover(), FakeJournal::Unreadable(32), 3 * MINUTE);
+    assert_eq!(
+        lost_notices(&world),
+        [Notice::JournalLost {
+            reset: KEYS.to_vec(),
+            failed: false
+        }],
+        "{}",
+        world.trace()
+    );
+    for key in KEYS {
+        let state = world.plans().state();
+        let default = state.default_of(sim::BALANCED, key);
+        assert_eq!(
+            state.in_force(sim::BALANCED, key),
+            Some(default),
+            "{key:?}\n{}",
+            world.trace()
+        );
+    }
+    check(&world, restored_at_the_end);
+    check(&world, every_action_is_explained);
+}
+
+#[test]
+fn a_users_own_do_nothing_meets_a_lost_journal_and_is_reset_with_the_notice() {
+    // The other plan: the user's own lid action on battery is Do nothing; their AC Hibernate and battery sleep stay.
+    let start = WorldStart {
+        active: 1,
+        ac: false,
+        startup_unread: true,
+        ..WorldStart::default()
+    };
+    let world = lost_journal(&start, FakeJournal::Unreadable(32), 3 * MINUTE);
+    assert_eq!(
+        lost_notices(&world),
+        [Notice::JournalLost {
+            reset: vec![SettingKey::LidDc],
+            failed: false
+        }],
+        "{}",
+        world.trace()
+    );
+    let lid_dc = world
+        .plans()
+        .state()
+        .default_of(sim::OTHER_PLAN, SettingKey::LidDc);
+    assert_eq!(world.user_value(sim::OTHER_PLAN, SettingKey::LidDc), lid_dc);
+    assert_eq!(world.user_value(sim::OTHER_PLAN, SettingKey::LidAc), 2);
+    check(&world, restored_at_the_end);
+    check(&world, every_action_is_explained);
+}
+
+#[test]
+fn a_damaged_leftover_journal_ends_at_the_defaults() {
+    // The first tick's retry sets the damaged file aside; its values are still in force, so the reset takes them.
+    let world = lost_journal(&unread_leftover(), FakeJournal::Corrupt, MINUTE);
+    assert_eq!(
+        lost_notices(&world),
+        [Notice::JournalLost {
+            reset: KEYS.to_vec(),
+            failed: false
+        }],
+        "{}",
+        world.trace()
+    );
+    assert_eq!(world.plans().state().set_aside, 1);
+    check(&world, restored_at_the_end);
+    check(&world, every_action_is_explained);
 }
 
 proptest! {

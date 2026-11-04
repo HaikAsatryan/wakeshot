@@ -201,7 +201,8 @@ pub enum Event {
                                                 // config wins over Core::new's; journal: known entries only, None
                                                 // when there are none; journal_unread: journal.json did not read at
                                                 // start, so the core retries it as Restore { why: Leftover } on
-                                                // each tick; owner: holds the settings mutex; on_console:
+                                                // each tick, for two minutes, then ResetLost; owner: holds the
+                                                // settings mutex; on_console:
                                                 // this session is the one on the PC's own screen
                                                 // (WTSGetActiveConsoleSessionId); tray: this tray's own process,
                                                 // for state.json and the Keep awake hold; first_run: config.json
@@ -220,7 +221,8 @@ pub enum Event {
     ActivePlan(Guid),                           // the active plan changed (GUID_ACTIVE_POWERSCHEME); the core
                                                 // sends ReadPlan when it differs from the last read, never more
     UserChanged(OwnedKey),                      // the IO thread saw a value we wrote change; it dropped the entry
-    JournalCorrupt,                             // a corrupt journal was set aside; once per corrupt file
+    JournalCorrupt,                             // a corrupt journal was set aside; once per corrupt file; the
+                                                // journal is lost: the core sends ResetLost { damaged: true }
     InputIdle { ms: u64 },                      // read on each tick
     Suspending, Resumed,
     Session(SessionChange),                     // Locked, Unlocked, Ending, EndCancelled, Ended,
@@ -245,6 +247,9 @@ pub enum Command {
                                                 // why: WorkEnded, UserAsked, PlanSwitch, Floor, Quit, SessionEnd,
                                                 // ConsoleLeft, Leftover (a journal left at start; run only when
                                                 // its owner is Gone or this tray)
+    ResetLost { damaged: bool },                // a lost journal ("A journal that cannot be read" below): on the
+                                                // plan in use each key at Wakeshot's value goes to the plan's
+                                                // Windows default, the bad file goes aside (ownership::reset)
     Lock,
     Hibernate { reason: CountdownReason, floor_pct: u8, last_resume_mono_ms: Option<u64> },
                                                 // what the hibernate thread's last check needs (section 5); that
@@ -291,6 +296,9 @@ pub enum Outcome {
     Restored { plan: Option<Guid>, why: RestoreWhy, result: Result<(), Failure>, journal: Vec<JournalEntry> },
                                        // Err: journal kept, retried on the tick while still wanted (episode flow)
                                        // journal: the entries after the command; the core's mirror is this copy
+    ResetLost { reset: Vec<SettingKey>, result: Result<(), Failure>, journal: Vec<JournalEntry> },
+                                       // reset: the keys set to the default; journal: known entries when the
+                                       // file read after all, and then nothing was reset
     Locked(Result<(), Failure>),
     Hibernate(HibernateEnd),           // Skipped(HibernateSkip) | NotAllowed | Failed(Failure) | Resumed
     Sound(Result<SoundEnd, Failure>),  // logged only
@@ -310,17 +318,18 @@ pub enum ApplyError {
 
 `Notice` variants: `FirstRun`, `UserChanged(SettingKey)`, `RestoredByUser`, `StepBack { floor_pct }`,
 `RequestsOnly` (settings blocked or a failed apply), `CannotHold`, `RestoreFailed`, `HibernateFailed`, `LockFailed`,
-`ClosedLidReport { ran_ms, held_by }`, `UpdateWakeshot { agent }`, `JournalCorrupt` (a corrupt journal was set aside,
-so an override may be left), `IdleLocked` (Keep screen on locked the PC), `Updated { version }` (Wakeshot updated
-itself; Haik's yes, 2026-11-03). The tray track words each one in `text::notice`. A notice raised while the session
-is locked or another session has the PC's screen waits, and the waiting ones go out in order once the session is
-unlocked and on the console again: a balloon shown to nobody is lost. The same notice twice in one absence waits once.
-Sounds never wait.
+`ClosedLidReport { ran_ms, held_by }`, `UpdateWakeshot { agent }`, `JournalLost { reset, failed }` (a lost journal's
+reset set these keys to Windows defaults, or a call of it failed), `IdleLocked` (Keep screen on locked the PC),
+`Updated { version }` (Wakeshot updated itself; Haik's yes, 2026-11-03). The tray track words each one in
+`text::notice`. A notice raised while the session is locked or another session has the PC's screen waits, and the
+waiting ones go out in order once the session is unlocked and on the console again: a balloon shown to nobody is lost.
+The same notice twice in one absence waits once. Sounds never wait.
 
 State is one struct owned by the loop thread: `automatic`; holds by source; live `PlanValues`; `ac`, `battery_pct`,
 `floor_pct`, `lid`; `episode: Option<Episode>` (from the first hold to the last: `released: Set<SettingKey>`, on every
 plan, `lid_closed_since`, labels of what held); a mirror of the journal, a copy of the entries that `Done(Applied)` and
-`Done(Restored)` carry, less the keys `UserChanged` names; `requests`; `stepped_back` (battery floor); `on_console`;
+`Done(Restored)` carry, less the keys `UserChanged` names, with when it became unknown and whether a `ResetLost` is
+out; `requests`; `stepped_back` (battery floor); `on_console`;
 `session_ending`; `ending: Option<Countdown>`; `last_resume_mono`; notices already shown; and the lid side's own
 memory (`lock: LockWatch`): the lock watch (a closed-lid `Lock` until `Session(Locked)` confirms it), the lock step
 back, the lock after a hibernate that did not happen, notices kept for the user's return, countdown rules waiting for
@@ -334,12 +343,14 @@ plan copy behind the other way, showing what Wakeshot wrote until the next read 
 entry that left the mirror, whose key the copy still shows at `written`, puts its `original` back in the copy, and a
 later read replaces it (power safety review finding 5). Before the first plan read, a countdown rule that meets the lid
 closed while the `Started` journal holds entries (a crashed tray's values) waits for that read and decides on it
-(power safety verify minor 3). A work-end or Floor countdown also waits while the mirror may not know `journal.json`
-(it did not read at start, or a restore failed to load it, and no read of the file since): a Do nothing in force may
-be a crashed tray's, and once a restore puts the user's value back, the copy shows the Do nothing until a later read,
-since no mirror entry names the key. So a countdown that waited takes no Do nothing as final: it starts once a read
-shows the user's own action for its power source (battery for Floor) as not Do nothing, and ends when the lid opens, a
-hold starts or, for Floor, AC comes back (`p2-6-unread-lid-countdown`, `p2-6-unread-floor-countdown`).
+(power safety verify minor 3). A work-end or Floor countdown also waits while the journal is unknown ("A journal that
+cannot be read", below): a Do nothing in force may be a crashed tray's, and once a restore or the reset puts another
+value in, the copy shows the Do nothing until a later read, since no mirror entry names the key. So a countdown that
+waited takes no Do nothing as final: it starts once a read shows the user's own action for its power source (battery
+for Floor) as not Do nothing, and ends when the lid opens, a hold starts or, for Floor, AC comes back
+(`p2-6-unread-lid-countdown`, `p2-6-unread-floor-countdown`). When the unknown window ends, known or lost, with the lid
+closed and nothing holding, the work-end want starts waiting the same way; with a hold that holds nothing because of
+the battery floor, the Floor want does (`Core::unknown_journal_ended`, `p2-6-record-lost`).
 
 ### Clocks
 
@@ -375,19 +386,16 @@ While holding:
   `Apply` to the new plan.
 - Lid closes while the lid action in force is our Do nothing: `Lock` and `Play(LidClosedHolding)` at once, side by side;
   note `lid_closed_since`. Also with nothing holding, when a restore that failed or has not landed left our Do nothing
-  in force (the countdown below starts too). While the mirror may not know `journal.json` (it did not read at start, or
-  a restore failed to load it, and no read of the file since), a lid key in force at Do nothing that no entry names
-  counts as ours, and before the first plan read both lid keys do: a crashed tray's Do nothing may be in force, so this
-  errs toward a lock, also over a user's own Do nothing (`Core::lock_view`, `p6-int-wiring-fixes` decision 7, open for
-  Haik). The lock is watched: a lock that fails, or that no `Session(Locked)` follows within 5 s (`LockWorkStation` only
+  in force (the countdown below starts too). While the journal is unknown ("A journal that cannot be read", below)
+  there is no lock at a lid close and no source lock: no entry names a key, and a Do nothing in force may be the user's
+  own (Haik, 2026-11-04; this replaced the guess of `p6-int-wiring-fixes` decision 7). The lock is watched: a lock that fails, or that no `Session(Locked)` follows within 5 s (`LockWorkStation` only
   starts it), is sent once more at the next tick; if that one goes the same way, step back as at the floor (requests
   off, restore, the work-end countdown) until the session locks or the lid opens, then hold again as at a hold start
   (section 8, "Lock fails"). The same for the source lock below. The lock does not wait for the sound. Tested: the
   Windows alias sound played in full with the lock 0.2 ms after its call, and our chime was heard both in a session
   already locked and with its stream running before the lock (research, "Lid-close sound", "Lid-close results"). Not
   tested: our chime with the lock landing during its stream start, which is the v1 order (checklist 16). Change it when
-  a test shows the lock cuts a sound. A user whose own lid action is Do nothing (docked use) gets no lock and no sound,
-  except while the mirror may not know the journal (above).
+  a test shows the lock cuts a sound. A user whose own lid action is Do nothing (docked use) gets no lock and no sound.
 - Power source changes while the lid is closed: if the lid action in force for the new source is our Do nothing, and
   either it was the user's own before (their AC action is Do nothing, ours is the DC one) or the change is AC to
   battery, then once the new source has lasted 30 s: `Lock` and `Play(LidClosedHolding)`. AC to battery covers a user
@@ -419,8 +427,8 @@ While holding:
 Holding ends (last hold gone):
 
 - `Requests` off and, when anything may be owned, `Restore { plan: None }` at once, lid open or closed. May be
-  owned: the mirror holds an entry, an `Apply` has no answer yet, or a restore failed (the mirror may not know what
-  the journal holds). The console-left and battery-floor restores follow the same rule; the user's Restore, Quit and
+  owned: the mirror holds an entry, an `Apply` has no answer yet, a restore failed (the mirror may not know what the
+  journal holds), or a lost journal's reset has not answered. The console-left and battery-floor restores follow the same rule; the user's Restore, Quit and
   session end go out whatever the mirror says.
 - If the lid is closed and the user's own lid action is not Do nothing: countdown (reason WorkEnded). Settings come
   back first, so a crash during the countdown leaves nothing overridden.
@@ -435,6 +443,27 @@ wait for an apply that never comes. So a retry never undoes a running hold, and 
 fails rests on entries the journal still holds. The 10 s read deadline is set only while the mirror holds an entry or
 an apply waits for a plan (`core/settings.rs` `plan_read_due`), so with an empty mirror (a journal that did not read)
 the retry comes at the 30 s safety tick (measured, `p2-6-unread-floor-countdown` Result item 4).
+
+A journal that cannot be read (product "User settings safety" 7, Haik 2026-11-04; `p2-6-record-lost`). The journal is
+unknown while a restore is still wanted and the mirror names no entry (`journal.json` did not read at start, or a
+restore failed to load a journal the mirror knew as empty), and while a `ResetLost` waits for its answer. A failed
+load with a known mirror is not this case: the mirror names what is ours, and the retry goes on as above. While the
+journal is unknown the retry goes on at the ticks, a failed one shows no `RestoreFailed` (the window ends in a read or
+the reset, each with its own word), and there is no lid lock and no countdown (both above). Two minutes of run time
+after it became unknown (a sleep in between pauses the clock, so the tries still happen), the tick sends
+`ResetLost { damaged: false }` in place of the retry; `JournalCorrupt` sends `ResetLost { damaged: true }` at once. The
+reset (`ownership::reset`, under the journal mutex) loads the file once more: known entries mean it read after all,
+nothing is reset, and the mirror takes them; a missing file, or one with no known entry, means someone else restored
+it, unless `damaged`. Otherwise, on the plan in use, each of the three keys that holds exactly Wakeshot's value (lid
+Do nothing, sleep Never) gets the plan's Windows default (`PowerRead*DefaultIndex` of the plan's personality, research
+"Windows defaults of the three keys"), then `PowerSetActiveScheme`; any other value is the user's and stays. The bad
+file goes aside afterwards (a failed move is logged, nothing more), and the executor marks it seen, so the next start
+does not reset again. The log has a line per key with its old and new value, or why it stayed. The answer makes the
+journal known and empty, also when a call failed; then a read goes out, since the plan copy shows the old values. One
+`JournalLost` notice when a key was reset or a call failed, kept for the user's return like `HibernateFailed`; nothing
+reset is the log's only. A reset whose answer never comes goes out again two minutes later. Only the plan in use is
+reset: a lost journal's values on another plan stay (rare: a crash after a plan switch whose restore failed, then a
+journal that never reads).
 
 Countdown: due when input idle (clamped at resume as above) reaches 5 minutes (Haik, 2026-11-03). Cancelled by a new
 hold (not while stepped back, at the floor or after a failed lock, since no hold holds then), lid open, or AC back
@@ -594,13 +623,15 @@ How they talk: files only. No pipes, no sockets.
    covers the rest.
 6. Restore if a journal exists and its owner (pid and start time) is Gone (section 5, "Liveness"). Unknown: retry on
    each tick. A journal that does not read (a read error, not a parse error) is read once more after 500 ms; still
-   unread, `Started` carries `journal_unread`, and the core retries it on each tick as a leftover restore
-   (`app/startup.rs`, `p2-6-unread-journal`). A tray that writes the journal makes itself the owner and keeps the
+   unread, `Started` carries `journal_unread`, and the core retries it on each tick as a leftover restore, for two
+   minutes, then resets it as a lost journal (section 3, "A journal that cannot be read"; `app/startup.rs`,
+   `p2-6-unread-journal`, `p2-6-record-lost`). A tray that writes the journal makes itself the owner and keeps the
    entries already in it (section 5, Apply step 3).
 7. Try `Global\Wakeshot.Settings`.
 8. Window, icon (retry until the taskbar exists; re-add on `TaskbarCreated`, tested), notifications, watchers, first
    reads, then `Started`, then `Session(Locked)` when the session was locked at start, then `JournalCorrupt` when a
-   corrupt journal was left by another process, then `Updated` when Velopack restarted the tray. After Quit: the IO
+   corrupt journal was set aside at start or left by another process (the core resets it as a lost journal), then
+   `Updated` when Velopack restarted the tray. After Quit: the IO
    thread runs what is queued (up to 10 s), the update and watch threads stop, the icon and the requests go, the
    mutexes are released.
 

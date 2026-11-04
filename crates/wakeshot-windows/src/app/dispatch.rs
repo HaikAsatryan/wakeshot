@@ -382,6 +382,7 @@ impl<R: LoopRunners> Dispatcher<R> {
             command @ (Command::ReadPlan
             | Command::Apply { .. }
             | Command::Restore { .. }
+            | Command::ResetLost { .. }
             | Command::WriteState(_)
             | Command::WriteConfig(_)
             | Command::WriteHold { .. }
@@ -478,8 +479,8 @@ mod tests {
     use wakeshot_core::policy::ending::IDLE_MS;
     use wakeshot_core::process::Alive;
     use wakeshot_core::sim::{
-        self, BALANCED, KEYS, OTHER_PLAN, START, Start, applied, claude, entries, plan, restored,
-        watched,
+        self, BALANCED, KEYS, OTHER_PLAN, START, Start, applied, claude, entries, plan, reset_done,
+        restored, watched,
     };
     use wakeshot_core::sources::Activity;
     use wakeshot_core::testing::FakeClock;
@@ -510,12 +511,13 @@ mod tests {
     };
 
     /// Every `Command` variant, by the name [`name`] gives.
-    const ALL: [&str; 19] = [
+    const ALL: [&str; 20] = [
         "Requests",
         "Retake",
         "ReadPlan",
         "Apply",
         "Restore",
+        "ResetLost",
         "Lock",
         "Hibernate",
         "Tray",
@@ -540,6 +542,7 @@ mod tests {
             Command::ReadPlan => "ReadPlan",
             Command::Apply { .. } => "Apply",
             Command::Restore { .. } => "Restore",
+            Command::ResetLost { .. } => "ResetLost",
             Command::Lock => "Lock",
             Command::Hibernate { .. } => "Hibernate",
             Command::Tray(_) => "Tray",
@@ -962,6 +965,9 @@ mod tests {
         w.post(menu(MenuCommand::OpenLog));
         w.post(menu(MenuCommand::Restore));
         w.post(restored(None, RestoreWhy::UserAsked, Ok(()), Vec::new()));
+        // A damaged journal goes aside: the reset of a lost journal, answered.
+        w.post(Event::JournalCorrupt);
+        w.post(reset_done(&[], Ok(())));
         // The work ends with the lid closed: the countdown runs to the idle mark.
         let input = w.mono();
         w.recorder().input_mono = input;
@@ -1001,6 +1007,7 @@ mod tests {
             "ReadPlan",
             "Apply",
             "Restore",
+            "ResetLost",
             "WriteState",
             "WriteConfig",
             "WriteHold",
@@ -1434,15 +1441,26 @@ mod tests {
                 updated.clone(),
             ]
         );
+        let queued = w.queue();
+        assert!(notices(&queued).is_empty(), "held while locked");
+        // The damaged journal's reset goes out at once; its answer decides the notice.
+        assert!(
+            queued.contains(&Command::ResetLost { damaged: true }),
+            "{queued:?}"
+        );
+        w.post(reset_done(&[KEYS[0]], Ok(())));
         assert!(notices(&w.queue()).is_empty(), "held while locked");
         w.d.on_session(SessionChange::Unlocked);
         assert_eq!(
             notices(&w.queue()),
             [
-                &Notice::JournalCorrupt,
                 &Notice::Updated {
                     version: "1.1.0".to_owned()
-                }
+                },
+                &Notice::JournalLost {
+                    reset: vec![KEYS[0]],
+                    failed: false
+                },
             ]
         );
     }

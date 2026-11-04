@@ -61,15 +61,20 @@ pub enum FileKind {
 /// (architecture section 4, "Tray threads").
 ///
 /// Owner: core track (Phase 2) issues them; power track (Phase 3) runs `Requests`, `Retake`, `ReadPlan`, `Apply`,
-/// `Restore`, `Lock`, `Hibernate`; tray track (Phase 5) runs `Tray`, `Notify`, `Play`; ship track (Phase 6) runs
-/// `ApplyUpdate`; the integration step wires the rest. Each runner may rely on getting commands in the order the core
-/// returned them.
+/// `Restore`, `ResetLost`, `Lock`, `Hibernate`; tray track (Phase 5) runs `Tray`, `Notify`, `Play`; ship track
+/// (Phase 6) runs `ApplyUpdate`; the integration step wires the rest. Each runner may rely on getting commands in the
+/// order the core returned them.
 ///
 /// - `Requests`: `system` means SYSTEM plus EXECUTION; `display` only for Keep screen on.
 /// - `Retake`: answers as `Outcome::Requests`.
 /// - `Apply`: `writes` is the three keys less the ones the user released, never less a key already at its target;
 ///   the apply restores this plan's journal entries for other keys in the same run (architecture section 5, Apply).
 /// - `Restore`: `plan: None` takes every entry, `Some` only that plan's.
+/// - `ResetLost`: the journal is lost (product "User settings safety" 7): on the plan in use, each key at the value
+///   Wakeshot writes goes to the plan's Windows default, and the bad file is set aside (`ownership::reset`). It first
+///   loads the journal once more: a file with known entries read after all, and nothing is reset. A missing file, or
+///   one with no known entry, means someone else restored it, unless `damaged`: then a corrupt file was set aside just
+///   before, and the values it named are still in force. Answers as `Outcome::ResetLost`.
 /// - `Hibernate`: the hibernate thread checks again right before the call (section 5), so it gets what that check
 ///   needs: the reason, the battery floor, and the last resume (idle counts from it). The hibernate thread plays
 ///   `Cue::GoingToSleep` after its last check, then reads the lid once more; the core never sends
@@ -98,6 +103,9 @@ pub enum Command {
     Restore {
         plan: Option<Guid>,
         why: RestoreWhy,
+    },
+    ResetLost {
+        damaged: bool,
     },
     Lock,
     Hibernate {
@@ -171,9 +179,11 @@ pub enum SoundEnd {
 ///
 /// Owner: whoever runs the command (see `Command`). In `Applied` and `Restored`, `journal` is every entry left after
 /// the command, so the core's mirror is a copy of it, never its own guess. A failed `Restored` kept the journal; the
-/// core retries on the tick while a restore is still wanted. `Update(Ok)`: Velopack's updater now waits (at most
-/// 60 s) for this process to exit, so the core issues `Quit`; `Update(Err)`: nothing changed, and the core waits for
-/// the next `UpdateReady`. That comes at most once per version per run, so the failed version is not tried again
+/// core retries on the tick while a restore is still wanted. `ResetLost`: `reset` names each key set to the plan's
+/// Windows default; `result` is the first failed call (the set-aside of the bad file is logged only); `journal` holds
+/// the known entries when the file read after all, and then nothing was reset. `Update(Ok)`: Velopack's updater now
+/// waits (at most 60 s) for this process to exit, so the core issues `Quit`; `Update(Err)`: nothing changed, and the
+/// core waits for the next `UpdateReady`. That comes at most once per version per run, so the failed version is not tried again
 /// until a newer one is found or the tray starts again.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Outcome {
@@ -187,6 +197,11 @@ pub enum Outcome {
     Restored {
         plan: Option<Guid>,
         why: RestoreWhy,
+        result: Result<(), Failure>,
+        journal: Vec<JournalEntry>,
+    },
+    ResetLost {
+        reset: Vec<SettingKey>,
         result: Result<(), Failure>,
         journal: Vec<JournalEntry>,
     },

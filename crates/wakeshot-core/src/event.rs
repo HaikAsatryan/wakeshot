@@ -35,7 +35,7 @@ pub enum SessionChange {
 /// - `Started` comes first and once. Its `config` wins over the one `Core::new` got. `journal`: the entries this
 ///   version knows, `None` when there are none. `journal_unread`: `journal.json` did not read at start (then
 ///   `journal` is `None`), so what it holds is not known and the core retries it as `Restore { why: Leftover }` on
-///   each tick. `owner`: this tray holds the settings mutex. `on_console`: this session is on the PC's own screen.
+///   each tick, for two minutes, then sends `ResetLost`. `owner`: this tray holds the settings mutex. `on_console`: this session is on the PC's own screen.
 ///   `tray`: this tray's own process, for `state.json` and the Keep awake hold. `first_run`: `config.json` was
 ///   missing at start, so the core shows `Notice::FirstRun` and writes the config.
 /// - A tray that starts while the session is locked gets `Session(Locked)` right after `Started`, before
@@ -46,7 +46,8 @@ pub enum SessionChange {
 ///   from the last read's `active` and never acts on it alone.
 /// - `UserChanged` comes after the IO thread already dropped that entry from the journal.
 /// - `JournalCorrupt`: a corrupt journal was set aside, once per corrupt file (at start for one left by restore mode,
-///   the guard or a hook; at once for the tray's own restore).
+///   the guard or a hook; at once for the tray's own restore). The journal is lost: the core sends
+///   `ResetLost { damaged: true }` (product "User settings safety" 7).
 /// - `UpdateReady`: an update is downloaded, at most once per version per run.
 /// - `Updated`: Velopack restarted the tray after it installed `version`. At most once per run, at start, after
 ///   `Started` (and after `JournalCorrupt` when both come); the core answers with `Notify(Notice::Updated)`.

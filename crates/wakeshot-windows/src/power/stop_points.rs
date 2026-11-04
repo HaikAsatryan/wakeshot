@@ -167,6 +167,11 @@ impl<P: PlanIo> PlanIo for StopAt<'_, P> {
         self.script.step("values".into())?;
         self.inner.values()
     }
+
+    fn read_default(&mut self, plan: Guid, key: SettingKey) -> Result<u32, Failure> {
+        self.script.step(format!("read_default {plan} {key:?}"))?;
+        self.inner.read_default(plan, key)
+    }
 }
 
 impl<N: SafetyNet> SafetyNet for StopAt<'_, N> {

@@ -16,13 +16,16 @@ use windows::Win32::Foundation::{
 };
 use windows::Win32::System::Power::{
     ACCESS_AC_POWER_SETTING_INDEX, ACCESS_DC_POWER_SETTING_INDEX, ACCESS_SCHEME, PowerEnumerate,
-    PowerGetActiveScheme, PowerReadACValueIndex, PowerReadDCValueIndex, PowerSetActiveScheme,
-    PowerSettingAccessCheckEx, PowerWriteACValueIndex, PowerWriteDCValueIndex,
+    PowerGetActiveScheme, PowerReadACDefaultIndex, PowerReadACValueIndex, PowerReadDCDefaultIndex,
+    PowerReadDCValueIndex, PowerSetActiveScheme, PowerSettingAccessCheckEx, PowerWriteACValueIndex,
+    PowerWriteDCValueIndex,
 };
 use windows::Win32::System::Registry::KEY_WRITE;
 use windows::Win32::System::SystemServices::{
     GUID_ENERGY_SAVER_BATTERY_THRESHOLD, GUID_ENERGY_SAVER_SUBGROUP, GUID_LIDCLOSE_ACTION,
+    GUID_MAX_POWER_SAVINGS, GUID_MIN_POWER_SAVINGS, GUID_POWERSCHEME_PERSONALITY,
     GUID_SLEEP_SUBGROUP, GUID_STANDBY_TIMEOUT, GUID_SYSTEM_BUTTON_SUBGROUP,
+    GUID_TYPICAL_POWER_SAVINGS, NO_SUBGROUP_GUID,
 };
 use windows::core::GUID;
 
@@ -216,6 +219,64 @@ fn write_value(plan: Guid, key: SettingKey, value: u32) -> Result<(), WinError> 
     }
 }
 
+/// The plan's kind, which keys Windows' defaults: `PowerRead*DefaultIndex` takes the scheme *personality*, not the
+/// scheme (Microsoft, `PowerReadDCDefaultIndex`), and a plan copied from Balanced keeps Balanced's kind in the hidden
+/// setting `GUID_POWERSCHEME_PERSONALITY` (research, "Windows defaults of the three keys").
+fn personality_of(plan: Guid) -> Result<GUID, WinError> {
+    const CALL: &str = "PowerReadACValueIndex (plan personality)";
+    let scheme = GUID::from_u128(plan.0);
+    let mut index = 0u32;
+    // SAFETY: the GUIDs and the out value live across the call.
+    let rc = unsafe {
+        PowerReadACValueIndex(
+            None,
+            Some(&scheme),
+            Some(&NO_SUBGROUP_GUID),
+            Some(&GUID_POWERSCHEME_PERSONALITY),
+            &mut index,
+        )
+    };
+    win(CALL, rc.0)?;
+    personality(index).ok_or(WinError {
+        call: CALL,
+        code: ERROR_INVALID_DATA.0,
+    })
+}
+
+/// The setting's three values, as its possible values name them on the test laptop: 0 Power saver, 1 High
+/// performance, 2 Balanced, each value's data being that personality's GUID (research, "Windows defaults of the three
+/// keys").
+fn personality(index: u32) -> Option<GUID> {
+    match index {
+        0 => Some(GUID_MAX_POWER_SAVINGS),
+        1 => Some(GUID_MIN_POWER_SAVINGS),
+        2 => Some(GUID_TYPICAL_POWER_SAVINGS),
+        _ => None,
+    }
+}
+
+/// Windows' default of `key` for `plan`'s kind.
+fn read_default_value(plan: Guid, key: SettingKey) -> Result<u32, WinError> {
+    let personality = personality_of(plan)?;
+    let setting = PlanSetting::from(key);
+    let (sub, id) = setting.ids();
+    let mut value = 0u32;
+    if setting.on_ac() {
+        // SAFETY: the GUIDs and the out value live across the call.
+        let rc = unsafe {
+            PowerReadACDefaultIndex(None, &personality, Some(&raw const sub), &id, &mut value)
+        };
+        win("PowerReadACDefaultIndex", rc)?;
+    } else {
+        // SAFETY: as above.
+        let rc = unsafe {
+            PowerReadDCDefaultIndex(None, &personality, Some(&raw const sub), &id, &mut value)
+        };
+        win("PowerReadDCDefaultIndex", rc)?;
+    }
+    Ok(value)
+}
+
 fn set_active_plan(plan: Guid) -> Result<(), WinError> {
     let scheme = GUID::from_u128(plan.0);
     // SAFETY: the GUID lives across the call.
@@ -399,6 +460,10 @@ impl PlanIo for Win32Power {
         let active = get_active()?;
         self.values_of(active)
     }
+
+    fn read_default(&mut self, plan: Guid, key: SettingKey) -> Result<u32, Failure> {
+        Ok(read_default_value(plan, key)?)
+    }
 }
 
 /// A dry-run value for one plan and key, and the real stored value it was written over.
@@ -514,6 +579,11 @@ impl<P: PlanIo> PlanIo for DryRunPower<P> {
             self.seen.note(values.active, key, shown);
         }
         Ok(values)
+    }
+
+    /// A read only, so the real one: a dry-run reset then writes the default into the overlay.
+    fn read_default(&mut self, plan: Guid, key: SettingKey) -> Result<u32, Failure> {
+        self.inner.read_default(plan, key)
     }
 }
 
@@ -800,6 +870,10 @@ mod copies {
 
         fn values(&mut self) -> Result<PlanValues, Failure> {
             self.inner.values_of(self.copy)
+        }
+
+        fn read_default(&mut self, plan: Guid, key: SettingKey) -> Result<u32, Failure> {
+            self.inner.read_default(plan, key)
         }
     }
 }
@@ -1316,6 +1390,157 @@ mod tests {
         after.sort();
         assert_eq!(after, before);
         assert!(!after.contains(&gone));
+    }
+
+    #[test]
+    fn personality_index_names_the_three_kinds() {
+        assert_eq!(personality(0), Some(GUID_MAX_POWER_SAVINGS));
+        assert_eq!(personality(1), Some(GUID_MIN_POWER_SAVINGS));
+        assert_eq!(personality(2), Some(GUID_TYPICAL_POWER_SAVINGS));
+        assert_eq!(personality(3), None);
+        // Balanced is its own kind: the scheme and personality GUIDs are one.
+        assert_eq!(GUID_TYPICAL_POWER_SAVINGS.to_u128(), BALANCED.0);
+    }
+
+    #[test]
+    fn dry_run_reset_reads_the_real_default_and_writes_only_its_overlay() {
+        use wakeshot_core::ownership::fake::{FAKE_DEFAULT_LID, FakeJournal, SetBy};
+        use wakeshot_core::ownership::reset::reset_lost;
+
+        let inner = FakePlans::new(PlanValues {
+            lid_ac: 0,
+            ..user_values(BALANCED)
+        });
+        inner
+            .state()
+            .set_stored(BALANCED, SettingKey::LidAc, 0, SetBy::Override);
+        let mut dry = DryRunPower::new(inner.clone(), Arc::new(MemoryLog::default()));
+        let net = FakePlans::new(user_values(BALANCED));
+        net.state().journal = FakeJournal::Unreadable(32);
+        let done = reset_lost(&mut dry, &mut net.clone(), false);
+        assert_eq!(done.reset_keys(), [SettingKey::LidAc]);
+        assert_eq!(dry.read(BALANCED, SettingKey::LidAc), Ok(FAKE_DEFAULT_LID));
+        assert_eq!(dry.set_active_calls(), [BALANCED]);
+        let calls = inner.state().calls.clone();
+        assert!(calls.contains(&Call::ReadDefault(BALANCED, SettingKey::LidAc)));
+        assert!(
+            !calls
+                .iter()
+                .any(|c| matches!(c, Call::Write(..) | Call::SetActive(_))),
+            "{calls:?}"
+        );
+        assert_eq!(inner.state().stored(BALANCED, SettingKey::LidAc), Some(0));
+    }
+
+    /// One value of `HKLM\...\PowerSettings\<sub>\<setting>\DefaultPowerSchemeValues\<personality>`, a second reader
+    /// beside `PowerRead*DefaultIndex`.
+    fn registry_default(personality: GUID, setting: PlanSetting) -> u32 {
+        let (sub, id) = setting.ids();
+        let (sub, id, kind) = (
+            Guid(sub.to_u128()),
+            Guid(id.to_u128()),
+            Guid(personality.to_u128()),
+        );
+        let key = format!(
+            r"HKLM\SYSTEM\CurrentControlSet\Control\Power\PowerSettings\{sub}\{id}\DefaultPowerSchemeValues\{kind}"
+        );
+        let name = match setting.on_ac() {
+            true => "ACSettingIndex",
+            false => "DCSettingIndex",
+        };
+        let out = Command::new("reg")
+            .args(["query", &key, "/v", name])
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&out.stdout);
+        let line = text
+            .lines()
+            .find(|l| l.contains(name))
+            .unwrap_or_else(|| panic!("no {name} under {key}:\n{text}"));
+        let hex = line.rsplit("0x").next().unwrap().trim();
+        u32::from_str_radix(hex, 16).unwrap()
+    }
+
+    /// Battery sleep on a Modern Standby PC since Windows 11's new defaults: 3 minutes (Microsoft, "Power settings in
+    /// Windows 11", "New default settings for modern standby devices"). The registry's `DefaultPowerSchemeValues`
+    /// still holds the older 15 minutes, and `PowerReadDCDefaultIndex` gives the new value (research, "Windows defaults
+    /// of the three keys").
+    const MODERN_STANDBY_SLEEP_DC: u32 = 180;
+
+    #[test]
+    #[ignore = "real laptop (the Modern Standby test laptop on Balanced): reads Windows' defaults only"]
+    fn real_defaults_of_the_active_plan_read() {
+        let mut power = Win32Power::new(Arc::new(MemoryLog::default()));
+        let active = power.active_plan().unwrap();
+        let kind = personality_of(active).unwrap();
+        println!("active plan {active}: personality {kind:?}");
+        assert_eq!(kind, GUID_TYPICAL_POWER_SAVINGS, "Balanced");
+        for key in KEYS {
+            let default = power.read_default(active, key).unwrap();
+            let registry = registry_default(kind, key.into());
+            println!(
+                "{} default: {default} (registry table {registry})",
+                PlanSetting::from(key).name()
+            );
+            let want = match key {
+                SettingKey::LidAc | SettingKey::LidDc => registry,
+                SettingKey::SleepDc => MODERN_STANDBY_SLEEP_DC,
+            };
+            assert_eq!(default, want, "{key:?}");
+        }
+        // A plan with no such kind fails, and never guesses one.
+        let none = power.read_default(OTHER, SettingKey::LidAc);
+        println!("a plan that does not exist: {none:?}");
+        assert!(none.is_err());
+    }
+
+    #[test]
+    #[ignore = "real laptop: writes a plan copy that is never active"]
+    fn real_reset_on_a_copy_puts_the_balanced_defaults() {
+        use wakeshot_core::ownership::fake::FakeJournal;
+        use wakeshot_core::ownership::reset::reset_lost;
+
+        let log = Arc::new(MemoryLog::default());
+        let mut check = Win32Power::new(log.clone());
+        let before = check.values().unwrap();
+        println!("user's plan before: {before:?}");
+        let copy = fresh_copy(before.active);
+        let plan = copy.guid();
+        let kind = personality_of(plan).unwrap();
+        println!("copy {plan}: personality {kind:?}");
+
+        // The copy as a crashed tray left it: lid on AC and battery sleep at Wakeshot's values.
+        let mut io = CopyAsActive::over(&copy, Win32Power::new(log.clone())).unwrap();
+        io.write(plan, SettingKey::LidAc, 0).unwrap();
+        io.write(plan, SettingKey::SleepDc, 0).unwrap();
+        // A fake net: the real journal is never read or touched.
+        let net = FakePlans::new(user_values(plan));
+        net.state().journal = FakeJournal::Unreadable(32);
+        let done = reset_lost(&mut io, &mut net.clone(), false);
+        println!("reset: {done:?}");
+        assert_eq!(done.result, Ok(()));
+        for key in [SettingKey::LidAc, SettingKey::SleepDc] {
+            let default = read_default_value(plan, key).unwrap();
+            assert_ne!(default, 0, "{key:?}");
+            assert!(done.reset_keys().contains(&key), "{key:?}");
+            assert_eq!(powercfg_index(plan, key.into()), default, "{key:?}");
+            assert_eq!(io.in_force(key), default, "{key:?}");
+        }
+        assert_eq!(io.set_active_count(), 1);
+
+        assert_eq!(
+            get_active(),
+            Ok(before.active),
+            "Windows never switched plans"
+        );
+        assert_eq!(
+            check.values().unwrap(),
+            before,
+            "the user's plan is as it was"
+        );
+        drop(io);
+        drop(copy);
+        assert!(!check.plans().unwrap().contains(&plan));
     }
 
     #[test]

@@ -13,7 +13,7 @@ use proptest::prelude::*;
 use proptest::test_runner::Config as ProptestConfig;
 
 use crate::command::{
-    Command, CountdownReason, Failure, HibernateEnd, HibernateSkip, Outcome, RestoreWhy,
+    ApplyError, Command, CountdownReason, Failure, HibernateEnd, HibernateSkip, Outcome, RestoreWhy,
 };
 use crate::event::{Event, SessionChange};
 use crate::policy::ending::IDLE_MS;
@@ -22,7 +22,7 @@ use crate::process::{Alive, FileTime};
 use crate::settings::{Journal, JournalOwner, OwnedKey, PlanValues, SettingKey};
 use crate::sim::{
     self, BALANCED, KEYS, SAFETY_TICK_MS, Sim, Start, applied, claude, entries, hold, plan,
-    restored,
+    reset_done, restored,
 };
 use crate::sources::Activity;
 use crate::time::Now;
@@ -461,8 +461,9 @@ fn unplugged_before_the_first_plan_read_locks_on_a_crashed_trays_do_nothing_once
     );
 }
 
-// `p2-6-unread-journal` Found outside scope 3: `journal.json` did not read at start, so the copy knows nothing, yet a
-// crashed tray's Do nothing may be in force until a read of the file lands.
+// A journal the copy does not know (`journal.json` did not read at start, or a damaged one went aside): a crashed
+// tray's Do nothing may be in force, yet Wakeshot neither locks nor counts down until the window ends in a read or the
+// reset (product "User settings safety" 7, Haik 2026-11-04; `p2-6-record-lost`).
 
 fn unread_start() -> Event {
     Start {
@@ -479,79 +480,21 @@ fn close_on_battery(sim: &mut Sim) -> Vec<Command> {
 }
 
 #[test]
-fn a_lid_close_before_any_read_locks_when_the_journal_did_not_read() {
+fn no_lock_at_a_lid_close_while_the_journal_is_unknown() {
+    // Before any plan read.
     let mut sim = Sim::new();
     sim.send(unread_start());
     sim.send(power(false, 80));
-    let out = close_on_battery(&mut sim);
-    let trace = sim.trace();
-    assert_eq!(count(&out, &LOCK), 1, "{trace}");
-    assert_eq!(count(&out, &CHIME), 1, "{trace}");
-    assert!(position(&out, &LOCK) < position(&out, &CHIME), "{trace}");
-
-    // Unplugged with the lid closed: the new source's action may be ours too.
-    let mut sim = Sim::new();
-    sim.send(unread_start());
-    sim.send(power(true, 80));
-    sim.send(lid(true));
-    let unplugged = sim.now();
-    let mut out = sim.send(power(false, 80));
-    out.extend(sim.run(SOURCE_SETTLE_MS + SECOND));
-    let trace = sim.trace();
-    assert_eq!(count(&out, &LOCK), 1, "{trace}");
-    assert_eq!(
-        lock_times(&sim, unplugged),
-        [i128::from(SOURCE_SETTLE_MS)],
-        "{trace}"
-    );
-}
-
-#[test]
-fn with_an_unread_journal_a_do_nothing_in_force_may_be_ours_until_a_read_lands() {
-    // The plan read shows Do nothing on battery: the crashed tray's or the user's own, and the copy cannot tell.
-    let do_nothing_dc = PlanValues {
-        lid_dc: 0,
-        ..plan(BALANCED)
-    };
-    let mut sim = Sim::new();
-    sim.send(unread_start());
-    sim.send(power(false, 80));
-    sim.send(read(do_nothing_dc));
-    let out = close_on_battery(&mut sim);
-    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
-    assert_eq!(count(&out, &CHIME), 1, "{}", sim.trace());
-
-    // Sleep in force: Windows sleeps the laptop itself, so nothing.
-    let mut sim = Sim::new();
-    sim.send(unread_start());
-    sim.send(power(false, 80));
-    sim.send(read(plan(BALANCED)));
     let out = close_on_battery(&mut sim);
     assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
     assert_eq!(plays(&out), 0, "{}", sim.trace());
 
-    // The retry read the file and put every value back: the Do nothing is the user's own now (decision 18).
+    // A plan read that shows Do nothing on battery, the crashed tray's or the user's own, and a retry whose load
+    // fails again: still nothing known.
     let mut sim = Sim::new();
     sim.send(unread_start());
     sim.send(power(false, 80));
-    sim.send(read(do_nothing_dc));
-    sim.send(restored(None, RestoreWhy::Leftover, Ok(()), vec![]));
-    let out = close_on_battery(&mut sim);
-    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
-    assert_eq!(plays(&out), 0, "{}", sim.trace());
-}
-
-#[test]
-fn an_unread_journal_keeps_the_guess_until_a_retry_reads_it() {
-    let do_nothing_dc = PlanValues {
-        lid_dc: 0,
-        ..plan(BALANCED)
-    };
-    // A retry whose load fails again reads nothing: still nothing known, so still a lock.
-    let mut sim = Sim::new();
-    sim.send(unread_start());
-    sim.send(power(false, 80));
-    sim.send(read(do_nothing_dc));
+    sim.send(read(do_nothing_dc()));
     sim.send(restored(
         None,
         RestoreWhy::Leftover,
@@ -559,10 +502,33 @@ fn an_unread_journal_keeps_the_guess_until_a_retry_reads_it() {
         vec![],
     ));
     let out = close_on_battery(&mut sim);
-    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    assert_eq!(plays(&out), 0, "{}", sim.trace());
 
-    // A retry that read the file but could not restore (its owner lives): the entries it names decide. Only the
-    // battery sleep key is the crashed tray's, so the Do nothing is the user's own.
+    // Unplugged with the lid closed: no source lock either.
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(true, 80));
+    sim.send(read(do_nothing_dc()));
+    sim.send(lid(true));
+    let mut out = sim.send(power(false, 80));
+    out.extend(sim.run(SOURCE_SETTLE_MS + SECOND));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+
+    // A damaged file whose reset has not answered yet.
+    let mut sim = Sim::new();
+    sim.start();
+    sim.send(power(false, 80));
+    sim.send(read(do_nothing_dc()));
+    sim.send(Event::JournalCorrupt);
+    let out = close_on_battery(&mut sim);
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+}
+
+#[test]
+fn once_the_journal_reads_its_entries_decide_the_lock() {
+    // A retry that read the file but could not restore (its owner lives): the entries it names decide. The crashed
+    // tray's battery lid key: a lock.
     let alive = Failure {
         call: "journal owner (alive)",
         code: 170,
@@ -570,7 +536,22 @@ fn an_unread_journal_keeps_the_guess_until_a_retry_reads_it() {
     let mut sim = Sim::new();
     sim.send(unread_start());
     sim.send(power(false, 80));
-    sim.send(read(do_nothing_dc));
+    sim.send(read(do_nothing_dc()));
+    sim.send(restored(
+        None,
+        RestoreWhy::Leftover,
+        Err(alive),
+        entries(BALANCED, &[SettingKey::LidDc]),
+    ));
+    let out = close_on_battery(&mut sim);
+    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+    assert_eq!(count(&out, &CHIME), 1, "{}", sim.trace());
+
+    // Only the battery sleep key is the crashed tray's, so the Do nothing is the user's own (decision 18).
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(false, 80));
+    sim.send(read(do_nothing_dc()));
     sim.send(restored(
         None,
         RestoreWhy::Leftover,
@@ -584,7 +565,8 @@ fn an_unread_journal_keeps_the_guess_until_a_retry_reads_it() {
 
 // `p6-int-wiring-fixes` Found outside scope 3: with nothing holding, the lid closes on a Do nothing that may be a
 // crashed tray's. Once the retry puts the user's own Sleep back, the closed laptop must count down as with a journal
-// that read; with their own Do nothing it must not.
+// that read; with their own Do nothing it must not. Since `p2-6-record-lost` the close in the window neither locks nor
+// wants a countdown; the want comes when the window ends (`Core::unknown_journal_ended`).
 
 /// Do nothing on battery: the crashed tray's or the user's own.
 fn do_nothing_dc() -> PlanValues {
@@ -594,8 +576,8 @@ fn do_nothing_dc() -> PlanValues {
     }
 }
 
-/// An unread journal, a plan read with Do nothing on battery, then the lid closes with nothing holding: the lock
-/// (the unread guess), and the session reports it. Gives the time of the last input.
+/// An unread journal, a plan read with Do nothing on battery, then the lid closes with nothing holding: no lock in the
+/// window. Gives the time of the last input.
 fn closed_on_an_unread_do_nothing(sim: &mut Sim) -> Now {
     sim.send(unread_start());
     sim.send(power(false, 80));
@@ -604,8 +586,7 @@ fn closed_on_an_unread_do_nothing(sim: &mut Sim) -> Now {
     sim.input();
     let at = sim.now();
     let out = sim.send(lid(true));
-    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
-    sim.send(session(SessionChange::Locked));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
     at
 }
 
@@ -649,7 +630,7 @@ fn with_an_unread_journal_a_closed_lid_counts_down_once_the_retry_puts_the_users
     sim.input();
     let at = sim.now();
     let out = sim.send(lid(true));
-    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
     sim.send(restored(None, RestoreWhy::Leftover, Ok(()), vec![]));
     sim.send(read(plan(BALANCED)));
     sim.run(IDLE_MS + MINUTE);
@@ -740,8 +721,8 @@ fn with_an_unread_journal_a_closed_step_back_counts_down_once_the_users_sleep_is
 
 #[test]
 fn with_an_unread_journal_a_close_after_the_step_back_counts_down_once_a_retry_works() {
-    // The step back's restore fails to load the file, so the lid close locks on the unread guess. A retry that fails
-    // again, and the reads in between, still tell nothing.
+    // The step back's restore fails to load the file, so the lid close in the window neither locks nor wants a
+    // countdown. A retry that fails again, and the reads in between, still tell nothing; the window's end does.
     let mut sim = Sim::new();
     sim.send(unread_start());
     sim.send(power(false, 19));
@@ -757,8 +738,7 @@ fn with_an_unread_journal_a_close_after_the_step_back_counts_down_once_a_retry_w
     sim.input();
     let at = sim.now();
     let out = sim.send(lid(true));
-    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
-    sim.send(session(SessionChange::Locked));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
     sim.send(restored(
         None,
         RestoreWhy::Floor,
@@ -811,6 +791,141 @@ fn with_an_unread_journal_a_step_back_with_the_lid_open_wants_no_countdown() {
     let trace = sim.trace();
     assert_eq!(count(&out, &LOCK), 0, "{trace}");
     assert!(hibernates(&out).is_empty(), "{trace}");
+}
+
+// The end of the window (`p2-6-record-lost` deliverable 4): known or lost, with the lid closed and nothing holding,
+// the work-end countdown starts once a read shows the user's own lid action as not Do nothing.
+
+const RESET: Command = Command::ResetLost { damaged: false };
+
+#[test]
+fn a_lost_journal_with_the_lid_closed_counts_down_after_the_reset() {
+    let mut sim = Sim::new();
+    let at = closed_on_an_unread_do_nothing(&mut sim);
+    let out = sim.run_failing_restores(2 * MINUTE, RESTORE_FAILED);
+    let trace = sim.trace();
+    assert!(
+        hibernates(&out).is_empty(),
+        "no countdown in the window\n{trace}"
+    );
+    assert_eq!(count(&out, &RESET), 1, "{trace}");
+
+    // The reset put the battery keys back to the plan's defaults; the read behind it shows Sleep.
+    let out = sim.send(reset_done(
+        &[SettingKey::LidDc, SettingKey::SleepDc],
+        Ok(()),
+    ));
+    assert_eq!(count(&out, &Command::ReadPlan), 1, "{}", sim.trace());
+    let lost = Notice::JournalLost {
+        reset: vec![SettingKey::LidDc, SettingKey::SleepDc],
+        failed: false,
+    };
+    assert_eq!(notices(&out), [&lost], "{}", sim.trace());
+    sim.send(read(plan(BALANCED)));
+    sim.run(IDLE_MS);
+    hibernated_after_idle(&sim, at, CountdownReason::WorkEnded);
+
+    // The notice went to a closed laptop's screen: it comes again at the open laptop.
+    sim.send(hibernated(HibernateEnd::Resumed));
+    let out = sim.send(lid(false));
+    assert_eq!(notices(&out), [&lost], "{}", sim.trace());
+}
+
+#[test]
+fn a_damaged_file_with_the_lid_closed_counts_down_after_its_reset() {
+    // A crashed tray's battery Do nothing, the tray starting with the lid closed, and its journal damaged.
+    let mut sim = Sim::new();
+    sim.start();
+    sim.send(power(false, 80));
+    sim.send(read(do_nothing_dc()));
+    sim.send(lid(true));
+    sim.input();
+    let at = sim.now();
+    let out = sim.send(Event::JournalCorrupt);
+    assert_eq!(
+        count(&out, &Command::ResetLost { damaged: true }),
+        1,
+        "{}",
+        sim.trace()
+    );
+    let out = sim.run(MINUTE);
+    assert!(hibernates(&out).is_empty(), "{}", sim.trace());
+    sim.send(reset_done(&[SettingKey::LidDc], Ok(())));
+    sim.send(read(plan(BALANCED)));
+    sim.run(IDLE_MS);
+    hibernated_after_idle(&sim, at, CountdownReason::WorkEnded);
+}
+
+#[test]
+fn after_the_window_a_do_nothing_still_in_force_gives_no_countdown() {
+    // The reset failed, or the plan's own default is Do nothing: as without Wakeshot, the closed laptop runs on.
+    let mut sim = Sim::new();
+    closed_on_an_unread_do_nothing(&mut sim);
+    sim.run_failing_restores(2 * MINUTE, RESTORE_FAILED);
+    let failed = Failure {
+        call: "PowerWriteDCValueIndex",
+        code: 5,
+    };
+    let out = sim.send(reset_done(&[], Err(failed)));
+    assert_eq!(
+        notices(&out),
+        [&Notice::JournalLost {
+            reset: vec![],
+            failed: true
+        }],
+        "{}",
+        sim.trace()
+    );
+    let mut out = sim.send(read(do_nothing_dc()));
+    out.extend(sim.run(20 * MINUTE));
+    let trace = sim.trace();
+    assert!(hibernates(&out).is_empty(), "{trace}");
+    assert_eq!(count(&out, &LOCK), 0, "{trace}");
+}
+
+#[test]
+fn a_hold_in_the_window_runs_on_requests_and_counts_down_when_it_ends() {
+    // The hold's apply cannot load the journal either: requests only for the episode. The lid close in the window
+    // neither locks nor counts down, and the reset does not end the hold.
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(false, 80));
+    sim.send(read(do_nothing_dc()));
+    sim.send(lid(false));
+    let out = sim.send(working(1));
+    assert_eq!(count(&out, &SYSTEM), 1, "{}", sim.trace());
+    let load_failed = Failure {
+        call: "ReadFile (journal.json)",
+        code: 33,
+    };
+    let out = sim.send(applied(
+        BALANCED,
+        Err(ApplyError::SafetyNet(load_failed)),
+        vec![],
+    ));
+    assert_eq!(notices(&out), [&Notice::RequestsOnly], "{}", sim.trace());
+    let out = sim.send(lid(true));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    sim.run_failing_restores(2 * MINUTE, RESTORE_FAILED);
+    sim.send(reset_done(
+        &[SettingKey::LidDc, SettingKey::SleepDc],
+        Ok(()),
+    ));
+    sim.send(read(plan(BALANCED)));
+    let out = sim.run(10 * MINUTE);
+    assert!(
+        hibernates(&out).is_empty(),
+        "the hold holds\n{}",
+        sim.trace()
+    );
+    assert!(sim.requests().system, "{}", sim.trace());
+
+    // The hold ends with the lid closed: the user's own Sleep is known now, so the countdown starts at once.
+    sim.input();
+    let at = sim.now();
+    sim.send(idle(1));
+    sim.run(IDLE_MS);
+    hibernated_after_idle(&sim, at, CountdownReason::WorkEnded);
 }
 
 // Item 2: the power source changes with the lid closed.
@@ -2389,9 +2504,12 @@ fn notices_raised_while_locked_go_out_at_unlock_in_order() {
         plan: BALANCED,
         key: SettingKey::LidDc,
     }));
+    let lost = || reset_done(&[SettingKey::SleepDc], Ok(()));
     out.extend(sim.send(Event::JournalCorrupt));
+    out.extend(sim.send(lost()));
     // A second corrupt file in the same absence: the same notice waits once.
     out.extend(sim.send(Event::JournalCorrupt));
+    out.extend(sim.send(lost()));
     assert!(notices(&out).is_empty(), "{}", sim.trace());
 
     let out = sim.send(session(SessionChange::Unlocked));
@@ -2399,7 +2517,10 @@ fn notices_raised_while_locked_go_out_at_unlock_in_order() {
         notices(&out),
         [
             &Notice::UserChanged(SettingKey::LidDc),
-            &Notice::JournalCorrupt
+            &Notice::JournalLost {
+                reset: vec![SettingKey::SleepDc],
+                failed: false
+            }
         ],
         "{}",
         sim.trace()

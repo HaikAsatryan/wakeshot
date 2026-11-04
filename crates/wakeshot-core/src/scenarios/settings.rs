@@ -10,7 +10,7 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::test_runner::Config as ProptestConfig;
 
-use crate::command::{ApplyError, Command, Failure, RestoreWhy};
+use crate::command::{ApplyError, Command, Failure, Outcome, RestoreWhy};
 use crate::event::{Event, SessionChange};
 use crate::holds::HoldId;
 use crate::ownership::apply::JOURNAL_CORRUPT;
@@ -117,6 +117,16 @@ fn logs(commands: &[Command]) -> usize {
 
 fn notified(commands: &[Command], notice: &Notice) -> usize {
     count(commands, &Command::Notify(notice.clone()))
+}
+
+fn notices_of(commands: &[Command]) -> Vec<&Notice> {
+    commands
+        .iter()
+        .filter_map(|c| match c {
+            Command::Notify(notice) => Some(notice),
+            _ => None,
+        })
+        .collect()
 }
 
 fn position(commands: &[Command], wanted: &Command) -> usize {
@@ -971,7 +981,7 @@ fn unread_journal_retry_ends_at_a_good_read() {
 }
 
 #[test]
-fn unread_journal_that_keeps_failing_keeps_the_retry() {
+fn unread_journal_that_keeps_failing_keeps_the_retry_until_it_is_lost() {
     let mut sim = unread_at_start();
     let from = sim.steps().len();
     let leftover = restore(None, RestoreWhy::Leftover);
@@ -987,28 +997,249 @@ fn unread_journal_that_keeps_failing_keeps_the_retry() {
         ));
         warned += notified(&out, &Notice::RestoreFailed);
     }
-    // `Sim::send` panics on a deadline that is not after a `Tick`, so no tick loops; each one sends one retry.
+    // `Sim::send` panics on a deadline that is not after a `Tick`, so no tick loops; each one sends one retry until
+    // the 2 minutes are up, then the reset goes in its place, and no retry while it waits for its answer.
     let ticks = restores_per_tick(&sim, from);
-    assert_eq!(ticks.len(), 6, "{}", sim.trace());
-    assert!(ticks.iter().all(|t| *t == [leftover.clone()]), "{ticks:?}");
-    assert_eq!(warned, 1, "one notice per run of failed restores");
+    let trace = sim.trace();
+    assert_eq!(ticks.len(), 6, "{trace}");
+    assert!(
+        ticks[..3].iter().all(|t| *t == [leftover.clone()]),
+        "{ticks:?}"
+    );
+    assert!(ticks[3..].iter().all(Vec::is_empty), "{ticks:?}");
+    assert_eq!(resets_at(&sim), [START.mono_ms + LOST], "{trace}");
+    assert_eq!(
+        warned, 0,
+        "the window ends in a read or the reset, each with its own word"
+    );
     assert!(overridden(&mut sim).is_empty());
 }
 
-// Item 9, and the orchestrator's decision on `JOURNAL_CORRUPT`.
+// A journal that cannot be read: product "User settings safety" 7 (`p2-6-record-lost`).
+
+/// Haik's 2 minutes from the first failure.
+const LOST: u64 = 120 * SECOND;
+
+const RESET: Command = Command::ResetLost { damaged: false };
+const RESET_DAMAGED: Command = Command::ResetLost { damaged: true };
+
+/// When each `ResetLost` went out, in run time.
+fn resets_at(sim: &Sim) -> Vec<u64> {
+    sim.commands()
+        .filter(|(_, c)| matches!(c, Command::ResetLost { .. }))
+        .map(|(at, _)| at.mono_ms)
+        .collect()
+}
+
+fn run_failing(sim: &mut Sim, ms: u64) -> Vec<Command> {
+    sim.run_failing_restores(ms, LOAD_FAILED)
+}
+
+/// The Balanced plan read at 7 s, then "Restore my power settings", whose load fails: the journal is unknown from
+/// that moment, off the safety tick grid. Gives that moment.
+fn unknown_off_the_tick() -> (Sim, u64) {
+    let mut sim = known_plan();
+    sim.send(Event::Menu(MenuCommand::Restore));
+    let out = sim.send(restored(
+        None,
+        RestoreWhy::UserAsked,
+        Err(LOAD_FAILED),
+        vec![],
+    ));
+    assert_eq!(notified(&out, &Notice::RestoreFailed), 0, "{}", sim.trace());
+    let first = sim.now().mono_ms;
+    (sim, first)
+}
 
 #[test]
-fn journal_corrupt_shows_a_notice() {
-    let mut sim = Sim::new();
-    sim.start();
-    let out = sim.send(Event::JournalCorrupt);
-    assert_eq!(
-        notified(&out, &Notice::JournalCorrupt),
-        1,
+fn an_unreadable_journal_is_lost_two_minutes_after_the_first_failure() {
+    let (mut sim, first) = unknown_off_the_tick();
+    let out = run_failing(&mut sim, LOST + 5 * SECOND);
+    let trace = sim.trace();
+    assert!(
+        count(&out, &restore(None, RestoreWhy::UserAsked)) >= 3,
+        "{trace}"
+    );
+    // The core's own clock, to the millisecond, not a count of ticks.
+    assert_eq!(resets_at(&sim), [first + LOST], "{trace}");
+    let reset_step = sim
+        .steps()
+        .iter()
+        .find(|s| s.commands.contains(&RESET))
+        .unwrap();
+    assert!(
+        !reset_step
+            .commands
+            .iter()
+            .any(|c| matches!(c, Command::Restore { .. })),
+        "the reset goes in the retry's place\n{trace}"
+    );
+    assert_eq!(notified(&out, &Notice::RestoreFailed), 0, "{trace}");
+
+    // The answer: one notice naming what was reset, a read for the values now in force, and the journal known.
+    let out = sim.send(sim::reset_done(
+        &[SettingKey::LidAc, SettingKey::SleepDc],
+        Ok(()),
+    ));
+    let trace = sim.trace();
+    let lost = Notice::JournalLost {
+        reset: vec![SettingKey::LidAc, SettingKey::SleepDc],
+        failed: false,
+    };
+    assert_eq!(notified(&out, &lost), 1, "{trace}");
+    assert_eq!(count(&out, &Command::ReadPlan), 1, "{trace}");
+    let out = sim.run(5 * 60 * SECOND);
+    assert!(settings(&out).is_empty(), "{}", sim.trace());
+    assert!(resets_at(&sim).len() == 1, "{}", sim.trace());
+    assert!(sim.notices().iter().filter(|n| ***n == lost).count() == 1);
+}
+
+#[test]
+fn a_read_that_works_at_one_fifty_nine_ends_the_window() {
+    let (mut sim, first) = unknown_off_the_tick();
+    run_failing(&mut sim, LOST - SECOND);
+    assert_eq!(sim.now().mono_ms, first + LOST - SECOND);
+    // A late answer of the last retry: the file read and nothing of Wakeshot's was left.
+    sim.send(restored(None, RestoreWhy::UserAsked, Ok(()), vec![]));
+    let out = sim.run(10 * 60 * SECOND);
+    assert!(resets_at(&sim).is_empty(), "{}", sim.trace());
+    assert!(settings(&out).is_empty(), "{}", sim.trace());
+
+    // The same with a known copy: the entries it read now decide, and the retry goes on as before.
+    let (mut sim, _) = unknown_off_the_tick();
+    run_failing(&mut sim, LOST - SECOND);
+    sim.send(restored(
+        None,
+        RestoreWhy::UserAsked,
+        Err(RESTORE_FAILED),
+        entries(BALANCED, &[SettingKey::LidDc]),
+    ));
+    let out = sim.run(5 * 60 * SECOND);
+    assert!(resets_at(&sim).is_empty(), "{}", sim.trace());
+    assert!(
+        count(&out, &restore(None, RestoreWhy::UserAsked)) >= 1,
         "{}",
         sim.trace()
     );
 }
+
+#[test]
+fn nothing_reset_gives_no_notice() {
+    let (mut sim, _) = unknown_off_the_tick();
+    run_failing(&mut sim, LOST);
+    let out = sim.send(sim::reset_done(&[], Ok(())));
+    let trace = sim.trace();
+    assert!(
+        sim.notices()
+            .iter()
+            .all(|n| !matches!(n, Notice::JournalLost { .. })),
+        "{trace}"
+    );
+    assert_eq!(logs(&out), 1, "the log says so\n{trace}");
+}
+
+#[test]
+fn a_damaged_file_is_lost_at_once() {
+    // Set aside at start (by this tray's start-up restore, or left by another process).
+    let mut sim = Sim::new();
+    sim.start();
+    let out = sim.send(Event::JournalCorrupt);
+    let trace = sim.trace();
+    assert_eq!(count(&out, &RESET_DAMAGED), 1, "{trace}");
+    assert!(
+        sim.notices().is_empty(),
+        "the reset's answer decides\n{trace}"
+    );
+    let out = sim.send(sim::reset_done(&[SettingKey::LidDc], Ok(())));
+    let lost = Notice::JournalLost {
+        reset: vec![SettingKey::LidDc],
+        failed: false,
+    };
+    assert_eq!(notified(&out, &lost), 1, "{}", sim.trace());
+
+    // Set aside by a restore of this run.
+    let mut sim = holding();
+    sim.send(idle(1));
+    sim.send(restored(None, RestoreWhy::WorkEnded, Ok(()), vec![]));
+    let out = sim.send(Event::JournalCorrupt);
+    assert_eq!(count(&out, &RESET_DAMAGED), 1, "{}", sim.trace());
+    let out = sim.send(sim::reset_done(&[], Ok(())));
+    assert!(
+        sim.notices()
+            .iter()
+            .all(|n| !matches!(n, Notice::JournalLost { .. }))
+    );
+    assert_eq!(count(&out, &Command::ReadPlan), 1, "{}", sim.trace());
+}
+
+#[test]
+fn a_reset_that_finds_the_journal_readable_keeps_the_retry() {
+    let mut sim = unread_at_start();
+    run_failing(&mut sim, LOST);
+    assert_eq!(resets_at(&sim).len(), 1, "{}", sim.trace());
+    let out = sim.send(Event::Done(Outcome::ResetLost {
+        reset: vec![],
+        result: Ok(()),
+        journal: entries(BALANCED, &[SettingKey::LidDc]),
+    }));
+    assert!(notices_of(&out).is_empty(), "{}", sim.trace());
+    assert_eq!(overridden(&mut sim), owned(BALANCED, &[SettingKey::LidDc]));
+    let out = sim.run(SAFETY_TICK_MS);
+    assert!(
+        count(&out, &restore(None, RestoreWhy::Leftover)) >= 1,
+        "{}",
+        sim.trace()
+    );
+}
+
+#[test]
+fn a_failed_reset_warns_once_and_the_journal_counts_as_known() {
+    let mut sim = unread_at_start();
+    run_failing(&mut sim, LOST);
+    let out = sim.send(sim::reset_done(&[SettingKey::LidAc], Err(WRITE_FAILED)));
+    let failed = Notice::JournalLost {
+        reset: vec![SettingKey::LidAc],
+        failed: true,
+    };
+    assert_eq!(notified(&out, &failed), 1, "{}", sim.trace());
+    let out = sim.run(5 * 60 * SECOND);
+    assert!(settings(&out).is_empty(), "{}", sim.trace());
+    assert_eq!(resets_at(&sim).len(), 1, "{}", sim.trace());
+}
+
+#[test]
+fn a_reset_whose_answer_never_comes_goes_out_again() {
+    let mut sim = unread_at_start();
+    let out = run_failing(&mut sim, LOST + 3 * 60 * SECOND);
+    let trace = sim.trace();
+    let at = resets_at(&sim);
+    assert_eq!(
+        at,
+        [START.mono_ms + LOST, START.mono_ms + 2 * LOST],
+        "{trace}"
+    );
+    // While a reset waits for its answer, that answer decides: no retry in between.
+    let between = sim
+        .steps()
+        .iter()
+        .filter(|s| s.at.mono_ms > at[0] && s.at.mono_ms < at[1])
+        .flat_map(|s| s.commands.iter())
+        .any(|c| matches!(c, Command::Restore { .. }));
+    assert!(!between, "{trace}");
+    assert_eq!(notified(&out, &Notice::RestoreFailed), 0, "{trace}");
+
+    // A damaged file's reset asks the same again: that file went aside, and only `damaged` resets what it named.
+    let mut sim = Sim::new();
+    sim.start();
+    let at = sim.now().mono_ms;
+    let mut out = sim.send(Event::JournalCorrupt);
+    out.extend(sim.run(LOST + SECOND));
+    let trace = sim.trace();
+    assert_eq!(resets_at(&sim), [at, at + LOST], "{trace}");
+    assert_eq!(count(&out, &RESET_DAMAGED), 2, "{trace}");
+}
+
+// Item 9, and the orchestrator's decision on `JOURNAL_CORRUPT`.
 
 #[test]
 fn a_corrupt_journal_at_apply_sends_one_restore_per_file() {
@@ -1373,6 +1604,16 @@ fn event() -> impl Strategy<Value = Event> {
         1 => Just(Event::SettingsOwner),
         1 => (plan_id(), key()).prop_map(|(plan, key)| Event::UserChanged(OwnedKey { plan, key })),
         1 => Just(Event::JournalCorrupt),
+        1 => (
+            vec(key(), 0..3),
+            prop_oneof![Just(Ok(())), failure().prop_map(Err)],
+            journal(),
+        )
+            .prop_map(|(reset, result, journal)| Event::Done(Outcome::ResetLost {
+                reset,
+                result,
+                journal
+            })),
         2 => session_change().prop_map(Event::Session),
         1 => Just(Event::Menu(MenuCommand::Restore)),
         1 => (plan_id(), apply_result(), journal()).prop_map(|(p, r, j)| applied(p, r, j)),
