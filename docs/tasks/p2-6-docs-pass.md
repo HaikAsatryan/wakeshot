@@ -1,6 +1,6 @@
 # Docs pass for Phases 2 to 6: make the docs match the built code
 
-Phase: 6. Status: done (rounds 1, 2 and 3). Needs Haik: no.
+Phase: 6. Status: rounds 1, 2 and 3 done; round 4 ready. Needs Haik: no.
 Runs after: the Phase 2 to 6 track cards named below. Parallel with: `p6-int-window`, `p6-int-startup`, `p5-text`,
 the power fix round (core), the Claude parsing review.
 
@@ -387,3 +387,36 @@ For code cards (not done):
 5. Test fixture names, Found outside scope 1.
 
 Open items: Found outside scope 1 to 3; the lists above.
+
+## Round 4 (2026-11-04)
+
+Status: ready. Written by the orchestrator (session `wakeshot-12`). Runs after `p2-6-unread-floor-countdown` (it edits
+`core/lid.rs`, `scenarios/lid.rs`, `state.rs` and `docs/architecture.md`).
+
+Items (from the orchestrator):
+
+1. `docs/architecture.md` line 751 (section 5, restore step 7): "`velo.rs` does not call it yet" is stale:
+   `p6-velopack-dependency` wired the hooks, and `p6-install-e2e` and `p6-int-update-e2e` ran them for real.
+2. `docs/product.md` line 208 (Distribution): "Whether Velopack accepts a dot in the pack id: not verified" is stale:
+   `architecture.md` section 6 and research "Velopack checks for Wakeshot" point 1 record it as tested.
+3. `docs/tasks/p6-readme.md`: its deliverable cites `docs/phases/04-sources.md` "note 16" for the rival port line; it
+   is note 17 (that card's Found outside scope 1). Fix the citation only.
+4. Round 3 Found outside scope 1: rename the test fixtures that call their plan values "Haik's values" (names and
+   comments only, no value change; describe them as test values, the way round 3 item 3 did `sim.rs`). Keep every
+   test passing.
+5. Round 3 Found outside scope 3: `claude-code-signals.md` rule 5 lacks the resume and reminder texts, if the
+   research has them; if not, say so.
+6. Docs pass items in the Results and "Found outside scope" lists of the cards finished since round 3:
+   `p6-int-wiring-fixes`, `p6-int-log-wording`, `p2-6-unread-lid-countdown`, `p2-6-unread-floor-countdown`,
+   `p6-int-dry-run-e2e`, `p6-int-real-e2e`, `p6-int-update-e2e`, the `p6-install-e2e` rerun, `p6-readme` (its Found
+   outside scope 2 to 6: only doc lines that state what the code or a test shows; anything that needs Haik or a new
+   test goes to the list for the orchestrator).
+7. Not to change: Phase 1 Question 11's "30 s" (a record of Haik's answer; the README and `architecture.md` give the
+   hook's inner limit, 25 s); records of past runs (work logs, card Logs, dated research results); `CLAUDE.md` (its
+   test laptop line already says 5 h, line 48).
+
+### Log
+
+### Found outside scope
+
+### Result
