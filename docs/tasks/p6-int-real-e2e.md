@@ -1,6 +1,6 @@
 # Integration: the real tray on active plan copies
 
-Phase: 6. Status: ready. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 130K tokens.
+Phase: 6. Status: in progress. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 130K tokens.
 Real laptop: **global lane** (power settings, one card at a time across all tracks): two plan copies made active in
 turn, the real RunOnce value, a real guard process. Haik's own plan is never written; his values are read before and
 after and must match. No sign-out, no sleep, no lid. Build folder:
@@ -84,6 +84,40 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03: card written by `p6-plan-integration`.
+- 2026-11-04 04:39: started (stop 1: write the suite, compile, lint, record BEFORE; no tray, no write, no run).
+- 2026-11-04 05:05: stop 1 done; nothing started, written or run. BEFORE (read only, 04:39:41, again 04:59:46):
+  Balanced `381b4222-...` active and the only plan; lid AC 1, DC 1; sleep AC 18000, DC 18000; energy saver AC 0,
+  DC 30; RunOnce key with no values. Kept as `<scratchpad>\p6-int-real-e2e\before.txt` (raw `powercfg` output) and
+  `before.env` (the record the suite reads, through `WAKESHOT_REAL_E2E_BEFORE`). `tests/e2e_real.rs` written (10
+  tests, all `#[ignore]`, all `real_e2e_*`; 1844 lines); `rustfmt --edition 2024 --check` on it exit 0 (run on a
+  scratch copy so `e2e/mod.rs` is never rewritten); clippy x64 `-p wakeshot-tray` with and without `--all-targets`
+  clean (the first try without failed on `core/lid.rs` of `p2-6-unread-lid-countdown`, clean a minute later); plain
+  `cargo test --locked -p wakeshot-tray`: 8 + 5 pass, the 10 new ones ignored. Helpers that belong in `e2e/mod.rs`
+  (`RealTray`, `Bench`, the real CLI runner, `terminate`, the real loop window) are private in `e2e_real.rs` for now
+  and move to `mod.rs` in stop 2. Decided by the worker, for Haik's review (none changes the product):
+  1. The copies are made at Medium through Explorer (`powercfg /duplicatescheme <plan> <id>` with an id the test
+     picks, then `/changename`), as a user could (research "powercfg as a normal user"): whether a Medium tray may
+     write a copy an elevated process made is not verified. Change it when Medium creation turns out flaky.
+  2. Stored values by `powercfg /qh <plan> <subgroup> <setting>` (about 15 ms each here, 420 ms for a whole plan);
+     "in force" by `CallNtPowerInformation` `SystemPowerPolicyAc` and `Dc`, read as research "Power track real checks"
+     did (lid Do nothing 0, Sleep 2; DC idle 2147483647 for Never).
+  3. The user change sets A's lid DC to 2 (Hibernate), not 1: 1 is A's own original (Haik's Sleep), so a restore that
+     wrongly wrote the original over the user's change would look the same. Only stored, on a copy, no lid closed.
+     Change it when Haik wants the card's literal 1 (one constant).
+  4. A test starts only when the PC equals the BEFORE record (and no process of this build or real tray runs), else
+     it says to run `real_e2e_cleanup`. Each test makes its own copies and ends with a teardown: every process of this
+     build ended before Haik's plan is active again, copies deleted, a RunOnce value of this build removed, data folder
+     removed, AFTER compared; a failed test's drop does the same. `real_e2e_cleanup` finds a cut-off run's copies by
+     the names A and B and by the ids written to the data folder before `/duplicatescheme` ran; `Wakeshot int haik`
+     and `Wakeshot test` copies are never touched.
+  5. Restore my power settings: "no new write" is checked for 35 s (one safety tick plus 5 s), the requests by
+     `powercfg /requests`, and the next hold must apply again (a new episode).
+  6. Plan switch: 15 s (no limit in the card); the switch may start a new guard (the restore of A empties the
+     journal), so the test finds the one guard again after it.
+  7. End of session: `SendMessageTimeoutW` with `ENDSESSION_LOGOFF` (sign-out, checklist 6), the 5 s limit on the
+     `WM_ENDSESSION` send.
+  8. Icon entry: one whose `IconGuid` is the product GUID (bytes or text), else a new one naming this build's exe;
+     looked for 10 s while the tray runs, then 10 s after its quit.
 
 ## Result
 
