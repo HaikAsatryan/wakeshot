@@ -432,3 +432,8 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   review in its card (a tray start under the floor steps back at once; with the lid closed the lock goes out before
   the restore, floor chime only; the 30 s restart at each AC loss and count run time). Running: its narrow power
   safety check, `p6-notice-app-icon` Part A (it also fixes the old switch bytes in `hooks.rs` tests).
+- 2026-11-05 ~03:35 (orchestrator): the floor grace's narrow power safety check: 0 blockers, 0 majors, 4 minors
+  (`docs/reviews/p2-6-floor-grace.md`). Orchestrator decisions, for Haik's review: minor 1 (AC that flaps under 30 s
+  never steps back) takes the lean fix, an AC return restarts the grace only once AC has lasted 30 s (replaces worker
+  decision 4); minor 2 takes the code fix, the closed-lid unplug lock keeps its retry and notice during a floor step
+  back. All four go to the same worker; no re-check (no blocker or major).
