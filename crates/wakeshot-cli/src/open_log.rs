@@ -3,20 +3,16 @@
 //! Owner: sources track (`p4-cli-commands`); fixes by `p6-int-dry-run-e2e`.
 
 use std::ffi::OsStr;
-use std::path::PathBuf;
 use std::process::ExitCode;
 
 use wakeshot_windows::WinError;
-use wakeshot_windows::log::{Level, Proc};
+use wakeshot_windows::log::{Level, Proc, log_file};
 use wakeshot_windows::recovery;
 use wakeshot_windows::shell;
 use wakeshot_windows::store::DataDir;
 
 use crate::command::Global;
 use crate::status::{self, AREA, Answer};
-
-/// `log::LOG_FILE`, private there: the one file every process appends to.
-const LOG_FILE: &str = "wakeshot.log";
 
 const NO_LOG: &str = "No log yet. Wakeshot writes one once it runs.";
 
@@ -27,13 +23,9 @@ pub fn main(global: &Global) -> ExitCode {
     }
 }
 
-pub(crate) fn log_path(dir: &DataDir) -> PathBuf {
-    dir.logs().join(LOG_FILE)
-}
-
 /// `open`: the shell in `main`, a fake in tests, so no test opens a window.
 pub(crate) fn run(dir: &DataDir, open: &dyn Fn(&OsStr) -> Result<(), WinError>) -> Answer {
-    let path = log_path(dir);
+    let path = log_file(&dir.logs());
     // No log line here: it would create the very file this says is missing. A folder that cannot be read gets the
     // open, which then names the reason.
     if matches!(path.try_exists(), Ok(false)) {
@@ -127,7 +119,7 @@ mod tests {
         let data = TempData::new("log-real");
         std::fs::create_dir_all(data.dir.logs()).unwrap();
         std::fs::write(
-            log_path(&data.dir),
+            log_file(&data.dir.logs()),
             "Wakeshot test log: close this window.\r\n",
         )
         .unwrap();

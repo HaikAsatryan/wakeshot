@@ -3615,3 +3615,14 @@ card's scratchpad folder (`run1.txt`, `run2.txt`, `claude-timeline.txt`).
   The `NotifyIconSettings` entry with that id held only `IconSnapshot`. Both keys were exported and deleted, and were
   still gone 2 minutes later. The PNG is left. The balloon header on screen was not seen: the session was locked.
   **Verified** (`reg export`, `Get-ItemProperty`, ids listed before and after).
+
+## Log wording checks
+
+- **Right after the watch thread starts, a notice in the data folder names `holds`.** In the exit wait test
+  (`watch::thread`), the hold file is written into `holds\` before the thread starts. The thread's first wake after
+  its first round was a notice in the data folder naming `holds`, in every run: 3 runs alone and 40 runs with 8 copies
+  at once. Why Windows reports it then (the folder's new write time reaching its parent late, or the thread's own
+  read of the folder) is not verified. In the app it costs one extra read: the thread posts only what changed. It
+  made the exit wait test flaky: with 8 copies at once, 5 of 40 runs failed before the fix (the test now waits a
+  quiet spell before it changes the fake). After it, none failed: 40 runs with the probe, 60 runs (12 at once)
+  without. **Verified** (a temporary probe that printed each wake, removed after; repeated runs of the test binary).

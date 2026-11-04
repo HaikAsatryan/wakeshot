@@ -206,9 +206,9 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | `p6-int-tray-mode` | no | Part B: screen, about 10 min (a dry-run icon) | `p6-int-io-thread`, `p6-int-window`, `p6-int-dispatch`, `p6-int-startup`, `p3-requests`, `p3-system-events`, `p3-hibernate`, `p3-recovery`, `p4-watch-thread`, `p4-claude-transcript`, `p4-cron`, `p5-tray-icon`, `p5-menu-view`, `p5-notices`, `p5-sounds` | blocked: waiting for the screen slot (Part A done, 11 tests; smoke test passed 02:58 in the locked session; the picture waits for Haik) |
 | `p6-int-update-wiring` | no | no | `p6-int-tray-mode`, `p6-velopack-dependency`, `p6-update-schedule` | done (committed 03:54): 15 `tray_mode` tests; smoke passed; ARM64 tray CI only |
 | `p6-int-wiring-fixes` | no | no | `p6-int-tray-mode` Part A, `p6-velopack-dependency`, `p6-int-update-wiring` | done (04:29; 1276 tests; smoke test passed) |
-| `p6-int-log-wording` | no | no | `p6-int-wiring-fixes` | in progress (started 04:51) |
+| `p6-int-log-wording` | no | no | `p6-int-wiring-fixes` | done (05:16) |
 | `p6-int-dry-run-e2e` | no | screen (dry-run icon, balloons, pictures); agent-session lane (one Claude Code test session) | `p6-int-update-wiring`, `p4-cli-args`, `p4-cli-run`, `p4-cli-commands`, `p4-cli-restore`, `p4-live-claude` | blocked: waiting for the screen slot (12 of 12 suite tests passed twice, no fix needed; Claude session check and clean-up done 04:51; pictures left) |
-| `p6-int-real-e2e` | no | global: power settings on active plan copies, RunOnce, a guard | `p6-int-dry-run-e2e`, `p3-real-checks` | in progress (started 04:39: stop 1, the suite and the BEFORE record only; the run waits for `p6-int-dry-run-e2e`) |
+| `p6-int-real-e2e` | no | global: power settings on active plan copies, RunOnce, a guard | `p6-int-dry-run-e2e`, `p3-real-checks` | in progress (started 04:39; suite committed 0932c60; stop 2, the run, alone on the laptop from 05:06) |
 | `p6-int-update-e2e` | no | global: installs, Run, RunOnce, Path, a user environment value, an active plan copy | `p6-int-real-e2e`, `p6-install-e2e`, `p6-pack-and-release`, `p6-hooks` | ready |
 | `p6-int-haik-checks` | yes: about 42 min (27, 18 of hands, plus 15 with the dock) | whole laptop: lid, lock, hibernate, switch user, battery; no other agent or cargo command | `p6-int-update-e2e`, `p3-haik-checks`, `p5-haik-check` | ready |
 
@@ -367,3 +367,12 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
 - 2026-11-04 04:51 (orchestrator `wakeshot-12`): new card `p6-int-log-wording` (journal key names, the false WARN at
   quit in `watch/thread.rs`, `open_log.rs` on `log::log_file`, the watch test that failed once under load), started
   beside `p2-6-unread-lid-countdown` and `p6-int-real-e2e` stop 1.
+- 2026-11-04 05:06: `p6-int-real-e2e` stop 2 started (same worker), alone on the laptop: BEFORE recorded at 04:39
+  and 04:59 (Balanced only and active, lid 1/1, sleep 18000/18000, saver DC 30, RunOnce empty); 10 tests. A final
+  full run follows once `p2-6-unread-lid-countdown` and `p6-int-log-wording` end.
+- 2026-11-04 05:16: `p6-int-log-wording` done: journal log lines use the file's key names (`wrote lidAc, lidDc,
+  sleepDc`); a 1400 post at quit logs Info, not WARN; `open_log.rs` on `log::log_file`; the flaky watch exit test
+  fixed at its cause (a folder notice right after start read the fake before the test changed it; 5 of 40 failed
+  before, 0 of 100 after). x64 clippy, ARM64 windows and cli, 1280 workspace tests. The worker saw one
+  `scenarios::props` lid lock over a user's own Do nothing while `p2-6-unread-lid-countdown` was mid-edit; relayed
+  to that card.

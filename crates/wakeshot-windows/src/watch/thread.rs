@@ -22,7 +22,7 @@ use wakeshot_core::holds::HoldFacts;
 use wakeshot_core::process::ProcessRef;
 use wakeshot_core::sources::AgentSource;
 use wakeshot_core::view::MenuCommand;
-use windows::Win32::Foundation::{HANDLE, WAIT_OBJECT_0};
+use windows::Win32::Foundation::{ERROR_INVALID_WINDOW_HANDLE, HANDLE, WAIT_OBJECT_0};
 use windows::Win32::System::Threading::{CreateEventW, SetEvent, WaitForSingleObject};
 
 use crate::WinError;
@@ -492,7 +492,19 @@ impl Watcher {
             }
             Err(e) => {
                 self.resync = true;
-                if !std::mem::replace(&mut self.post_failing, true) {
+                if std::mem::replace(&mut self.post_failing, true) {
+                    return false;
+                }
+                if e.code == ERROR_INVALID_WINDOW_HANDLE.0 {
+                    // The loop window is gone for good, as after a quit while a hold file changes (`WindowSink`):
+                    // nothing is wrong and no tick follows, so it is no warning, as on the IO thread.
+                    let text = format!(
+                        "the loop window is gone ({} error {}), as after a quit: this event and every later one are \
+                         dropped",
+                        e.call, e.code
+                    );
+                    self.log.line(Level::Info, AREA, &text);
+                } else {
                     self.warn(&format!(
                         "an event could not be posted to the loop ({} error {}); the next tick posts everything again",
                         e.call, e.code
@@ -569,7 +581,7 @@ mod tests {
     use std::fs;
     use std::path::Path;
     use std::process::{Child, Command, Stdio};
-    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
     use std::sync::{Mutex, MutexGuard, PoisonError};
 
     use wakeshot_core::holds::{HoldId, HoldKind};
@@ -665,17 +677,19 @@ mod tests {
     #[derive(Default)]
     struct Sink {
         fake: FakeEventSink,
-        failing: AtomicBool,
+        /// The `PostMessageW` error each post fails with; 0 posts.
+        failing: AtomicU32,
         tries: AtomicUsize,
     }
 
     impl EventSink for Sink {
         fn post(&self, event: Event) -> Result<(), WinError> {
             self.tries.fetch_add(1, Ordering::SeqCst);
-            if self.failing.load(Ordering::SeqCst) {
+            let code = self.failing.load(Ordering::SeqCst);
+            if code != 0 {
                 return Err(WinError {
                     call: "PostMessageW",
-                    code: 1816,
+                    code,
                 });
             }
             self.fake.post(event)
@@ -781,6 +795,11 @@ mod tests {
         fn lines(&self) -> Vec<String> {
             let lines = self.log.lines.lock().unwrap();
             lines.iter().map(|(_, _, text)| text.clone()).collect()
+        }
+
+        fn levels(&self) -> Vec<Level> {
+            let lines = self.log.lines.lock().unwrap();
+            lines.iter().map(|(level, _, _)| *level).collect()
         }
     }
 
@@ -1057,8 +1076,10 @@ mod tests {
         rig.live_hold(holder);
         rig.live_session(agent);
         rig.started(Config::default(), 2);
+        // Settled first: right after the first round, a notice in the data folder names `holds` (every run on the test
+        // laptop, 2026-11-04). The read it starts must find the fake still saying alive, or it posts the session gone.
         assert_eq!(
-            rig.events(),
+            rig.settled(),
             [
                 Event::Holds(vec![hold_facts("job.json", Alive::Yes)]),
                 claude(vec![(session(agent), Alive::Yes)]),
@@ -1067,7 +1088,8 @@ mod tests {
 
         // The fake now says the session is gone, but nothing asks it: no notice, no tick.
         rig.liveness.alive.lock().unwrap().clear();
-        assert_eq!(rig.settled().len(), 2);
+        let events = rig.settled();
+        assert_eq!(events.len(), 2, "{events:#?}");
         let at = Instant::now();
         agent_kid.end();
         let gone = claude(vec![(session(agent), Alive::Gone)]);
@@ -1080,7 +1102,8 @@ mod tests {
         assert_eq!(rig.settled().len(), 3, "the hold did not change");
 
         rig.liveness.starts.lock().unwrap().clear();
-        assert_eq!(rig.settled().len(), 3);
+        let events = rig.settled();
+        assert_eq!(events.len(), 3, "{events:#?}");
         let at = Instant::now();
         hold_kid.end();
         let gone = Event::Holds(vec![hold_facts("job.json", Alive::Gone)]);
@@ -1127,7 +1150,7 @@ mod tests {
         rig.live_hold(fake(1));
         rig.live_session(fake(2));
         rig.data.write("restore-request.json", b"{\"version\":1}");
-        rig.sink.failing.store(true, Ordering::SeqCst);
+        rig.sink.failing.store(1816, Ordering::SeqCst);
         rig.start(Config::default());
 
         let tries = || rig.sink.tries.load(Ordering::SeqCst);
@@ -1140,8 +1163,9 @@ mod tests {
                 "an event could not be posted to the loop (PostMessageW error 1816); the next tick posts everything again"
             ]
         );
+        assert_eq!(rig.levels(), [Level::Warn]);
 
-        rig.sink.failing.store(false, Ordering::SeqCst);
+        rig.sink.failing.store(0, Ordering::SeqCst);
         assert!(
             rig.settled().is_empty(),
             "nothing is posted again before the tick"
@@ -1158,6 +1182,32 @@ mod tests {
         rig.tick();
         assert_eq!(rig.settled(), full, "the next tick posts nothing again");
         assert_eq!(rig.lines().len(), 1);
+    }
+
+    /// 1400 is the loop window gone, as after a quit while a hold file changes (the quit deletes Keep awake's file):
+    /// one Info line, no warning, and no promise of a tick.
+    #[test]
+    fn a_post_after_the_loop_window_is_gone_is_logged_once_as_info() {
+        let mut rig = Rig::new("gone");
+        let path = rig.hold("job.json", fake(1));
+        rig.live_hold(fake(1));
+        rig.sink.failing.store(1400, Ordering::SeqCst);
+        rig.start(Config::default());
+
+        let tries = || rig.sink.tries.load(Ordering::SeqCst);
+        until(Instant::now(), || tries() >= 2, || tries().to_string());
+        fs::remove_file(&path).unwrap();
+        until(Instant::now(), || tries() >= 3, || tries().to_string());
+        std::thread::sleep(QUIET);
+        assert_eq!(
+            rig.lines(),
+            [
+                "the loop window is gone (PostMessageW error 1400), as after a quit: this event and every later one \
+                 are dropped"
+            ]
+        );
+        assert_eq!(rig.levels(), [Level::Info]);
+        assert!(rig.events().is_empty());
     }
 
     #[test]

@@ -23,6 +23,7 @@ use windows::Win32::Foundation::{
 
 use crate::WinError;
 use crate::log::{Level, Log};
+use crate::power::plan::PlanSetting;
 use crate::store::{self, AutoStart, DataDir, DataFile, NamedMutex, Names, StartKey};
 
 /// The RunOnce value's name (architecture section 5, "Logon restore"); the uninstall hook removes it by this name.
@@ -567,9 +568,28 @@ fn parse(bytes: &[u8]) -> Result<JournalFile, String> {
     }
 }
 
+/// The journal file's own name for a key (`lidAc`), the one the plan lines use too, so a log line, a plan line and the
+/// file can be matched by eye.
+fn key_name(key: SettingKey) -> &'static str {
+    PlanSetting::from(key).name()
+}
+
+/// `lidAc, lidDc`, or `nothing`.
+fn key_list(keys: &[SettingKey]) -> String {
+    match keys.is_empty() {
+        true => "nothing".to_owned(),
+        false => keys
+            .iter()
+            .map(|&key| key_name(key))
+            .collect::<Vec<_>>()
+            .join(", "),
+    }
+}
+
 fn push_entry(text: &mut String, entry: &JournalFileEntry) {
     let _ = match &entry.key {
-        JournalKey::Known(key) => write!(text, " {key:?}"),
+        JournalKey::Known(key) => write!(text, " {}", key_name(*key)),
+        // Quoted and escaped: the name comes from the file, so a stray quote or line break cannot break the line.
         JournalKey::Other(name) => write!(text, " {name:?}"),
     };
     // The `restored` mark is saved before an apply's first write and before a restore writes the original back, so it
@@ -631,7 +651,10 @@ fn log_applied(log: &dyn Log, plan: Guid, done: &Applied) {
         ),
         Err(ApplyError::Write(f)) => (Level::Warn, format!("failed at a write: {}", error_text(f))),
     };
-    let text = format!("apply to plan {plan} {how}; wrote {written:?}; {left} journal entries");
+    let text = format!(
+        "apply to plan {plan} {how}; wrote {}; {left} journal entries",
+        key_list(written)
+    );
     log.line(level, AREA, &text);
 }
 
@@ -644,7 +667,7 @@ fn log_checked(log: &dyn Log, done: &Checked) {
     if !done.user_changed.is_empty() {
         text.push_str(" the user changed");
         for OwnedKey { plan, key } in &done.user_changed {
-            let _ = write!(text, " {key:?} on {plan};");
+            let _ = write!(text, " {} on {plan};", key_name(*key));
         }
     }
     for f in &done.failures {
@@ -931,16 +954,14 @@ mod tests {
         let saved = lines(&log);
         assert_eq!(saved.len(), 2, "{saved:?}");
         assert_eq!(saved[0].0, Level::Info);
-        assert!(
-            saved[0].1.starts_with(&format!(
-                "journal saved: owner pid 9120 start 134381211391959336 session 1; LidAc on {BALANCED}: original 1, \
-                 written 0;"
-            )),
-            "{saved:?}"
+        assert_eq!(
+            saved[0].1,
+            format!(
+                "journal saved: owner pid 9120 start 134381211391959336 session 1; lidAc on {BALANCED}: original 1, \
+                 written 0; \"hibernateDc\" on {BALANCED}: original 10800, written 0; sleepDc on {BALANCED}: \
+                 original 1, written 0, being changed;"
+            )
         );
-        assert!(saved[0].1.ends_with(
-            "SleepDc on 381b4222-f694-41f0-9685-ff5bb260df2e: original 1, written 0, being changed;"
-        ));
 
         // Whatever version the caller passes, the file gets this version (review m2).
         let newer = JournalFile {
@@ -1662,19 +1683,19 @@ mod tests {
             [
                 (
                     Level::Info,
-                    format!("apply to plan {BALANCED} done; wrote [LidAc, LidDc]; 2 journal entries")
+                    format!("apply to plan {BALANCED} done; wrote lidAc, lidDc; 2 journal entries")
                 ),
                 (
                     Level::Warn,
                     format!(
-                        "apply to plan {BALANCED} failed at a write: PowerWriteDCValueIndex failed with 5; wrote []; \
-                         0 journal entries"
+                        "apply to plan {BALANCED} failed at a write: PowerWriteDCValueIndex failed with 5; wrote \
+                         nothing; 0 journal entries"
                     )
                 ),
                 (
                     Level::Warn,
                     format!(
-                        "ownership check: the user changed SleepDc on {BALANCED}; PowerReadDCValueIndex failed with \
+                        "ownership check: the user changed sleepDc on {BALANCED}; PowerReadDCValueIndex failed with \
                          2; 1 journal entries"
                     )
                 ),
