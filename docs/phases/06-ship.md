@@ -161,7 +161,7 @@ those one at a time across all tracks.
 | `p6-launch-research` | yes: reads its Result (rival pick, Store recommendation) before the README, winget and Store cards are rewritten; no installs | none | done: its Result waits for Haik's read |
 | `p6-winget-manifest` | no | `p6-pack-and-release`; `p6-launch-research` (the winget rules for an app that updates itself) | done (committed 02:25): templates and `fill.ps1`; `winget validate` passed on the local packs |
 | `p6-readme` | yes: a read at the Phase 6 sign-off; the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3, sign-off item 12) are in, all defaults | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-claude`; the tray track's `p5-haik-check` (review m2); `p6-launch-research` (its scope grows from that Result, Haik 2026-11-04); `p6-media` | blocked: draft done 04:22 (474 lines, 10 media spots, product words from the code as it is); waits for `p5-haik-check` and `p6-media` |
-| `p6-media` | yes: watches the video and the loop and says yes or what to change; about 10 min off the PC for the captures | `p6-launch-research` (tool, storyboard, shot list); `p5-haik-check` (final icon); integration's `p6-int-real-e2e` (the real app) | ready |
+| `p6-media` | yes: watches the video and the loop and says yes or what to change; about 10 min off the PC for the captures | `p6-launch-research` (tool, storyboard, shot list); `p5-haik-check` (final icon); integration's `p6-int-real-e2e` (the real app) | blocked: Part A done (14:08: loops, the video pipeline with stand-ins, Remotion inside `media/`); Part B needs the laptop idle, captures and Haik |
 | `p6-pages` | yes: one look before it goes live at v1 | `p6-readme`; the tray track's `p5-icon-art` and `p5-haik-check` (Haik's icon pick rewrites `assets/wakeshot.ico`; review m3) | blocked: draft done (11:50); 9 marked spots wait for other cards |
 | `p6-startup-switch-check` | no | `p6-install-e2e` | done (06:23: the off choice survives Setup over the install by the keys; uninstall leaves the StartupApproved value) |
 | `p6-tray-size` | no (stop 2, a dependency change, waits for the orchestrator) | `p6-int-update-wiring` | done (07:01: release tray 3.95 to 2.71 MB, CLI 0.67 to 0.56 MB) |
@@ -432,3 +432,9 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   (screen slot), the Claude Code session captures, Haik's look. `p6-int-haik-checks` got its 2026-11-04 changes
   (sleep, not hibernate; the dim timeout; a Startup switch block with one sign-out) and now runs after
   `p2-6-sleep-route-fixes`.
+- 2026-11-04 14:08: `p6-media` Part A done: `media/` (Remotion 4.0.540 installed inside it only): the Sunrise ported
+  from `art.rs` (0 pixel difference), icon loops light and dark (5 s GIFs), the 30 s video pipeline on the storyboard
+  with stand-in pictures marked DRAFT (the final render refuses stand-ins and missing numbers), sounds made in code
+  (Wakeshot's chimes from `chime.rs`), `README.md`, `CREDITS.md`, `measure-speed.ps1` (not run). 10 worker decisions
+  for Haik's review. Part B: speed numbers (from a plain PowerShell window, no busy Claude Code session), final
+  captures at 150% and 125%, a real Claude Code session, Haik's look.

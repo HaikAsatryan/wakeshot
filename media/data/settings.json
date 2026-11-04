@@ -1,0 +1,8 @@
+{
+  "note": "The two power settings Wakeshot writes during a hold, and the user's own values it puts back. Stand-in: the test laptop's own values from CLAUDE.md (2026-11-04); the capture session's log replaces them (shot S9).",
+  "standIn": true,
+  "rows": [
+    {"label": "Lid close", "held": "Do nothing", "own": "Sleep"},
+    {"label": "Battery sleep", "held": "Never", "own": "5 hours"}
+  ]
+}

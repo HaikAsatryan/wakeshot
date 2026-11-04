@@ -1,0 +1,33 @@
+{
+  "name": "wakeshot-media",
+  "private": true,
+  "description": "The icon loop, the promo video and the composed stills for Wakeshot, built with Remotion.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "sounds": "node scripts/make-sounds.mjs",
+    "loop": "node scripts/build.mjs loop",
+    "video": "node scripts/build.mjs video",
+    "draft": "node scripts/build.mjs draft",
+    "poster": "node scripts/build.mjs poster",
+    "check": "node scripts/check.mjs",
+    "check-video": "node scripts/check-video.mjs",
+    "check-rebuild": "node scripts/check-rebuild.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fontsource/inter": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@remotion/cli": "4.0.540",
+    "@remotion/fonts": "4.0.540",
+    "@remotion/media": "4.0.540",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "remotion": "4.0.540"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "typescript": "7.0.2"
+  }
+}

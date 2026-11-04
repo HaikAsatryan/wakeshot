@@ -1,0 +1,13 @@
+{
+  "note": "Each picture the video uses, with its size in pixels. standIn true: an older screen-run picture, or none yet; the capture session (p6-media Part B) replaces the file, sets w and h to the new size and standIn to false. The final render refuses any stand-in.",
+  "shots": {
+    "tray-dark-idle": {"shot": "S1", "file": "shots/tray-dark-idle.png", "w": 150, "h": 72, "standIn": true, "from": "docs/research/img/ux/taskbar-dark-idle.png (demo icon, 150 %)"},
+    "tray-dark-holding": {"shot": "S2", "file": "shots/tray-dark-holding.png", "w": 150, "h": 72, "standIn": true, "from": "docs/research/img/ux/taskbar-dark-holding.png (demo icon, 150 %)"},
+    "tooltip-dark-holding": {"shot": "S3", "file": null, "w": 300, "h": 170, "standIn": true, "from": "no capture yet"},
+    "tooltip-dark-idle": {"shot": "S4", "file": "shots/tooltip-dark-idle.png", "w": 300, "h": 170, "standIn": true, "from": "docs/research/img/ux/taskbar-tooltip-dark.png (says Wakeshot demo)"},
+    "menu-light-sub": {"shot": "S5", "file": "shots/menu-light-sub.png", "w": 1144, "h": 564, "standIn": true, "from": "docs/research/img/ux/menu-screen-light-sub.png (demo menu, sample hold labels)"},
+    "menu-dark-sub": {"shot": "S5", "file": "shots/menu-dark-sub.png", "w": 1144, "h": 564, "standIn": true, "from": "docs/research/img/ux/menu-screen-dark-sub.png (demo menu, sample hold labels)"},
+    "menu-light-main": {"shot": "S5", "file": "shots/menu-light-main.png", "w": 904, "h": 364, "standIn": true, "from": "docs/research/img/ux/menu-screen-light-main.png (demo menu)"},
+    "menu-dark-main": {"shot": "S5", "file": "shots/menu-dark-main.png", "w": 904, "h": 364, "standIn": true, "from": "docs/research/img/ux/menu-screen-dark-main.png (demo menu)"}
+  }
+}

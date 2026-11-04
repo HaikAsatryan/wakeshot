@@ -148,8 +148,8 @@ From `docs/product.md` and `docs/architecture.md` (decisions, not yet measured o
   back at the end; the user's own later change wins (product.md, "Power behavior", "User settings safety").
 - Crash safety: a guard process restores if the tray dies; the next start and the next sign-in restore; the gap after
   an OS crash or power cut is accepted and the README says so (product.md, "User settings safety").
-- Battery: steps back at Windows' energy saver level (20% when that is Never or Always) and hibernates a closed laptop
-  after 5 minutes with no input. Locks at lid close while holding. No heat guard (product.md, "Power behavior").
+- Battery: steps back at Windows' energy saver level (20% when that is Never or Always) and puts a closed laptop to
+  sleep after 5 minutes with no input (hibernate only as the fallback; changed 2026-11-04, product.md). Locks at lid close while holding. No heat guard (product.md, "Power behavior").
 - Updates: automatic from GitHub Releases, applied only while nothing holds; the network is two GitHub API calls a day;
   no telemetry (product.md, "Distribution", "UX"; `phases/06-ship.md`, "Updates").
 - Install: per user, no admin (Velopack). MIT, free.

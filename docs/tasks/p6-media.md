@@ -1,6 +1,6 @@
 # Speed numbers, pictures, the icon loop and the 30 second video
 
-Phase: 6. Status: ready. Needs Haik: yes: he watches the video and the loop and says yes or what to change; he stays
+Phase: 6. Status: Part A done (2026-11-04: the loop, the video pipeline with stand-ins, the media docs, the speed script); Part B waits for an installed release build, the screen slot with a real Claude Code session, 10 idle minutes and Haik's look. Needs Haik: yes: he watches the video and the loop and says yes or what to change; he stays
 off the PC for about 10 minutes while the captures run. Agent: `wakeshot-worker`. Size: about 120K tokens.
 Real laptop: yes: screen captures of the real tray during one real Claude Code test session, light and dark; the real
 app holds and restores the power settings during it. One card at a time on the laptop.
@@ -59,11 +59,114 @@ Each with the worker's default.
 
 Problems seen but not fixed.
 
+1. `docs/research/launch.md` line 151 ("Wakeshot's row") still says a closed laptop on battery "hibernates" after 5
+   minutes; since 2026-11-04 it sleeps, with hibernate only as the fallback (`docs/product.md`). `p6-readme` drafts
+   its rival table from that row.
+2. `docs/brand.md`, "Logo and wordmark", says "Not checked: whether Segoe UI may be used in rendered pictures and the
+   video. `p6-media` checks it". Checked 2026-11-04 (Part A): Microsoft's Font redistribution FAQ
+   (learn.microsoft.com/en-us/typography/fonts/font-faq, fetched with curl) says "We view creating graphic files as
+   being essentially the same as printing from an output device" and, for videos, "We view this as the same as
+   graphic files, providing the captions or text is rendered as a bitmap image, and the font files themselves are not
+   embedded within the video file". The line in `brand.md` and a `research.md` entry are for their owners (this card
+   may not edit `research.md` before its speed numbers).
+3. `p5-haik-check` may change the menu words or the icon after Part A: the loop then needs `npm run loop` again (and
+   `check-art.mjs` first if the art changed).
+
 ## Log
 
 - 2026-11-04: card written from Haik's launch request (speed shown, pictures, a 30 s animated video with sound and
   effects).
+- 2026-11-04 13:55: Part A started (orchestrator, session `wakeshot-12`): the icon loop, the video pipeline with
+  stand-in pictures, `media/README.md`, `media/CREDITS.md`, the speed script (not run). Started before
+  `p5-haik-check` on the orchestrator's call, for Haik's review.
+- 2026-11-04 13:57 (Part A): Remotion 4.0.540 installed inside `media/` with npm (versions pinned, lock file).
+  Nothing system-wide; Remotion bundles FFmpeg and ffprobe and put its Chrome Headless Shell into
+  `media/node_modules/.remotion`. npm 11.20 skipped esbuild's install script (its `allowScripts` rule); the build
+  works without it. No usage event without a licence key (read in `@remotion/renderer` `render-media.js`).
+- 2026-11-04 13:58 (Part A): the Sunrise art ported to `media/src/art/sunrise.ts`; `check-art.mjs` rasters the port
+  as `art.rs` does and compares it with the Rust-written sheets and `assets/wakeshot.ico`: 0 difference at every size
+  (tray glyphs 16 to 48 px in three states on light and dark; app icon frames 16 to 64 px).
+- 2026-11-04 13:59 (Part A): soundtrack made in code, the same bytes on two runs; loops rendered (light 0.27 MB,
+  dark 0.46 MB).
+- 2026-11-04 14:00 (Part A): draft video rendered in 57 s at concurrency 4: 2.2 MB, all `check-video` lines ok;
+  audio -15.6 LUFS integrated, true peak -1.0 dBTP (ffmpeg `loudnorm` measure).
+- 2026-11-04 14:01 (Part A): Segoe UI checked: Microsoft's Font redistribution FAQ allows Windows fonts in pictures
+  and video text rendered as bitmaps; the video uses Inter anyway, for builds that match on any machine.
+- 2026-11-04 14:03 (Part A): `check-rebuild.mjs` (clean copy, `npm ci`, every command): all 5 outputs the same
+  bytes. Stills reviewed by eye; fixed the open lid running off the top, the jagged 1.25x menu zoom, a speck in the
+  nearly filled sun and the glow's hard edge.
+- 2026-11-04 14:12 (Part A): after the last source edits, the outputs rebuilt and `check-rebuild.mjs` run again: the
+  art check and 5 of 5 outputs the same bytes. Scratch folder `<scratchpad>\p6-media\` deleted. No git run.
 
 ## Result
 
-What was done, files changed, checks and outcomes, open items.
+**Part A done (2026-11-04 14:10). Part B waits** for an installed release build, the screen slot with a real Claude
+Code test session, 10 idle minutes and Haik's look.
+
+### Part A: built
+
+`media/` (owned whole; all new):
+
+- `package.json`, `package-lock.json`, `tsconfig.json`, `.gitignore` (`node_modules/`, `.remotion/`,
+  `public/sound/`, `out/draft/`).
+- `src/art/sunrise.ts`: the Sunrise geometry and raster, ported from `art.rs`. `src/art/Glyph.tsx`: the glyph and the
+  app icon as SVG, with a motion between idle and holding (the sun fills and rises, the rays grow).
+- `src/loop/IconLoop.tsx`: the README loop, idle to holding and back, tray colours, light and dark.
+- `src/promo/Promo.tsx`, `scenes.tsx`, `parts.tsx`: the 30 s video, eight scenes on the storyboard of
+  `research/launch.md` part 4; `src/timeline.ts` (frames for picture and sound), `src/copy.ts` (every word on
+  screen, drafts), `src/fonts.ts`, `src/theme.ts`.
+- `data/shots.json` (each picture, its size, stand-in or not, its source), `data/speed.json` (empty),
+  `data/settings.json` (stand-in: the laptop's own Sleep and 5 hours).
+- `public/shots/` (7 stand-ins copied from `docs/research/img/ux/`; the holding tooltip S3 has no picture yet and
+  shows as an outlined box).
+- `scripts/`: `build.mjs` (loop, draft, video, poster), `make-sounds.mjs`, `measure-speed.ps1` (not run; parse
+  checked only), `check.mjs`, `check-art.mjs`, `check-video.mjs`, `check-rebuild.mjs`, `lib/png.mjs`.
+- `out/icon-loop-light.gif`, `out/icon-loop-dark.gif`: final unless Haik or `p5-haik-check` changes the icon.
+- `README.md` (one command per file, sources, what to do when the icon, chimes or words change) and `CREDITS.md`.
+- Not kept: `out/draft/wakeshot-promo-draft.mp4` and its poster (git-ignored), for Haik's first look.
+
+### Part A: checks
+
+| Check | Outcome |
+|---|---|
+| Art port equals `art.rs` (`check-art.mjs`) | ok, 43 comparisons, worst difference 0 |
+| Rebuild from a clean copy gives the same files (`check-rebuild.mjs`) | ok, 5 of 5 the same bytes: both loops, soundtrack, draft video, draft poster |
+| Video specs (`check-video.mjs --draft`) | ok: h264, yuv420p, 1920 x 1080, 30 fps, 30.02 s, aac track, 2.18 MB; loops GIF89a, 5 s, forever, 0.27 and 0.46 MB |
+| No em dash, en dash or emoji; every asset credited (`check.mjs`) | ok, 10 assets; every text file in `media/` is plain ASCII |
+| Final render refuses stand-ins (`build.mjs video`) | ok: refuses and lists the 8 stand-in shots, the 6 missing speed fields and the stand-in settings |
+| Types (`tsc --noEmit`) | ok |
+| Speed numbers in `docs/research.md`; power settings before equal after; Haik's yes | waits for Part B |
+
+### Decisions (principal designer, for Haik's review; reasons and triggers in `media/README.md`)
+
+1. All sound made in code (bed in C major so the C6 and G6 chimes sit in tune, effects, chimes read from
+   `chime.rs`), not the research's Kenney and Freesound files: no third-party file, same bytes every build. Change it
+   when Haik finds it thin.
+2. Inter and JetBrains Mono from npm, not Segoe UI. Change it when the text must match Windows exactly.
+3. The loop keeps the tray glyph's own colours, with a soft gold light behind the risen sun; 480 x 240, 25 fps
+   (GIF delays are whole hundredths), 5 s. Change it when Haik wants the app icon's gold sun.
+4. The art as a checked vector port, not PNG exports: the video needs large sizes and the in-between motion.
+5. Screen pictures zoom by whole numbers with hard pixels, else smooth.
+6. The final render refuses stand-ins and missing numbers; every draft frame says DRAFT.
+7. The story follows today's behaviour: after the lid beat, "Work done" says a closed laptop goes to sleep once
+   nothing has happened for 5 minutes, with Wakeshot's going-to-sleep chime; the lid scene plays the lid chime.
+8. Settings scene shows the laptop's real values (Sleep, 5 hours), not the storyboard's "4 hours".
+9. Install line on the end card: the GitHub address until winget is live.
+10. Store-size screenshots dropped, as the launch research says (no Store at launch).
+
+### Part B: what waits
+
+1. Speed numbers (installed release build): `measure-speed.ps1` modes snapshot, size, idle, hold, delays, compare;
+   results into `docs/research.md` (method, build, date) and `media/data/speed.json`. Idle and hold refuse to start
+   while any `claude`, `node`, `cargo` or `rustc` runs; an agent's own busy Claude Code session makes Wakeshot hold,
+   so Haik starts these two from a plain PowerShell window with no session working.
+2. Final captures S1 to S6 at 150 % and 125 %, light and dark (100 % only by Haik's hand), into `media/public/shots/`
+   with `data/shots.json` updated; S9 values from the capture session's log into `data/settings.json`. Nothing private
+   in view (the stand-ins show "Wakeshot demo", an Armenian sample label and the date).
+3. Real Claude Code session captures (the holding tooltip, S3).
+4. `npm run video`, `npm run check-video`, `npm run check-rebuild -- --final`; the power settings check after.
+5. Haik's look at the loop and the video; his yes in the Log.
+6. Upload with `gh issue comment <n> --attach` to a pinned "Media" issue; the URL into `media/README.md`.
+
+Open: the Windows screenshot terms of Microsoft and the bundled FFmpeg and Chrome licences are not checked
+(`CREDITS.md` says so).
