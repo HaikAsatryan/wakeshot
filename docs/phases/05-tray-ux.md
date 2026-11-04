@@ -190,7 +190,7 @@ own Windows settings switched and put back.
 | `p5-menu-view` | no (menu look answered 17:32) | screen, settings (light and dark mode) | `p5-menu-paint`, `p5-tray-icon` | blocked: waiting for the screen slot (Part A done, committed 02:27: 10 tests) |
 | `p5-notices` | no | screen, settings (Do not disturb) | Part A: contracts change card; Part B: `p5-tray-icon`, `p5-text`, `p5-icon-art` | blocked: waiting for the screen slot (Part A done, committed 02:07: 10 tests) |
 | `p5-sounds` | no (the "No sounds" question: honor it, Haik 2026-11-03 18:09) | sound | contracts change card | done (committed 02:41): Part B in a locked session: all nine chimes seen in loopback at full length; reads equal |
-| `p5-haik-check` | yes, about 25 minutes: eyes, ears, hands | screen, sound, settings | every card above, `p4-cli-commands` | ready |
+| `p5-haik-check` | yes, about 25 minutes: eyes, ears, hands | screen, sound, settings | every card above, `p4-cli-commands` | blocked: Part A done (11:49, `ux_all`); Part B needs Haik at the screen |
 
 Sizes, one worker's context: `p5-theme` about 40K tokens, `p5-icon-art` 120K, `p5-text` 80K, `p5-menu-paint` 110K,
 `p5-tray-icon` 140K, `p5-menu-view` 130K, `p5-notices` 110K, `p5-sounds` 120K, `p5-haik-check` 80K. Total about 930K.
@@ -314,3 +314,7 @@ Bundle (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p5-th
   `docs/brand.md`; `art.rs` picks Sunrise (Cup, Eye and Sky stay drawable for `p5-haik-check`); new `.ico` and
   sheets. Art tests 12 of 12, clippy clean x64 and ARM64. Stale for the next docs pass: `research.md` "Tray UX: icon
   art", the `p5-icon-art` Result, the 01:30 line above. `CLAUDE.md` "Start here" lists `docs/brand.md` (Haik's yes).
+- 2026-11-04 11:49 (orchestrator `wakeshot-12`): `p5-haik-check` Part A done: `examples/ux_all.rs` (the demo icon with the
+  real menu from `present::build`; keys n, f, 1, 2, 3, l, q and `a`), built and tested on an export of f47391d, since
+  the tree did not compile mid `p2-6-sleep-route`; the in-repo checks rerun after that card. Haik's 11 steps are in the
+  card (step 11: confirm the Sunrise or pick another, then the text list). 8 worker decisions for Haik's review.
