@@ -527,3 +527,104 @@ Checks (build folder `<scratchpad>\p2-6-docs-pass-r4\target`, no `RUSTFLAGS`, al
 Decided by the worker, for Haik's review: Log 06:11, items 1 to 3.
 
 Open items: Found outside scope 1 (Haik), 2 to 4 (tests), 5 (orchestrator), 7 and 8 (minor).
+
+## Round 5 (2026-11-04)
+
+Status: done. Written by the orchestrator (session `wakeshot-12`). Runs beside `p2-6-sleep-route`, which owns all
+code, `docs/architecture.md` and the card files it names; this round owns none of them.
+
+Items (from the orchestrator):
+
+1. Branding (Haik's yes, 2026-11-04; `docs/brand.md`, commit f47391d): the Sunrise replaced the Cup. Bring
+   `docs/research.md` "Tray UX: icon art" up to date (concepts and pick, the app icon colours `e06a22` to `c2501a`,
+   the "transparent corner and the disc's orange" line) without erasing what was measured then: say what changed and
+   point to `docs/brand.md`. Add a dated note under the `p5-icon-art` Result that the pick changed (do not rewrite the
+   Result itself).
+2. `README.md` draft: only the lines that describe the icon art (cup, steam, orange) or the brand; keep its media
+   spots and everything about the lid and sleep (that waits for `p2-6-sleep-route`). List the lines you changed.
+3. `docs/product.md` "User settings safety" 7: say the 2 minutes are run time, and that after a reset battery sleep
+   is Windows' default for the plan (180 s on this laptop, `research.md` "Windows defaults of the three keys").
+4. Docs items in the Results and "Found outside scope" lists of `p2-6-record-lost` and `p3-idle-sleep-check` that are
+   not code and not `docs/architecture.md` (that file is `p2-6-sleep-route`'s this round): fix them or list them.
+5. Not to change: work logs, card Logs, dated research results, `CLAUDE.md`, any code.
+
+### Log
+
+- 2026-11-04: round 5 written by the orchestrator (session `wakeshot-12`).
+- 2026-11-04 11:40: round 5 started, Status in progress.
+- 2026-11-04 11:50: item 1 done. Checked first: `art.rs` (`PICK = Concept::Sunrise`, four concepts, `APP_LIGHT`
+  7957f4, `APP_DARK` 6b49f3, `SUN_GOLD` ffcc4d, mark 72%); `assets/wakeshot.ico` read with a stdlib Python ICO reader
+  (seven frames, transparent corners, violet plate, gold and white, no orange); sheet sizes from the PNG headers; the
+  new contrast numbers recomputed with a Python WCAG script (match `brand.md`). Research "Tray UX: icon art" got a
+  dated "Changed later" paragraph and a "Now" line in four points; the old measurements stay. `p5-icon-art.md` got a
+  dated note after its Result.
+- 2026-11-04 11:52: orchestrator dropped item 2 (a README worker owns all of `README.md`). I had not edited it; lines
+  it may want are under Found outside scope.
+- 2026-11-04 11:55: item 3 done (`product.md` rule 7: run time, the 180 s battery default, and "with nothing holding"
+  on the 7 minutes, from `p2-6-record-lost` Found outside scope 5). Item 4: the two cards read; nothing else of theirs
+  is a doc line this round may edit; listed below.
+- 2026-11-04 11:58: checks run (Result); scratch scripts deleted. Status done.
+
+### Found outside scope
+
+For the README worker (item 2, dropped):
+
+1. `README.md` has no line on a cup, steam or orange. Lines 3 and 57 to 59 (media comments) say the art comes "from
+   `p5-haik-check`"; the art is decided now (`tray/art.rs`, `docs/brand.md`). Line 3's alt text ("wakes while an agent
+   works and rests when it is done") could follow `brand.md` "The idea" (the sun rises and sets).
+
+For `p2-6-sleep-route` or the orchestrator (`docs/architecture.md`, code):
+
+2. `p2-6-record-lost` Found outside scope 3: `architecture.md` section 5 "Restore routine" step 1 and the section 8
+   row "Journal corrupt" still say a corrupt journal's values stay; the tray now resets them at its next start.
+3. `p2-6-record-lost` Found outside scope 2: `examples/power_check.rs` `Timed<T>` does not forward
+   `PlanIo::read_default` (code; matters once a harness flow sends `ResetLost`).
+
+For Haik (decisions, not doc lines):
+
+4. `p2-6-record-lost` Found outside scope 4: the uninstall hook sets a corrupt journal aside and no tray starts after
+   it, so its values are not reset. Product rule 5 lists uninstall as a restore point.
+5. `p2-6-record-lost` Open items: a hold that ran through the 2 minutes with the lid closed runs unlocked until it
+   ends, longer than rule 7's "about 7 minutes" (now marked "with nothing holding").
+6. `p3-idle-sleep-check` Open: the proposed 15-minute follow-up run (display already off at the release; a display
+   timeout longer than the sleep timeout).
+
+For the orchestrator (lines this round may not edit):
+
+7. `docs/product.md` lines 126 and 127 (lid section, not rule 7): "after a release its apps most likely run until the user's
+   own sleep timeout (inferred; not tested with the lid closed)". `p3-idle-sleep-check` tested a release with the lid
+   closed on battery: the sleep came at the display timeout, not the sleep timeout. Same for `docs/research.md` line
+   722 to 724, a dated 2026-11-03 result: left as it is; a pointer to "Idle sleep with the lid closed" would do.
+
+Minor, left: `docs/product.md` line 204 is over 120 characters (not mine; round 4 listed line 24 only).
+
+### Result
+
+Done 2026-11-04 11:58. Every new line was checked in the code, the files or a script first.
+
+| # | Outcome |
+|---|---|
+| 1 | Done: research "Tray UX: icon art" has a dated "Changed later" paragraph and "Now" lines on contrast, stroke, concepts and pick, and the ICO and PNG files; old numbers kept. `p5-icon-art.md` has a dated note after its Result |
+| 2 | Dropped by the orchestrator (README worker); `README.md` not edited. Lines for that worker: Found outside scope 1 |
+| 3 | Done: rule 7 says the 2 minutes are run time, the battery default is 180 s on the test laptop (3 minutes for a user's own Never), and the 7 minutes assume nothing holds |
+| 4 | Nothing more to edit in my files; Found outside scope 2 to 7 |
+| 5 | Kept: work logs, card Logs, dated research results, `CLAUDE.md`, code, `architecture.md`, `site/` |
+
+Files changed: `docs/research.md` ("Tray UX: icon art" only), `docs/tasks/p5-icon-art.md` (a dated note),
+`docs/product.md` (rule 7 only), this card.
+
+Checks:
+
+| Check | Outcome |
+|---|---|
+| `assets/wakeshot.ico` matches the new art (stdlib Python ICO reader) | pass: 7 frames, 43,006 bytes, transparent corners, 7957f4 and 6b49f3, gold and white, no orange |
+| New contrast numbers (Python WCAG 2) | match `brand.md`; the dark end on 202020 is 3.004 |
+| Changed files: no CR byte, em dash, en dash or emoji; final newline | pass (scratch script, 4 files) |
+| No line of mine over 120 characters | pass; `product.md` 24 and 204 and older research lines are not mine |
+| Not touched: code, `architecture.md`, `site/`, `README.md`, `CLAUDE.md`, phase files, work logs | pass, from my edit record (no git) |
+| Scratch scripts deleted | yes |
+
+No cargo run: this round changed no code.
+
+Open items: Found outside scope 1 (README worker), 2 and 3 (`p2-6-sleep-route` or a code card), 4 to 6 (Haik), 7
+(orchestrator).

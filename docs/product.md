@@ -155,14 +155,16 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
 5. Restore on: work end, quit, sign-out, next start, uninstall, and app crash or kill (guard process).
 6. If a company policy blocks the write, run with power requests only and tell the user.
 7. A journal that cannot be read (Haik, 2026-11-04): Wakeshot tries again every 30 seconds for 2 minutes; a damaged
-   file ends that at once. Then, on the plan in use, each setting Wakeshot writes that holds exactly the value
-   Wakeshot writes (lid Do nothing, sleep Never) goes to Windows' default for that plan; any other value is the
-   user's and stays. The log gets each old and new value, the bad file is set aside, and one notice says what was
-   reset and that a user who had their own values should set them again. During the 2 minutes Wakeshot neither
-   locks at a lid close nor counts down; if the lid is closed when they end and nothing holds, the work end rule
-   puts the laptop to sleep. Rare cost: a user's own Do nothing or Never meets a lost journal and goes back to the
-   default, with the notice; a closed laptop that a crashed Wakeshot left at Do nothing may run unlocked for up to
-   about 7 minutes before it sleeps.
+   file ends that at once. The 2 minutes are run time: a sleep pauses them. Then, on the plan in use, each setting
+   Wakeshot writes that holds exactly the value Wakeshot writes (lid Do nothing, sleep Never) goes to Windows' default
+   for that plan; any other value is the user's and stays. For battery sleep that default is 180 seconds on the test
+   laptop (`research.md`, "Windows defaults of the three keys"), so a user whose own value was Never gets 3 minutes.
+   The log gets each old and new value, the bad file is set aside, and one notice says what was reset and that a user
+   who had their own values should set them again. During the 2 minutes Wakeshot neither locks at a lid close nor
+   counts down; if the lid is closed when they end and nothing holds, the work end rule puts the laptop to sleep.
+   Rare cost: a user's own Do nothing or Never meets a lost journal and goes back to the default, with the notice; with
+   nothing holding, a closed laptop that a crashed Wakeshot left at Do nothing may run unlocked for up to about 7
+   minutes before it sleeps.
 
 The crash gap is accepted (Haik, 2026-11-03): after an OS crash, a power cut or the other cases listed in
 `architecture.md` ("Gap left"), nothing restores before the next sign-in, because that would need admin, or longer
@@ -220,7 +222,9 @@ lid action stays Do nothing and battery sleep Never. The README says so.
 - README (Haik, 2026-11-04): long and detailed is fine, but never boring. The top says what we solve (the PC stays
   awake while an AI agent works, then sleeps as usual with the user's settings back; keep awake on demand comes with
   it, so nobody needs a second tool), shows a short animation of the icon and the measured speed numbers, then a side
-  by side table against the 2 or 3 most-starred rivals. Details sit below in folded sections. It says macOS is
+  by side table against the 2 or 3 most popular keep-awake options only (many thousands of stars or users), agent
+  aware or not, compared on features, so it shows what Wakeshot gives beyond a plain keep awake like PowerToys Awake
+  (Haik, 2026-11-04: "I want to compete with popular options"). Details sit below in folded sections. It says macOS is
   planned for later. Pictures of the menu and tooltip, light and dark.
 - A 30 second promo video with sound and effects, animated in code from the real icon art and screenshots, showing
   only what Wakeshot really does (Haik, 2026-11-04). For the README, the Pages page and the Store listing.

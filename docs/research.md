@@ -2859,6 +2859,11 @@ Checked 2026-11-04 by `p5-icon-art` (code `crates/wakeshot-windows/src/tray/art.
 `docs/research/img/ux/icon-*.png`). Colours were read from Phase 0's pictures of this laptop (build 26300) with a
 stdlib Python PNG reader in the card's scratchpad (`p5-icon-art\pngread.py`, `measure.py` to `measure3.py`).
 
+**Changed later on 2026-11-04 (brand, `docs/brand.md`):** Haik picked the Sunrise over the Cup, and the app icon moved
+from an orange disc to a violet rounded square with a gold sun. The points below are what `p5-icon-art` measured with
+the Cup; each "Now" line says what changed (written by `p2-6-docs-pass` round 5). The taskbar and glyph colours,
+Microsoft's guidance, the padding and stroke rules and the ICO and PNG writers are unchanged.
+
 - **Taskbar colours.** Dark: 202021, and 1f1f20 to 222223 along the bar (`tray-taskbar-after-promote.png`,
   `tray-icon-add2-dark-taskbar.png`); the bar is translucent, so it follows the wallpaper a little. The plate under an
   icon the mouse rests on, dark: 2d2d2e (`tray-icon-switch4-dark-taskbar.png`). Light: d8dadc, from d4d7d8 to dadcde,
@@ -2872,7 +2877,10 @@ stdlib Python PNG reader in the card's scratchpad (`p5-icon-art\pngread.py`, `me
 - **Contrast** (WCAG 2, test `glyph_contrast_on_taskbars` and a Python check): white on 202021 16.3:1, on 2d2d2e
   13.8:1; 1a1a1a on d8dadc 12.4:1, on d4d7d8 12.0:1, on ecedee 14.9:1. The sample high contrast pair, yellow on black:
   19.6:1. App icon disc: white mark on e06a22 3.4:1 and on c2501a 4.7:1; the disc on f3f3f3 3.0:1 and 4.3:1, on
-  202020 4.9:1 and 3.5:1. All at or above Microsoft's 3:1.
+  202020 4.9:1 and 3.5:1. All at or above Microsoft's 3:1. Now (the violet plate, 7957f4 to 6b49f3): white on it
+  4.7:1 and 5.4:1, the gold sun ffcc4d 3.1:1 and 3.6:1; the plate on f3f3f3 4.2:1 and 4.9:1, on 202020 3.5:1 and
+  3.0:1 (3.004, just over). Recomputed by round 5 with a Python WCAG 2 script; they match `brand.md`, and
+  `glyph_contrast_on_taskbars` asks 3:1 for each.
 - **Windows' own glyph shapes at 150% (24 px slot).** Strokes about 1.5 px, antialiased, not snapped to pixels. Wifi
   24 px wide and 17 tall, volume 18 tall, battery 30 wide (coverage grids printed by `measure3.py`). So Windows' own
   glyphs fill the slot's width.
@@ -2894,19 +2902,31 @@ stdlib Python PNG reader in the card's scratchpad (`p5-icon-art\pngread.py`, `me
 - **Stroke:** whole pixels, size / 16 rounded (1 px at 16 and 20, 2 at 24 to 36, 3 at 40 and 48, 4 at 56 and 64), with
   straight edges snapped to pixel edges. At 16 to 32 px the cup has at most 13% half-covered pixels (its round bottom
   and the off bar); a stroke off the grid would give 50% or more. At 24 px the cup's 2 px strokes are a little heavier
-  than Windows' 1.5 px.
-- **Concepts and pick.** Cup (picked): a full cup with steam (holding), an empty cup (idle), the empty cup struck
+  than Windows' 1.5 px. Now: the Sunrise follows the same rules; its empty sun is a 1 px curve at 16 and 20 px, so
+  `strokes_are_crisp_at_small_sizes` lets it have up to 35% half-covered pixels at 16 to 32 px (`SUNRISE_GREY`; the
+  Cup 15%). Its measured share: not recorded.
+- **Concepts and pick.** Cup (the pick then): a full cup with steam (holding), an empty cup (idle), the empty cup struck
   through (off). Eye: open eye, closed eye with lashes, struck through. Sky: sun, moon, struck-through moon. States
   differ in shape: test `states_differ_in_shape` asks that at least 25% of two states' ink sits in different pixels at
   16 and 24 px; measured 34% to 90% (the cup: 38% idle to off, over 50% against holding; read before the last steam
   change, which only adds ink to holding). App icon: the holding glyph in white on a disc from e06a22 to c2501a.
+  Now: `art.rs` draws four concepts (`Concept::ALL`: Sunrise, Cup, Eye, Sky) and `PICK` is the Sunrise (Haik,
+  2026-11-04): a risen half sun with three rays over the horizon (holding), an empty half sun on the horizon (idle),
+  the empty sun struck through (off). Why it replaced the Cup and why Eye and Sky were dropped: `brand.md` "Tray
+  icon". The states test covers all four concepts; the Sunrise's shares: not recorded. App icon now: the holding
+  sunrise on a violet rounded square from 7957f4 (top left) to 6b49f3 (bottom right) at 120 degrees, sun and rays in
+  gold ffcc4d, horizon in white, the mark 72% of the icon (`concept_app_icon`; `brand.md` "App icon").
 - **ICO and PNG.** `ico` writes 32-bit BGRA frames with an AND mask (bit set where alpha is 0; those pixels carry no
   colour). .NET `System.Drawing.Icon` loaded each of the seven frames of `assets/wakeshot.ico` at its size, with a
   transparent corner and the disc's orange inside (2026-11-04, between 01:20 and 01:26); both x64 release exes carry
   it (`ExtractAssociatedIcon`). `png` deflates with fixed codes and runs only,
   and writes a palette when an image has at most 256 colours: the sheets are 1892 by 3712 px and 107 KB each (a stored
   PNG would be about 28 MB); the app sheet (1582 colours, RGBA) is 333 KB. Python's `zlib` inflated every IDAT stream
-  and every chunk CRC matched (`colours.py`).
+  and every chunk CRC matched (`colours.py`). Now: that was the Cup's file. Read again by round 5 with a stdlib
+  Python ICO reader (2026-11-04, about 11:45): `assets/wakeshot.ico` is still 43,006 bytes with the seven 32-bit
+  frames; in each, the corner is transparent, the plate reads 7957f4 near the top left and 6b49f3 near the bottom
+  right, gold and white pixels are there and no orange. The .NET load and the exes' icon resource were not checked
+  again. The sheets now hold four concepts: 1892 by 4960 px, 139 KB each; the app sheet 1508 by 2304 px, 288 KB.
 - **Same bytes on x64 and ARM64:** the shapes use `+`, `-`, `*`, `/`, `sqrt` and `round` only, all exact in IEEE 754,
   and Rust does not fuse a multiply and an add on its own. So the golden test compares exactly. Tests ran on x64 only;
   ARM64 got clippy and builds, not a test run.

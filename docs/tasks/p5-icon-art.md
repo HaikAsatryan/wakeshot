@@ -225,3 +225,9 @@ Decided by the worker, for Haik's review (each with its trigger):
 
 **Open items:** Haik's look (`p5-haik-check`); after it, remove the other concepts. Not tested on ARM64 hardware (CI
 or a device runs the golden test there). The 256 px frame note under Found outside scope.
+
+**Note, 2026-11-04 (`p2-6-docs-pass` round 5; the Result above is left as written).** The pick changed: Haik chose the
+Sunrise over the Cup, and the app icon is now a violet rounded square (7957f4 to 6b49f3) with a gold sun (ffcc4d)
+and a white horizon, not the orange disc. `art.rs` now draws four concepts (Sunrise, Cup, Eye, Sky) with
+`PICK = Concept::Sunrise`; `assets/wakeshot.ico` and the sheets were written again. The why and the colours:
+`docs/brand.md`; what changed against the measurements: `docs/research.md` "Tray UX: icon art".

@@ -410,3 +410,8 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   velopack/velopack#1146 (an opt-in native TLS feature; #76, the system proxy issue, already names the trust store
   side). `p6-int-haik-checks` gains two steps when `p2-6-sleep-route` is done: the lid test of the sleep route,
   and Haik turns off Wakeshot under Settings > Apps > Startup, then signs out and in once (the real switch).
+- 2026-11-04 11:33 (orchestrator `wakeshot-12`, decision for Haik's review): `p6-pages` started as a draft before
+  its Runs after (`p6-readme` final, `p5-haik-check`) are done, as `p6-readme` was: the brand is final
+  (`docs/brand.md`), so the page is built now with marked spots for media, menu words, release and winget lines,
+  and the sleep wording (checked after `p2-6-sleep-route`). Running beside it: `p2-6-sleep-route`, docs pass round 5,
+  `p5-haik-check` Part A (built on an export of f47391d, since the tree does not compile mid-change).
