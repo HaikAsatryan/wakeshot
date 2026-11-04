@@ -349,3 +349,9 @@ Where each item this track owns is built. "Integration" is planned after the tra
   New card `p2-6-sleep-route-fixes` (starts now): the findings, plus four notices that are cut after five lines, and
   the watch test that fails in agent shells. Orchestrator decision, for Haik's review: rule 7's reset also covers
   the short timeouts at exactly Wakeshot's value. Review minor 8 fixed in `product.md`.
+- 2026-11-04 13:49 (orchestrator `wakeshot-12`): `p2-6-sleep-route-fixes` done: review majors 1 to 3 fixed (the window
+  lock waits for the lid or a lock and comes once a hold holds or our Do nothing is in force; the reset covers the
+  four 1-minute keys, and a damaged reset that finds this tray's own apply undoes it, resets and applies again; the
+  uninstall hook runs the reset and keeps the logs folder); minors 4, 6 and 7 as the review says, 5 leaner (a failed
+  reset locks once); the listing test drops the backup privilege on its thread; four notices shortened to fit four
+  lines. Not pushed: GitHub rejects the SSH key since about 13:50. Next: the reviewer checks the three majors' fixes.
