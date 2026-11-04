@@ -404,3 +404,9 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   small glyph is not the Sunrise, likely a cached PNG from 04:38 (not verified). The dry-run icon entry
   `15983757285637097514` and its two AUMID keys, recreated by an earlier test run, are still in Haik's registry:
   his call whether to delete them (orchestrator default: delete, with a `.reg` export first).
+- 2026-11-04 13:37 (orchestrator `wakeshot-12`): Haik's yes (defaults): the dry-run icon entry `15983757285637097514`
+  (`NotifyIconSettings`, `AppUserModelId` and `Notifications\Settings` keys, display name "Wakeshot") deleted
+  after a `.reg` export to the orchestrator's scratchpad; all three checked gone. Windows' cached
+  `%TEMP%\NotifyIconGeneratedAumid_15983757285637097514.png` is left (Windows writes it again). The README keeps
+  "Codex CLI and Copilot CLI next". `CLAUDE.md` notes that the Bash tool's shell has the backup and restore
+  privileges enabled (checked).

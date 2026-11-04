@@ -40,7 +40,9 @@ Start here: `docs/plan.md` (how we work, phases, status, next step). Then:
 - A user's own sleep (Start > Sleep) ends every request; after resume it is not honored until it is taken again.
 
 - Agents here run elevated (High, `SeDebugPrivilege` enabled; checked 2026-11-03). A test that expects an open or a
-  write to be denied must run under an unelevated (Medium) token, or it passes for the wrong reason.
+  write to be denied must run under an unelevated (Medium) token, or it passes for the wrong reason. The Bash tool's
+  shell (Git Bash) also has `SeBackupPrivilege` and `SeRestorePrivilege` enabled, PowerShell's has not (checked
+  2026-11-04), so a deny ACL test can give different results by tool.
 - In agent shells `cargo` may not be on `PATH`; call `%USERPROFILE%\.cargo\bin\cargo.exe` (checked 2026-11-03).
 
 ## Test laptop
