@@ -26,8 +26,9 @@ in `p6-plan-ship`, Result, for the orchestrator to route.
 | `packaging/` | `pack.ps1`, `smoke-test.ps1`, `e2e.ps1`, `winget/` |
 | `.github/workflows/release.yml`, `pages.yml`; `site/` | release build, pack, smoke test, upload; the Pages page |
 
-Why the hook and update logic sit in the lib, not the tray: they test without `velopack` and its 113 packages, and a
-bin crate flags every item no `main` calls yet, which would fail `clippy -D warnings` until integration.
+Why the hook and update logic sit in the lib, not the tray: they test without `velopack` and its 93 packages (x64,
+since `p6-tray-size`), and a bin crate flags every item no `main` calls yet, which would fail `clippy -D warnings`
+until integration.
 
 ### Package and install values
 
@@ -165,6 +166,7 @@ those one at a time across all tracks.
 | `p6-startup-switch-check` | no | `p6-install-e2e` | done (06:23: the off choice survives Setup over the install by the keys; uninstall leaves the StartupApproved value) |
 | `p6-tray-size` | no (stop 2, a dependency change, waits for the orchestrator) | `p6-int-update-wiring` | done (07:01: release tray 3.95 to 2.71 MB, CLI 0.67 to 0.56 MB) |
 | `p6-uninstall-startup-approval` | no (orchestrator decision for his review) | `p6-startup-switch-check` | done (06:45: 1287 workspace tests; `e2e.ps1` 88 of 88) |
+| `p6-small-fixes` | no | `p6-tray-size` | in progress (started 07:02) |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
 dependency 110K, pack and release 110K, install e2e 130K, winget 60K, README 70K, Pages 60K. About 880K in all.
@@ -386,3 +388,5 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   it; no tray ran, no power setting touched. Left: that test's release guard, the `architecture.md` section 11
   dependency rows, the velopack package counts in phase files (113 to 93), panic paths in local release builds
   (CI builds the shipped exes; `trim-paths` still unstable).
+- 2026-11-04 07:02 (orchestrator `wakeshot-12`): new card `p6-small-fixes` (a release guard for the CLI run tests,
+  one shared `taskbar_dpi`, three doc lines); line 29's velopack package count set to 93 here.
