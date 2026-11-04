@@ -138,7 +138,7 @@ laptop" cards run one at a time across all tracks.
 | `p3-harness` | no | yes for the `cleanup` smoke run only (global lane, review M7); other smoke runs touch no setting | `p3-power-io`, `p3-recovery`, `p3-requests`, `p3-session`, `p3-system-events` | done (22:56): 22 tests, smoke runs done; Haik's values same |
 | `p3-real-checks` | no | yes: an active plan copy, 50 cycles | `p3-harness`, `p3-stop-points` | done (00:54): every step passed; 16 real tests in `wakeshot-windows`, 2 in the tray; 50 cycles, `PowerSetActiveScheme` median 51.5 ms, max 121.8 ms |
 | `p3-haik-checks` | yes: about 60 min elapsed, about 15 min of hands | yes, whole laptop: battery, lid, sign-out, sleep, lock; no other agent or cargo command runs (review B2) | `p3-real-checks` | done (18:31): A (values back; End task closed the console, so the guard path did not run), C, D, E, B1 pass; B2 not shown (RunOnce pass timing; a real gap, fix card `p2-6-runonce-keep`); Haik's values same |
-| `p2-6-runonce-keep` | Part B only: about 5 min, one sign-out | Part A no; Part B yes, whole laptop | `p3-haik-checks` | running (18:37): Part A, the fix; then a narrow power safety check, then the B2 redo with Haik |
+| `p2-6-runonce-keep` | Part B only: about 5 min, one sign-out | Part A no; Part B yes, whole laptop | `p3-haik-checks` | running (18:32): Part A, the fix; then a narrow power safety check, then the B2 redo with Haik |
 | `p3-idle-sleep-check` | yes: about 10 min (dock out, lid closed 4 min) | yes: an active plan copy, lid, battery; Haik's plan never written | nothing | done (10:42): it sleeps (Modern Standby, not hibernate) 55 s after the release, when the screen timeout turns the screen off; locked at wake |
 
 Size estimates (one worker's context): store 90K, log 80K, process 110K, power-plan 110K, requests 60K,
@@ -249,7 +249,7 @@ Critical path: store, journal, (core ownership cards), power-io, harness, real-c
   gone, but the journal and the plan copy `40fece43-...` ("Wakeshot test 41604", not active) stayed. Checklist 5 may
   have a real bug. Haik was asked not to run `0-cleanup.cmd`. A new worker runs the card's "After Haik's steps", saves
   the evidence first, then finds the cause, then cleans up. It runs alone.
-- 2026-11-04 18:37 (orchestrator): `p3-haik-checks` done (90794e2). Haik did not run `0-cleanup.cmd`. B2 started 48 s
+- 2026-11-04 18:32 (orchestrator): `p3-haik-checks` done (90794e2). Haik did not run `0-cleanup.cmd`. B2 started 48 s
   after B1's sign-in, before Explorer's RunOnce pass of that sign-in (39 to 65 s after sign-in, after every Run
   entry); the pass ran restore mode at once, which found the owner alive and exited, and Windows deleted the value.
   `kill.ps1` said `NOT READY`; Haik read B as all OK. Same cause in the product: a hold that starts in the first

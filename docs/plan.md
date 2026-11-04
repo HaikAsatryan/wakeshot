@@ -243,7 +243,7 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   table round 3 (his comments), `p5-haik-check` (done: the menu opens above the taskbar; the demo banner names
   Wakeshot), his answers on a restore during the countdown and a hold that starts with the lid closed (`product.md`). CI
   green through 2016893.
-- 2026-11-04 18:37: `p3-haik-checks` done (90794e2): A, C, D, E and B1 pass; Haik's values same. B2 (restore at the
+- 2026-11-04 18:32: `p3-haik-checks` done (90794e2): A, C, D, E and B1 pass; Haik's values same. B2 (restore at the
   next sign-in) not shown: B2 started before Explorer's RunOnce pass of that sign-in, which ran restore mode at once
   and Windows deleted the value. The same gap is real in the product (a hold that starts in the first minute after
   sign-in loses its RunOnce value). Orchestrator decision, for Haik's review: fix card `p2-6-runonce-keep`. Running:
