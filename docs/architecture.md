@@ -337,8 +337,9 @@ State is one struct owned by the loop thread: `automatic`; holds by source; live
 `floor_pct`, `lid`; `episode: Option<Episode>` (from the first hold to the last: `released: Set<SettingKey>`, on every
 plan, `lid_closed_since`, labels of what held); a mirror of the journal, a copy of the entries that `Done(Applied)` and
 `Done(Restored)` carry, less the keys `UserChanged` names, with when it became unknown and whether a `ResetLost` is
-out; `requests`; `stepped_back` (battery floor); `source_since_mono` (when the power source last changed: on battery
-the AC loss the floor's grace and the source lock count from); `on_console`;
+out; `requests`; `stepped_back` (battery floor); `source_since_mono` (when the power source last changed, which the
+source lock counts from) and `floor_since_mono` (the AC loss after AC that lasted 30 s, which the floor's grace counts
+from); `on_console`;
 `session_ending`; `ending: Option<Countdown>`; `short` (the sleep route's short timeouts in force, with the fallback's
 deadline) and the short keys the user changed in this countdown; `last_resume_mono` and `last_unlock_mono`; notices
 already shown; and the lid side's own
@@ -416,7 +417,10 @@ While holding:
   own (Haik, 2026-11-04; this replaced the guess of `p6-int-wiring-fixes` decision 7). The lock is watched: a lock that fails, or that no `Session(Locked)` follows within 5 s (`LockWorkStation` only
   starts it), is sent once more at the next tick; if that one goes the same way, step back as at the floor (requests
   off, restore, the work-end countdown) until the session locks or the lid opens, then hold again as at a hold start
-  (section 8, "Lock fails"). The same for the source lock below. The lock does not wait for the sound. Tested: the
+  (section 8, "Lock fails"). The same for the source lock below. A lock that goes out while a floor step back lasts
+  with the lid closed keeps its check after the step back's restore takes our Do nothing away, since the closed laptop
+  runs on (`Core::floor_guards`; finding 2 of the `p2-6-floor-grace` power safety check). The lock does not wait for
+  the sound. Tested: the
   Windows alias sound played in full with the lock 0.2 ms after its call, and our chime was heard both in a session
   already locked and with its stream running before the lock (research, "Lid-close sound", "Lid-close results"). Not
   tested: our chime with the lock landing during its stream start, which is the v1 order (checklist 16). Change it when
@@ -432,7 +436,9 @@ While holding:
   same settle pass: the source lock settles first, so its `Lock` goes out ahead of the step back's `Restore`, and
   without `Play(LidClosedHolding)`, since the step back's `Play(BatteryFloor)` and notice go with it and the chime says
   the laptop keeps running (`p2-6-floor-grace`, worker decision for Haik's review). Change it when Haik wants both
-  sounds.
+  sounds. Under a charger that flaps the step back can come first, since its grace counts from an earlier loss: a
+  source lock still waiting then stays through the step back's restore while the step back lasts with the lid closed
+  and the user's own action for the source is not Do nothing, and locks with the chime once the source has lasted 30 s.
 - Another user's session takes the PC's own screen and keyboard (fast user switching, `Session(ConsoleLeft)`):
   `Restore { plan: None }` and hold the system request only, also with Keep screen on; `ConsoleBack`: the screen
   request again if asked for, and `Apply` as at a hold start. Plans are machine-wide, so our Do nothing would keep the
@@ -444,8 +450,10 @@ While holding:
   only. A restore that fails here warns in this session, not the user at the screen; it is retried at the ticks (below).
   Session notices: not tested (checklist 11). Phase 1 Question 10: the default, Haik 2026-11-03 18:09.
 - On battery under the floor (energy saver threshold DC; 20 when it is 0 "Never" or 100 "On battery"), once the PC has
-  been on battery for 30 s since the last AC loss the core heard (`policy::floor::decide`, `GRACE_MS`, the source
-  lock's 30 s; at once when it heard none, as for a tray that starts on battery): step back: `Requests` off,
+  been on battery for 30 s since the AC loss the core heard after AC that lasted 30 s (`policy::floor::decide` and
+  `battery_run_start`, `GRACE_MS`, the source lock's 30 s; AC that comes back for less keeps the run's first loss, so
+  a charger that flaps still steps back; at once when the core heard no such loss, as for a tray that starts on
+  battery): step back: `Requests` off,
   `Restore`, notice and `Play(BatteryFloor)`; if the lid is closed and the user's own battery lid action is not Do
   nothing, start the countdown (reason Floor). Until then holds hold, the settle pass gives the grace's end as a
   deadline, and AC back within the 30 s does nothing: no step back, sound, notice, restore or apply (Haik,

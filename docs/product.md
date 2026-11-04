@@ -102,7 +102,8 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   - Battery floor reached.
   - No sound for: a failed restore (the warning notification is enough), a hold that starts or ends with the lid
     open, Keep awake running out, the lid opening, AC lost or back (except when it leaves a closed laptop running on
-    Wakeshot's Do nothing: then as a lid close, with the lock), the user changing a setting Wakeshot overrides, and
+    Wakeshot's Do nothing: then as a lid close, with the lock; under the battery floor the lock comes with the battery
+    floor sound instead, "Battery floor" below), the user changing a setting Wakeshot overrides, and
     "update Wakeshot". These get a notification or the icon only.
   - Every sound plays on the default audio device, unless that device is a screen's audio (HDMI or DisplayPort, often
     with no speakers); then on the laptop speakers. Headphones stay as they are. Card `p1-lid-sound` picked this and
@@ -115,15 +116,22 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   request, restores settings and notifies, so Windows rules apply. If AC comes back within the 30 seconds, nothing
   happens: no step back, no chime, no notice (Haik, 2026-11-05: in his checks every short dock AC drop gave a chime
   and a notice, and one notice showed late, on AC; the same 30 seconds as the lock after an unplug). During the 30
-  seconds every hold keeps holding, and no setting is restored or written again. They count from the last AC loss, so
-  AC that comes and goes starts them again. A battery that falls under the floor after 30 seconds on battery steps
-  back at once, and so does a Wakeshot that starts on battery under the floor: there is no AC drop to wait out
-  (worker decision of `p2-6-floor-grace`, for Haik's review). An unplug with the lid closed brings the lock after an
-  unplug (above) at the same moment: the lock goes first, with the battery floor sound only, since the lid-close chime
-  says the laptop keeps running (worker decision, for Haik's review). If the lid is closed, it then puts the laptop to
-  sleep the same way as at work end (below; sleep, not hibernate, Haik 2026-11-04), after the same 5 minutes with no
-  input, so someone typing on an external screen with the lid closed is not put to sleep; right after an AC loss
-  Windows may sleep it at once instead (work end, below). If the user's own battery lid action is Do nothing, it does
+  seconds every hold keeps holding, and no setting is restored or written again. They count from the AC loss after AC
+  that lasted 30 seconds: AC that comes back for less does not start them again, so a charger that flaps, on battery
+  under 30 seconds at a time, still steps back 30 seconds after its first loss; each later blip of AC then ends the
+  step back, and the next loss steps back again at once, with its sound and notice (power safety check finding 1 of
+  `p2-6-floor-grace`, orchestrator decision 2026-11-05, for Haik's review; a quieter choice would end a step back only
+  once AC has lasted 30 seconds too). A battery that falls under the floor after 30 seconds on battery steps back at
+  once, and so does a Wakeshot that starts on battery under the floor: there is no AC drop to wait out (worker
+  decision of `p2-6-floor-grace`, for Haik's review). An unplug with the lid closed brings the lock after an unplug
+  (above) at the same moment: the lock goes first, with the battery floor sound only, since the lid-close chime says
+  the laptop keeps running (worker decision, for Haik's review). That lock is watched and tried once more as at a lid
+  close, also once the step back's restore has landed, and a lock after an unplug that still waits when the step back
+  comes stays, since the closed laptop runs on (finding 2 of the same check). If the lid is closed, it then puts the
+  laptop to sleep the same way as at work end (below; sleep, not hibernate, Haik 2026-11-04), after the same 5 minutes
+  with no input, so someone typing on an external screen with the lid closed is not put to sleep; at the step back, 30
+  seconds after the AC loss, Windows may sleep it at once instead (not known; work end, below). If the user's own
+  battery lid action is Do nothing, it does
   not act, the same rule as at work end (Haik, 2026-11-03). Right before it acts, it checks again that the lid is
   closed and the PC is on battery under the floor: a USB-C dock can drop AC for a few seconds (seen on the test
   laptop). When AC comes back, the hold resumes.

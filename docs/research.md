@@ -4480,6 +4480,20 @@ sim, scenarios and props only; no real laptop.
 - **Long property run.** `PROPTEST_CASES=10000`, release, `scenarios::props` and `lid_events_in_any_order`: 36 tests
   passed in 20 s. `coverage_tally` (256 cases): 13 step backs after an AC loss, 3 AC returns under the floor before
   a step back while holding. **Verified** (runs).
+- **Fix round (review `docs/reviews/p2-6-floor-grace.md`, same day).** The grace now counts from the AC loss after AC
+  that lasted 30 s (`policy::floor::battery_run_start`); a lock that goes out while a floor step back lasts with the
+  lid closed keeps its retry after the restore lands, and a source lock still waiting then stays (`floor_guards`).
+  Hand mutants, 10 of 10 killed: no grace; no grace deadline, also with only `scenarios::props` run (the new
+  property `a_floor_step_back_comes_at_30_s_on_battery_with_the_request_off` kills it alone); the lid chime always
+  with the source lock; the grace off by one millisecond; every loss starting a new run (the old flap rule), also
+  with only the props; no retry for a lock sent in a floor step back; a waiting source lock dropped at the restore;
+  the guard ignoring the user's own battery Do nothing. **Verified** (runs).
+- **A false failure of `no_floor_step_back_before_30_s_on_battery` at 10000 cases.** A floor restore failed, AC came
+  back, the user took every hold key back, and the retry of that restore went out on AC at the tick, with its reason
+  `Floor`. The property counted it as a step back; it now skips a floor restore at a tick while a restore is still
+  wanted. The case is the named test `the_retry_of_a_failed_floor_restore_on_ac_is_no_step_back`, which fails on the
+  old property. Latent since the first round, not a core fault. Then three runs at 10000 cases, release: 37 tests
+  passed each time, 21 to 23 s. **Verified** (runs).
 
 ## Notice header icon checks
 

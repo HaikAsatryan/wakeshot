@@ -258,6 +258,23 @@ impl Core {
         })
     }
 
+    /// A floor step back with the lid closed still guards the closed laptop (review finding 2 of `p2-6-floor-grace`):
+    /// its restore puts the user's own lid action back, which does not sleep a laptop whose lid is already closed
+    /// (product, work end; right after a source change Windows did, block 4, not known 30 s later), so the laptop may
+    /// run on until the `Floor` countdown sleeps it. So a lock that went out while it held is retried when the session
+    /// does not confirm it, and a source lock still waiting stays, after the restore landed. A lid-close lock from
+    /// before the step back keeps its own rule. Not on the user's own Do nothing for the source: then it would run
+    /// without Wakeshot too (decision 18). No plan read: no guard, as for every lid rule.
+    fn floor_guards(&self) -> bool {
+        self.state.stepped_back
+            && self.state.lid_closed == Some(true)
+            && self.in_force().is_some_and(|(plan, journal)| {
+                self.sources()
+                    .iter()
+                    .all(|&ac| lid::user_action(&plan, ac, &journal) != DO_NOTHING)
+            })
+    }
+
     /// A step back with the lid closed wants the `Floor` countdown only when the user's own battery lid action is not
     /// Do nothing, the same rule as at work end (Haik, 2026-11-03; power safety review finding 7): with their own Do
     /// nothing the closed laptop would run without Wakeshot too. No plan read: not known yet.
@@ -353,6 +370,7 @@ impl Core {
             self.state.lock.pending = Some(PendingLock {
                 retry: false,
                 shown: false,
+                floor: self.floor_guards(),
                 check_mono: now.mono_ms.saturating_add(LOCK_CHECK_MS),
             });
         }
@@ -383,7 +401,8 @@ impl Core {
     }
 
     /// `Power`. A source change with the lid closed may lock once the new source lasts (`policy::lid`), and an AC loss
-    /// starts the battery floor's grace from the same moment (`source_since_mono`); AC back ends a `Floor` countdown.
+    /// after AC that lasted starts the battery floor's grace (`policy::floor::battery_run_start`); AC back ends a
+    /// `Floor` countdown.
     pub(super) fn take_power(
         &mut self,
         ac: bool,
@@ -398,6 +417,13 @@ impl Core {
         let Some(from) = from.filter(|&from| from != ac) else {
             return;
         };
+        if !ac {
+            self.state.floor_since_mono = floor::battery_run_start(
+                self.state.floor_since_mono,
+                self.state.source_since_mono,
+                now.mono_ms,
+            );
+        }
         self.state.source_since_mono = Some(now.mono_ms);
         let closed = self.state.lid_closed == Some(true);
         // In place of any earlier one, so a change back inside the settle drops it.
@@ -709,8 +735,8 @@ impl Core {
 
     /// The battery floor from the facts now, before the requests: stepped back takes none (`policy::requests`). AC
     /// back holds again as at a hold start. Under the floor the step back waits until the PC has been on battery for
-    /// the grace since the last AC loss (`policy::floor::decide`, Haik 2026-11-05), and holds hold meanwhile; gives the
-    /// grace end, so the step back comes on time with no other event.
+    /// the grace since the AC loss that began this run on battery (`policy::floor`, Haik 2026-11-05), and holds hold
+    /// meanwhile; gives the grace end, so the step back comes on time with no other event.
     pub(super) fn settle_floor(&mut self, now: Now, out: &mut Vec<Command>) -> Option<Deadline> {
         let ac = self.state.ac?;
         let was = self.state.stepped_back;
@@ -721,7 +747,7 @@ impl Core {
             ac,
             pct,
             floor_pct,
-            self.state.source_since_mono,
+            self.state.floor_since_mono,
             now.mono_ms,
         );
         let pct_text = || pct.map_or_else(|| "?".to_owned(), |p| p.to_string());
@@ -846,7 +872,8 @@ impl Core {
     /// At a tick, before the settle pass: a watched lock that failed, or that the session did not confirm in time,
     /// gets the one retry; when the retry goes the same way, the step back, whose requests go off in this pass. Both
     /// only while the lid is closed on our Do nothing, or a hold holds through a lid close in the unknown window, which
-    /// may run on requests only (review minor 7); else the lock no longer guards anything Wakeshot keeps running.
+    /// may run on requests only (review minor 7), or the lock went out while a floor step back guards the closed laptop
+    /// and that lasts ([`Core::floor_guards`]); else the lock no longer guards anything Wakeshot keeps running.
     pub(super) fn check_lock(&mut self, now: Now, out: &mut Vec<Command>) {
         let Some(pending) = self
             .state
@@ -859,7 +886,8 @@ impl Core {
         self.state.lock.pending = None;
         let window_hold =
             self.state.lock.window_close && self.state.episode.is_some() && !self.holds_back();
-        if self.state.lid_closed != Some(true) || !(self.lid_ours() || window_hold) {
+        let guards = self.lid_ours() || window_hold || (pending.floor && self.floor_guards());
+        if self.state.lid_closed != Some(true) || !guards {
             out.push(Command::Log(
                 "The lock is not confirmed, but Wakeshot no longer keeps a closed laptop running: nothing to do"
                     .to_owned(),
@@ -887,6 +915,7 @@ impl Core {
         self.state.lock.pending = Some(PendingLock {
             retry: true,
             shown: true,
+            floor: pending.floor,
             check_mono: now.mono_ms.saturating_add(LOCK_CHECK_MS),
         });
     }
@@ -957,6 +986,18 @@ impl Core {
                 lid::settle(pending, &plan, &journal, closed, ac, now.mono_ms)
             }
             _ => Settle::Drop,
+        };
+        // A step back's restore takes our Do nothing away before the source has lasted, as under a charger that flaps,
+        // where the grace counts from an earlier loss than the lock does; the closed laptop runs on all the same.
+        let answer = match answer {
+            Settle::Drop if self.floor_guards() && self.state.ac == Some(pending.ac) => {
+                if now.mono_ms < pending.due_mono_ms {
+                    Settle::Wait(pending.deadline())
+                } else {
+                    Settle::Lock
+                }
+            }
+            other => other,
         };
         match answer {
             Settle::Wait(at) => Some(at),

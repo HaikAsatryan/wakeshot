@@ -106,9 +106,11 @@ struct Model {
     plan: Option<PlanValues>,
     ac: Option<bool>,
     battery_pct: Option<u8>,
-    /// When the power source last changed, as the core heard it (run time): on battery, the last AC loss, from which
-    /// the floor's grace counts (Haik, 2026-11-05).
+    /// When the power source last changed, as the core heard it (run time).
     source_since: Option<u64>,
+    /// Where the floor's grace counts from (Haik, 2026-11-05; review finding 1 of `p2-6-floor-grace`): an AC loss after
+    /// AC that lasted 30 s, or AC since the first reading; a loss after shorter AC keeps the run's first loss.
+    floor_since: Option<u64>,
     stepped_back: bool,
     step_back_shown: bool,
     episode: Option<Episode>,
@@ -417,8 +419,17 @@ impl Model {
             },
             Event::SettingsOwner => self.owner = true,
             Event::Power { ac, battery_pct } => {
+                let now = step.at.mono_ms;
+                if self.ac == Some(true) && !*ac {
+                    let ac_lasted = self
+                        .source_since
+                        .is_none_or(|at| now.saturating_sub(at) >= SOURCE_SETTLE_MS);
+                    if ac_lasted {
+                        self.floor_since = Some(now);
+                    }
+                }
                 if self.ac.is_some_and(|was| was != *ac) {
-                    self.source_since = Some(step.at.mono_ms);
+                    self.source_since = Some(now);
                 }
                 self.ac = Some(*ac);
                 self.battery_pct = *battery_pct;
@@ -450,7 +461,7 @@ impl Model {
                 ac,
                 self.battery_pct,
                 self.floor_pct(),
-                self.source_since,
+                self.floor_since,
                 step.at.mono_ms,
             );
             self.stepped_back = answer == floor::Floor::SteppedBack;
@@ -1021,10 +1032,12 @@ fn every_action_is_explained(world: &World) -> Result<(), String> {
 }
 
 /// Haik, 2026-11-05: under the battery floor the step back comes only once the PC has been on battery for the grace
-/// since the last AC loss the core heard, or at once when it heard none (a tray that starts on battery). So a dock's
-/// short AC drop gives no floor chime, no step back notice and no floor restore. Judged on the model's own record of
-/// the source change and the step's time, not on its step back flag, which comes from `policy::floor` as the core's
-/// does. A floor restore the failed lid lock's step back sends is that rule's, not this one's.
+/// since the AC loss that began the run ([`Model::floor_since`]), or at once when the core heard none (a tray that
+/// starts on battery). So a dock's short AC drop gives no floor chime, no step back notice and no floor restore.
+/// Judged on the model's own record of the source changes and the step's time, not on its step back flag, which comes
+/// from `policy::floor` as the core's does. A floor restore the failed lid lock's step back sends is that rule's, and
+/// one at a tick while a restore is still wanted is the retry of a failed one, which keeps its reason (seed found at
+/// 10000 cases: a floor restore failed, AC came back, and its retry went out on AC).
 fn no_step_back_inside_the_grace(world: &World) -> Result<(), String> {
     let floor_restore = Command::Restore {
         plan: None,
@@ -1041,13 +1054,14 @@ fn no_step_back_inside_the_grace(world: &World) -> Result<(), String> {
                 .commands
                 .iter()
                 .any(|c| matches!(c, Command::Notify(Notice::StepBack { .. })));
-        let restore = !seen.after.lock_stepped_back && seen.sent(&floor_restore);
+        let retry = step.event == Event::Tick && seen.before.retry;
+        let restore = !seen.after.lock_stepped_back && !retry && seen.sent(&floor_restore);
         if !(chime || notice || restore) {
             continue;
         }
         let on_battery_ms = seen
             .after
-            .source_since
+            .floor_since
             .map(|at| step.at.mono_ms.saturating_sub(at));
         if seen.after.ac != Some(false) || on_battery_ms.is_some_and(|ms| ms < floor::GRACE_MS) {
             return Err(format!(
@@ -1055,6 +1069,50 @@ fn no_step_back_inside_the_grace(world: &World) -> Result<(), String> {
                  {on_battery_ms:?} ms on battery, {}",
                 seen.where_()
             ));
+        }
+    }
+    Ok(())
+}
+
+/// The other bound of the grace (review finding 3 of `p2-6-floor-grace`): on battery under the floor, the step back
+/// comes at the grace's end, [`Model::floor_since`] plus 30 s, or at the percent reading when that is later, and at
+/// once with no `floor_since`. So a core step falls at that very moment, and from it on the system request is off. The
+/// sim fires a `Tick` at every core deadline, so a step back that waits for another timer (a plan read, the safety
+/// tick) leaves no step at that moment. Judged on the model's own record, not on `policy::floor`.
+fn step_back_at_the_grace_end(world: &World) -> Result<(), String> {
+    let mut last = (false, false);
+    let mut due: Option<u64> = None;
+    for seen in replay(world) {
+        let (system, _) = requests_now(&mut last, &seen);
+        let Some(step) = seen.step else {
+            continue;
+        };
+        let at = step.at.mono_ms;
+        if let Some(due) = due.filter(|&due| at > due) {
+            return Err(format!(
+                "no core step at the grace's end, run {} ms; the next one {}",
+                due - sim::START.mono_ms,
+                seen.where_()
+            ));
+        }
+        let model = &seen.after;
+        let owed = model.started
+            && !model.quit
+            && model.ac == Some(false)
+            && floor::below(model.battery_pct, model.floor_pct());
+        due = owed.then(|| {
+            model
+                .floor_since
+                .map_or(at, |since| since.saturating_add(floor::GRACE_MS).max(at))
+        });
+        if due == Some(at) {
+            if system {
+                return Err(format!(
+                    "the system request is on past the grace's end on battery under the floor, {}",
+                    seen.where_()
+                ));
+            }
+            due = None;
         }
     }
     Ok(())
@@ -2219,6 +2277,41 @@ fn a_plan_switchs_restore_that_leaves_nothing_ends_the_wait_and_owes_no_window_l
     );
 }
 
+/// `p2-6-floor-grace` fix round, the case found at 10000 cases: the step back's restore fails, AC comes back, the user
+/// takes every hold key back, so the hold applies nothing, and the retry of that restore goes out on AC at the tick
+/// with its reason, `Floor`. That is no step back.
+#[test]
+fn the_retry_of_a_failed_floor_restore_on_ac_is_no_step_back() {
+    let sets = |key, value| WorldStep::UserSets {
+        plan: None,
+        key,
+        value,
+    };
+    check_case(
+        WorldStart {
+            on_console: false,
+            ..on_battery_at_25()
+        },
+        vec![
+            restore_fails(),
+            WorldStep::Agent {
+                pid: 1,
+                now: AgentNow::Working,
+            },
+            WorldStep::ConsoleBack,
+            sets(SettingKey::LidAc, 1),
+            WorldStep::Run(10 * SECOND),
+            WorldStep::Battery(10),
+            WorldStep::Ac(true),
+            sets(SettingKey::SleepDc, 300),
+            sets(SettingKey::LidDc, 1),
+            WorldStep::Run(20 * SECOND),
+        ],
+        End::LastHold,
+        no_step_back_inside_the_grace,
+    );
+}
+
 /// The floor countdown's sleep check goes out, then input; the reading that shows it comes while the check is out, and
 /// the check's pass (taken before the input) after it. The session is ending, so the short timeouts cannot be written:
 /// before the fix the fallback was due at once and `Hibernate` went out 10 s after input.
@@ -2324,6 +2417,14 @@ proptest! {
     fn no_floor_step_back_before_30_s_on_battery(case in prop_oneof![case(), lid_case()]) {
         let world = play(&case);
         verdict(&world, no_step_back_inside_the_grace(&world))?;
+    }
+
+    #[test]
+    fn a_floor_step_back_comes_at_30_s_on_battery_with_the_request_off(
+        case in prop_oneof![case(), lid_case()]
+    ) {
+        let world = play(&case);
+        verdict(&world, step_back_at_the_grace_end(&world))?;
     }
 
     #[test]

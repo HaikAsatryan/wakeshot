@@ -1768,29 +1768,155 @@ fn haiks_night_five_dock_drops_under_the_floor_give_no_chime_and_no_notice() {
 }
 
 #[test]
-fn ac_that_flaps_inside_the_grace_starts_it_again_at_the_last_loss() {
+fn ac_back_for_under_30_s_keeps_the_grace_of_the_first_loss() {
+    // Review finding 1 of `p2-6-floor-grace`, the orchestrator's decision 2026-11-05: short AC does not start it again.
     let mut sim = holding_on_ac_at(plan(BALANCED), &KEYS, 19);
+    sim.run(3 * SECOND);
+    let first_loss = sim.now();
     let mut out = sim.send(power(false, 19));
     out.extend(sim.run(5 * SECOND));
     out.extend(sim.send(power(true, 19)));
     out.extend(sim.run(5 * SECOND));
-    let last_loss = sim.now();
     out.extend(sim.send(power(false, 19)));
+    out.extend(sim.run(SOURCE_SETTLE_MS - 10 * SECOND - 1));
+    nothing_of_a_step_back(&sim, &out);
+
     // 30 s after the first loss, 20 s after the last.
+    let out = sim.run(1);
+    steps_back(&sim, &out);
+    assert_eq!(
+        floor_chimes_since(&sim, first_loss),
+        [SOURCE_SETTLE_MS],
+        "{}",
+        sim.trace()
+    );
+}
+
+#[test]
+fn ac_back_for_30_s_starts_the_grace_again() {
+    let mut sim = holding_on_ac_at(plan(BALANCED), &KEYS, 19);
+    sim.run(3 * SECOND);
+    let mut out = sim.send(power(false, 19));
+    out.extend(sim.run(5 * SECOND));
+    out.extend(sim.send(power(true, 19)));
+    out.extend(sim.run(SOURCE_SETTLE_MS));
+    let second_loss = sim.now();
+    out.extend(sim.send(power(false, 19)));
     out.extend(sim.run(SOURCE_SETTLE_MS - 1));
     nothing_of_a_step_back(&sim, &out);
 
     let out = sim.run(1);
     steps_back(&sim, &out);
     assert_eq!(
-        sim.sent_at(&FLOOR_CHIME)
-            .iter()
-            .map(|t| t.mono_ms - last_loss.mono_ms)
-            .collect::<Vec<_>>(),
+        floor_chimes_since(&sim, second_loss),
         [SOURCE_SETTLE_MS],
         "{}",
         sim.trace()
     );
+}
+
+/// When each floor chime went out, in run time since `from`.
+fn floor_chimes_since(sim: &Sim, from: Now) -> Vec<u64> {
+    sim.sent_at(&FLOOR_CHIME)
+        .iter()
+        .map(|t| t.mono_ms - from.mono_ms)
+        .collect()
+}
+
+/// A charger that flaps: on battery for 20 s, then AC for 5 s, from now on, `stretches` times. Gives every command.
+fn flaps(sim: &mut Sim, stretches: usize) -> Vec<Command> {
+    let mut out = Vec::new();
+    for _ in 0..stretches {
+        out.extend(sim.send(power(false, 19)));
+        out.extend(sim.run(20 * SECOND));
+        out.extend(sim.send(power(true, 19)));
+        out.extend(sim.run(5 * SECOND));
+    }
+    out
+}
+
+#[test]
+fn a_charger_that_flaps_steps_back_30_s_after_its_first_loss() {
+    // Review finding 1: battery stretches of 20 s and AC of 5 s once restarted the grace at every loss, so the PC held
+    // on battery under the floor for as long as the flapping lasted.
+    let mut sim = holding_on_ac_at(plan(BALANCED), &KEYS, 19);
+    sim.run(3 * SECOND);
+    let first_loss = sim.now();
+    let out = flaps(&mut sim, 2);
+    let trace = sim.trace();
+    assert_eq!(
+        floor_chimes_since(&sim, first_loss),
+        [SOURCE_SETTLE_MS],
+        "inside the second stretch on battery\n{trace}"
+    );
+    assert_eq!(count(&out, &OFF), 1, "{trace}");
+    // The cost: each blip of AC holds again, and the next loss steps back at once, with its sound and notice.
+    assert_eq!(count(&out, &SYSTEM), 1, "{trace}");
+    let out = sim.send(power(false, 19));
+    steps_back(&sim, &out);
+    assert_eq!(
+        notices(&out),
+        [&Notice::StepBack { floor_pct: 20 }],
+        "{}",
+        sim.trace()
+    );
+}
+
+/// Signed in on the external screen after the lid-close lock, a charger that flaps: the step back comes 30 s after the
+/// first loss, when the lock for the last loss still waits 25 s more, and its restore lands. Gives the sim and the
+/// last loss.
+fn closed_flap_to_the_restore() -> (Sim, Now) {
+    let mut sim = holding_on_ac_at(plan(BALANCED), &KEYS, 19);
+    sim.send(lid(true));
+    sim.send(session(SessionChange::Locked));
+    sim.send(session(SessionChange::Unlocked));
+    sim.run(3 * SECOND);
+    let first_loss = sim.now();
+    let mut out = sim.send(power(false, 19));
+    out.extend(sim.run(20 * SECOND));
+    out.extend(sim.send(power(true, 19)));
+    out.extend(sim.run(5 * SECOND));
+    let last_loss = sim.now();
+    out.extend(sim.send(power(false, 19)));
+    out.extend(sim.run(5 * SECOND));
+    let trace = sim.trace();
+    assert_eq!(
+        floor_chimes_since(&sim, first_loss),
+        [SOURCE_SETTLE_MS],
+        "{trace}"
+    );
+    assert_eq!(count(&out, &LOCK), 0, "{trace}");
+    sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
+    (sim, last_loss)
+}
+
+#[test]
+fn a_charger_that_flaps_with_the_lid_closed_locks_once_the_last_loss_lasts_30_s() {
+    // The restore took our Do nothing away, but the closed laptop runs on (review finding 2 of `p2-6-floor-grace`).
+    let (mut sim, last_loss) = closed_flap_to_the_restore();
+    // To 1 s past the lock, before its check.
+    let out = sim.run(26 * SECOND);
+    let trace = sim.trace();
+    assert_eq!(count(&out, &LOCK), 1, "{trace}");
+    assert_eq!(count(&out, &CHIME), 1, "{trace}");
+    assert_eq!(
+        lock_times(&sim, last_loss).last(),
+        Some(&i128::from(SOURCE_SETTLE_MS)),
+        "{trace}"
+    );
+}
+
+#[test]
+fn a_lock_waiting_through_a_floor_step_back_drops_on_the_users_own_battery_do_nothing() {
+    // A read after the restore shows the user's own battery lid action as Do nothing: the laptop would run on without
+    // Wakeshot too, so no lock (decision 18).
+    let (mut sim, _) = closed_flap_to_the_restore();
+    sim.send(read(PlanValues {
+        lid_dc: 0,
+        ..plan(BALANCED)
+    }));
+    let out = sim.run(MINUTE);
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
 }
 
 #[test]
@@ -1911,9 +2037,24 @@ fn a_docked_unplug_with_the_lid_closed_under_the_floor_locks_and_steps_back_at_3
         "{}",
         sim.trace()
     );
-    // Not confirmed in 5 s: the one retry.
+    // The restore lands in about 1 s (block 4), long before the lock's check, and takes our Do nothing away; the
+    // closed laptop runs on all the same (review finding 2 of `p2-6-floor-grace`). Not confirmed in 5 s: the notice and
+    // the one retry.
+    sim.run(SECOND);
+    sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
+    let out = sim.run(LOCK_CHECK - SECOND);
+    let trace = sim.trace();
+    assert_eq!(count(&out, &LOCK), 1, "{trace}");
+    assert_eq!(notices(&out), [&Notice::LockFailed], "{trace}");
+    // The retry fails too: the step back after a failed lock, with the floor's still in force; then the session
+    // locks after all, and holds wait for AC.
     let out = sim.run(LOCK_CHECK);
-    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    sim.send(session(SessionChange::Locked));
+    let out = sim.run(MINUTE);
+    let trace = sim.trace();
+    assert_eq!(count(&out, &LOCK), 0, "{trace}");
+    assert_eq!(count(&out, &SYSTEM), 0, "{trace}");
 }
 
 // Item 4: the countdown.

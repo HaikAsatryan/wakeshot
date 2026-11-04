@@ -40,10 +40,29 @@ pub enum Floor {
     SteppedBack,
 }
 
-/// The floor after a power reading. `was`: stepped back before it. `on_battery_since_mono`: when the PC last went from
-/// AC to battery (run time, so a sleep in between does not count); `None` when the core saw no such change, as for a
-/// tray that starts on battery, which steps back at once: there is no AC drop to wait out, and a hold that ran for the
-/// grace would apply settings only to take them back with a chime 30 s later.
+/// Where the grace counts from after an AC loss at `now_mono_ms` (run time, so a sleep in between does not count): the
+/// loss itself when the AC before it lasted [`SOURCE_SETTLE_MS`], or AC since the first reading (`ac_since_mono`
+/// `None`); else `kept`, the start of the run on battery that AC came back into for less than that. So a charger that
+/// flaps, on battery under 30 s at a time with short AC between, still steps back 30 s after its first loss, while a
+/// dock's short drop between long stretches of AC waits 30 s each time (review finding 1 of `p2-6-floor-grace`, the
+/// orchestrator's decision 2026-11-05). `kept` is `None` for a tray that started on battery and saw no AC that lasted:
+/// it steps back at once, as at its start. The cost under a flapping charger: each blip of AC ends the step back, and
+/// the next loss steps back again at once, with its sound and notice. Change it when Haik wants a step back to end only
+/// once AC has lasted 30 s too.
+pub fn battery_run_start(
+    kept: Option<u64>,
+    ac_since_mono: Option<u64>,
+    now_mono_ms: u64,
+) -> Option<u64> {
+    let ac_lasted =
+        ac_since_mono.is_none_or(|at| now_mono_ms >= at.saturating_add(SOURCE_SETTLE_MS));
+    if ac_lasted { Some(now_mono_ms) } else { kept }
+}
+
+/// The floor after a power reading. `was`: stepped back before it. `on_battery_since_mono`: where the grace counts
+/// from ([`battery_run_start`]); `None` when the core saw no AC loss after AC that lasted, as for a tray that starts
+/// on battery, which steps back at once: there is no AC drop to wait out, and a hold that ran for the grace would
+/// apply settings only to take them back with a chime 30 s later.
 ///
 /// A step back starts on battery below the floor and ends only when AC comes back, so a percent that reads one higher
 /// for a moment does not start the hold, its apply, notice and sound again. An unknown percent never starts it, or a
@@ -201,14 +220,44 @@ mod tests {
     }
 
     #[test]
-    fn the_grace_starts_again_at_the_last_ac_loss() {
-        // Lost at T0, back at T0 + 5 s, lost again at T0 + 10 s: the source began at the last loss.
-        let last = T0 + 10_000;
+    fn a_loss_after_ac_that_lasted_30_s_starts_a_new_run() {
+        let loss = T0 + 10 * 60_000;
+        let ac_since = loss - SOURCE_SETTLE_MS;
         assert_eq!(
-            decide(false, false, Some(19), 20, Some(last), T0 + GRACE_MS),
-            Floor::Grace {
-                due_mono_ms: last + GRACE_MS
-            }
+            battery_run_start(Some(T0), Some(ac_since), loss),
+            Some(loss)
+        );
+        assert_eq!(battery_run_start(None, Some(ac_since), loss), Some(loss));
+    }
+
+    #[test]
+    fn a_loss_after_ac_since_the_first_reading_starts_a_run() {
+        assert_eq!(battery_run_start(None, None, T0), Some(T0));
+    }
+
+    #[test]
+    fn a_loss_after_ac_of_under_30_s_keeps_the_run_of_the_first_loss() {
+        // Lost at T0, back at T0 + 5 s, lost again at T0 + 10 s: the grace still ends 30 s after T0.
+        let loss = T0 + 10_000;
+        let kept = battery_run_start(Some(T0), Some(T0 + 5_000), loss);
+        assert_eq!(kept, Some(T0));
+        assert_eq!(
+            battery_run_start(Some(T0), Some(loss - SOURCE_SETTLE_MS + 1), loss),
+            Some(T0)
+        );
+        assert_eq!(
+            decide(false, false, Some(19), 20, kept, T0 + GRACE_MS),
+            Floor::SteppedBack
+        );
+    }
+
+    #[test]
+    fn a_tray_that_started_on_battery_keeps_stepping_back_at_once_after_a_short_ac_blip() {
+        let kept = battery_run_start(None, Some(T0), T0 + 5_000);
+        assert_eq!(kept, None);
+        assert_eq!(
+            decide(false, false, Some(19), 20, kept, T0 + 5_000),
+            Floor::SteppedBack
         );
     }
 

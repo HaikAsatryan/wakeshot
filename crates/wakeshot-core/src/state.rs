@@ -103,6 +103,10 @@ pub(crate) struct State {
     pub battery_pct: Option<u8>,
     /// When the current power source began (run time); `None` before the first change.
     pub source_since_mono: Option<u64>,
+    /// Where the battery floor's grace counts from (`policy::floor::battery_run_start`): the AC loss that began this
+    /// run on battery, kept through AC that came back for less than `SOURCE_SETTLE_MS`. `None` until an AC loss after
+    /// AC that lasted, as for a tray that starts on battery.
+    pub floor_since_mono: Option<u64>,
     /// On battery under the floor, after the grace: no requests, no apply, until AC.
     pub stepped_back: bool,
     /// The step back's notice and sound went out in this step back: once, at the first moment a hold counts in it.
@@ -207,6 +211,7 @@ impl State {
             ac: None,
             battery_pct: None,
             source_since_mono: None,
+            floor_since_mono: None,
             stepped_back: false,
             step_back_shown: false,
             floor_grace: None,
@@ -383,6 +388,9 @@ pub(crate) struct PendingLock {
     pub retry: bool,
     /// `LockFailed` went out for this lock or the one it retries.
     pub shown: bool,
+    /// The lock went out while a floor step back guards the closed laptop (`core::lid::floor_guards`), whose restore
+    /// may land before the check: it is retried while that lasts (review finding 2 of `p2-6-floor-grace`).
+    pub floor: bool,
     /// When a tick decides: `core::lid::LOCK_CHECK_MS` after the lock, or at once after it failed.
     pub check_mono: u64,
 }
