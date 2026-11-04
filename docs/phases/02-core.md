@@ -301,3 +301,4 @@ Where each item this track owns is built. "Integration" is planned after the tra
 - 2026-11-04 05:31: CI on 46edb07 failed on x64 only: `scenarios::props::no_lock_when_the_lid_action_in_force_is_the_users_own`,
   the flaky property that `p2-6-unread-lid-countdown` found (6 of 60 local runs) and fixed in 2181c12 (not pushed then).
   Pushed 2181c12 to check it in CI.
+- 2026-11-04 05:35: CI green on abd3061 (with the property fix 2181c12), all three jobs.

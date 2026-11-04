@@ -1,6 +1,6 @@
 # Integration: the update path and checklist 14 on a real install
 
-Phase: 6. Status: ready. Needs Haik: no (uses his answers 5 and 6: off after `winget upgrade` until the next sign-in;
+Phase: 6. Status: in progress. Needs Haik: no (uses his answers 5 and 6: off after `winget upgrade` until the next sign-in;
 the data folder deleted after a good restore). Agent: `wakeshot-worker`. Size: about 120K tokens.
 Real laptop: **global lane**, installs (never beside another install, `p6-install-e2e` or a card that uses the
 dry-run data folder): Velopack installs into `%LocalAppData%\HaikAsatryan.Wakeshot`, the real Run and RunOnce values,
@@ -77,6 +77,41 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03: card written by `p6-plan-integration`.
+- 2026-11-04 05:16: worker started, in two stops (orchestrator): stop 1 writes `packaging/e2e-update.ps1` and runs
+  only what leaves the laptop as it is (parse, `Get-Help`, the read-only BEFORE, the build and packs into scratch);
+  stop 2 runs steps 1 to 8 alone on the laptop after `p6-int-real-e2e`.
+- 2026-11-04 05:38: stop 1 done. `packaging/e2e-update.ps1` written (steps 1 to 8, modeled on `e2e.ps1`: same BEFORE
+  and AFTER checks, refusals, Medium rule and tidy-up; LF, ASCII). Parser: 0 errors; `Get-Help` shows synopsis, 3
+  examples, 7 parameters. Debug x64 build of the tree at 05:25 (`-p wakeshot-tray -p wakeshot-cli --locked`, exit 0,
+  100 s; tray 12,585,984 bytes, CLI 1,744,384; the tray holds the string `WAKESHOT_UPDATE_FEED`). `-PrepareOnly` run
+  elevated (`<scratchpad>\p6-int-update-e2e\prepare1.log`, exit 0, 15 s): no refusal; BEFORE: Run 7 values, RunOnce
+  empty, Path type 2, 332 bytes, hash `A8FDC61D7FFE5745`; one plan, Balanced `381b4222-...` active, lid 1/1, sleep
+  18000/18000, saver DC 30, `/qh` hash `C64AFDB1CFDD13CF` (same as the install card's runs); no install, no data folder.
+  Packs: `Setup.exe` 14,921,322 bytes, full nupkg 7,363,690, delta 0.0.1 to 0.0.2 8,975, zip 7,356,214; 4 to 6 s per
+  pack; feed lists 0.0.1 Full only. Helpers tried alone (`probe-functions.ps1`): log patterns against the install
+  card's saved hook log, process finders, lock check, `Wait-Until` scope: all as expected. Refusals tried: elevated
+  full run exits 2 before making its work folder; a non-empty work folder exits 2. Nothing installed, no plan made, no
+  tray started; Run, RunOnce, Path and `%LocalAppData%\Wakeshot` not touched. The session is locked (LogonUI.exe since
+  02:00:38), so the update notice will likely be a SKIP in stop 2 (decision 5). Decided by the worker, for Haik's
+  review:
+  1. The build stays the caller's (`-ExeDir`), as in `e2e.ps1`; the script refuses a tray exe without the string
+     `WAKESHOT_UPDATE_FEED` (a release build ignores the feed). Change it when CI runs it on its own build.
+  2. The tray's launch `.cmd` points `CLAUDE_CONFIG_DIR` at an empty folder, as `e2e_real.rs` does: the agent sessions
+     on this laptop would hold the tray, and the update would never apply. Change it when a step must check Claude
+     holds on an install.
+  3. 0.0.2 is packed with 0.0.1 as the earlier release (a delta, as a real release has), 0.0.3 with 0.0.2. The feed
+     holds what Velopack's `FileSource` reads: the index, `RELEASES` and the nupkgs, not Setup or the zip.
+  4. A `-PrepareOnly` switch: refusals reported only, the BEFORE read, the packs; it may run elevated. For a check
+     before a real run, as this stop needed.
+  5. The update notice is a SKIP, not a FAIL, when the session is locked (LogonUI.exe in the session): the core keeps
+     every notice while locked (`core.rs`, `notify`). Then Haik's checks must see it. Change it when a run can unlock.
+  6. The helpers are copied from `e2e.ps1`, not shared: that script is done and owned by `p6-install-e2e`. Change it
+     when a third script needs them.
+  7. "The copy is put back before the apply" is checked by log order: the first line after keep-awake off that names
+     the copy's plan id (journal and power lines do; nothing else writes the copy then) must come before "Applying
+     update". No journal wording is matched.
+  8. It refuses while any `wakeshot-tray` or `wakeshot` process runs, from any folder: a second tray stops at once on
+     the tray mutex.
 
 ## Result
 
