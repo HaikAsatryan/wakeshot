@@ -752,6 +752,21 @@ mod tests {
             self.handle.as_ref().unwrap().tick();
         }
 
+        /// Session liveness checks so far: a tick checks each live session once, so this shows that a tick ran.
+        fn checks(&self) -> usize {
+            self.liveness.checked.lock().unwrap().len()
+        }
+
+        /// Ticks, then waits until the checks reach `want`, so the tick ran before the test looks at what it posted.
+        fn tick_and_wait(&self, want: usize) {
+            self.tick();
+            until(
+                Instant::now(),
+                || self.checks() >= want,
+                || format!("{} checks, want {want}", self.checks()),
+            );
+        }
+
         fn events(&self) -> Vec<Event> {
             self.sink.fake.events()
         }
@@ -771,9 +786,17 @@ mod tests {
             self.events()
         }
 
+        /// Writes a data folder file as Wakeshot's own writers do, in one move. A plain write lets a busy thread read
+        /// the empty file first and then the full one with a new write time: a restore request counted twice (seen
+        /// under 8 test copies at once, 2026-11-04).
+        fn write(&self, rel: &str, bytes: &[u8]) -> PathBuf {
+            let path = self.data.path().join(rel);
+            crate::store::write_atomic(&path, bytes).unwrap();
+            path
+        }
+
         fn hold(&self, name: &str, process: ProcessRef) -> PathBuf {
-            self.data
-                .write(&format!("holds/{name}"), hold_json(process).as_bytes())
+            self.write(&format!("holds/{name}"), hold_json(process).as_bytes())
         }
 
         fn live_hold(&self, process: ProcessRef) {
@@ -789,7 +812,7 @@ mod tests {
 
         fn config(&self, automatic: bool) {
             let json = format!("{{\"version\":1,\"automatic\":{automatic}}}");
-            self.data.write("config.json", json.as_bytes());
+            self.write("config.json", json.as_bytes());
         }
 
         fn lines(&self) -> Vec<String> {
@@ -955,7 +978,7 @@ mod tests {
         rig.hold("job.json", fake(1));
         rig.live_hold(fake(1));
         rig.live_session(fake(2));
-        rig.data.write("restore-request.json", b"{\"version\":1}");
+        rig.write("restore-request.json", b"{\"version\":1}");
 
         let at = Instant::now();
         rig.start(Config::default());
@@ -1035,7 +1058,7 @@ mod tests {
         let restore = Event::Menu(MenuCommand::Restore);
 
         let at = Instant::now();
-        rig.data.write("restore-request.json", b"{\"version\":1}");
+        rig.write("restore-request.json", b"{\"version\":1}");
         let took = rig.wait_for(at, |e| e.contains(&restore));
         println!(
             "restore request: Menu(Restore) after {} ms",
@@ -1123,18 +1146,13 @@ mod tests {
         let file = rig.agent.write("1.json", b"{}");
         rig.started(Config::default(), 3);
         let first = rig.settled();
-        let checks = rig.liveness.checked.lock().unwrap().len();
+        let checks = rig.checks();
 
-        for _ in 0..3 {
-            rig.tick();
-            std::thread::sleep(Duration::from_millis(50));
+        // One tick at a time: ticks that come while one runs count once, so three at once could be one.
+        for n in 1..=3 {
+            rig.tick_and_wait(checks + n);
         }
         assert_eq!(rig.settled(), first);
-        let after = rig.liveness.checked.lock().unwrap().len();
-        assert!(
-            after >= checks + 3,
-            "the ticks ran: {checks} checks before, {after} after"
-        );
         assert_eq!(
             rig.source.fed(),
             [whole(&file, b"{}")],
@@ -1149,7 +1167,7 @@ mod tests {
         rig.hold("job.json", fake(1));
         rig.live_hold(fake(1));
         rig.live_session(fake(2));
-        rig.data.write("restore-request.json", b"{\"version\":1}");
+        rig.write("restore-request.json", b"{\"version\":1}");
         rig.sink.failing.store(1816, Ordering::SeqCst);
         rig.start(Config::default());
 
@@ -1179,7 +1197,7 @@ mod tests {
             Event::Menu(MenuCommand::Restore),
         ];
         assert_eq!(rig.settled(), full);
-        rig.tick();
+        rig.tick_and_wait(rig.checks() + 1);
         assert_eq!(rig.settled(), full, "the next tick posts nothing again");
         assert_eq!(rig.lines().len(), 1);
     }

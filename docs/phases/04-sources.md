@@ -124,6 +124,7 @@ Notes 7, 8 and 9 apply after v1: Codex and Copilot moved there (Haik, 2026-11-03
 | `p4-live-claude` | optional: 3 minutes for the VS Code check; agent-session lane | `p4-watch-thread`, `p4-claude-transcript`, `p4-cli-run`, `p3-process`, the Claude parsing review (`docs/phases/02-06-lighter.md`) | done (committed 01:59): every live case passed (Claude Code 2.1.317); m6 fixed; the VS Code check waits for Haik |
 | `p4-live-codex` | yes: about 20 minutes (install or sign in, then type the steps) | `p4-live-claude` | later (after v1, Haik 2026-11-03) |
 | `p4-live-copilot` | yes: about 20 minutes (install or sign in, then type the steps) | `p4-live-codex` | later (after v1, Haik 2026-11-03) |
+| `p4-watch-tick-flake` | no | `p4-watch-thread` | done (15:00: ticks wait for their check; data files written atomically; 20 serial and 24 of 24 load runs pass) |
 
 Bundles (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p4-cli-args` + `p4-cli-run`;
 `p4-cli-commands` + `p4-cli-restore`; `p4-watch-reads` + `p4-watch-data`. Codex and Copilot moved to after v1 (Haik,
@@ -300,3 +301,7 @@ limit; Copilot waiting does not hold. The cards build these.
   wait), then its delay; 20 of 20 runs passed; not yet run on the ARM64 runner. Seen by the worker, not changed:
   `run.rs` test `held_while_running` expects a `ping -n 2` child (about 1 s) still alive after the hold file shows; a
   very slow runner could miss that window (never seen failing).
+- 2026-11-04 15:00 (orchestrator `wakeshot-27`): `p4-watch-tick-flake` done (from the ARM64 CI failure on 83b38fd,
+  rerun green). The tick test ticks once and waits for its check, three times (ticks that come while one runs count
+  once); the failed-post test's last tick the same; a second flake found under load (two `Menu(Restore)` in 1 of 8):
+  the rig now writes data folder files atomically, as the CLI does. 20 serial runs and 24 of 24 load runs pass.
