@@ -52,3 +52,5 @@ Start here: `docs/plan.md` (how we work, phases, status, next step). Then:
   A USB-C dock (DELL) with an external screen is always plugged in; its cable can drop AC for a few
   seconds.
 - Never run another keep-awake app during tests: it changes the same power settings.
+- The same for an installed Wakeshot: quit it from its tray before real-settings tests, and for a sign-out test turn
+  it off in Settings > Apps > Startup. `power_check` and `packaging/e2e.ps1` refuse while one runs.

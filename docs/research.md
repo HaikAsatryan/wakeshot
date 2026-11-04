@@ -3617,7 +3617,8 @@ release build of commit cd3d498 (velopack 1.2.161 with the four hook callbacks),
   `p6-uninstall-startup-approval`), the x64 release build of commit 75233b6 plus that card's `store.rs` and
   `hooks.rs`, with `e2e.ps1` extended for the switch value, the same launcher, at Medium: exit 0, 88 of 88 checks
   passed (the 81 before plus 7). The install wrote no `Explorer\StartupApproved\Run\Wakeshot` value. The script then
-  wrote it in the off form (`03 00 00 00` and the FILETIME of the write, research "Start at login switch check"; not
+  wrote it in the web sources' off form (`03 00 00 00` and the FILETIME of the write, research "Start at login switch
+  check", where the real switch's `01` form is recorded since 2026-11-05; not
   the real switch, the session was locked): Setup over the install and the update kept its 12 bytes, and the
   uninstall removed it with the Run, RunOnce and Path values. The other `StartupApproved\Run` values (none here) and
   every other BEFORE value were equal at the end; an elevated read before and after gave the same state. The
@@ -3881,17 +3882,21 @@ session was locked the whole time, so nobody used the real Settings switch. "Tes
   `explorer.exe` (10.0.26100.8117), `Startupscan.dll` and `twinui.pcshell.dll`; not in `shell32.dll`,
   `windows.storage.dll` or `twinui.dll`. So the Settings page, Task Manager and Explorer all use the key. **Verified**
   (string search in the binaries); what each of them does with it: **not verified**.
-- **The value's format.** REG_BINARY, 12 bytes: a DWORD state, 02 (or 06) on, 03 off, then the FILETIME of the
-  switch-off, zero when on. A missing value counts as on. Sources: windowsir.blogspot.com, 2022-07-09 (Task
-  Manager's switch); the `auto-launch` Rust crate (`src/windows.rs`, used by Tauri's autostart plugin) writes
-  `02` and 11 zero bytes to turn it on and reads "the last 8 bytes all zero" as on. **Not verified** with the real
-  Settings switch: this laptop's `StartupApproved\Run` and `StartupApproved\StartupFolder` keys are empty (no startup
-  app was ever switched here), so there was no switch-written value to compare with.
+- **The value's format.** REG_BINARY, 12 bytes: a DWORD state, then a FILETIME. Corrected 2026-11-05: the real
+  Settings > Apps > Startup switch on this laptop (build 26300) wrote state **1** and the FILETIME of the change for
+  off (`01-00-00-00-9D-AA-39-37-A4-6C-DD-01`, switched off 2026-11-05 01:34:04) and **12 zero bytes** for on, and
+  Windows honoured state 1: no tray started at the next sign-in. **Verified** (Haik's block 8 of
+  `p6-int-haik-checks`: registry reads, the tray log, Winlogon 7001 and 7002). Until then this line named the web
+  sources' forms, 02 (or 06) on and 03 off: windowsir.blogspot.com, 2022-07-09 (Task Manager's switch); the
+  `auto-launch` Rust crate (`src/windows.rs`, used by Tauri's autostart plugin) writes `02` and 11 zero bytes to turn
+  it on and reads "the last 8 bytes all zero" as on. Those forms, and that a missing value counts as on (the same
+  sources): **not verified** here.
 - **A fresh install writes no switch value.** After `Setup.exe --silent` the Run value `Wakeshot` is REG_SZ
   `"%LocalAppData%\HaikAsatryan.Wakeshot\current\wakeshot-tray.exe"` (158 bytes) and there is no
   `StartupApproved\Run\Wakeshot` value, so start at login is on by the keys. **Verified** (test).
 - **Setup over the install keeps the switch off, by the keys.** With `StartupApproved\Run\Wakeshot` set to
-  `03 00 00 00` and a FILETIME (the documented off form), `Setup.exe --silent` over the install (what `winget upgrade`
+  `03 00 00 00` and a FILETIME (the web sources' off form; the real switch writes `01`, above), `Setup.exe --silent`
+  over the install (what `winget upgrade`
   runs) exited 0 in 0.4 s; the install hook logged "Run value Wakeshot set to ..."; the Run value read the same; the
   `StartupApproved\Run\Wakeshot` value kept the same 12 bytes and the `StartupApproved\Run` key's last write time did
   not move. Neither Velopack nor the hook touches that key (Velopack's log; `hooks.rs` writes only `Run`, `RunOnce`
@@ -4419,10 +4424,36 @@ The card's Result has the per-block table; these are the facts.
   Quit 01:33:18.4: no journal left, exit 0. `values.cmd` 01:33:28: both plans their own values. **Verified** (log).
 - **The real Startup switch writes `01` and `00`, not `03` and `02`.** Settings > Apps > Startup, off at 01:34:04:
   `StartupApproved\Run\Wakeshot` = `01-00-00-00-9D-AA-39-37-A4-6C-DD-01` (state 1, then the FILETIME of the change);
-  on again: 12 zero bytes (read 01:56). "Where Windows keeps the switch" above names `03` and `02`, from web sources
+  on again: 12 zero bytes (read 01:56). "Where Windows keeps the switch" above named `03` and `02` (corrected 2026-11-05), from web sources
   and a script. Windows honoured `01`: no tray started at the 01:38:35 sign-in (no log line after the 01:33:18 quit,
   no process at 01:43). Build 26300. **Verified** (registry reads, tray log, Winlogon 7001 and 7002).
 - **Teardown.** `undo-part-a.ps1` at Medium, 01:56:37 to 01:56:43: uninstall exit 0, Balanced active, copy deleted.
   AFTER equals BEFORE on every field but the icon entry's `IsPromoted` = 1 (Haik's own block 1 choice). Windows'
   `Notifications\Settings\velopack.HaikAsatryan.Wakeshot` key stays after the uninstall, like `NotifyIconSettings`.
   **Verified** (`state.ps1` reads compared field by field).
+
+## Real install guard checks
+
+Checked 2026-11-05 02:00 to 02:25 for card `docs/tasks/p6-real-install-guard.md`, elevated, on scratch names, keys
+and folders only (`store.rs` tests `real_signs_*`, a scratch PowerShell script); the real places were only read.
+
+- **Looking for a mutex takes nothing.** `OpenMutexW` with `SYNCHRONIZE` only: a missing name gives the not-found
+  error (no sign), a made or a taken mutex opens, and while the look ran, another thread's wait of 0 on a mutex this
+  thread held still timed out. Once its last handle closed, the name was gone. A name held by an event fails with
+  `ERROR_INVALID_HANDLE` (6), which the Rust guard counts as "cannot tell" and stops on. **Verified** (test). That a
+  mutex this user may not open gives `ERROR_ACCESS_DENIED`, which the guard counts as a tray: **not verified** (no
+  deny ACL test; this shell runs elevated).
+- **The same look in PowerShell.** `[Threading.Mutex]::TryOpenExisting` with a `Local\` name (PowerShell 7.6.9, .NET
+  10.0.14): `False` for a missing name, `True` for a made and for a taken mutex, the owner's hold kept (another
+  thread's `WaitOne(0)` false), `False` again once disposed. For an event of that name it returns `False` and throws
+  nothing, so `e2e.ps1` passes where the Rust guard stops; nothing Wakeshot makes has that name. **Verified** (test).
+  That a mutex this user may not open throws `UnauthorizedAccessException`, which `e2e.ps1` counts as a tray, is from
+  memory of the .NET docs: **not verified** (the docs page was not read, and the test needs a mutex with a deny ACL).
+- **This laptop's real places, 02:20.** `power_check hold --plan-only` and `cleanup --plan-only` read the tray lock
+  `Local\Wakeshot.Tray`, `%LocalAppData%\HaikAsatryan.Wakeshot`, `HKCU\...\Uninstall\HaikAsatryan.Wakeshot`, the Run
+  value `Wakeshot` with its switch value, `%LocalAppData%\Wakeshot\journal.json` and the RunOnce value
+  `WakeshotRestore`: no sign and no read failure, exit 0. `e2e.ps1` (elevated) passed its lock check and refused at the
+  elevation check, exit 2, no work folder made. **Verified** (runs).
+- **How the guard reads the switch value.** Off when the first DWORD is 1 (the real switch's form, "Start at login
+  switch check") or 3 (the web sources' form); no value or any other form counts as on, so an unknown form stops a
+  sign-out test rather than miss a tray that starts at sign-in. A rule of ours, not a fact about Windows.

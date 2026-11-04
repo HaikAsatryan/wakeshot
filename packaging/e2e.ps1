@@ -34,8 +34,8 @@ the active plan and its values if they differ from BEFORE, deletes the copy and 
 never names the real plan, so no step can change it unless a hook writes the wrong plan.
 
 Run it unelevated (Medium), as users run Wakeshot: an elevated run installs with a token no user has. -AllowElevated
-is for a CI runner, where every process is elevated. It refuses while Wakeshot is installed, a journal exists, or a
-"Wakeshot test e2e" plan is active.
+is for a CI runner, where every process is elevated. It refuses while a Wakeshot tray runs, Wakeshot is installed, a
+journal exists, or a "Wakeshot test e2e" plan is active.
 
 Where the terminal opens elevated (this laptop's does), a .cmd opened with explorer.exe runs at Medium (research.md,
 "Spike launch and stop checks"); the second example is such a .cmd. Write the exit code as `(echo %ERRORLEVEL%)`: in
@@ -95,6 +95,8 @@ $RunSub = 'Software\Microsoft\Windows\CurrentVersion\Run'
 $RunOnceSub = 'Software\Microsoft\Windows\CurrentVersion\RunOnce'
 $RunName = 'Wakeshot'
 $RunOnceName = 'WakeshotRestore'
+# The real tray's lock (store.rs, Names::real).
+$TrayLock = 'Local\Wakeshot.Tray'
 # Where Windows keeps the Settings > Apps > Startup switch, one value per Run value with the same name.
 $ApprovedParent = 'Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved'
 $ApprovedSub = "$ApprovedParent\Run"
@@ -433,14 +435,14 @@ function Test-HoldBack([string] $Check) {
     Test-Check "$Check`: journal.json gone" (-not (Test-Path -LiteralPath $Journal)) "$Journal still there"
 }
 
-# Start at login switched off, as Windows writes it: state 3, then the FILETIME of the switch-off (research.md, "Start
-# at login switch check"; the bytes of the real switch are not verified). Keys this run makes are listed deepest
-# first, so the end deletes only those.
+# Start at login switched off, as the Settings > Apps > Startup switch writes it: state 1, then the FILETIME of the
+# switch-off (research.md, "Where Windows keeps the switch": seen 2026-11-05 on build 26300, and Windows honoured it;
+# web sources name state 3). Keys this run makes are listed deepest first, so the end deletes only those.
 function Set-SwitchOff {
     foreach ($sub in $ApprovedParent, $ApprovedSub) {
         if (-not (Test-RegKey $sub)) { $script:MadeKeys.Insert(0, $sub) }
     }
-    $bytes = [byte[]](@(3, 0, 0, 0) + [BitConverter]::GetBytes([DateTime]::UtcNow.ToFileTimeUtc()))
+    $bytes = [byte[]](@(1, 0, 0, 0) + [BitConverter]::GetBytes([DateTime]::UtcNow.ToFileTimeUtc()))
     $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($ApprovedSub)
     try { $key.SetValue($RunName, $bytes, 'Binary') } finally { $key.Dispose() }
     "type 3, $($bytes.Length) bytes: $([BitConverter]::ToString($bytes))"
@@ -540,7 +542,30 @@ function Get-Traces {
     $traces
 }
 
+# $true: a mutex of this name exists. It is only opened, never created or taken, and one this user may not open
+# exists too.
+function Test-MutexExists([string] $Name) {
+    $mutex = $null
+    try {
+        if ([Threading.Mutex]::TryOpenExisting($Name, [ref]$mutex)) {
+            $mutex.Dispose()
+            return $true
+        }
+        $false
+    } catch [UnauthorizedAccessException] {
+        $true
+    }
+}
+
 # ---- Refusals: nothing has changed yet.
+
+# First the places a real Wakeshot leaves its marks, the ones power_check reads (store.rs RealPlaces,
+# docs/tasks/p6-real-install-guard.md): a running tray (its lock name exists) would fight this run over the data
+# folder, the journal and the power values. The install, its Run and RunOnce values and a journal are refused below.
+if (Test-MutexExists $TrayLock) {
+    Say "e2e: refused: a Wakeshot tray runs in this session (its lock $TrayLock exists). Quit it first (right-click its tray icon, then Quit)."
+    exit 2
+}
 
 $groups = (whoami /groups) -join "`n"
 $level = if ($groups -match 'Mandatory Label\\(\w+) Mandatory Level') { $Matches[1] } else { 'unknown' }

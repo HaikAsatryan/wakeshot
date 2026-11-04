@@ -677,7 +677,11 @@ impl AutoStart {
             unsafe { RegSetValueExW(*opened, PCWSTR(name.as_ptr()), None, REG_BINARY, Some(data)) };
         reg_ok("RegSetValueExW", set)
     }
+}
 
+/// The switch value read back, for tests and for the dev tools' guard (`RealPlaces`).
+#[cfg(any(test, feature = "test-support"))]
+impl AutoStart {
     /// The value's bytes; `None`: no such value, or no such key.
     pub(crate) fn approval(&self, name: &str) -> Result<Option<Vec<u8>>, WinError> {
         use windows::Win32::System::Registry::RRF_RT_REG_BINARY;
@@ -704,6 +708,190 @@ impl AutoStart {
         buf.truncate(got as usize);
         Ok(Some(buf))
     }
+}
+
+/// Velopack's pack id: the install folder's and the uninstall key's name (`packaging/pack.ps1`).
+#[cfg(any(test, feature = "test-support"))]
+const PACK_ID: &str = "HaikAsatryan.Wakeshot";
+
+/// One mark of a real Wakeshot on this PC, which a dev tool that changes power settings would fight with
+/// (`docs/tasks/p6-real-install-guard.md`).
+#[cfg(any(test, feature = "test-support"))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RealSign {
+    /// The tray's lock name exists: a real tray runs in this session.
+    TrayRuns { lock: String },
+    /// Velopack's install folder.
+    InstallFolder { path: PathBuf },
+    /// Velopack's uninstall key, under `HKCU`.
+    UninstallKey { key: String },
+    /// The Run value, and no switch value that says off: Windows starts it at the next sign-in.
+    StartsAtLogin { command: String },
+    /// `journal.json` in the real data folder: a real Wakeshot may own power values now.
+    Journal { path: PathBuf },
+    /// The RunOnce value: restore mode runs at the next sign-in.
+    RunOnce { command: String },
+    /// A read failed, so whether a real Wakeshot is here is unknown.
+    Unread { what: String, error: WinError },
+}
+
+/// Where a real Wakeshot leaves its marks: the real places, or scratch ones in tests. Only for dev tools, so no shipped
+/// exe carries it: `examples/power_check.rs` reads it before it changes anything, and `packaging/e2e.ps1` reads the
+/// same places in PowerShell.
+#[cfg(any(test, feature = "test-support"))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RealPlaces {
+    pub tray_lock: String,
+    pub install_dir: PathBuf,
+    /// Under `HKCU`.
+    pub uninstall_key: String,
+    pub data_dir: DataDir,
+    /// The Run value `Wakeshot`, its switch value and the RunOnce value `WakeshotRestore`.
+    pub auto: AutoStart,
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl RealPlaces {
+    /// The installed Wakeshot's places. Never `WAKESHOT_DATA_DIR`: it moves only a debug build's own folder, and a
+    /// dev shell may have it set.
+    pub fn real() -> Result<Self, WinError> {
+        let local = local_app_data()?;
+        Ok(Self {
+            tray_lock: Names::real().tray,
+            install_dir: local.join(PACK_ID),
+            uninstall_key: format!(
+                r"Software\Microsoft\Windows\CurrentVersion\Uninstall\{PACK_ID}"
+            ),
+            data_dir: DataDir::at(local.join("Wakeshot")),
+            auto: AutoStart::real(),
+        })
+    }
+
+    /// Every mark found, in the order of `RealSign`; empty when there is none. It only reads: the lock is opened and
+    /// closed, never created or taken.
+    pub fn signs(&self) -> Vec<RealSign> {
+        use crate::hooks::RUN_NAME;
+        use crate::power::journal::RUN_ONCE_NAME;
+
+        let mut signs = Vec::new();
+        let unread = |what: String, error: WinError| RealSign::Unread { what, error };
+        match mutex_exists(&self.tray_lock) {
+            Ok(true) => signs.push(RealSign::TrayRuns {
+                lock: self.tray_lock.clone(),
+            }),
+            Ok(false) => {}
+            Err(e) => signs.push(unread(format!("the tray lock {}", self.tray_lock), e)),
+        }
+        match exists(&self.install_dir) {
+            Ok(true) => signs.push(RealSign::InstallFolder {
+                path: self.install_dir.clone(),
+            }),
+            Ok(false) => {}
+            Err(e) => signs.push(unread(
+                format!("the install folder {}", self.install_dir.display()),
+                e,
+            )),
+        }
+        match reg_key_exists(&self.uninstall_key) {
+            Ok(true) => signs.push(RealSign::UninstallKey {
+                key: self.uninstall_key.clone(),
+            }),
+            Ok(false) => {}
+            Err(e) => signs.push(unread(
+                format!(r"the uninstall key HKCU\{}", self.uninstall_key),
+                e,
+            )),
+        }
+        match self.auto.get(StartKey::Run, RUN_NAME) {
+            Ok(None) => {}
+            Ok(Some(command)) => match self.auto.approval(RUN_NAME) {
+                Ok(value) if switched_off(value.as_deref()) => {}
+                Ok(_) => signs.push(RealSign::StartsAtLogin { command }),
+                Err(e) => signs.push(unread(format!("the switch value {RUN_NAME}"), e)),
+            },
+            Err(e) => signs.push(unread(format!("the Run value {RUN_NAME}"), e)),
+        }
+        let journal = self.data_dir.file(DataFile::Journal);
+        match exists(&journal) {
+            Ok(true) => signs.push(RealSign::Journal { path: journal }),
+            Ok(false) => {}
+            Err(e) => signs.push(unread(format!("the journal {}", journal.display()), e)),
+        }
+        match self.auto.get(StartKey::RunOnce, RUN_ONCE_NAME) {
+            Ok(Some(command)) => signs.push(RealSign::RunOnce { command }),
+            Ok(None) => {}
+            Err(e) => signs.push(unread(format!("the RunOnce value {RUN_ONCE_NAME}"), e)),
+        }
+        signs
+    }
+}
+
+/// Off when the state, the value's first DWORD, is 1 (what the Settings > Apps > Startup switch wrote on the test
+/// laptop) or 3 (what web sources name); research "Where Windows keeps the switch". No value, or any other form,
+/// counts as on, so an unknown form stops a dev tool rather than miss a tray that starts at the next sign-in.
+#[cfg(any(test, feature = "test-support"))]
+fn switched_off(value: Option<&[u8]>) -> bool {
+    let state = value
+        .and_then(|bytes| bytes.get(..4))
+        .and_then(|head| <[u8; 4]>::try_from(head).ok())
+        .map(u32::from_le_bytes);
+    matches!(state, Some(1 | 3))
+}
+
+/// `SYNCHRONIZE` only, and closed at once, so the open neither creates the mutex nor takes it. One this user may not
+/// open exists too.
+#[cfg(any(test, feature = "test-support"))]
+fn mutex_exists(name: &str) -> Result<bool, WinError> {
+    use windows::Win32::System::Threading::OpenMutexW;
+
+    let name = wide("OpenMutexW", OsStr::new(name))?;
+    // SAFETY: `name` is NUL-terminated and lives for the call.
+    match unsafe { OpenMutexW(SYNCHRONIZATION_SYNCHRONIZE, false, PCWSTR(name.as_ptr())) } {
+        Ok(handle) => {
+            // SAFETY: the handle is new and owned only here; the drop closes it.
+            drop(unsafe { Owned::new(handle) });
+            Ok(true)
+        }
+        Err(e) => match core_error("OpenMutexW", &e) {
+            e if e.code == ERROR_ACCESS_DENIED.0 => Ok(true),
+            e => missing_is_none::<()>(e).map(|_| false),
+        },
+    }
+}
+
+/// A key this user may not open exists too.
+#[cfg(any(test, feature = "test-support"))]
+fn reg_key_exists(path: &str) -> Result<bool, WinError> {
+    use windows::Win32::System::Registry::{KEY_QUERY_VALUE, RegOpenKeyExW};
+
+    let name = wide("RegOpenKeyExW", OsStr::new(path))?;
+    let mut key = HKEY::default();
+    // SAFETY: `name` is NUL-terminated and lives for the call; the key is written to a live local.
+    let opened = unsafe {
+        RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(name.as_ptr()),
+            None,
+            KEY_QUERY_VALUE,
+            &raw mut key,
+        )
+    };
+    match opened {
+        ERROR_SUCCESS => {
+            // SAFETY: the key is new and owned only here; the drop closes it.
+            drop(unsafe { Owned::new(key) });
+            Ok(true)
+        }
+        ERROR_ACCESS_DENIED => Ok(true),
+        other => missing_is_none::<()>(win32("RegOpenKeyExW", other)).map(|_| false),
+    }
+}
+
+/// A file or folder; one this user may not read is an error, not a "no".
+#[cfg(any(test, feature = "test-support"))]
+fn exists(path: &Path) -> Result<bool, WinError> {
+    path.try_exists()
+        .map_err(|e| io_error("Path::try_exists", &e))
 }
 
 /// NUL-terminated UTF-16. An inner NUL would cut the name short and name another file or value, so it is refused.
@@ -1424,9 +1612,10 @@ mod tests {
         assert_eq!(auto.remove_approval("Wakeshot"), Ok(false));
         assert_eq!(auto.approval("Wakeshot"), Ok(None));
 
-        // Off: state 3, then the FILETIME of the switch-off. On: state 2 and zeros.
-        let off = [3, 0, 0, 0, 0xE1, 0x58, 0x96, 0xF6, 0x02, 0x6C, 0xDD, 0x01];
-        let on = [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        // As the real switch wrote them (research "Where Windows keeps the switch"): off is state 1, then the FILETIME
+        // of the switch-off; on is 12 zero bytes.
+        let off = [1, 0, 0, 0, 0x9D, 0xAA, 0x39, 0x37, 0xA4, 0x6C, 0xDD, 0x01];
+        let on = [0; 12];
         auto.set_approval("Wakeshot", &off).unwrap();
         auto.set_approval("Other", &on).unwrap();
         assert_eq!(auto.approval("Wakeshot"), Ok(Some(off.to_vec())));
@@ -1469,5 +1658,281 @@ mod tests {
         assert!(key_exists(mine.path()), "a live pid's key stays");
         assert!(!key_exists(&dead.0), "an ended pid's key goes");
         drop(child);
+    }
+
+    /// Scratch places that start clean: a lock name nobody made, and a folder and keys with nothing in them yet. The
+    /// real lock, folders and keys are never touched.
+    struct RealRig {
+        places: RealPlaces,
+        _dir: TempDir,
+        _key: ScratchKey,
+    }
+
+    impl RealRig {
+        fn new(test_name: &str) -> Self {
+            let dir = TempDir::new("real");
+            let key = ScratchKey::new(test_name);
+            let places = RealPlaces {
+                tray_lock: Names::test(test_name).tray,
+                install_dir: dir.0.join(PACK_ID),
+                uninstall_key: format!(r"{}\Uninstall\{PACK_ID}", key.path()),
+                data_dir: DataDir::at(dir.0.join("Wakeshot")),
+                auto: AutoStart::at(key.path()),
+            };
+            Self {
+                places,
+                _dir: dir,
+                _key: key,
+            }
+        }
+    }
+
+    /// A `REG_DWORD`, which `AutoStart::get` refuses to read as a command.
+    fn set_dword(key: &str, name: &str) {
+        create_key(key).unwrap();
+        let path = wide("RegOpenKeyExW", OsStr::new(key)).unwrap();
+        let mut opened = HKEY::default();
+        // SAFETY: `path` is NUL-terminated; the key is written to a live local and owned below.
+        let result = unsafe {
+            RegOpenKeyExW(
+                HKEY_CURRENT_USER,
+                PCWSTR(path.as_ptr()),
+                None,
+                KEY_SET_VALUE,
+                &raw mut opened,
+            )
+        };
+        assert_eq!(result, ERROR_SUCCESS);
+        // SAFETY: the key is new and owned only here.
+        let opened = unsafe { Owned::new(opened) };
+        let name = wide("RegSetValueExW", OsStr::new(name)).unwrap();
+        // SAFETY: an open key with `KEY_SET_VALUE`; the data is a live 4-byte DWORD.
+        let set = unsafe {
+            RegSetValueExW(
+                *opened,
+                PCWSTR(name.as_ptr()),
+                None,
+                REG_DWORD,
+                Some(&1u32.to_le_bytes()[..]),
+            )
+        };
+        assert_eq!(set, ERROR_SUCCESS);
+    }
+
+    const NONE: [RealSign; 0] = [];
+    const TRAY_COMMAND: &str =
+        r#""C:\Users\Test User\AppData\Local\HaikAsatryan.Wakeshot\current\wakeshot-tray.exe""#;
+    const RESTORE_COMMAND: &str = r#""C:\Users\Test User\AppData\Local\HaikAsatryan.Wakeshot\current\wakeshot-tray.exe" --restore"#;
+
+    #[test]
+    fn real_places_name_the_installed_app() {
+        let real = RealPlaces::real().unwrap();
+        let local = local_app_data().unwrap();
+        assert_eq!(real.tray_lock, Names::real().tray);
+        assert_eq!(real.tray_lock, r"Local\Wakeshot.Tray");
+        assert_eq!(real.install_dir, local.join("HaikAsatryan.Wakeshot"));
+        assert_eq!(
+            real.uninstall_key,
+            r"Software\Microsoft\Windows\CurrentVersion\Uninstall\HaikAsatryan.Wakeshot"
+        );
+        // Not `DataDir::real`, which a debug build moves with `WAKESHOT_DATA_DIR`.
+        assert_eq!(real.data_dir.root(), local.join("Wakeshot"));
+        assert_eq!(real.auto, AutoStart::real());
+    }
+
+    #[test]
+    fn real_signs_none_on_a_clean_pc() {
+        let rig = RealRig::new("store::real_signs_none_on_a_clean_pc");
+        assert_eq!(rig.places.signs(), NONE);
+        // The check opened no lock that a second look would find.
+        assert_eq!(rig.places.signs(), NONE);
+    }
+
+    #[test]
+    fn real_signs_a_running_tray() {
+        let rig = RealRig::new("store::real_signs_a_running_tray");
+        let lock = rig.places.tray_lock.clone();
+        let mutex = NamedMutex::open(&lock).unwrap();
+        let runs = [RealSign::TrayRuns { lock: lock.clone() }];
+        assert_eq!(rig.places.signs(), runs, "made, not taken");
+        let held = mutex.take(0).unwrap().expect("a new mutex is free");
+        assert_eq!(rig.places.signs(), runs, "taken");
+        // The look never takes the lock, so another thread still finds it held, never free or abandoned.
+        let other = thread::spawn(move || {
+            let mutex = NamedMutex::open(&lock).unwrap();
+            mutex.take(0).unwrap().is_none()
+        });
+        assert!(other.join().unwrap(), "still held by this thread");
+        drop(held);
+        drop(mutex);
+        assert_eq!(rig.places.signs(), NONE, "gone with its last handle");
+    }
+
+    #[test]
+    fn real_signs_an_install() {
+        let rig = RealRig::new("store::real_signs_an_install");
+        let places = &rig.places;
+        fs::create_dir_all(&places.install_dir).unwrap();
+        assert_eq!(
+            places.signs(),
+            [RealSign::InstallFolder {
+                path: places.install_dir.clone()
+            }]
+        );
+        fs::remove_dir(&places.install_dir).unwrap();
+        create_key(&places.uninstall_key).unwrap();
+        assert_eq!(
+            places.signs(),
+            [RealSign::UninstallKey {
+                key: places.uninstall_key.clone()
+            }]
+        );
+    }
+
+    #[test]
+    fn real_signs_start_at_login_by_the_switch() {
+        let rig = RealRig::new("store::real_signs_start_at_login_by_the_switch");
+        let (places, auto) = (&rig.places, &rig.places.auto);
+        auto.set(StartKey::Run, "Wakeshot", TRAY_COMMAND).unwrap();
+        let on = [RealSign::StartsAtLogin {
+            command: TRAY_COMMAND.to_owned(),
+        }];
+        assert_eq!(places.signs(), on, "no switch value: on");
+        let filetime = [0x9D, 0xAA, 0x39, 0x37, 0xA4, 0x6C, 0xDD, 0x01];
+        // 1 and 0 are what the real switch wrote; 3, 2 and 6 are what web sources name.
+        for (state, off) in [(1u8, true), (3, true), (0, false), (2, false), (6, false)] {
+            let mut value = vec![state, 0, 0, 0];
+            value.extend(if off { filetime } else { [0; 8] });
+            auto.set_approval("Wakeshot", &value).unwrap();
+            let want: &[RealSign] = if off { &NONE } else { &on };
+            assert_eq!(places.signs(), want, "state {state}");
+        }
+        // A switch value with no Run value starts nothing.
+        auto.set_approval("Wakeshot", &[0; 12]).unwrap();
+        assert_eq!(auto.remove(StartKey::Run, "Wakeshot"), Ok(true));
+        assert_eq!(places.signs(), NONE);
+    }
+
+    #[test]
+    fn switch_forms() {
+        assert!(!switched_off(None), "no value is on");
+        assert!(switched_off(Some(&[
+            1, 0, 0, 0, 0x9D, 0xAA, 0x39, 0x37, 0xA4, 0x6C, 0xDD, 0x01
+        ])));
+        assert!(switched_off(Some(&[3, 0, 0, 0])));
+        assert!(!switched_off(Some(&[0; 12])));
+        assert!(!switched_off(Some(&[2, 0, 0, 0])));
+        assert!(!switched_off(Some(&[1, 1, 0, 0])), "state 257 is unknown");
+        assert!(!switched_off(Some(&[1, 0, 0])), "too short for a state");
+        assert!(!switched_off(Some(&[])));
+    }
+
+    #[test]
+    fn real_signs_a_journal_and_a_run_once_value() {
+        let rig = RealRig::new("store::real_signs_a_journal_and_a_run_once_value");
+        let places = &rig.places;
+        fs::create_dir_all(places.data_dir.root()).unwrap();
+        assert_eq!(places.signs(), NONE, "a data folder alone is no sign");
+        let journal = places.data_dir.file(DataFile::Journal);
+        fs::write(&journal, b"{}").unwrap();
+        assert_eq!(
+            places.signs(),
+            [RealSign::Journal {
+                path: journal.clone()
+            }]
+        );
+        fs::remove_file(&journal).unwrap();
+        places
+            .auto
+            .set(StartKey::RunOnce, "WakeshotRestore", RESTORE_COMMAND)
+            .unwrap();
+        assert_eq!(
+            places.signs(),
+            [RealSign::RunOnce {
+                command: RESTORE_COMMAND.to_owned()
+            }]
+        );
+    }
+
+    #[test]
+    fn real_signs_all_in_order() {
+        let rig = RealRig::new("store::real_signs_all_in_order");
+        let places = &rig.places;
+        let _mutex = NamedMutex::open(&places.tray_lock).unwrap();
+        fs::create_dir_all(&places.install_dir).unwrap();
+        create_key(&places.uninstall_key).unwrap();
+        places
+            .auto
+            .set(StartKey::Run, "Wakeshot", TRAY_COMMAND)
+            .unwrap();
+        fs::create_dir_all(places.data_dir.root()).unwrap();
+        fs::write(places.data_dir.file(DataFile::Journal), b"{}").unwrap();
+        places
+            .auto
+            .set(StartKey::RunOnce, "WakeshotRestore", RESTORE_COMMAND)
+            .unwrap();
+        assert_eq!(
+            places.signs(),
+            [
+                RealSign::TrayRuns {
+                    lock: places.tray_lock.clone()
+                },
+                RealSign::InstallFolder {
+                    path: places.install_dir.clone()
+                },
+                RealSign::UninstallKey {
+                    key: places.uninstall_key.clone()
+                },
+                RealSign::StartsAtLogin {
+                    command: TRAY_COMMAND.to_owned()
+                },
+                RealSign::Journal {
+                    path: places.data_dir.file(DataFile::Journal)
+                },
+                RealSign::RunOnce {
+                    command: RESTORE_COMMAND.to_owned()
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn real_signs_what_does_not_read() {
+        use windows::Win32::Foundation::ERROR_INVALID_HANDLE;
+        use windows::Win32::System::Threading::CreateEventW;
+
+        let rig = RealRig::new("store::real_signs_what_does_not_read");
+        let places = &rig.places;
+        // An event of the lock's name: the mutex open fails with ERROR_INVALID_HANDLE, so the guard cannot tell.
+        let name = wide("CreateEventW", OsStr::new(&places.tray_lock)).unwrap();
+        // SAFETY: `name` is NUL-terminated and lives for the call; the event is owned below.
+        let event = unsafe { CreateEventW(None, false, false, PCWSTR(name.as_ptr())) }.unwrap();
+        // SAFETY: the handle is new and owned only here.
+        let event = unsafe { Owned::new(event) };
+        // A Run value of another type does not read as a command.
+        set_dword(&format!(r"{}\Run", places.auto.base), "Wakeshot");
+        let signs = places.signs();
+        println!("what does not read: {signs:?}");
+        match signs.as_slice() {
+            [
+                RealSign::Unread {
+                    what: lock,
+                    error: a,
+                },
+                RealSign::Unread {
+                    what: run,
+                    error: b,
+                },
+            ] => {
+                assert_eq!(*lock, format!("the tray lock {}", places.tray_lock));
+                assert_eq!(a.call, "OpenMutexW");
+                assert_eq!(a.code, ERROR_INVALID_HANDLE.0);
+                assert_eq!(run, "the Run value Wakeshot");
+                assert_eq!(b.call, "RegGetValueW");
+            }
+            other => panic!("two unread signs, got {other:?}"),
+        }
+        drop(event);
+        assert_eq!(places.signs().len(), 1, "the lock reads again");
     }
 }

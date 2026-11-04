@@ -39,7 +39,9 @@ use wakeshot_windows::process::{self, Liveness, SystemLiveness};
 use wakeshot_windows::recovery::TrayGuard;
 use wakeshot_windows::session;
 use wakeshot_windows::sink::EventSink;
-use wakeshot_windows::store::{self, AutoStart, DataDir, DataFile, NamedMutex, Names, StartKey};
+use wakeshot_windows::store::{
+    self, AutoStart, DataDir, DataFile, NamedMutex, Names, RealPlaces, RealSign, StartKey,
+};
 use windows::Win32::Foundation::{
     ERROR_MORE_DATA, ERROR_NO_DATA, ERROR_SUCCESS, HANDLE, LPARAM, LRESULT, WIN32_ERROR, WPARAM,
 };
@@ -76,6 +78,8 @@ const TARGET: u32 = 0;
 
 const EXIT_FAILED: u8 = 1;
 const EXIT_BAD_ARGS: u8 = 2;
+/// A real Wakeshot runs or left a mark this command must not run beside; nothing was changed.
+const EXIT_REFUSED: u8 = 3;
 
 const RUN_ONCE_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce";
 
@@ -102,7 +106,15 @@ fn main() -> ExitCode {
         let _ = writeln!(std::io::stdout(), "{}", cli::USAGE);
         return ExitCode::SUCCESS;
     }
-    match run(&args) {
+    // First, before the log, the harness folder or any power call: for `fake-tray` even the log is in the real folder.
+    let notes = match guard::verdict(&args.cmd, args.plan_only, &real_signs(&args.cmd)) {
+        Ok(notes) => notes,
+        Err(why) => {
+            print_err(&why);
+            return ExitCode::from(EXIT_REFUSED);
+        }
+    };
+    match run(&args, &notes) {
         Ok(()) => ExitCode::SUCCESS,
         Err(why) => {
             print_err(&why);
@@ -178,7 +190,7 @@ impl Ctx {
     }
 }
 
-fn run(args: &Args) -> Result<(), String> {
+fn run(args: &Args, notes: &[String]) -> Result<(), String> {
     let home = Home::at(match &args.home {
         Some(root) => absolute(root)?,
         None => Home::default_root()?,
@@ -216,6 +228,9 @@ fn run(args: &Args) -> Result<(), String> {
         dir.root().display(),
         home.root().display()
     ));
+    for note in notes {
+        out.warn(note);
+    }
     let mut power = Win32Power::new(log.clone());
     let original = original_plan(&home, &mut power, &out, args)?;
     let start = values::read(&mut power, original);
@@ -263,6 +278,20 @@ fn run(args: &Args) -> Result<(), String> {
     out.say(&format!("power_check {} ended", args.cmd.name()));
     ctrl::finished();
     result
+}
+
+/// The marks of a real Wakeshot on this PC; none are read for a command that changes nothing.
+fn real_signs(cmd: &Cmd) -> Vec<RealSign> {
+    if !guard::changes(cmd) {
+        return Vec::new();
+    }
+    match RealPlaces::real() {
+        Ok(places) => places.signs(),
+        Err(error) => vec![RealSign::Unread {
+            what: "%LocalAppData%".to_owned(),
+            error,
+        }],
+    }
 }
 
 fn default_dir(cmd: &Cmd, home: &Home) -> Result<PathBuf, String> {
@@ -2405,6 +2434,12 @@ Every command prints the user's values (active plan; lid AC and DC; sleep AC and
 start and at exit, and the exact commands that undo what it changes. Run one command that writes RunOnce
 (fake-tray, end-session) at a time: they share the one value.
 
+Before hold, fake-tray, end-session, cycles and cleanup change anything, they look for a real Wakeshot and
+stop with exit code 3 when its tray runs, when a journal or the RunOnce value is left in the real places
+(not cleanup, which clears a power_check run's), or, for fake-tray and end-session, when it starts at
+login. An installed Wakeshot that does not run is only noted: quit it from its tray first, as any other
+keep-awake app.
+
 build: cargo build --locked -p wakeshot-windows --features test-support --example power_check
        cargo build --locked -p wakeshot-tray        (the same --target and profile)"#;
 
@@ -3037,6 +3072,104 @@ mod tidy {
                 "delete every Wakeshot test copy whose process is gone (TestPlan::sweep)".to_owned()
             }
         }
+    }
+}
+
+mod guard {
+    //! Whether a command may run beside a real Wakeshot (`docs/tasks/p6-real-install-guard.md`). Two Wakeshots fight
+    //! over the same power values, journal and RunOnce value, also with separate names, so a command that changes any
+    //! of them stops before its first change. Decided from the signs alone, so the rules are tested without an install.
+
+    use wakeshot_windows::power::journal::RUN_ONCE_NAME;
+    use wakeshot_windows::store::RealSign;
+
+    use super::cli::Cmd;
+    use super::win_text;
+
+    /// The commands that change a power value, the active plan, a journal or the RunOnce value.
+    pub fn changes(cmd: &Cmd) -> bool {
+        matches!(
+            cmd,
+            Cmd::Hold { .. } | Cmd::FakeTray | Cmd::EndSession | Cmd::Cycles { .. } | Cmd::Cleanup
+        )
+    }
+
+    /// `true`: this sign stops `cmd`.
+    pub fn stops(cmd: &Cmd, sign: &RealSign) -> bool {
+        match sign {
+            RealSign::TrayRuns { .. } | RealSign::Unread { .. } => changes(cmd),
+            // `cleanup` touches only what its own run records name, and a power_check run's leftover is its job.
+            RealSign::Journal { .. } | RealSign::RunOnce { .. } => {
+                changes(cmd) && *cmd != Cmd::Cleanup
+            }
+            // Their checks cross a sign-out or a sign-in, where Windows would start the installed tray too.
+            RealSign::StartsAtLogin { .. } => matches!(cmd, Cmd::FakeTray | Cmd::EndSession),
+            // An install that does not run changes nothing, as with any other keep-awake app.
+            RealSign::InstallFolder { .. } | RealSign::UninstallKey { .. } => false,
+        }
+    }
+
+    pub fn text(sign: &RealSign) -> String {
+        const INSTALLED: &str = "quit it from its tray before a power test, and for a sign-out test also turn it \
+                                 off in Settings > Apps > Startup";
+        match sign {
+            RealSign::TrayRuns { lock } => format!(
+                "a Wakeshot tray runs in this session (its lock {lock} exists): quit it first (right-click its tray \
+                 icon, then Quit)"
+            ),
+            RealSign::InstallFolder { path } => {
+                format!("Wakeshot is installed ({}): {INSTALLED}", path.display())
+            }
+            RealSign::UninstallKey { key } => {
+                format!(r"Wakeshot is installed (HKCU\{key}): {INSTALLED}")
+            }
+            RealSign::StartsAtLogin { command } => format!(
+                "Wakeshot starts at the next sign-in (Run value Wakeshot = {command}): for a sign-out test turn it \
+                 off in Settings > Apps > Startup first"
+            ),
+            RealSign::Journal { path } => format!(
+                "a Wakeshot journal is left ({}), so a Wakeshot may own power values now: run `wakeshot restore`; \
+                 when a power_check run left it, end that run or run `power_check cleanup`",
+                path.display()
+            ),
+            RealSign::RunOnce { command } => format!(
+                "the RunOnce value {RUN_ONCE_NAME} is set ({command}), so a Wakeshot restore is due at the next \
+                 sign-in: sign out and in once; when a power_check run left it, end that run or run `power_check \
+                 cleanup`"
+            ),
+            RealSign::Unread { what, error } => format!(
+                "{what} does not read ({}), so whether a real Wakeshot is here is unknown",
+                win_text(*error)
+            ),
+        }
+    }
+
+    /// `Err`: the refusal, one line per sign that stops the run. `Ok`: the notes the run logs first; with
+    /// `--plan-only`, which changes nothing, a stopping sign is one of them.
+    pub fn verdict(cmd: &Cmd, plan_only: bool, signs: &[RealSign]) -> Result<Vec<String>, String> {
+        let (stopping, other): (Vec<&RealSign>, Vec<&RealSign>) =
+            signs.iter().partition(|sign| stops(cmd, sign));
+        if !stopping.is_empty() && !plan_only {
+            let mut refusal = format!(
+                "refused, nothing changed: a real Wakeshot would fight `{}` over the same power settings",
+                cmd.name()
+            );
+            for sign in stopping {
+                refusal.push_str("\n  ");
+                refusal.push_str(&text(sign));
+            }
+            return Err(refusal);
+        }
+        let mut notes: Vec<String> = stopping
+            .into_iter()
+            .map(|sign| format!("a run without --plan-only stops here: {}", text(sign)))
+            .collect();
+        notes.extend(
+            other
+                .into_iter()
+                .map(|sign| format!("note: {}", text(sign))),
+        );
+        Ok(notes)
     }
 }
 
@@ -3823,6 +3956,210 @@ mod tests {
             stats_text(&[3.0, 1.0, 2.0]),
             "3 calls, min 1.0 ms, median 2.0 ms, max 3.0 ms"
         );
+    }
+
+    fn every_command() -> Vec<Cmd> {
+        [
+            &["hold"][..],
+            &["hold", "--no-request", "--active-copy"][..],
+            &["fake-tray"][..],
+            &["end-session"][..],
+            &["session-watch"][..],
+            &["cycles", "3"][..],
+            &["medium-probe"][..],
+            &["cleanup"][..],
+            &["help"][..],
+        ]
+        .into_iter()
+        .map(cmd)
+        .collect()
+    }
+
+    /// One of each sign, with the texts a real install would give.
+    fn sign_of_each() -> Vec<RealSign> {
+        vec![
+            RealSign::TrayRuns {
+                lock: r"Local\Wakeshot.Tray".to_owned(),
+            },
+            RealSign::InstallFolder {
+                path: PathBuf::from(r"C:\Users\Haik\AppData\Local\HaikAsatryan.Wakeshot"),
+            },
+            RealSign::UninstallKey {
+                key: r"Software\Microsoft\Windows\CurrentVersion\Uninstall\HaikAsatryan.Wakeshot".to_owned(),
+            },
+            RealSign::StartsAtLogin {
+                command: r#""C:\Users\Haik\AppData\Local\HaikAsatryan.Wakeshot\current\wakeshot-tray.exe""#
+                    .to_owned(),
+            },
+            RealSign::Journal {
+                path: PathBuf::from(r"C:\Users\Haik\AppData\Local\Wakeshot\journal.json"),
+            },
+            RealSign::RunOnce {
+                command: r#""C:\x\wakeshot-tray.exe" --restore"#.to_owned(),
+            },
+            RealSign::Unread {
+                what: "the tray lock Local\\Wakeshot.Tray".to_owned(),
+                error: WinError {
+                    call: "OpenMutexW",
+                    code: 6,
+                },
+            },
+        ]
+    }
+
+    #[test]
+    fn guard_reads_only_for_commands_that_change_something() {
+        let changing: Vec<&str> = every_command()
+            .iter()
+            .filter(|c| guard::changes(c))
+            .map(Cmd::name)
+            .collect();
+        assert_eq!(
+            changing,
+            [
+                "hold",
+                "hold",
+                "fake-tray",
+                "end-session",
+                "cycles",
+                "cleanup"
+            ]
+        );
+        // So a command that changes nothing never stops, and reads nothing first.
+        for c in every_command().iter().filter(|c| !guard::changes(c)) {
+            assert!(sign_of_each().iter().all(|s| !guard::stops(c, s)), "{c:?}");
+            assert!(real_signs(c).is_empty(), "{c:?}");
+        }
+    }
+
+    #[test]
+    fn guard_passes_a_clean_pc() {
+        for c in every_command() {
+            for plan_only in [false, true] {
+                assert_eq!(guard::verdict(&c, plan_only, &[]), Ok(Vec::new()), "{c:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn guard_stops_on_a_running_tray_and_on_what_does_not_read() {
+        let signs = sign_of_each();
+        let (runs, unread) = (&signs[0], &signs[6]);
+        for c in every_command().iter().filter(|c| guard::changes(c)) {
+            let why = guard::verdict(c, false, std::slice::from_ref(runs)).unwrap_err();
+            assert!(
+                why.starts_with(&format!(
+                    "refused, nothing changed: a real Wakeshot would fight `{}`",
+                    c.name()
+                )),
+                "{why}"
+            );
+            assert!(
+                why.ends_with(
+                    "\n  a Wakeshot tray runs in this session (its lock Local\\Wakeshot.Tray exists): quit it first \
+                     (right-click its tray icon, then Quit)"
+                ),
+                "{why}"
+            );
+            let why = guard::verdict(c, false, std::slice::from_ref(unread)).unwrap_err();
+            assert!(
+                why.ends_with(
+                    "\n  the tray lock Local\\Wakeshot.Tray does not read (OpenMutexW code 6), so whether a real \
+                     Wakeshot is here is unknown"
+                ),
+                "{why}"
+            );
+            // `--plan-only` changes nothing, so it only says where a real run would stop.
+            let notes = guard::verdict(c, true, std::slice::from_ref(runs)).unwrap();
+            assert_eq!(notes.len(), 1);
+            assert!(
+                notes[0].starts_with("a run without --plan-only stops here: a Wakeshot tray runs"),
+                "{notes:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn guard_notes_an_install_that_does_not_run() {
+        let signs = sign_of_each();
+        let install = &signs[1..3];
+        for c in every_command().iter().filter(|c| guard::changes(c)) {
+            let notes = guard::verdict(c, false, install).unwrap();
+            assert_eq!(
+                notes,
+                [
+                    r"note: Wakeshot is installed (C:\Users\Haik\AppData\Local\HaikAsatryan.Wakeshot): quit it from its tray before a power test, and for a sign-out test also turn it off in Settings > Apps > Startup",
+                    r"note: Wakeshot is installed (HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\HaikAsatryan.Wakeshot): quit it from its tray before a power test, and for a sign-out test also turn it off in Settings > Apps > Startup",
+                ],
+                "{c:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn guard_stops_sign_out_commands_when_wakeshot_starts_at_login() {
+        let signs = sign_of_each();
+        let login = &signs[3..4];
+        for c in every_command().iter().filter(|c| guard::changes(c)) {
+            let verdict = guard::verdict(c, false, login);
+            match c {
+                Cmd::FakeTray | Cmd::EndSession => {
+                    let why = verdict.unwrap_err();
+                    assert!(
+                        why.contains("Wakeshot starts at the next sign-in (Run value Wakeshot = "),
+                        "{why}"
+                    );
+                    assert!(why.ends_with("turn it off in Settings > Apps > Startup first"));
+                }
+                _ => {
+                    let notes = verdict.unwrap();
+                    assert_eq!(notes.len(), 1, "{c:?}");
+                    assert!(notes[0].starts_with("note: Wakeshot starts at the next sign-in"));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn guard_stops_on_a_left_journal_or_run_once_value_except_cleanup() {
+        let signs = sign_of_each();
+        let left = &signs[4..6];
+        for c in every_command().iter().filter(|c| guard::changes(c)) {
+            let verdict = guard::verdict(c, false, left);
+            if *c == Cmd::Cleanup {
+                let notes = verdict.unwrap();
+                assert_eq!(notes.len(), 2);
+                assert!(notes.iter().all(|n| n.starts_with("note: ")), "{notes:?}");
+                continue;
+            }
+            let why = verdict.unwrap_err();
+            let lines: Vec<&str> = why.lines().skip(1).collect();
+            assert_eq!(
+                lines,
+                [
+                    r"  a Wakeshot journal is left (C:\Users\Haik\AppData\Local\Wakeshot\journal.json), so a Wakeshot may own power values now: run `wakeshot restore`; when a power_check run left it, end that run or run `power_check cleanup`",
+                    r#"  the RunOnce value WakeshotRestore is set ("C:\x\wakeshot-tray.exe" --restore), so a Wakeshot restore is due at the next sign-in: sign out and in once; when a power_check run left it, end that run or run `power_check cleanup`"#,
+                ],
+                "{c:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn guard_lists_every_stopping_sign_and_notes_the_rest() {
+        let all = sign_of_each();
+        let why = guard::verdict(&Cmd::FakeTray, false, &all).unwrap_err();
+        // The tray, start at login, the journal, the RunOnce value and the unread lock; not the install.
+        assert_eq!(why.lines().count(), 1 + 5, "{why}");
+        assert!(!why.contains("installed"), "{why}");
+        let why = guard::verdict(&cmd(&["hold"]), false, &all).unwrap_err();
+        assert_eq!(why.lines().count(), 1 + 4, "{why}");
+        let notes = guard::verdict(&Cmd::Cleanup, true, &all).unwrap();
+        let stops = notes
+            .iter()
+            .filter(|n| n.starts_with("a run without --plan-only stops here: "))
+            .count();
+        assert_eq!((stops, notes.len()), (2, all.len()), "{notes:?}");
     }
 
     /// Real, read only: the token and the plan names read on any Windows PC.

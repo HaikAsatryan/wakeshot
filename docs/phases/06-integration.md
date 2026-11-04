@@ -212,7 +212,7 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | `p6-int-update-e2e` | no | global: installs, Run, RunOnce, Path, a user environment value, an active plan copy | `p6-int-real-e2e`, `p6-install-e2e`, `p6-pack-and-release`, `p6-hooks` | done (05:51: 125 checks passed, 1 skipped: the update notice, held while the session was locked) |
 | `p6-int-haik-checks` | yes: about 42 min (27, 18 of hands, plus 15 with the dock) | whole laptop: lid, lock, hibernate, switch user, battery; no other agent or cargo command | `p6-int-update-e2e`, `p3-haik-checks`, `p5-haik-check` | done (2026-11-05 ~02:00): blocks 1, 2, 3, 5, 7, 8 pass; 4 safe, with findings; 6 steps 1 and 2 pass, step 3 not shown (lid opened at 4 min 51 s); AFTER equals BEFORE; findings 3 to 11 in the card |
 | `p2-6-floor-grace` | no | no | `p6-int-haik-checks` | ready: 30 s on battery before the floor step back (Haik 2026-11-05), docs of finding 6; then a narrow power safety check |
-| `p6-real-install-guard` | no | no (read-only checks) | `p2-6-runonce-keep` | ready (orchestrator 2026-11-05, before the first release): plus finding 8 (Startup switch bytes) |
+| `p6-real-install-guard` | no | no (read-only checks) | `p2-6-runonce-keep` | done (2026-11-05 ~03:00): shared check in `store.rs` (test-support), `power_check` and `e2e.ps1` refuse; switch bytes fixed; 579 windows tests pass |
 | `p6-notice-app-icon` | Part B: about 5 min, a look at the screen | Part A: test installs (HKCU keys); Part B: screen | `p6-real-install-guard` (both own `packaging/e2e.ps1`) | ready: the white square in the notice header (finding 5), plus finding 11 |
 
 Sizes, one worker's context: skeleton 50K, io-thread 120K, window 100K, dispatch 140K, startup 100K, tray-mode 140K,
