@@ -163,7 +163,7 @@ those one at a time across all tracks.
 | `p6-media` | yes: watches the video and the loop and says yes or what to change; about 10 min off the PC for the captures | `p6-launch-research` (tool, storyboard, shot list); `p5-haik-check` (final icon); integration's `p6-int-real-e2e` (the real app) | ready |
 | `p6-pages` | yes: one look before it goes live at v1 | `p6-readme`; the tray track's `p5-icon-art` and `p5-haik-check` (Haik's icon pick rewrites `assets/wakeshot.ico`; review m3) | ready |
 | `p6-startup-switch-check` | no | `p6-install-e2e` | done (06:23: the off choice survives Setup over the install by the keys; uninstall leaves the StartupApproved value) |
-| `p6-tray-size` | no (stop 2, a dependency change, waits for the orchestrator) | `p6-int-update-wiring` | in progress (started 06:13: stop 1, read only) |
+| `p6-tray-size` | no (stop 2, a dependency change, waits for the orchestrator) | `p6-int-update-wiring` | blocked: stop 1 done 06:35; stop 2 (go given) runs alone among builders after `p6-uninstall-startup-approval` |
 | `p6-uninstall-startup-approval` | no (orchestrator decision for his review) | `p6-startup-switch-check` | in progress (started 06:24) |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
@@ -360,3 +360,12 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   new card `p6-uninstall-startup-approval`.
 - 2026-11-04 06:24 (orchestrator `wakeshot-12`): `p6-uninstall-startup-approval` started (store `AutoStart`, the
   uninstall hook, `e2e.ps1` step 7, one `e2e.ps1` run alone on the laptop), beside `p6-tray-size` stop 1.
+- 2026-11-04 06:35: `p6-tray-size` stop 1 done (read only): the 1.9 MB come from velopack's own dependencies, not its
+  features (`file-logging`, `public-utils`, both off): `ureq` with default features (rustls, ring, the root list,
+  about 1.09 MB), the HTTP client (about 213 KB), `url` and through `idna` ICU (about 133 KB). Measured: 3,953,152
+  bytes now; `opt-level = "z"` 2,827,776; the IDNA stub (`idna_adapter = "=1.0.0"`) 3,820,544; both 2,705,920
+  (32 % smaller), nothing the app uses lost. Orchestrator decision, for Haik's review: go for stop 2 with both,
+  plus one release smoke run, alone among builders after `p6-uninstall-startup-approval`. For Haik: a stronger
+  option, Windows' own TLS (SChannel) through a patched copy of velopack kept in the repo: 1,865,728 bytes, and
+  the ARM64 tray builds without clang (checked by the worker; an HTTPS check against GitHub passed). It means
+  keeping a patched dependency; his call.
