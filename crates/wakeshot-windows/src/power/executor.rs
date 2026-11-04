@@ -66,10 +66,10 @@ pub struct Startup {
 ///
 /// - `run` answers `ReadPlan`, `Apply`, `Restore` and `ResetLost`; every other command gives no event and makes no
 ///   call;
-/// - before each of those three, a journal that holds a known entry this tray owns gets its RunOnce value
-///   (`set_run_once`, which reads first and writes only a missing or wrong value) and a guard (`ensure_guard`), so a
-///   value Windows deleted at a sign-in and a guard that ended are replaced (architecture section 5, "Logon restore"
-///   and "Guard");
+/// - before each of those three, a journal that reads and holds a known entry gets its RunOnce value
+///   (`set_run_once`, which reads first and writes only a missing or wrong value), whatever its owner, and one this
+///   tray owns also a guard (`ensure_guard`), so a value Windows deleted at a sign-in and a guard that ended are
+///   replaced (architecture section 5, "Logon restore" and "Guard");
 /// - `Restore { why: Leftover }` runs only when the journal's owner is Gone or this tray; otherwise it answers a failed
 ///   `Restored` (`OWNER_ALIVE`, `OWNER_UNKNOWN`) with the file's known entries, so the core retries on the tick;
 /// - a restore that sets a corrupt journal aside answers `Done(Restored)`, then `JournalCorrupt`, and the file is
@@ -238,34 +238,38 @@ impl<P: PlanIo, N: SafetyNet> PowerExecutor<P, N> {
         (Some(journal), set_aside)
     }
 
-    /// Keeps the safety net of a journal this tray owns: the RunOnce value and a guard. A leftover of another owner
-    /// gets neither here: a guard waits on this tray and restores only a journal that names this tray as owner
-    /// (`recovery`), so it would never act, and an apply that takes the journal over sets both in its own step 3.
-    /// The value is set again because Windows deletes it when it runs it: Explorer runs RunOnce once per sign-in,
-    /// after every Run entry, so a hold that started before that pass loses it to a restore mode that finds this tray
-    /// alive and exits (`p3-haik-checks`, Found outside scope 2). A failed write or start is logged and the command
-    /// still runs: the other half of the net still covers most cases, and the next command tries again. Returns the
-    /// journal as read, for the `Leftover` check.
+    /// Keeps the safety net of a journal that holds a known entry: the RunOnce value whatever its owner, and a guard
+    /// when the owner is this tray. The value is set again because Windows deletes it when it runs it: Explorer runs
+    /// RunOnce once per sign-in, after every Run entry, so a hold that started before that pass loses it to a restore
+    /// mode that finds this tray alive and exits (`p3-haik-checks`, Found outside scope 2). Another owner's leftover
+    /// that this tray could not restore yet gets the value too, so the next sign-in still restores it if this tray
+    /// dies first (review of `p2-6-runonce-keep`, finding 6); restore mode checks the owner, so for a live or Unknown
+    /// one the value costs only a start that exits. It gets no guard: a guard waits on this tray and restores only a
+    /// journal that names this tray as owner (`recovery`), so it would never act, and an apply that takes the journal
+    /// over starts one in its own step 3. A journal that does not read gets neither, as nothing is known of it
+    /// (architecture section 5, "Gap left"). A failed write or start is logged and the command still runs: the other
+    /// half of the net still covers most cases, and the next command tries again. Returns the journal as read, for the
+    /// `Leftover` check.
     fn keep_guard(&mut self, what: &str) -> JournalRead {
         let read = self.net.load_journal();
-        let owned = match &read {
-            JournalRead::Read(file) => {
-                file.owner == self.me
-                    && file
-                        .entries
-                        .iter()
-                        .any(|e| matches!(e.key, JournalKey::Known(_)))
-            }
-            _ => false,
+        let (known, mine) = match &read {
+            JournalRead::Read(file) => (
+                file.entries
+                    .iter()
+                    .any(|e| matches!(e.key, JournalKey::Known(_))),
+                file.owner == self.me,
+            ),
+            _ => (false, false),
         };
-        if !owned {
+        if !known {
             return read;
         }
         // Apply step 3's order: the RunOnce value, then the guard.
         match self.net.set_run_once() {
             Ok(true) => {
                 let text = format!(
-                    "RunOnce value was missing while this tray owns journal entries; set again before the {what}"
+                    "RunOnce value was missing while journal.json holds entries to restore; set again before the \
+                     {what}"
                 );
                 self.note(Level::Info, &text);
             }
@@ -277,6 +281,9 @@ impl<P: PlanIo, N: SafetyNet> PowerExecutor<P, N> {
                 );
                 self.note(Level::Warn, &text);
             }
+        }
+        if !mine {
+            return read;
         }
         if let Err(f) = self.net.ensure_guard() {
             let text = format!(
@@ -1010,7 +1017,9 @@ mod tests {
                         )],
                         "{case}"
                     );
-                    assert_eq!(s.calls, [Call::LoadJournal], "{case}");
+                    // The value for the next sign-in, and no guard: one would wait on this tray, not the owner.
+                    assert_eq!(s.calls, [Call::LoadJournal, Call::SetRunOnce], "{case}");
+                    assert!(s.run_once, "{case}");
                     assert_eq!(s.known_entries(), entries, "{case}");
                     assert_eq!(s.held().len(), 3, "{case}");
                 }
@@ -1027,9 +1036,9 @@ mod tests {
         let rig = Rig::new("leftover-taken");
         overridden(&rig.fake, DEAD, &ALL, vec![]);
         let taker = JournalOwner { pid: 777, ..ME };
-        // Calls: load (the owner check), then the routine's load.
+        // Calls: load (the owner check), the RunOnce value, then the routine's load.
         rig.script_next(
-            1,
+            2,
             Action::Run(Box::new(move |s: &mut FakeState| {
                 if let FakeJournal::File(file) = &mut s.journal {
                     file.owner = taker;
@@ -1046,7 +1055,10 @@ mod tests {
                 entries
             )]
         );
-        assert_eq!(rig.calls(), [Call::LoadJournal, Call::LoadJournal]);
+        assert_eq!(
+            rig.calls(),
+            [Call::LoadJournal, Call::SetRunOnce, Call::LoadJournal]
+        );
         assert_eq!(rig.fake.state().held().len(), 3);
 
         // No journal: answered without the routine, so no lock and no second read.
@@ -1156,7 +1168,8 @@ mod tests {
                     "{case}"
                 );
                 let said = format!(
-                    "RunOnce value was missing while this tray owns journal entries; set again before the {what}"
+                    "RunOnce value was missing while journal.json holds entries to restore; set again before the \
+                     {what}"
                 );
                 assert_eq!(
                     rig.count(Level::Info, &said),
@@ -1313,19 +1326,26 @@ mod tests {
         }
     }
 
+    /// Nothing this version can restore, or nothing known: no value and no guard. A journal that does not read is
+    /// skipped too, so a value Windows deleted stays missing while reads fail (architecture section 5, "Gap left").
     #[test]
-    fn no_safety_net_when_nothing_owned() {
+    fn no_safety_net_without_a_known_entry() {
         type Start = (&'static str, fn(&FakePlans));
-        let starts: [Start; 4] = [
+        let starts: [Start; 5] = [
             ("no journal", |_| {}),
             ("corrupt journal", |fake| {
                 fake.state().journal = FakeJournal::Corrupt;
             }),
-            ("only unknown entries", |fake| {
+            ("journal does not read", |fake| {
+                // This tray's entries, held: a read that fails cannot know they are there.
+                overridden(fake, ME, &ALL, vec![]);
+                fake.state().journal = FakeJournal::Unreadable(32);
+            }),
+            ("only unknown entries, this tray's", |fake| {
                 fake.state().journal = FakeJournal::File(journal_file(ME, vec![unknown_entry()]));
             }),
-            ("another owner's leftover", |fake| {
-                overridden(fake, DEAD, &ALL, vec![]);
+            ("only unknown entries, another owner's", |fake| {
+                fake.state().journal = FakeJournal::File(journal_file(DEAD, vec![unknown_entry()]));
             }),
         ];
         let commands = [
@@ -1361,6 +1381,84 @@ mod tests {
         assert_eq!(calls[..2], [Call::LoadJournal, Call::LoadJournal]);
         assert_eq!(calls.iter().filter(|c| **c == Call::EnsureGuard).count(), 1);
         assert_eq!(calls.iter().filter(|c| **c == Call::SetRunOnce).count(), 1);
+    }
+
+    /// Review of `p2-6-runonce-keep`, finding 6: a leftover of another owner that this tray cannot restore yet (owner
+    /// alive or of unknown liveness, or a restore that keeps failing) gets the RunOnce value back, so the next sign-in
+    /// still restores it if this tray dies first. It gets no guard: a guard waits on this tray, not on the owner.
+    #[test]
+    fn another_owners_leftover_gets_the_value_not_a_guard() {
+        let commands = [
+            ("plan read", Command::ReadPlan),
+            ("apply", all_three()),
+            (
+                "restore",
+                Command::Restore {
+                    plan: Some(OTHER),
+                    why: RestoreWhy::PlanSwitch,
+                },
+            ),
+            ("restore", restore(RestoreWhy::Leftover)),
+        ];
+        for (what, command) in &commands {
+            for alive in [Alive::Yes, Alive::Unknown] {
+                let case = format!("{command:?}, owner {alive:?}");
+                let rig = Rig::new("other-owner");
+                overridden(&rig.fake, DEAD, &ALL, vec![]);
+                // Deleted by the sign-in's RunOnce pass.
+                rig.fake.state().run_once = false;
+                rig.set_alive(DEAD, alive);
+
+                rig.executor().run(command);
+
+                let s = rig.fake.state();
+                assert_eq!(
+                    s.calls[..2],
+                    [Call::LoadJournal, Call::SetRunOnce],
+                    "{case}"
+                );
+                assert_ne!(s.calls.get(2), Some(&Call::EnsureGuard), "{case}");
+                let said = format!(
+                    "RunOnce value was missing while journal.json holds entries to restore; set again before the \
+                     {what}"
+                );
+                assert_eq!(rig.count(Level::Info, &said), 1, "{case}");
+                // An apply that takes the journal over starts this tray's guard in its own step 3, after its own load.
+                if !matches!(command, Command::Apply { .. }) {
+                    assert!(
+                        !s.calls.contains(&Call::EnsureGuard),
+                        "{case}: {:?}",
+                        s.calls
+                    );
+                    assert_eq!(s.guards_started, 0, "{case}");
+                    assert_eq!(s.known_entries().len(), 3, "{case}");
+                    assert!(s.run_once, "{case}");
+                }
+            }
+        }
+
+        // The value stays while the owner's liveness is unknown; once the owner is gone, the retry restores and its
+        // clean-up removes the value. No guard at any point.
+        let rig = Rig::new("other-owner-then-gone");
+        overridden(&rig.fake, DEAD, &ALL, vec![]);
+        rig.fake.state().run_once = false;
+        rig.set_alive(DEAD, Alive::Unknown);
+        let mut executor = rig.executor();
+        executor.run(&Command::ReadPlan);
+        assert!(rig.fake.state().run_once);
+        executor.run(&restore(RestoreWhy::Leftover));
+        assert!(rig.fake.state().run_once);
+        assert_eq!(rig.fake.state().known_entries().len(), 3);
+        rig.liveness.alive.lock().unwrap().clear();
+        assert_eq!(
+            executor.run(&restore(RestoreWhy::Leftover)),
+            [restored(None, RestoreWhy::Leftover, Ok(()), Vec::new())]
+        );
+        let s = rig.fake.state();
+        assert_eq!(s.journal, FakeJournal::Missing);
+        assert!(s.held().is_empty());
+        assert!(!s.run_once);
+        assert_eq!(s.guards_started, 0);
     }
 
     #[test]

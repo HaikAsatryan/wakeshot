@@ -344,8 +344,9 @@ impl GuardControl for RecordingGuard {
 
 /// What a `FileNet` may do with the RunOnce value.
 enum RunOnce {
-    /// The tray: set before the journal, set again before each plan read, apply and restore while the tray owns a known
-    /// entry (Windows deletes the value when it runs it; `PowerExecutor`'s `keep_guard`), removed in the clean-up.
+    /// The tray: set before the journal, set again before each plan read, apply and restore while the journal reads and
+    /// holds a known entry, whatever its owner (Windows deletes the value when it runs it; `PowerExecutor`'s
+    /// `keep_guard`), removed in the clean-up.
     /// `None`: the exe path is not valid Unicode, so no value can name it.
     SetAndClear {
         auto: AutoStart,
@@ -373,6 +374,8 @@ pub struct FileNet<G> {
     /// The unknown entries this net last logged: the ownership check loads the journal every 10 s during a hold, and
     /// one line per load would bury the rest of the log.
     unknown_logged: Vec<JournalFileEntry>,
+    /// The dry-run line was logged: `keep_guard` calls `set_run_once` before every plan read of a hold, every 10 s.
+    dry_run_logged: bool,
 }
 
 impl<G: GuardControl> FileNet<G> {
@@ -405,6 +408,7 @@ impl<G: GuardControl> FileNet<G> {
             guard,
             log,
             unknown_logged: Vec::new(),
+            dry_run_logged: false,
         }
     }
 
@@ -544,7 +548,10 @@ impl<G: GuardControl> SafetyNet for FileNet<G> {
                 });
             }
             RunOnce::Off => {
-                self.note(Level::Info, "dry run: RunOnce value not set");
+                if !self.dry_run_logged {
+                    self.note(Level::Info, "dry run: RunOnce value not set");
+                    self.dry_run_logged = true;
+                }
                 return Ok(false);
             }
         };
@@ -1373,7 +1380,8 @@ mod tests {
             assert_eq!(net.ensure_guard(), Ok(false));
             assert_eq!(net.stop_guard(), Ok(()));
         }
-        assert_eq!(count_containing(&log, "dry run: RunOnce value not set"), 2);
+        // Once per net, not once per call: a dry-run hold calls it before every plan read.
+        assert_eq!(count_containing(&log, "dry run: RunOnce value not set"), 1);
         assert_eq!(count_containing(&log, "guard started"), 0);
         // The journal itself works as in the tray, in the folder the dry run was given.
         let file = journal(vec![known(SettingKey::LidDc, false)]);

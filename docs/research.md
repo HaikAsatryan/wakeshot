@@ -4332,3 +4332,11 @@ to the 16:44 baseline after every check and at the end (18:26, `powercfg`).
   sign-in nothing restored; journal and copy (never active) were left, and `power_check cleanup` restored them at
   18:24:50. The restore mode start from RunOnce, its journal read and its owner check: **verified**; the
   restore of a gone owner's journal by restore mode at sign-in: **not verified**.
+- **Explorer's RunOnce pass takes about 17 ms and does not wait for the command to end.** Card
+  `docs/tasks/p2-6-runonce-keep.md`, Part A, read from B1's sign-in in the Shell-Core Operational export (B2's
+  evidence, `shell-core.txt` lines 217 to 220) and the restore mode's log: `9705` (RunOnce enumeration started)
+  18:15:18.653, `9707` (execution of `wakeshot-tray.exe" --restore` started) 18:15:18.653, `9708` (finished, PID 35732)
+  18:15:18.670, `9706` (enumeration finished) 18:15:18.670; restore mode's own first lines (`restore mode started`, its
+  owner check) at 18:15:18.683, after the pass had ended. So a value the tray writes again at its next plan read (up to
+  10 s later) is not run a second time by that pass. Whether Explorer would pick up a value written inside those 17 ms:
+  **not verified**. **Verified** (event log and Wakeshot log, one sign-in).

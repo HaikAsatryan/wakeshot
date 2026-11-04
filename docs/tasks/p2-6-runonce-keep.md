@@ -1,6 +1,7 @@
 # Keep the RunOnce value while a hold owns entries, then redo B2
 
-Phase: 2 to 6 (power track fix). Status: blocked: waiting for review (Part A done; Part B after it). Needs Haik:
+Phase: 2 to 6 (power track fix). Status: blocked: waiting for Haik (fix round done; Part B prep done, B2 redo
+steps ready in "Part B: B2 redo"). Needs Haik:
 Part B only: about 5 minutes of his hands, one sign-out, after the review of Part A. Agent: `wakeshot-worker`. Size: about 120K tokens (Part A about 80K, Part B about 40K).
 Written by the orchestrator (session after `wakeshot-27`, 2026-11-04 18:32) from `docs/tasks/p3-haik-checks.md`
 "Found outside scope" item 2 and Result "Open items" 1 and 2.
@@ -70,7 +71,75 @@ Part B (Haik, after the review):
 
 ## Questions for Haik
 
-None. The fix is the orchestrator's decision (2026-11-04), for Haik's review.
+None. The fix is the orchestrator's decision (2026-11-04), for Haik's review. So is the fix round's finding 6 (the
+RunOnce value also for another owner's leftover; Decisions 9).
+
+## Part B: B2 redo
+
+Written 2026-11-04 19:08 by the worker of the fix round. `<S2>` is
+`C:\Users\haika\AppData\Local\Temp\claude\C--Users-haika-code-wakeshot\7c3512fd-d0b5-4439-a2c6-4dd5cf1b6c37\scratchpad\p3-haik-checks`
+(build in `target`, scripts in `scripts`, `make-cmd.py`). The step files are in `%LocalAppData%\Wakeshot-harness\haik`;
+the scripts' own records in `%LocalAppData%\Wakeshot-harness\haik-out`; the fake tray's, guard's and restore mode's log
+in `%LocalAppData%\Wakeshot\logs\wakeshot.log`.
+
+### Before Haik starts (orchestrator)
+
+1. No other agent runs and no cargo command runs until Haik is done: the sign-out ends every agent and every Claude
+   Code session. Write the state to files.
+2. Give Haik the steps below and tell him "go".
+
+### Worker prep (done 2026-11-04 19:08, see Log)
+
+Builds of today's code (with the fix round) in `<S2>\target`, Haik's values saved as the baseline, the six step files
+written and smoke-tested. Nothing runs in the background; no setting was changed.
+
+### Steps for Haik
+
+**Your time: about 6 minutes, one sign-out.**
+
+Before you start:
+
+1. The sign-out in step 4 ends every Claude Code session on this laptop, the orchestrator too. Finish or close every
+   other Claude Code session first, and save your work in other apps.
+2. Lid open; charger or dock, either is fine. Change no power setting by hand until step 5 is done.
+
+Steps:
+
+1. Win+R, type `%LocalAppData%\Wakeshot-harness\haik`, Enter. A folder opens.
+2. Double-click `B2-1-fake-tray.cmd`. A window opens. If you signed in less than 2 minutes ago, it counts down
+   (`please wait: ... s left`); let it. Then wait for a line that starts with `holding:`. One of the first lines ends
+   with `integrity Medium (0x2000), elevation type Limited`; if it says High, close the window and tell the
+   orchestrator. Leave this window open.
+3. Double-click `B2-2-kill-tray-and-guard.cmd`. After about 3 seconds a dialog box opens on top of everything and the
+   window shows a large green or red banner.
+   - Green, `READY: SIGN OUT NOW`: click OK, go on with step 4.
+   - Red, `STOP: DO NOT SIGN OUT` or `NOT READY: DO NOT SIGN OUT`: click OK and **do not sign out**. Close both B2
+     windows, double-click `0-cleanup.cmd` (it must end with `check: ALL OK`), and tell the orchestrator what the red
+     banner says.
+4. Start > your picture > Sign out. If Windows lists apps that keep it from signing out, click "Sign out anyway". Sign
+   in again.
+5. Win+R, `%LocalAppData%\Wakeshot-harness\haik`, Enter. Double-click `B2-3-check-after-sign-in.cmd`. It counts down
+   until 2 minutes after your sign-in, then checks. It must end with `check: ALL OK` (a line `test copy left, not
+   active` is fine). If it ends with `check: NOT OK`, close it and do **not** run `0-cleanup.cmd`: the worker reads
+   what is left first. The test writes only to a copy of your plan that is never active, so your own values stay.
+6. Start Claude Code and the orchestrator (`/orchestrate`), and tell it "B2 done", with what steps 3 and 5 showed.
+
+### After Haik's steps (a new worker: deliverable 6)
+
+1. Before any change, copy to the worker's scratchpad: `%LocalAppData%\Wakeshot-harness\haik-out\` (`baseline.json`,
+   `check.log`, `B2-kill.txt`, `wait-signin.txt`), `%LocalAppData%\Wakeshot\` (journal if left, `logs\wakeshot.log`),
+   the System log (Winlogon 7001 and 7002), Shell-Core Operational 9705 to 9708 (the RunOnce passes), RunOnce and Run
+   values, `powercfg /list`.
+2. Pass or fail, with log lines: `B2-kill.txt` READY with the RunOnce command `"<S2>\target\debug\wakeshot-tray.exe"
+   --restore`; after the sign-in (7001), Shell-Core 9707 runs `wakeshot-tray.exe" --restore`; restore mode's lines:
+   the owner gone, the copy's three entries written back (lid AC 0 to 1, lid DC 0 to 1, sleep DC 0 to 18000),
+   `journal deleted`, `RunOnce value WakeshotRestore removed`; `check.log` from step 5 `check: ALL OK`. Note whether the
+   fake tray logged `RunOnce value was missing ... set again` (not expected: it starts after its sign-in's pass).
+3. `power_check cleanup` (deletes the copy), then `check.ps1`: Haik's values against the baseline; put back any
+   difference and read again. No "Wakeshot test" plan, no journal, no `WakeshotRestore` value.
+4. Delete `%LocalAppData%\Wakeshot-harness` (all of it, the `haik` folder too), `%LocalAppData%\Wakeshot` and
+   `<S2>\target`; `powercfg /qh` once more.
+5. `docs/research.md` "Power track manual checks": the B2 outcome. This card's Result.
 
 ## Decisions
 
@@ -85,6 +154,25 @@ Worker's, Part A (2026-11-04):
 | 5 | The name `keep_guard` kept | `docs/phases/03-windows-power.md` and the reviews name it; its doc now says it keeps both halves | The executor is next reworked: rename to `keep_safety_net` with those references |
 | 6 | No change to `stop_points.rs`, `props.rs` or `fake.rs` | Both walk only the locked routines (apply, restore, check), whose starts already have RunOnce set while a known entry exists (`stop_points.rs:381`, `Prop::RunOnce`). `keep_guard` runs before the lock and writes no plan value and no journal; a stop there leaves a start those walks already cover. Its stops are walked in the executor instead (`plan_read_stop_points`) | `keep_guard` ever writes a plan value or the journal |
 
+Worker's, fix round of the review (2026-11-04):
+
+| # | Decision | Reason | Change it when |
+|---|---|---|---|
+| 7 | The dry-run line once per `FileNet` (a `dry_run_logged` bool, like `unknown_logged`) | The orchestrator's call on finding 1; one line tells a dry run has no value, a line every 10 s buries the log | Never, unless a dry run gets a RunOnce value |
+| 8 | Finding 2, the lean fix: a journal that does not read still gets no value; "Gap left" names the case and the stronger fix | The orchestrator's call; such reads fail rarely and briefly, and setting a value for a file not read guesses at what it holds | A log shows journal reads failing for longer than one plan read: then keep the last read's answer and, on a failed read after one with a known entry, still set the value |
+| 9 | Finding 6: the value for any journal that reads and holds a known entry, whatever its owner; the guard only for this tray's own journal. The orchestrator's decision, for Haik's review | Core `props.rs` `Prop::RunOnce` already asks for a value whenever the journal holds a known entry, whoever owns it; restore mode checks the owner (alive or Unknown: it exits; Gone: it restores), so the value is right for every owner. A guard waits on this tray, so for another owner it would never act | Two trays of one user run at once with different exe paths (two sessions): they would each rewrite the other's value every 10 s; then set the value only when it is missing |
+| 10 | The Info line now reads "RunOnce value was missing while journal.json holds entries to restore" | It is logged for another owner's leftover too, so "this tray owns" would be wrong | The wording of the log is next reviewed |
+
+Worker's, Part B prep (2026-11-04):
+
+| # | Decision | Reason | Change it when |
+|---|---|---|---|
+| 11 | Only B2's step files (plus `0-check.cmd`, `0-cleanup.cmd`, `_run.cmd`), numbered `B2-1`, `B2-2`, `B2-3` | The folder shows the steps in their order; no file of A to E or B1 to pick by mistake | Another check needs the harness again |
+| 12 | The two 2-minute waits are in the step files (`wait-signin.ps1`), not only in the text: it waits until 120 s after the shell Explorer's start and until Shell-Core 9706 (RunOnce) from that Explorer is logged; after 10 minutes without it, by the time alone | The card's timing rule, kept by the script so a fast hand cannot break it. Interactive users may read that log (channel SDDL: `IU` 0x3) | Shell-Core stops logging 9706 for RunOnce (then the time rule alone holds) |
+| 13 | `kill.ps1`: every outcome recolours the window, prints a banner of 7 lines and opens a dialog on top of every window (`WScript.Shell` `Popup`, system modal) that must be clicked; green READY, red STOP and NOT READY | Haik read a one-line NOT READY as OK in the first B2 | Never for this harness |
+| 14 | `check: NOT OK` after the sign-in: Haik does not run `0-cleanup.cmd` | Keeps the evidence for the worker; the fake tray writes only to a copy that is never active, so Haik's values are not at risk | Never for this harness |
+| 15 | No `requests-log.ps1` and no C2 test build | B2 needs neither | Never for this redo |
+
 ## Found outside scope
 
 Problems seen but not fixed.
@@ -92,14 +180,18 @@ Problems seen but not fixed.
 1. **A dry-run hold now logs "dry run: RunOnce value not set" at every plan read.** `FileNet::dry_run`'s `set_run_once`
    logs that line on every call (`power/journal.rs`, the `RunOnce::Off` branch), and `keep_guard` now calls it every
    10 s while a dry-run journal is owned: about 25 KB an hour (the log rolls at 1 MB). Fix: log it once per net (a
-   field, one line). `journal.rs` code is outside this round's files. Verified by reading the code; not run.
+   field, one line). `journal.rs` code is outside this round's files. Verified by reading the code; not run. Fixed in
+   the fix round (review finding 1).
 2. **`docs/architecture.md` section 8, row "Journal load, lock or write, RunOnce value or guard start fails"** reads as
    if every such failure gives a notice. It is the apply's row; the failures in `keep_guard` (the guard start since
    `p3-power-io`, the RunOnce write now) only log. Not changed: section 8 is outside this round's lines. Suggest "(in
-   an apply; before each command they only log)".
+   an apply; before each command they only log)". Fixed in the fix round (review finding 5).
 3. **The fact under Log 2026-11-04 (Explorer's pass takes 17 ms) belongs in `docs/research.md` "Power track manual
-   checks"**, which is not in this round's files; Part B adds it with the B2 outcome.
+   checks"**, which is not in this round's files; Part B adds it with the B2 outcome. Added in the fix round.
 4. `power/executor.rs:128`, a doc line from `p3-power-io`, is 121 characters (one over the wrap). Harmless.
+5. **`README.md`'s gap list lags architecture's "Gap left"** (review finding 3): it does not list the up to 10 s after
+   a sign-in's RunOnce pass, a value that cannot be written back, or a journal that does not read. Not changed: the
+   orchestrator skipped it this round, as `README.md` holds someone else's uncommitted edits. Open.
 
 ## Log
 
@@ -121,10 +213,68 @@ Problems seen but not fixed.
   replaced by what `p3-haik-checks` tested and what is left for checklist 5) and "Gap left" (the up to 10 s window and
   a value that cannot be written back). Full package checks pass; build folder deleted. Status set to blocked: waiting
   for review.
+- 2026-11-04 18:55, worker: fix round started on `docs/reviews/p2-6-runonce-keep.md` (0 blockers, 0 majors, 6
+  minors), with the orchestrator's calls: fix 1 (dry-run line once per net), 2 (lean: Gap left line and an
+  `Unreadable` start in a test; the stronger fix named with its trigger), 4 and 5 (architecture wording), 6 (set the
+  value for any readable journal with a known entry, whatever its owner; the guard only for this tray's own journal:
+  the orchestrator's decision, for Haik's review); skip 3 (`README.md` has someone else's uncommitted edits). Then
+  Part B prep.
+- 2026-11-04 19:01, worker: findings 1, 2, 4, 5, 6 fixed. Finding 6 is the orchestrator's decision, for Haik's
+  review: the code showed no reason against it (core `props.rs` `Prop::RunOnce` already asks for a value whenever the
+  journal holds a known entry, whatever its owner; restore mode checks the owner before it restores). Package checks
+  pass (570 passed, 0 failed, 23 ignored). Mutation checks: the old owner rule, a guard for any owner, an unreadable
+  read counted as known, and the dry-run line on every call each fail at least one test; files restored after.
+- 2026-11-04 19:02, worker: `docs/research.md` "Power track manual checks": the 17 ms RunOnce pass added (checked
+  again against `shell-core.txt` lines 217 to 220 and the restore mode's log line at 18:15:18.683). Fix round build
+  folder deleted.
+- 2026-11-04 19:06, worker (Part B prep): `powercfg /requests` None for all six types (19:03 and 19:06:41). Builds into
+  `<S2>\target` on the code after the fix round (host x64, debug, no `RUSTFLAGS`), 19:04:44 to 19:06:13, both exit 0:
+  `power_check.exe` (`--features test-support --example power_check`) and `wakeshot-tray.exe`. Baseline
+  (`check.ps1 -Save`, 19:06:41): Balanced `381b4222-f694-41f0-9685-ff5bb260df2e` active and the only plan, lid AC 1
+  and DC 1, sleep AC 18000 and DC 18000, energy saver DC 30; no journal; no `WakeshotRestore`. `HKCU\...\Run`: the
+  same 7 values as at 16:44, no Wakeshot; RunOnce empty; no `%LocalAppData%\Wakeshot`; `WAKESHOT_DATA_DIR` unset
+  (user, machine, process).
+- 2026-11-04 19:07, worker (Part B prep): `kill.ps1` rewritten (banner, colour, dialog; `-NoDialog` for the smoke test
+  only); new `scripts\wait-signin.ps1`; `make-cmd.py` now writes only B2's six files; `python -I make-cmd.py` wrote
+  them to `%LocalAppData%\Wakeshot-harness\haik`. Smoke tests, with `LOCALAPPDATA` pointed at a scratch folder for the
+  `pwsh` runs only: `wait-signin.ps1` found the shell Explorer (pid 19640, started 18:15:58) and its RunOnce pass
+  (9706 at 18:16:37.290, as in B2's evidence) and returned in 1 s; `kill.ps1 -NoDialog` with no fake tray running gave
+  the STOP banner ("Found 0 ... Nothing was ended"), exit 1. The dialog call (`Popup`, Stop icon, system modal) shown
+  once with a 2 s timeout: returned -1 (closed by the timeout). `power_check fake-tray --plan-only` exit 0: values at
+  start and exit the same, RunOnce and guard name `<S2>\target\debug\wakeshot-tray.exe`, data folder
+  `%LocalAppData%\Wakeshot`; afterwards no data folder, no RunOnce value, no test plan. Scratch folders deleted.
+  Nothing of mine runs. Steps for Haik written ("Part B: B2 redo"). Status `blocked: waiting for Haik`.
 
 ## Result
 
-Part A done (2026-11-04); Part B not started (after the review).
+Part A done (2026-11-04); fix round of the review done (19:01); Part B prep done (19:08), Haik's B2 redo next.
+
+Fix round (review `docs/reviews/p2-6-runonce-keep.md`, 0 blockers, 0 majors, 6 minors):
+
+- Finding 1, fixed: the dry-run line is logged once per `FileNet` (`power/journal.rs:378`, `:551`); test
+  `dry_run_never_touches_run_once` now expects one line for two calls.
+- Finding 2, lean fix: a journal that does not read still gets no value. `docs/architecture.md:939` names the case and
+  the stronger fix with its trigger; test `no_safety_net_without_a_known_entry` (`executor.rs:1332`, renamed from
+  `no_safety_net_when_nothing_owned`) has an `Unreadable` start.
+- Finding 3, skipped (orchestrator): `README.md` holds someone else's uncommitted edits. Open (Found outside scope 5).
+- Finding 4, fixed: `docs/architecture.md:912` "a value that is there and right is only read".
+- Finding 5, fixed: section 8's row (`docs/architecture.md:1196`) is the apply's; before each command a failed write
+  or guard start only logs.
+- Finding 6, fixed (orchestrator's decision, for Haik's review): `keep_guard` (`executor.rs:253`) sets the value for
+  any journal that reads and holds a known entry, whatever its owner (`:264`), and starts a guard only for this tray's
+  own (`:285`). New test `another_owners_leftover_gets_the_value_not_a_guard` (`executor.rs:1390`);
+  `leftover_runs_only_for_gone_or_own_owner` now expects the value. Docs: `executor.rs:70`, `:241`;
+  `journal.rs:348`; architecture "Logon restore".
+- Checks: `rustfmt --edition 2024 --check` on both files pass; `cargo clippy -p wakeshot-windows --all-targets --locked
+  -- -D warnings` pass, without `--all-targets` pass; `cargo test -p wakeshot-windows --locked` 570 passed, 0 failed,
+  23 ignored. Mutation checks: each of the four fixes undone fails at least one test. `wakeshot-core` not run (no
+  model changed). Build folder deleted.
+- `docs/research.md`: the 17 ms RunOnce pass fact (Part A's finding).
+
+Part B prep: builds in `<S2>\target`, baseline saved, B2's step files with the timing waits in the scripts and a
+STOP or NOT READY that cannot be missed (Decisions 11 to 15), smoke-tested. Steps for Haik in "Part B: B2 redo".
+
+Part A, as reported before the review:
 
 What was done: while the journal reads and names this tray with a known entry, `PowerExecutor::keep_guard` now calls
 `set_run_once`, then `ensure_guard`, before each plan read, apply and restore. A value Windows deleted at a sign-in's
@@ -161,8 +311,9 @@ harmless). While the tray lives, no other process restores its journal: the guar
 gone, and `wakeshot restore` hands the job to the tray. A restore command may now write the value right before its own
 clean-up removes it. That costs two registry calls, and the value is there if a session end cuts the restore short.
 
-Open items:
+Open items (updated 2026-11-04 19:08):
 
-1. The orchestrator's narrow power safety check of this change, then its fixes.
-2. Part B (B2 redo with Haik), deliverables 5 and 6.
-3. Found outside scope 1 to 3 (dry-run log line every 10 s; section 8 row wording; the 17 ms fact for research).
+1. Haik's B2 redo ("Part B: B2 redo", "Steps for Haik"), then deliverable 6 by a new worker ("After Haik's steps").
+2. Haik's review of finding 6's fix (the value also for another owner's leftover; Decisions 9).
+3. Found outside scope 5: the README's gap list (review finding 3), once `README.md`'s other edits are committed.
+4. Done in the fix round: the review's findings 1, 2, 4, 5, 6 and Found outside scope 1 to 3.

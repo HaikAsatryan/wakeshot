@@ -908,9 +908,13 @@ the value before it runs the command (Microsoft, "Run and RunOnce Registry Keys"
 to that key, and its retries (step 7) are the only second chance. Explorer runs RunOnce once per sign-in, after every
 Run entry (39 to 65 s after sign-in on the test laptop, research "Power track manual checks"), so a value the tray sets
 before that pass is run by that same pass: restore mode finds the owner alive and exits, and the value is gone. So the
-tray sets it again before each plan read, apply and restore while it owns a known entry, as it replaces a guard that
-ended (`PowerExecutor::keep_guard`, `p2-6-runonce-keep`; a value that is there is only read): it is back within one
-plan read, 10 s while anything is owned.
+tray sets it again before each plan read, apply and restore while `journal.json` reads and holds a known entry, as it
+replaces a guard that ended (`PowerExecutor::keep_guard`, `p2-6-runonce-keep`; a value that is there and right is only
+read): it is back within one plan read, 10 s while anything is owned. This holds whatever the journal's owner: a
+leftover of another tray that this tray cannot restore yet (owner alive or Unknown, or a restore that keeps failing)
+gets the value too, so the next sign-in still restores it if this tray dies first; restore mode checks the owner, so
+for a live or Unknown one the value costs only a start that exits. Only a journal this tray owns gets a guard (a guard
+waits on this tray).
 Picked over a logon task (Nightcrew's way): one value, no task XML. Tested: restore mode's start from RunOnce, its
 journal read and its owner check (research "Power track manual checks"). Not tested yet: its restore of a gone owner's
 journal at sign-in (checklist 5).
@@ -932,7 +936,11 @@ deleted the RunOnce value before restore mode ran:
 
 Also until Wakeshot next starts, since there is no RunOnce value then: an OS crash, a power cut, or End task on tray
 and guard together in the up to 10 s between a sign-in's RunOnce pass and the tray's next plan read ("Logon restore"),
-or while the tray cannot write the value back (each command logs it).
+while the tray cannot write the value back (each command logs it), or while `journal.json` does not read (the tray
+then knows nothing of the file and skips the value; such reads fail rarely and briefly). Stronger, not built: keep the
+last read's answer and, on a failed read after one with a known entry, still set the value (a stale value is harmless:
+restore mode finds no journal or a live owner); change to it when a log shows journal reads failing for longer than one
+plan read.
 
 Until a reinstall, with no warning: an uninstall during a hold whose restore fails for the hook's whole 25 s. The exe
 is gone, hooks show no UI, and the uninstall removes the RunOnce value; the journal stays, so a reinstall's install
@@ -1185,7 +1193,7 @@ fallback. The one exception is `watch::read` (the watch thread's file reads, std
 |---|---|
 | Power request fails | log, notice "cannot keep the PC awake" |
 | Settings access denied (5 or 1260 from `PowerSettingAccessCheckEx` or a `PowerWrite*` call) | requests only for this run, one notice |
-| Journal load, lock or write, RunOnce value or guard start fails, with any code (also 5: an elevated `wakeshot restore` may hold the journal mutex) | nothing written; requests only for the episode; one notice (power safety review finding 8) |
+| Journal load, lock or write, RunOnce value or guard start fails in an apply, with any code (also 5: an elevated `wakeshot restore` may hold the journal mutex) | nothing written; requests only for the episode; one notice (power safety review finding 8). Before each plan read, apply and restore (`keep_guard`, section 5 "Logon restore"), a failed RunOnce write or guard start only logs, and the next command tries again |
 | Active plan changed before a write | nothing written; the next plan read handles the switch |
 | Active plan changed between the writes and `PowerSetActiveScheme` | no call; the writes are journaled; the plan switch restores them |
 | Plan list or active plan read fails in a restore | the run fails before any entry is dropped or written; retried |
