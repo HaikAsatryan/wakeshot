@@ -950,7 +950,8 @@ Registry values Wakeshot writes, all under HKCU, all removed by uninstall: `...\
 login, set by the install hook); `...\CurrentVersion\RunOnce\WakeshotRestore` (only while overriding). Windows itself
 writes `Control Panel\NotifyIconSettings\<id>` for the icon and a `NotifyIconGeneratedAumid_<id>` key for balloons.
 `store::AutoStart` is the one code that writes or removes the Run and RunOnce values (the hooks and the journal call
-it; review m12); `install` keeps only the Path entry.
+it; review m12), and at uninstall it also removes the Run value's `StartupApproved` switch value
+(`p6-uninstall-startup-approval`); `install` keeps only the Path entry.
 
 Velopack hooks (Phase 6, `hooks.rs`): the registry steps come first and the restore last, so a restore that hangs until
 Velopack's kill never leaves a Run value or a Path entry that names a deleted folder. Install (also Setup.exe over an
@@ -1191,7 +1192,8 @@ Checked 2026-11-03 on crates.io (research, "Phase 1 design checks").
 | `serde_json` | 1.0.154 | core, `wakeshot-windows` | file formats and agent files; the IO thread reads and writes the files |
 | `embed-resource` | 3.0.12 | both exes' `build.rs` | manifest, icons, version info |
 | `proptest` | 1.12.0 | core, declared as a dev-dependency | property tests |
-| `velopack` | 1.2.161 | tray only (`velo.rs`), pinned `=1.2.161` in the root `[workspace.dependencies]` since `p6-velopack-dependency` (`Cargo.lock` 80 to 181 packages); ARM64 builds need clang for `ring` | installer and updates; 1.3.39-g8d2844f is a pre-release |
+| `velopack` | 1.2.161 | tray only (`velo.rs`), pinned `=1.2.161` in the root `[workspace.dependencies]` since `p6-velopack-dependency` (`Cargo.lock` 80 to 181 packages, 160 since `p6-tray-size`); ARM64 builds need clang for `ring` | installer and updates; 1.3.39-g8d2844f is a pre-release |
+| `idna_adapter` | 1.0.0 | tray only, pinned `=1.0.0` in the root `[workspace.dependencies]` since `p6-tray-size`; never named in code | picks the IDNA back end with no Unicode data for velopack's `url`, so the 21 ICU packages leave the build; `url` then rejects non-ASCII host names, and the one URL the tray parses is ASCII (research, "Tray size") |
 | cron next time | none: our own code | core (`sources::cron`) | `sources/cron.rs` (`p4-cron`) copies Claude Code's own scheduler (parser, search, jitter; research "Cron checks"), so a due time is the one Claude Code picks; no `croner` or `jiff` |
 
 - `windows`: windows-rs moved its smaller crates to 0.100.0 on 2026-09-03 but has not published `windows` or

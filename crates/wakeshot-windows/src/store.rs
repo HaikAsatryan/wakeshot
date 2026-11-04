@@ -1,4 +1,5 @@
-//! The data folder, atomic file writes, named mutexes, and the Run and RunOnce values (architecture sections 4 and 6).
+//! The data folder, atomic file writes, named mutexes, the Run and RunOnce values, and the Run value's
+//! `StartupApproved` switch value (architecture sections 4 and 6).
 //!
 //! Owner: power track (`p3-store`). The signatures are contract: the sources and ship tracks use them.
 

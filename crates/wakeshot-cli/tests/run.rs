@@ -3,7 +3,7 @@
 //! Owner: sources track (`p4-cli-run`); fixes by `p6-int-dry-run-e2e`.
 //!
 //! Every run sets `WAKESHOT_DATA_DIR` (read by debug builds only) to a temp folder, so nothing touches
-//! `%LocalAppData%\Wakeshot`.
+//! `%LocalAppData%\Wakeshot`. A release build skips every test that starts the exe: its exe ignores the variable.
 
 use std::fs::File;
 use std::os::windows::process::CommandExt;
@@ -26,6 +26,15 @@ const HELPER: &str = "WAKESHOT_TEST_CTRL_C_HELPER";
 const SLEEPER: &str = "WAKESHOT_TEST_SLEEPER";
 /// `STATUS_CONTROL_C_EXIT`: the code of a process the default Ctrl+C handler ended.
 const CONTROL_C_EXIT: i32 = 0xC000_013A_u32 as i32;
+
+/// `true` when this test must not run: a release exe ignores `WAKESHOT_DATA_DIR` and would use the real data folder.
+fn release_build() -> bool {
+    if cfg!(debug_assertions) {
+        return false;
+    }
+    eprintln!("skipped: a release exe ignores {DATA_DIR} and would use the real data folder");
+    true
+}
 
 /// A fresh folder under the temp folder, removed on drop.
 struct Temp(PathBuf);
@@ -74,6 +83,9 @@ fn json_files(folder: &Path) -> Vec<PathBuf> {
 
 #[test]
 fn the_exe_exits_with_the_childs_whole_code() {
+    if release_build() {
+        return;
+    }
     let data = Temp::new("codes");
     for (raw, want) in [
         ("cmd /d /c exit 7", 7),
@@ -97,6 +109,9 @@ fn the_exe_exits_with_the_childs_whole_code() {
 
 #[test]
 fn dry_run_echo_hi_prints_hi_and_uses_the_dry_run_folder() {
+    if release_build() {
+        return;
+    }
     let data = Temp::new("dry-run");
     let out = wakeshot(&data.0, &["--dry-run", "run", "--"], "cmd /c echo hi");
     assert_eq!(out.status.code(), Some(0));
@@ -109,6 +124,9 @@ fn dry_run_echo_hi_prints_hi_and_uses_the_dry_run_folder() {
 
 #[test]
 fn quotes_and_spaces_reach_the_child_as_typed() {
+    if release_build() {
+        return;
+    }
     let data = Temp::new("typed");
     let said = r#""a  b" c\d\"e "" \\x\\" end"#;
     let out = wakeshot(&data.0, &["run", "--"], &format!("cmd /d /c echo {said}"));
@@ -121,6 +139,9 @@ fn quotes_and_spaces_reach_the_child_as_typed() {
 
 #[test]
 fn a_program_not_found_exits_127() {
+    if release_build() {
+        return;
+    }
     let data = Temp::new("missing");
     let out = wakeshot(&data.0, &["run", "--"], "wakeshot-test-no-such-program x");
     assert_eq!(out.status.code(), Some(127));
@@ -133,6 +154,9 @@ fn a_program_not_found_exits_127() {
 
 #[test]
 fn ctrl_c_ends_the_child_and_wakeshot_exits_with_its_code() {
+    if release_build() {
+        return;
+    }
     let data = Temp::new("ctrl-c");
     // A console with no window of its own: Ctrl+C sent there reaches only the processes this test starts.
     let out = Command::new(std::env::current_exe().unwrap())

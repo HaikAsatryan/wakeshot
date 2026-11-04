@@ -166,7 +166,7 @@ those one at a time across all tracks.
 | `p6-startup-switch-check` | no | `p6-install-e2e` | done (06:23: the off choice survives Setup over the install by the keys; uninstall leaves the StartupApproved value) |
 | `p6-tray-size` | no (stop 2, a dependency change, waits for the orchestrator) | `p6-int-update-wiring` | done (07:01: release tray 3.95 to 2.71 MB, CLI 0.67 to 0.56 MB) |
 | `p6-uninstall-startup-approval` | no (orchestrator decision for his review) | `p6-startup-switch-check` | done (06:45: 1287 workspace tests; `e2e.ps1` 88 of 88) |
-| `p6-small-fixes` | no | `p6-tray-size` | in progress (started 07:02) |
+| `p6-small-fixes` | no | `p6-tray-size` | done (07:08) |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
 dependency 110K, pack and release 110K, install e2e 130K, winget 60K, README 70K, Pages 60K. About 880K in all.
@@ -390,3 +390,7 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   (CI builds the shipped exes; `trim-paths` still unstable).
 - 2026-11-04 07:02 (orchestrator `wakeshot-12`): new card `p6-small-fixes` (a release guard for the CLI run tests,
   one shared `taskbar_dpi`, three doc lines); line 29's velopack package count set to 93 here.
+- 2026-11-04 07:08: `p6-small-fixes` done: the CLI `run.rs` tests skip in a release build (no other test file lacked
+  the guard); one `taskbar_dpi` (`tray/icon.rs`, used by `notify.rs`); `store.rs` module doc and `architecture.md`
+  sections 6 and 11 (the switch value, `idna_adapter`, 160 lock packages). fmt, clippy, debug workspace tests pass.
+  2 worker decisions for Haik's review in the card.

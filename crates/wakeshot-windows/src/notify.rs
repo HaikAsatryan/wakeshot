@@ -14,17 +14,18 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use wakeshot_core::text::{self, NoticeClick, NoticeText};
 use wakeshot_core::view::Notice;
 use windows::Win32::Foundation::{GetLastError, HWND, SetLastError, WIN32_ERROR};
-use windows::Win32::UI::HiDpi::{GetDpiForSystem, GetDpiForWindow, GetSystemMetricsForDpi};
+use windows::Win32::UI::HiDpi::GetSystemMetricsForDpi;
 use windows::Win32::UI::Shell::{
     NIF_GUID, NIF_INFO, NIIF_INFO, NIIF_LARGE_ICON, NIIF_NONE, NIIF_NOSOUND, NIIF_USER,
     NIIF_WARNING, NIM_MODIFY, NOTIFY_ICON_INFOTIP_FLAGS, NOTIFYICONDATAW, Shell_NotifyIconW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateIconFromResourceEx, DestroyIcon, FindWindowW, HICON, LR_DEFAULTCOLOR, SM_CXICON,
+    CreateIconFromResourceEx, DestroyIcon, HICON, LR_DEFAULTCOLOR, SM_CXICON,
 };
-use windows::core::{GUID, PCWSTR, w};
+use windows::core::GUID;
 
 use crate::WinError;
+use crate::tray::icon::taskbar_dpi;
 use crate::tray::{IconIdentity, art};
 
 /// Shows one notice, so a later move from balloons to registered toasts changes only the implementation.
@@ -327,20 +328,6 @@ fn large_icon_size() -> u32 {
         _ => (32 * dpi + 48) / 96,
     };
     px.clamp(16, 256)
-}
-
-/// The primary taskbar's DPI, where the banner shows, else the system DPI. As `tray::icon` reads it: not this
-/// process's DPI, which Windows fixes at sign-in (research, "`LoadIconMetric` follows the system DPI").
-fn taskbar_dpi() -> u32 {
-    // SAFETY: plain calls; `GetDpiForWindow` checks the handle and gives 0 for a bad one.
-    let dpi = unsafe { FindWindowW(w!("Shell_TrayWnd"), PCWSTR::null()) }
-        .map_or(0, |h| unsafe { GetDpiForWindow(h) });
-    if dpi != 0 {
-        dpi
-    } else {
-        // SAFETY: plain call.
-        unsafe { GetDpiForSystem() }
-    }
 }
 
 /// A poisoned lock only means a panic elsewhere, and the panic hook aborts in every profile; the data is still whole.

@@ -872,8 +872,10 @@ fn small_icon_px(dpi: u32) -> u32 {
 }
 
 /// The taskbar window's DPI (its monitor's, since Explorer is per-monitor aware), else the system DPI. Not the DPI of
-/// this hidden window, which never got `WM_DPICHANGED` (research, "`LoadIconMetric` follows the system DPI").
-fn taskbar_dpi() -> u32 {
+/// this hidden window, which never got `WM_DPICHANGED`, nor this process's, which Windows fixes at sign-in (research,
+/// "`LoadIconMetric` follows the system DPI"). `notify` sizes the banner's large icon by it too: the banner shows on
+/// that taskbar.
+pub(crate) fn taskbar_dpi() -> u32 {
     // SAFETY: plain calls; `GetDpiForWindow` checks the handle and gives 0 for a bad one.
     let dpi = unsafe { FindWindowW(w!("Shell_TrayWnd"), PCWSTR::null()) }
         .map_or(0, |h| unsafe { GetDpiForWindow(h) });
