@@ -267,3 +267,144 @@ notice title); 313 to 333 (the CLI help, verbatim, checked by script); 340 to 34
 - Phase 8: the winget lines (`winget:` lines 10 and 116); drop the "not released" line 14 at the first release; read
   the rival stars again if the final pass is on a later day.
 - Found outside scope 1 to 6.
+
+## Round 2: the comparison, Haik's ask (2026-11-04)
+
+Status: done (round 2). Written by the orchestrator (session `wakeshot-12`). Needs Haik: he reads the new table. Owns
+`README.md` (all of it this round), a dated note in `docs/research/launch.md` part 1, and this section.
+
+Haik's words (2026-11-04): "I do not like that comparison table a lot. If we compare ourselves then we should only
+compare with multi thousand star and extremely popular 2-3 options, and it is not important whether its agent or
+program specific or not. I want to compete with popular options. And comparison should be on features to show that
+besides simple insomnia or keep awake PowerToys feature we give this this and this." `docs/product.md` (README line)
+now says so.
+
+1. Pick 2 or 3 keep-awake options that are extremely popular: many thousands of GitHub stars, or for tools not on
+   GitHub a verifiable large user count (downloads, store ratings). Agent aware or not does not matter. Tools that run
+   on Windows (Wakeshot is Windows only; macOS is planned). PowerToys Awake is the obvious first; research the others
+   (for example Caffeine by Zhorn Software, Don't Sleep, Mouse Jiggler; check what Haik may mean by "insomnia"; say
+   what you checked and why each is in or out). Read each fact from the tool's own page or repo, and give one read
+   date. The small agent-aware tools (LidGuard, Agents Don't Sleep, Nightcrew) leave the table; drop them from the
+   README unless one line elsewhere still helps the reader (say which, or none).
+2. The table compares features, rows as the reader's questions, so it shows plainly: the popular tools keep the PC
+   awake while you tell them to; Wakeshot also does this, this and this. Wakeshot's rows come from `docs/product.md`
+   as it is now (note: after a closed-lid work end Wakeshot puts the laptop to sleep, not hibernate; a lost journal
+   goes to Windows defaults; both 2026-11-04). Parity rows (keep awake on demand, timers, keep screen on) stay short.
+   Honest gaps too (for example: Windows only, new and small).
+3. Also fix the icon and brand lines (the Sunrise replaced the Cup, `docs/brand.md`), which docs pass round 5 handed
+   over. Keep the media spots and the lid and sleep text as they are unless a line is now wrong by `product.md`.
+4. Same checks as the draft (links, help block equal to `args.rs`, top line count); lines in the card at most 120
+   characters; plain short English, no em dashes.
+
+### Log
+
+- 2026-11-04: round 2 written by the orchestrator (session `wakeshot-12`).
+- 2026-11-04 11:33: started by `wakeshot-worker`. Reading `product.md`, `brand.md`, `launch.md` part 1.
+- 2026-11-04 11:39: read so far (`gh api` at 11:36): PowerToys 140,521 stars; no other Windows keep-awake repo has
+  thousands of stars (Mouse Jiggler 1,459; KeepingYouAwake 7,029 is macOS only). Chocolatey downloads: Caffeine
+  367,663, Don't Sleep 38,324 plus 20,340 portable, Mouse Jiggler 26,452 (page; 26,163 in a cached list). Leaning to
+  PowerToys Awake, Caffeine, Don't Sleep. Orchestrator note: also fix the media comments at README lines 3 and 57 to
+  59 (art is decided: the Sunrise).
+- 2026-11-04 11:45: rival facts read from each tool's own page (Awake and install pages, Zhorn's Caffeine page and home
+  page, SoftwareOK's Don't Sleep page, FAQ 1 and History). README lines now wrong by `product.md` found: hibernate
+  at closed-lid work end, battery floor and failed lock (now sleep); the damaged journal limit (now Windows defaults);
+  the timeouts Wakeshot writes after a closed-lid work end; three notice titles (`text.rs` as it is now). Editing.
+- 2026-11-04 11:48: README edited; every rival fact checked again in the raw page text (`curl`); dated note added
+  to `launch.md` part 1 ("Round 2: popular tools only"). Checks run (Result).
+- 2026-11-04 11:50: decided by the worker, for Haik's review:
+  1. Rivals: PowerToys Awake, Caffeine (Zhorn Software), Don't Sleep (SoftwareOK). Rule: Windows keep-awake tools
+     with the largest public count, GitHub stars or else Chocolatey downloads. Change it when a tool with a larger
+     count anyone can check turns up (Microsoft Store rating counts were not checked), or Haik names another.
+  2. Out: Mouse Jiggler (fewer downloads than either, and it fakes mouse moves); "Insomnia" (two tools by that name,
+     neither with a count: `launch.md`); LidGuard, Agents Don't Sleep and Nightcrew leave the README whole. No line
+     elsewhere keeps them: next to the popular three they only send readers to tiny rivals. Change it when Haik wants
+     an "other agent-aware tools" line.
+  3. The first row is how popular each is, in its own unit, with "new in 2026" for Wakeshot: it shows why these three,
+     and Wakeshot's honest gap.
+  4. Rows are the reader's questions. Parity rows say "yes". Two rows in bold, what only Wakeshot does: awake while
+     an AI agent works, and a closed laptop working. Lock, battery, settings and updates are not bold: a rival has
+     something close.
+  5. "no" only where the tool's own page says so, or where none of its listed methods can do it for a reason Microsoft
+     documents (the lid row, explained under the table); "not listed" where the page says nothing. Caffeine's "Keep the
+     screen on" says why ("it fakes a key press"): the page names only the lock and the screensaver.
+  6. Rows dropped: stars as such, "Built with", "ARM64 build" (now in "Runs on"), "Idle RAM and CPU" (no rival
+     publishes one; Wakeshot's numbers stay in the top line) and "Edits your agent's config" (no popular rival touches
+     an agent). Kept a "Download" row: a fair question and an honest gap; its Wakeshot cell stays a media spot. Media
+     spots: 9, was 10.
+  7. Below the table: why no rival keeps a closed laptop working, and "Where the others lead" (years of use, Windows
+     10, tiny downloads, Don't Sleep's shutdown features; Wakeshot new, Windows 11 only, Claude Code only).
+  8. Lines wrong by `product.md`, fixed: closed-lid work end, battery floor and failed lock now sleep, with hibernate
+     only as the fallback ("A night with Wakeshot" 3 and 5; "Lid closed, lock and battery"); "What it changes" gets
+     the 1 minute screen and sleep timeouts and its summary says "a few power settings"; the damaged journal leaves
+     the crash list for its own paragraph (Windows defaults); updates wait for no "closed-lid sleep" pending; "one
+     user" says "no lock, no sleep"; the credit line says "from other tools".
+  9. Notice table follows `text.rs` as it is now, which `p2-6-sleep-route` is still changing: "The PC did not go to
+     sleep" replaces "Wakeshot could not hibernate the PC"; "Power settings set to Windows defaults" added; "Check
+     your lid and sleep settings" now means the reset failed too.
+  10. Media comments (orchestrator note): the loop shows the sun rising and setting (`docs/brand.md`, "The idea") with
+      new alt text; the three icon spots name the Sunrise art in `tray/art.rs` and carry alt text from `product.md`.
+- 2026-11-04 11:51: orchestrator note 2 (the "hibernates" lines): already fixed under decision 8; trimmed them and
+  added two `<!-- sleep-route: -->` comments that name every line to check again after `p2-6-sleep-route`. Checks run
+  again; scratch files of this round deleted (the two check scripts stay).
+
+### Result (round 2)
+
+Status: done. Needs Haik: he reads the new table and decisions 1 to 10 (Log, 11:50). The card as a whole stays
+blocked on `p5-haik-check` and `p6-media`, as before.
+
+**Done.** The comparison is now Wakeshot against PowerToys Awake (140,521 GitHub stars, for all of PowerToys),
+Caffeine (367,663 Chocolatey downloads) and Don't Sleep (38,324 plus 20,340 portable), on 13 feature rows asked as
+the reader's questions. LidGuard, Agents Don't Sleep and Nightcrew are gone from the README. Lines wrong by
+`product.md` fixed (sleep, not hibernate; lost journal to Windows defaults; the 1 minute timeouts; notice titles).
+Sunrise media comments in place. README: 492 lines, 9 media spots.
+
+Files changed: `README.md`; `docs/research/launch.md` (part 1, new "Round 2: popular tools only"); this section.
+
+| Check | Outcome |
+|---|---|
+| Relative links and anchors (`check_readme.py`) | pass: 22 of 22 |
+| No em or en dash, no emoji or other non-ASCII; UTF-8, LF, no BOM (same script) | pass |
+| External links (`--web`, one GET each, 11:47) | pass: 16 of 16 unique URLs gave 200; none added since |
+| Help block equals `USAGE` in `args.rs` (`check_help.py`) | pass |
+| Top at most 15 lines, image tags not counted | pass: 13 non-blank before the table rows, 9 before the heading |
+| GitHub render (`gh api markdown`, gfm) | 4 tables, 9 `<details>`; comparison 14 rows of 5 cells; no comment shows |
+| Every rival fact in the raw page text (`curl`), not only a fetch summary | pass; Chocolatey counts from page HTML |
+| Round 2 lines in this card and the `launch.md` note at most 120 characters, ASCII only | pass |
+
+**Each table row and its source.** Rival cells: `launch.md` part 1, "Round 2: popular tools only" (Caffeine and
+Don't Sleep bullets; PowerToys there and in "Facts per rival"). Wakeshot cells: `product.md`.
+
+| Row | Rival source | Wakeshot source (`product.md`) |
+|---|---|---|
+| How popular is it? | gh stars; Chocolatey page counts | not released (README top) |
+| Keep awake for a set time, or until I turn it off? | Awake modes; `-activefor`; Don't Sleep timer | UX, Keep awake |
+| Keep the screen on too? | Keep screen on; F15 key press (reason in the cell); monitor off option | UX |
+| Awake while my AI agent works (bold) | none on any page | What keeps the PC awake |
+| Awake while a build or a script runs? | `--pid`; `-watchwindow`, `-cpu`; CPU and network load | `wakeshot run` |
+| Lid closed (bold) | Awake page, FAQ 1: no setting changed; Caffeine: no switch; lid fact | Power behavior |
+| Still locks when I walk away? | Awake "lock your computer"; Caffeine "won't lock"; none | Never lower security |
+| Step back when the battery runs low? | none; `-onac`; History 5.11 and 6.77 | Battery floor |
+| Does it change my power settings? | Awake page; none listed; FAQ 1 | Power behavior; User settings safety |
+| Updates itself? | install page; none listed; History "optional Auto Update Service" | Distribution, Velopack |
+| Runs on | install page; "x86 and x64" download; "Suitable for" | Platform and stack |
+| Download | v0.102.3001 assets (gh); caffeine.zip 306k; "Download (267 KB)" | media spot (`p6-media`) |
+| Price | MIT (gh); Zhorn "freeware" line; "small Freeware" | MIT, free |
+
+Under the table: the lid fact (`research.md`, "Windows power facts"); "Where the others lead" from the same note
+(Windows 10 lines, sizes, "Schedule computer to shut down", "prevent system shutdown").
+
+**Open items.**
+
+- After `p2-6-sleep-route`: the two `sleep-route:` comments in the README ("What it changes" paragraph on the 1
+  minute timeouts; lid bullets, "A night with Wakeshot" 3 and 5, the notice table).
+- From the draft, unchanged: `p6-media` spots (9 now; the Download cell is one), `p5-haik-check` words, the
+  SmartScreen `todo:`, the `winget:` and `release:` comments. Read the counts again if the final pass is on a later
+  day.
+
+**Found outside scope (round 2).**
+
+1. `docs/product.md` line 3, "Status on 2026-11-03: ... no product code yet", is stale. Its README line is right.
+2. The draft's "Found outside scope" 4 (the dot in the pack id) is fixed in `product.md` now.
+3. The crash gap text (`product.md` "User settings safety", README "Limits") names only lid Do nothing and battery
+   sleep Never. A crash during a closed-lid sleep step would leave the 1 minute timeouts too (inferred from
+   `product.md`; not verified). `architecture.md` "Gap left" is `p2-6-sleep-route`'s this round; README not changed.

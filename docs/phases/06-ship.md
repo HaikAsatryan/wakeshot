@@ -421,3 +421,8 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   `GITHUB_TOKEN` event starts no workflow; its `--final` check fails until the 9 spots are filled). actionlint 0
   errors; WCAG AA for every text colour pair. 10 worker decisions for Haik's review. Waits: `p6-media`,
   `p5-haik-check` words, `p2-6-sleep-route` wording, README comparison, SmartScreen words, winget line.
+- 2026-11-04 11:52: `p6-readme` round 2 done (Haik's ask: compare only with very popular tools, on features): PowerToys
+  Awake (140,521 stars), Caffeine (367,663 Chocolatey downloads), Don't Sleep (38,324 plus 20,340 portable); 13 rows,
+  the agent and lid rows in bold; LidGuard, Agents Don't Sleep and Nightcrew left the README. Lines wrong by
+  `product.md` fixed (sleep, not hibernate; the lost journal; notice titles), two marked to check after
+  `p2-6-sleep-route`. 10 worker decisions for Haik's review; Haik reads the table. `product.md` line 3 status updated.

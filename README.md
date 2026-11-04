@@ -1,6 +1,6 @@
 # Wakeshot
 
-<!-- media: icon loop. One centered <picture> block here: a dark and a light GIF (prefers-color-scheme), 4 to 6 s, under 1 MB, the tray icon going idle to working to idle, made from the final icon art, alt text "Wakeshot's tray icon wakes while an agent works and rests when it is done". Files under media/ from p6-media; the art from p5-haik-check. Takes 1 line here. -->
+<!-- media: icon loop. One centered <picture> block here: a dark and a light GIF (prefers-color-scheme), 4 to 6 s, under 1 MB, the tray icon going idle to holding to idle: the sun rises over the horizon when an agent starts and sets when it is done (docs/brand.md, "The idea"), alt text "Wakeshot's tray icon: the sun rises while an agent works and sets when it is done". Files under media/ from p6-media; the art is the Sunrise in crates/wakeshot-windows/src/tray/art.rs. Takes 1 line here. -->
 
 **Your PC stays awake while your AI agent works. Then it sleeps as usual, with your own power settings back.**
 Keep awake on demand comes in the same menu, so you never need a second tool.
@@ -15,32 +15,33 @@ Knows Claude Code today, with no hooks and no edits to its settings. Codex CLI a
 
 ## How it compares
 
-PowerToys Awake is the most-starred keep-awake tool on Windows. LidGuard and Agents Don't Sleep are the two
-most-starred tools that watch AI agents and ship a Windows release. Every rival cell links to its source, all read
-2026-11-04.
+PowerToys Awake, Caffeine and Don't Sleep are the most popular keep-awake tools for Windows that we could count
+(first row). They keep the PC awake while you tell them to, and so does Wakeshot. The two rows in bold are what only
+Wakeshot does. Each rival cell links to the tool's own page or package; all were read on 2026-11-04.
 
-| | Wakeshot | PowerToys Awake | LidGuard | Agents Don't Sleep |
+| | Wakeshot | PowerToys Awake | Caffeine | Don't Sleep |
 |---|---|---|---|---|
-| Stars | new | [140,491, for all of PowerToys](https://github.com/microsoft/PowerToys) | [13](https://github.com/airtaxi/LidGuard) | [10](https://github.com/itsmbaqer/agents-dont-sleep) |
-| Runs on | Windows 11; macOS later | [Windows](https://learn.microsoft.com/en-us/windows/powertoys/install) | [Windows, Linux, macOS](https://github.com/airtaxi/LidGuard) | [Windows, macOS, Linux](https://github.com/itsmbaqer/agents-dont-sleep) |
-| Built with | Rust and `windows-rs`, no runtime | [C# on .NET 10, inside PowerToys](https://github.com/microsoft/PowerToys/blob/main/src/Common.Dotnet.props) | [C# .NET 10 NativeAOT, a .NET tool](https://github.com/airtaxi/LidGuard) | [Rust and Tauri, with a web UI](https://github.com/itsmbaqer/agents-dont-sleep/blob/HEAD/src-tauri/Cargo.toml) |
-| Download, x64 | <!-- media: Wakeshot's x64 Setup.exe size in MB from p6-media, linked to its method in docs/research.md --> | [323.9 MB, all of PowerToys](https://github.com/microsoft/PowerToys/releases/tag/v0.102.3001) | [25.3 MB](https://www.nuget.org/packages/lidguard.win-x64), plus the [.NET SDK](https://learn.microsoft.com/en-us/dotnet/core/tools/global-tools) | [1.9 MB](https://github.com/itsmbaqer/agents-dont-sleep/releases/tag/v0.4.0) |
-| ARM64 build | yes, native | [yes](https://github.com/microsoft/PowerToys/releases/tag/v0.102.3001) | [yes](https://www.nuget.org/packages/lidguard.win-arm64) | [no](https://github.com/itsmbaqer/agents-dont-sleep/releases/tag/v0.4.0) |
-| Idle RAM and CPU | <!-- media: Wakeshot's idle RAM and CPU from p6-media, linked to its method in docs/research.md --> | [not published; 14.3 MB private memory in a maintainer's test harness](https://github.com/microsoft/PowerToys/pull/51181) | [not published](https://github.com/airtaxi/LidGuard) | [not published](https://github.com/itsmbaqer/agents-dont-sleep) |
-| Knows when an agent works | Claude Code, from its own status files; any command through `wakeshot run`; scripts through hold files | [no: a timer, a time or a process id](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [Codex, Claude Code, Copilot CLI, OpenCode; tested: Codex](https://github.com/airtaxi/LidGuard) | [8 agents; tested end to end: Claude Code](https://github.com/itsmbaqer/agents-dont-sleep) |
-| Edits your agent's config | no | [no](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [yes, adds hooks](https://github.com/airtaxi/LidGuard) | [yes, adds hooks](https://github.com/itsmbaqer/agents-dont-sleep) |
-| Keeps working with the lid closed | yes, while something holds | [no](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [yes, optional](https://github.com/airtaxi/LidGuard) | [yes](https://github.com/itsmbaqer/agents-dont-sleep) |
-| Puts your power settings back | yes: after each hold, at quit, after a crash | [changes none](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [yes; after a crash, only at its next run](docs/research/rivals-nightcrew-lidguard.md#32-edge-case-checklist) | [yes, also after a crash](https://github.com/itsmbaqer/agents-dont-sleep/blob/HEAD/SECURITY.md) |
-| Battery floor | Windows' own energy saver level | [none listed](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [no](docs/research/rivals-nightcrew-lidguard.md#4-lid-closed-behavior) | [15% by default](https://github.com/itsmbaqer/agents-dont-sleep) |
-| Locks a closed laptop | yes | [n/a: no lid support](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [no](docs/research/rivals-nightcrew-lidguard.md#4-lid-closed-behavior) | [yes, by default](https://github.com/itsmbaqer/agents-dont-sleep) |
-| Updates itself | yes, only while nothing holds | [checks, then shows a notice](https://learn.microsoft.com/en-us/windows/powertoys/install) | [no: `dotnet tool update` by hand](https://learn.microsoft.com/en-us/dotnet/core/tools/global-tools) | [no updater found](https://github.com/itsmbaqer/agents-dont-sleep) |
-| Install | per user, no admin | [per user or machine-wide](https://learn.microsoft.com/en-us/windows/powertoys/install) | [per user](https://learn.microsoft.com/en-us/dotnet/core/tools/global-tools) | [per user](https://github.com/itsmbaqer/agents-dont-sleep/blob/HEAD/src-tauri/tauri.conf.json) |
-| License, price | MIT, free | [MIT, free](https://github.com/microsoft/PowerToys) | [MIT, free](https://github.com/airtaxi/LidGuard) | [MIT, free](https://github.com/itsmbaqer/agents-dont-sleep) |
+| How popular is it? | new in 2026 | [140,521 GitHub stars, for all of PowerToys](https://github.com/microsoft/PowerToys) | [367,663 Chocolatey downloads](https://community.chocolatey.org/packages/caffeine) | [38,324 Chocolatey downloads](https://community.chocolatey.org/packages/dontsleep), plus [20,340 portable](https://community.chocolatey.org/packages/dontsleep.portable) |
+| Keep the PC awake for a set time, or until I turn it off? | yes | [yes](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [yes](https://www.zhornsoftware.co.uk/caffeine/) | [yes](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
+| Keep the screen on too? | yes, if you ask | [yes, if you ask](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [yes, by default: it fakes a key press](https://www.zhornsoftware.co.uk/caffeine/) | [yes, if you ask](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
+| **Stay awake on its own while my AI agent works, then sleep as usual?** | yes: Claude Code today; Codex CLI and Copilot CLI next | [no](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [no](https://www.zhornsoftware.co.uk/caffeine/) | [no](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
+| Stay awake while a build or a script runs? | yes: `wakeshot run -- <command>`, or a hold file from any script | [until a process ends, from the command line (`--pid`)](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [while a window with a given title is open, or until CPU use drops](https://www.zhornsoftware.co.uk/caffeine/) | [until CPU or network use drops; then it can also sleep or shut down the PC](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
+| **Keep a laptop working with the lid closed?** | yes, while something needs it, and locked; it sleeps once the work is done | [no](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [no](https://www.zhornsoftware.co.uk/caffeine/) | [no](https://www.softwareok.com/?seite=faq-DontSleep&faq=1) |
+| Does my PC still lock when I walk away? | yes: Windows locks it as usual; with the lid closed or Keep screen on, Wakeshot locks it | [not listed; its page says to lock the PC yourself](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [no, by default: its key presses stop the lock](https://www.zhornsoftware.co.uk/caffeine/) | [not listed](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
+| Step back when the battery runs low? | yes, at Windows' own energy saver level | [not listed](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [can work only while plugged in (`-onac`)](https://www.zhornsoftware.co.uk/caffeine/) | [can quit or sleep the PC at a battery level you set](https://www.softwareok.com/?seite=Microsoft/DontSleep/History) |
+| Does it change my power settings? | yes, but only the lid, sleep and screen settings, only while needed; put back after, and your own change wins | [no](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [none listed](https://www.zhornsoftware.co.uk/caffeine/) | [no](https://www.softwareok.com/?seite=faq-DontSleep&faq=1) |
+| Updates itself? | yes, only while nothing needs the PC awake | [checks, then shows a notice](https://learn.microsoft.com/en-us/windows/powertoys/install) | [not listed](https://www.zhornsoftware.co.uk/caffeine/) | [an optional auto update](https://www.softwareok.com/?seite=Microsoft/DontSleep/History) |
+| Runs on | Windows 11, x64 and ARM64; macOS later | [Windows 10 and 11, x64 and ARM64](https://learn.microsoft.com/en-us/windows/powertoys/install) | [Windows, x86 and x64](https://www.zhornsoftware.co.uk/caffeine/) | [Windows 7 to 11, x86 and x64](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
+| Download | <!-- media: Wakeshot's x64 Setup.exe size in MB from p6-media, linked to its method in docs/research.md --> | [323.9 MB, all of PowerToys](https://github.com/microsoft/PowerToys/releases/tag/v0.102.3001) | [306 KB zip](https://www.zhornsoftware.co.uk/caffeine/) | [267 KB](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
+| Price | free, open source (MIT) | [free, open source (MIT)](https://github.com/microsoft/PowerToys) | [free (freeware)](https://www.zhornsoftware.co.uk/) | [free (freeware)](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
 
-Where the others lead today: LidGuard and Agents Don't Sleep know more agents and also run on macOS and Linux, and
-Agents Don't Sleep's installer is smaller. Where Wakeshot differs: it reads Claude Code's own status files instead of
-adding hooks to your agent's config, and it updates itself, only between holds. Next to LidGuard it adds a lock and a
-battery floor; next to PowerToys Awake, it knows when your agent works and keeps a closed laptop working.
+Why no rival keeps a closed laptop working: Windows takes a lid close as you asking for sleep, and no keep-awake
+request can stop that; only the lid setting can ([Windows power facts](docs/research.md#windows-power-facts)).
+None of the three lists an option to change it.
+
+Where the others lead: years of use and many users. PowerToys Awake and Don't Sleep run on Windows 10 too, and
+Caffeine and Don't Sleep are tiny downloads (306 KB and 267 KB). Don't Sleep can also block a shutdown and shut the
+PC down on a schedule. Wakeshot is new, runs on Windows 11 only and knows only Claude Code today.
 
 ## See it work
 
@@ -54,9 +55,9 @@ The icon tells you what is going on, and the tooltip names what holds the PC awa
 
 | Icon | State | The tooltip says | What it means |
 |---|---|---|---|
-| <!-- media: holding icon, light and dark, from p5-haik-check's art --> | Holding | `Holding awake: Claude Code (1 session)` | Something needs the PC. It stays awake, and closing the lid does not stop it. |
-| <!-- media: idle icon, light and dark, from p5-haik-check's art --> | Idle | `Not holding, the PC sleeps as usual` | Automatic is on, and nothing needs the PC right now. |
-| <!-- media: off icon, light and dark, from p5-haik-check's art --> | Off | `Automatic is off, the PC sleeps as usual` | Wakeshot watches nothing. Keep awake still works. |
+| <!-- media: holding icon, light and dark, the Sunrise art (crates/wakeshot-windows/src/tray/art.rs), alt text "A risen sun with rays" --> | Holding | `Holding awake: Claude Code (1 session)` | Something needs the PC. It stays awake, and closing the lid does not stop it. |
+| <!-- media: idle icon, light and dark, the Sunrise art (crates/wakeshot-windows/src/tray/art.rs), alt text "An empty sun on the horizon" --> | Idle | `Not holding, the PC sleeps as usual` | Automatic is on, and nothing needs the PC right now. |
+| <!-- media: off icon, light and dark, the Sunrise art (crates/wakeshot-windows/src/tray/art.rs), alt text "The empty sun, struck through" --> | Off | `Automatic is off, the PC sleeps as usual` | Wakeshot watches nothing. Keep awake still works. |
 
 ### A night with Wakeshot
 
@@ -65,11 +66,11 @@ The icon tells you what is going on, and the tooltip names what holds the PC awa
 2. **You close the lid.** A short chime says the laptop keeps running, and Wakeshot locks it, so a closed laptop
    never runs unlocked.
 3. **Claude finishes in the night.** Wakeshot puts your lid and sleep settings back at once. After 5 minutes with no
-   input it plays a soft "going to sleep" sound and hibernates the laptop.
+   input it plays a soft "going to sleep" sound and puts the laptop to sleep.
 4. **Morning.** You open the lid and sign in. A notice says how long the PC ran with the lid closed, and what kept it
    running.
 5. **The battery ran low instead?** Below Windows' own energy saver level, Wakeshot steps back at once, puts your
-   settings back and hibernates the closed laptop after 5 minutes with no input.
+   settings back and puts the closed laptop to sleep after 5 minutes with no input.
 
 No window, no settings page, nothing to learn: a tray icon, one menu, a few notices and a small command line.
 
@@ -157,7 +158,7 @@ reboot.
 ### What it changes on your PC
 
 <details>
-<summary>One power request, three power settings, and how your own values come back</summary>
+<summary>One power request, a few power settings, and how your own values come back</summary>
 
 When nothing holds, Wakeshot changes nothing: your PC behaves as if Wakeshot were not there.
 
@@ -177,6 +178,12 @@ The facts and our tests behind the table: [Windows power facts](docs/research.md
 them also when plugged in, so unplugging, or a USB-C dock that drops power for a few seconds, never meets the battery
 rule first. Sleep while plugged in is never touched: there a power request is enough. While a hold runs, Windows
 Settings shows these values; that is Wakeshot, and they go back when the hold ends.
+
+**After work ends with the lid closed**, Wakeshot puts the laptop to sleep, where Windows would have put it. Apps
+cannot start sleep on a Modern Standby laptop (most laptops of the last years), so Wakeshot sets the screen and sleep
+timeouts of the plan in use to 1 minute where yours are longer, and Windows' own idle sleep does the rest. They go
+back when you open the lid, unlock after a wake, at any input, when a new hold starts and at every point below.
+<!-- sleep-route: check this paragraph against p2-6-sleep-route's Result and architecture.md once that card is done. -->
 
 How your values come back:
 
@@ -219,19 +226,20 @@ Wakeshot never lowers your security.
 - **Unplug a closed laptop that runs only because of Wakeshot.** It locks once the laptop has been on battery for
   30 seconds, so a dock's short power drop does not lock you while you work on the external screen.
 - **If the lock fails.** Wakeshot tries once more. If that fails too, it stops holding, puts your settings back and
-  hibernates the laptop after 5 minutes with no input, so a closed laptop never runs unlocked in a bag.
+  puts the laptop to sleep after 5 minutes with no input, so a closed laptop never runs unlocked in a bag.
 - **Work ends with the lid closed.** Your settings come back at once. After 5 minutes with no input, a short "going to
-  sleep" sound plays, then Wakeshot hibernates the laptop. Open the lid during the sound to stop it. Typing on an
-  external screen counts as input, so a docked laptop is not put to sleep under your hands. If hibernate is off or
-  fails, a notice says so, and Windows will most likely sleep it at your usual sleep time; until the lid opens,
-  Wakeshot locks it whenever it is left idle for 5 minutes.
+  sleep" sound plays and Wakeshot puts the laptop to sleep ([how](#what-it-changes-on-your-pc)). Open the lid during
+  the sound to stop it. Typing on an external screen counts as input, so a docked laptop is not put to sleep under
+  your hands. If it has not slept 5 minutes later, Wakeshot hibernates it. If hibernate is off or fails, a notice says
+  so, and until the lid opens Wakeshot locks it whenever it is idle for 5 minutes.
+  <!-- sleep-route: check this bullet, the lock-fail and battery floor bullets, "A night with Wakeshot" steps 3 and 5 and the notice table against p2-6-sleep-route's Result once that card is done. -->
 - **Open the lid and sign in.** A notice says how long the PC ran with the lid closed and what held it, such as "The
   PC kept running for 2 h 15 min with the lid closed. What held it: Claude Code."
 - **Battery floor.** Wakeshot uses Windows' own energy saver level (20% when energy saver is set to Never or Always);
   there is no Wakeshot setting for it. On battery below it, Wakeshot steps back at once: it ends its power request,
   puts your settings back, plays a sound and says "Battery low: the PC may sleep now". If the lid is closed, it then
-  hibernates the laptop after 5 minutes with no input, unless your own battery lid action is Do nothing. Plug in, and
-  the hold comes back.
+  puts the laptop to sleep the same way after 5 minutes with no input, unless your own battery lid action is Do
+  nothing. Plug in, and the hold comes back.
 - **Keep screen on.** The screen never turns off, so Windows does not lock the PC at screen off; Wakeshot locks it
   instead once you have been away longer than your own sleep timeout.
 - **Start > Sleep.** Your own sleep always wins. Windows drops every power request then, and Wakeshot takes its
@@ -293,9 +301,10 @@ notice:
 | Wakeshot cannot change power settings | Something, such as a company policy, blocked the change |
 | Wakeshot cannot keep the PC awake | Windows did not accept the power request |
 | Could not put back your power settings | A restore failed; Wakeshot keeps trying, and the log has your old values |
-| Check your lid and sleep settings | The file with your saved values was damaged; the log has your old values |
+| Power settings set to Windows defaults | Wakeshot could not read the file with your saved values, so its own values went to Windows defaults; the log has your old values |
+| Check your lid and sleep settings | The same, but setting Windows defaults failed too: set them by hand |
 | Wakeshot could not lock the PC | Windows did not lock; with the lid closed Wakeshot tries once more |
-| Wakeshot could not hibernate the PC | Hibernate is off or failed with the lid closed |
+| The PC did not go to sleep | With the lid closed, the PC did not sleep and could not hibernate |
 
 Notices raised while the PC is locked, or while another user is on the screen, wait until you are back. Sounds never
 wait.
@@ -357,7 +366,7 @@ For your own lengths and labels, write a hold file: [docs/hold-files.md](docs/ho
 - Wakeshot updates itself from GitHub Releases. It checks 5 minutes after it starts, then every 12 hours, and
   downloads a new version at once.
 - It applies the update only when nothing holds (no agent at work, no `wakeshot run`, no hold file, no Keep awake),
-  none of your settings are changed and no hibernate is pending. So an update never cuts your work short.
+  none of your settings are changed and no closed-lid sleep is pending. So an update never cuts your work short.
 - Then Wakeshot quits and the new version starts. One quiet notice says "Wakeshot updated to (version)", with no
   sound.
 - A failed check or download waits for the next check, with no notice. Pre-releases are skipped.
@@ -388,8 +397,14 @@ boot, and that needs admin rights, which Wakeshot never asks for.
   - the restore at sign-in crashes.
 - Until you reinstall, with no warning: you uninstall during a hold, and the restore fails for the uninstall's whole
   25 seconds. Your saved values stay, so a reinstall puts them back.
-- Until you set the values by hand: the file with your saved values is damaged. Wakeshot sets it aside and warns
-  you, and the log holds your old values. Until then a lid close gets no lock either.
+
+**A lost record of your values goes to Windows defaults.** If Wakeshot cannot read the file with your saved values
+for 2 minutes of run time (a damaged file: at once), it sets the file aside. On the plan in use, each setting that
+holds exactly the value Wakeshot writes (lid Do nothing, sleep Never) goes to Windows' default for that plan; any
+other value is yours and stays. A notice says what was reset, and the log has the old values. So if you had set Do
+nothing or Never yourself, set it again (Windows' default battery sleep was 3 minutes on our test laptop). During
+those 2 minutes a lid close gets no lock, and with nothing holding, a closed laptop that a crashed Wakeshot left at
+Do nothing may run unlocked for up to about 7 minutes before it sleeps.
 
 **A failed restore brings Wakeshot back.** When the guard or the restore at sign-in cannot put your settings back for
 2 minutes, it starts Wakeshot, even with start at login off, so you see the warning and the retries go on. That
@@ -399,7 +414,7 @@ agent turn. After a Quit whose restore failed, Wakeshot comes back 2 minutes lat
 **One signed-in user at a time.** Power plans belong to the whole PC. When another user takes the screen (switch
 user), Wakeshot puts your values back and keeps only its power request, then applies them again when you come back.
 If one user's changes were left behind (that session ended without a restore), another user's Wakeshot takes Do
-nothing for that user's own choice: no lock, no hibernate. A second signed-in user's Wakeshot keeps the PC awake with
+nothing for that user's own choice: no lock, no sleep. A second signed-in user's Wakeshot keeps the PC awake with
 the power request only. Remote Desktop into your session most likely counts as
 leaving the screen, so it gets the power request only; not tested yet.
 
@@ -464,7 +479,7 @@ What stays:
 
 ## Credits and license
 
-Wakeshot ports no code from the tools above, so no credit line is due. The date math in hold files follows Howard
+Wakeshot ports no code from other tools, so no credit line is due. The date math in hold files follows Howard
 Hinnant's public domain [date algorithms](https://howardhinnant.github.io/date_algorithms.html). Built on
 [`windows-rs`](https://github.com/microsoft/windows-rs); installs and updates with
 [Velopack](https://github.com/velopack/velopack).

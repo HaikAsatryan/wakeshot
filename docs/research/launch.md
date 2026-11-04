@@ -207,6 +207,77 @@ core" only as their claim.
 - Agents Don't Sleep is the rival to watch: same pitch, cross-platform, battery floor and lock. Its README is a good
   model (see part 4).
 
+### Round 2: popular tools only (2026-11-04, `p6-readme` round 2)
+
+Haik (2026-11-04): compare only with the 2 or 3 most popular keep-awake options, agent aware or not, on features.
+This note replaces the pick above for the README; the results above stay as they were read. Read 11:36 to 11:50.
+
+What was checked:
+
+- GitHub (`gh api repos/<owner>/<repo>`; `gh search repos` "keep awake", "prevent sleep windows", "caffeine
+  windows", by stars). Among Windows tools only PowerToys has thousands of stars: `microsoft/PowerToys` 140,521,
+  `arkane-systems/mousejiggler` 1,459, `sw3103/movemouse` 820, `CHerSun/NoSleep` 276. `newmarcel/KeepingYouAwake`
+  has 7,029 but is macOS only (a rival for the macOS port later). Verified.
+- Chocolatey, the "Downloads" field in each package page's HTML (`curl`): `caffeine` 367,663, `dontsleep` 38,324,
+  `dontsleep.portable` 20,340, `mouse-jiggler` 26,452. Chocolatey's OData API gave lower numbers at the same time
+  (362,859, 38,244, 20,307, 26,163), most likely cached; the README cites the pages. Verified. These count installs
+  and upgrades through Chocolatey only, not users.
+- Not checked: Microsoft Store rating counts. winget publishes no counts.
+- "Insomnia" (Haik's word): two Windows tools carry the name. David Anson's Insomnia (2009 and 2010, Microsoft's blog
+  archive, a .NET 3.5 tray app on `SetThreadExecutionState`, no user count found) and `stanley-projects/Insomnia`
+  (7 stars, agent aware, Electron). Neither is popular by any count found. Most likely Haik meant a plain keep awake
+  in general; not verified.
+
+Pick: PowerToys Awake (stars); Caffeine by Zhorn Software (the most Chocolatey downloads of any keep-awake tool
+found); Don't Sleep by SoftwareOK (the next, both packages together). Out: Mouse Jiggler (fewer downloads than
+either, and it fakes mouse moves, the other class named in "Candidates"); LidGuard, Agents Don't Sleep and Nightcrew,
+by Haik's rule. Decided by the worker, for Haik's review.
+
+Facts per tool, each verified in the raw page text (`curl`) on 2026-11-04 unless marked:
+
+**Caffeine** (https://www.zhornsoftware.co.uk/caffeine/)
+
+- "It works by simulating a keypress once every 59 seconds, so your machine thinks you're still working at the
+  keyboard, so won't lock the screen or activate the screensaver."
+- Switches: `-activefor:xx` (inactive after xx minutes), `-watchwindow:xx` ("active only when a window with xx in the
+  title is found"), `-cpu:xx` ("active until the CPU drops below xx%"), `-onac` ("active only when the computer is on
+  AC power"), `-stes` (`SetThreadExecutionState`, no simulated input), `-allowss` (the same, the screensaver may
+  start). None for the lid, a battery level, power plan settings, a lock or updates.
+- v1.98, November 2024. "Download Caffeine (x86 and x64)", `caffeine.zip` (306k). Windows versions: not stated.
+- Free: "All the applications on this site are freeware, and are also free for commercial use"
+  (https://www.zhornsoftware.co.uk/). No source code offered on the page.
+- Screen kept on by default: inferred from the simulated key press, which resets the screen timer; the page says only
+  that it stops the lock and the screensaver. Not tested.
+
+**Don't Sleep** (https://www.softwareok.com/?seite=Microsoft/DontSleep)
+
+- "Don't Sleep is a small Freeware Windows program to prevent system shutdown, Standby, Hibernate, Turn Off and
+  Restart". Options to block logoff, monitor off and the screen saver; a timer; "CPU Load based shutdown and prevent
+  shutdown"; "Network Traffic based shutdown and prevent sleep"; "Schedule computer to shut down at a certain time".
+- "Suitable for : Windows 11, Windows 10, 8.1, 7, ... , Server 2012-2025, 2022, x64, x32, x86"; "Download (267 KB)";
+  version 10.44 of 2026-10-31.
+- FAQ 1 (https://www.softwareok.com/?seite=faq-DontSleep&faq=1): "No! "Don't Sleep" does not change the 'power
+  saving options' on your system."
+- History (https://www.softwareok.com/?seite=Microsoft/DontSleep/History): "New: Activate the battery monitor function
+  and optional action" (5.11); "Automatic quit or standby if Battery ?? Percent" (a 6.77 bug fix); "optional Auto
+  Update Service" (6.02 on).
+- No lid option and no lock found. How it keeps the PC awake: the FAQ says it tells Windows it has tasks running; the
+  API is not named. Not verified which.
+
+**PowerToys Awake**, read again (https://learn.microsoft.com/en-us/windows/powertoys/awake, updated 2026-10-21): as
+in "Facts per rival", plus "PowerToys Awake temporarily overrides your power plan choices and is intended for use
+while you are at your computer or in private environments. For persistent keep-awake needs, especially when stepping
+away in shared environments, configure your Windows power plan settings directly and lock your computer for
+security." Install page (updated 2026-07-14): "Windows 11 or Windows 10 version 2004 ... or newer", "x64 or ARM64".
+The latest release is still v0.102.3001 (`gh api`, 11:44).
+
+Lid closed is "no" for all three: none changes the lid action (PowerToys and Don't Sleep say they change no power
+setting; Caffeine has no such switch), and a lid close is a user sleep that no power request or
+`SetThreadExecutionState` call blocks (`docs/research.md`, "Windows power facts"). That Caffeine's simulated key
+press does not block it either: inferred, not tested.
+
+The table built from this: `README.md`, "How it compares".
+
 ## 2. winget with an app that updates itself
 
 ### How winget decides an upgrade is available

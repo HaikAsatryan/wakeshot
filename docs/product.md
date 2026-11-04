@@ -1,6 +1,7 @@
 # Product
 
-Status on 2026-11-03: decisions fixed, Phase 1 (detailed design and skeleton) running, no product code yet.
+Status on 2026-11-04: decisions fixed; the product is built and in its last checks before the first release
+(`docs/plan.md` has the state).
 Personal project of Haik Asatryan (GitHub `HaikAsatryan`). Free, MIT license.
 
 ## The job
@@ -123,8 +124,8 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   (Haik, 2026-11-03), so someone typing on an external screen with the lid closed is not put to sleep. The rule
   (Haik, 2026-11-04): when Wakeshot is done, the laptop ends up where Windows would have put it, and with the lid
   closed that is sleep. It must act itself: putting the lid action back does not sleep a laptop whose lid is already
-  closed (tested), and after a release its apps most likely run until the user's own sleep timeout (inferred; not
-  tested with the lid closed). On Modern Standby, Windows gives apps no call that starts sleep (Microsoft Q&A; on this
+  closed (tested), and after a release the laptop runs until the user's own screen timeout turns the screen off and
+  the sleep timeout has passed (tested with the lid closed on battery, `p3-idle-sleep-check`). On Modern Standby, Windows gives apps no call that starts sleep (Microsoft Q&A; on this
   laptop `SetSuspendState(FALSE)` hibernates, tested), so Wakeshot uses Windows' own idle sleep: after the sound it
   sets the screen and sleep timeouts of the plan in use, on AC and DC, to 1 minute where the user's own is longer,
   marked in the journal as Wakeshot's. The screen one is needed: on this laptop the sleep came when the screen
