@@ -628,3 +628,33 @@ No cargo run: this round changed no code.
 
 Open items: Found outside scope 1 (README worker), 2 and 3 (`p2-6-sleep-route` or a code card), 4 to 6 (Haik), 7
 (orchestrator).
+
+## Round 6 (2026-11-04)
+
+Status: ready. Written by the orchestrator (session `wakeshot-12`). Runs after `p2-6-sleep-route-fixes` (done, local
+commit 9aa92f9). Owns: `README.md`, `site/index.html` (only its sleep wording spot), `crates/wakeshot-core/src/text.rs`
+(two notices), `docs/research.md` (the two lines below), and this section.
+
+Items (from the orchestrator; sources: `p2-6-sleep-route-fixes` Found outside scope 1, 3, 4, 7 and
+`p2-6-sleep-route` Found outside scope):
+
+1. `README.md`: the old notice title "Check your lid and sleep settings" (now "Check your power settings"); the reset
+   list (now also the 1-minute sleep and screen timeouts); uninstall now resets a damaged journal and keeps `logs\`;
+   the two `sleep-route:` comments: check those lines against the code now and remove the comments; the crash gap
+   text may leave out the 1-minute timeouts (`docs/product.md` crash gap paragraph now names them).
+2. `site/index.html`: the spot marked for the sleep wording after `p2-6-sleep-route`: check it against `product.md`
+   and the code, fill it, remove the mark.
+3. `text.rs`: two notices wrap to five body lines on the taskbar (one more than shows): `HibernateFailed` and the
+   closed-lid report with many holders. Use the same wrap model as `p2-6-sleep-route-fixes` deliverable 5 (its Result)
+   and make both fit four lines, keeping the meaning and `text.rs` rules (a suggested `HibernateFailed` is in that
+   card's Found outside scope 3). `cargo test --locked -p wakeshot-core` and clippy on the core after the change.
+4. `docs/research.md`: "Tray UX: notices" says "at most five body lines"; the pictures show a title and four body
+   lines. Add Balanced's Windows defaults of the short keys (AC sleep 300, screen off AC 300 and battery 180 by the
+   API; registry table 1800, 600, 300; read 2026-11-04 by `p2-6-sleep-route-fixes`) to "Windows defaults of the three
+   keys" as a dated addition.
+5. Not to change: `docs/product.md` (the orchestrator updated rules 5 and 7), work logs, card Logs, dated results,
+   `CLAUDE.md`, other code.
+
+### Log
+
+- 2026-11-04: round 6 written by the orchestrator (session `wakeshot-12`).

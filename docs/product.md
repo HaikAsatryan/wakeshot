@@ -158,8 +158,10 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
 6. If a company policy blocks the write, run with power requests only and tell the user.
 7. A journal that cannot be read (Haik, 2026-11-04): Wakeshot tries again every 30 seconds for 2 minutes; a damaged
    file ends that at once. The 2 minutes are run time: a sleep pauses them. Then, on the plan in use, each setting
-   Wakeshot writes that holds exactly the value Wakeshot writes (lid Do nothing, sleep Never) goes to Windows' default
-   for that plan; any other value is the user's and stays. For battery sleep that default is 180 seconds on the test
+   Wakeshot writes that holds exactly the value Wakeshot writes (lid Do nothing, battery sleep Never, and the
+   1-minute screen and sleep timeouts of the work end rule; the timeouts added by an orchestrator decision of
+   2026-11-04, for Haik's review) goes to Windows' default for that plan; any other value is the user's and stays.
+   The uninstall hook runs the same reset on a damaged journal, since no tray starts after it (log only, no notice). For battery sleep that default is 180 seconds on the test
    laptop (`research.md`, "Windows defaults of the three keys"), so a user whose own value was Never gets 3 minutes.
    The log gets each old and new value, the bad file is set aside, and one notice says what was reset and that a user
    who had their own values should set them again. During the 2 minutes Wakeshot neither locks at a lid close nor
@@ -171,7 +173,8 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
 The crash gap is accepted (Haik, 2026-11-03): after an OS crash, a power cut or the other cases listed in
 `architecture.md` ("Gap left"), nothing restores before the next sign-in, because that would need admin, or longer
 in the cases of Question 11 (`phases/01-design-skeleton.md`; the default, Haik 2026-11-03 18:09). Until then the
-lid action stays Do nothing and battery sleep Never. The README says so.
+lid action stays Do nothing and battery sleep Never (or the 1-minute timeouts stay, after a closed-lid work end).
+The README says so.
 
 ### UX
 
