@@ -4152,3 +4152,28 @@ test on a throwaway plan copy that was never active.
   never runs so: its privileges are a normal token's. **Verified** (both tools, 13:05). Not run at Medium integrity
   here, where the token has no backup privilege to turn off; that `AdjustTokenPrivileges` then still answers success
   is Microsoft's doc, not seen.
+
+## The release property's two failures
+
+`p2-6-props-flake`, 2026-11-04 14:13 to 14:45, release test binary, one test thread, `PROPTEST_CASES=4096` with
+`PROPTEST_RNG_SEED` set per run (proptest 1.12.0 reads it), full output kept per seed.
+
+- **`a_released_key_is_never_ours_in_force_again_in_its_episode` failed in 12 of 40 fixed seeds at 4096 cases** on
+  the code before this card (seed 1 gave the docs pass text exactly). So about 2 % of plain 256-case runs fail
+  (inferred from that rate, not counted). **Verified** (the 40 runs). Not the old "restore failed" flag cause: no
+  failed restore in the seed 1 trace.
+- **Cause 1, in the core: the sleep route's apply raced the user's change.** A short apply sent before the core
+  heard of the release (a plan switch's read posts `Plan` before its check's `UserChanged`; or, with the IO behind,
+  the user changes battery sleep over the hold's Never before the floor restore runs, and the short apply sent behind
+  it takes the user's value as its original) wrote the released key, and nothing took it back: `take_back` covered
+  only a hold's apply. Now a short key released while the short timeouts are on, with an apply out or the key in the
+  journal, sends the short apply again without it, which restores that plan's entry for it, or a restore when no
+  short key is left. Also in a work-end countdown, which has no episode. **Verified** (named tests and two scenarios
+  fail on the old code and pass now).
+- **Cause 2, in the test world: a reset's default was labeled ours.** When a lost journal's reset runs after a hold's
+  apply wrote entries and its own load fails, it writes the defaults and sets the file aside (rule 7, by design). It
+  writes before the set-aside, so the fake labeled battery sleep's default `Override` while the sim already counted
+  it as the user's own; `restored_at_the_end` failed on the same case ("still held at the end"). The sim now marks a
+  reset key `Default` (`FakeState::mark_reset`). **Verified** (seeds 29 and 33; named test).
+- **After both fixes: seeds 1 to 100 at 4096 cases, 100 passed; the whole core test binary at 4096 cases, 3 of 3
+  passed** (random seeds, 4 threads, about 26 s each). **Verified** (the runs).

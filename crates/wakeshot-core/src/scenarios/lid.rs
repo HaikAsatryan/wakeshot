@@ -2416,6 +2416,74 @@ fn a_plan_switch_moves_the_short_timeouts_to_the_new_plan() {
 }
 
 #[test]
+fn a_short_key_released_while_the_switchs_short_apply_is_on_its_way_is_written_again_without_it() {
+    // `p2-6-props-flake`: the switch's read posts `Plan` before its check's `UserChanged`, so the switch's short apply
+    // goes out with the key the user just took back on the old plan. As for a hold, the release sends the short
+    // timeouts again without it, which restores the new plan's entry for it.
+    let mut sim = work_ended_closed(true);
+    sim.run(IDLE_MS + MINUTE);
+    short_written(&mut sim);
+    sim.send(read(plan(sim::OTHER_PLAN)));
+    let out = sim.send(Event::UserChanged(OwnedKey {
+        plan: BALANCED,
+        key: SettingKey::SleepDc,
+    }));
+    let again = Command::Apply {
+        plan: sim::OTHER_PLAN,
+        writes: SettingKey::SHORT
+            .iter()
+            .filter(|&&k| k != SettingKey::SleepDc)
+            .map(|&k| (k, crate::settings::SHORT_TIMEOUT_S))
+            .collect(),
+    };
+    let trace = sim.trace();
+    assert_eq!(count(&out, &again), 1, "{trace}");
+    assert_eq!(
+        notices(&out),
+        [&Notice::UserChanged(SettingKey::SleepDc)],
+        "{trace}"
+    );
+
+    // Both answered in order: nothing more to write or restore.
+    let mut out = sim.send(applied(
+        sim::OTHER_PLAN,
+        Ok(()),
+        short_entries(sim::OTHER_PLAN),
+    ));
+    let mut left = short_entries(sim::OTHER_PLAN);
+    left.retain(|e| e.key != SettingKey::SleepDc);
+    out.extend(sim.send(applied(sim::OTHER_PLAN, Ok(()), left)));
+    assert!(
+        !out.iter()
+            .any(|c| matches!(c, Command::Apply { .. } | Command::Restore { .. })),
+        "{}",
+        sim.trace()
+    );
+}
+
+#[test]
+fn every_short_key_released_while_a_short_apply_is_on_its_way_restores() {
+    // With no short key left to write no apply comes, so a restore takes back what the one on its way writes.
+    let mut sim = work_ended_closed(true);
+    sim.run(IDLE_MS + MINUTE);
+    let out = sim.send(checked(Ok(())));
+    assert_eq!(count(&out, &short_apply()), 1, "{}", sim.trace());
+    let mut out = Vec::new();
+    for key in SettingKey::SHORT {
+        out = sim.send(Event::UserChanged(OwnedKey {
+            plan: BALANCED,
+            key,
+        }));
+    }
+    let trace = sim.trace();
+    assert_eq!(count(&out, &SHORT_BACK), 1, "{trace}");
+    assert!(
+        !out.iter().any(|c| matches!(c, Command::Apply { .. })),
+        "{trace}"
+    );
+}
+
+#[test]
 fn a_failed_lock_step_back_ends_in_the_short_timeouts_too() {
     let mut sim = closed_unconfirmed(false);
     failed_twice(&mut sim);

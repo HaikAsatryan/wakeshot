@@ -547,6 +547,17 @@ impl Core {
         self.state.applying.push(Applying { plan, short: true });
     }
 
+    /// A short key the user just took back may still be written or held ([`Core::take_back`]): the short timeouts
+    /// again without it, which restores the active plan's entry for it (`Command::Apply` doc), as a hold's apply does.
+    /// With no short key left to write, or no write possible, a restore takes them back.
+    pub(super) fn short_again(&mut self, out: &mut Vec<Command>) {
+        let plan = self.state.plan.map(|p| p.active);
+        match plan.filter(|_| self.can_write_short()) {
+            Some(plan) => self.send_short(plan, out),
+            None => self.restore_all(RestoreWhy::ShortTimeouts, out),
+        }
+    }
+
     /// The sleep check passed: the short timeouts, with the fallback 5 minutes on. One that cannot be written (the
     /// check took seconds, and the facts may have changed) leaves the fallback due at once.
     fn write_short(&mut self, now: Now, out: &mut Vec<Command>) {

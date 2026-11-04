@@ -282,9 +282,9 @@ impl Core {
             .journal
             .retain(|e| (e.plan, e.key) != (changed.plan, changed.key));
         // The sleep route writes it again after input only while the user has not changed it (decision 26).
-        if self.state.countdown.is_some() && SettingKey::SHORT.contains(&changed.key) {
-            self.state.short_released.insert(changed.key);
-        }
+        let short_newly = self.state.countdown.is_some()
+            && SettingKey::SHORT.contains(&changed.key)
+            && self.state.short_released.insert(changed.key);
         let what = key_words(changed.key);
         let newly = self
             .state
@@ -301,7 +301,8 @@ impl Core {
         };
         out.push(Command::Log(line));
         self.notify(Notice::UserChanged(changed.key), out);
-        if newly == Some(true) {
+        // A work-end countdown has no episode, yet its release is the same (architecture, "The sleep route" 4).
+        if newly == Some(true) || short_newly {
             self.take_back(changed.key, out);
         }
     }
@@ -309,7 +310,8 @@ impl Core {
     /// A key just released may still be ours somewhere: an apply on its way writes it (a plan switch's read posts
     /// `Plan` before its check's `UserChanged`), or another plan's entry holds it (`p2-core-props` finding 1). The next
     /// apply leaves the key out and restores this plan's entry for it (track note 3); with every key released no apply
-    /// comes, so a restore takes them back.
+    /// comes, so a restore takes them back. The sleep route's apply races the same way (`p2-6-props-flake`): the
+    /// switch's, or one sent while the user's change waited for its check, and it runs while no hold applies.
     fn take_back(&mut self, key: SettingKey, out: &mut Vec<Command>) {
         let ours =
             !self.state.applying.is_empty() || self.state.journal.iter().any(|e| e.key == key);
@@ -318,6 +320,8 @@ impl Core {
         }
         if self.applies() {
             self.want_apply();
+        } else if self.state.short.is_some() && SettingKey::SHORT.contains(&key) {
+            self.short_again(out);
         } else if self
             .state
             .episode

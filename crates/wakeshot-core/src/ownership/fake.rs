@@ -281,6 +281,21 @@ impl FakeState {
         }
     }
 
+    /// The reset of a lost journal reports `default` written to `key` on `plan`: where it still holds, it is
+    /// [`SetBy::Default`]. The reset writes before it sets the file aside, so when its own load failed on a file that
+    /// names the key, the write looked like an override (`p2-6-props-flake`).
+    pub fn mark_reset(&mut self, plan: Guid, key: SettingKey, default: u32) {
+        let active = self.active;
+        if let Some(p) = self.plans.get_mut(&plan) {
+            if value(&p.stored, &p.stored_screen, key) == default {
+                *p.stored_by.get_mut(key) = SetBy::Default;
+            }
+            if plan == active && value(&p.in_force, &p.in_force_screen, key) == default {
+                *p.in_force_by.get_mut(key) = SetBy::Default;
+            }
+        }
+    }
+
     /// The known entries of the journal file; none when it is missing, corrupt or unreadable.
     pub fn known_entries(&self) -> Vec<JournalEntry> {
         match &self.journal {

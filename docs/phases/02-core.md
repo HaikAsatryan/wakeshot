@@ -141,6 +141,7 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | `p2-6-record-lost` | no (Haik's rule of 2026-11-04 in `product.md`) | nothing | done (11:13: 1312 workspace tests; 14 of 14 mutants killed; 12 worker decisions) |
 | `p2-6-sleep-route` | no (Haik's rule of 2026-11-04; his lid test is in `p6-int-haik-checks`) | `p2-6-record-lost`, `p3-idle-sleep-check` | done (12:16: 1340 workspace tests; 13 of 13 mutants killed; 17 worker decisions) |
 | `p2-6-sleep-route-fixes` | no | `p2-6-sleep-route` | done (13:49: 1355 workspace tests; 13 of 13 mutants killed; 10 worker decisions) |
+| `p2-6-props-flake` | no | `p2-6-sleep-route-fixes` | done (14:45: a core bug and a test world fix; seeds 1 to 100 pass at 4096 cases; 6 of 6 mutants killed) |
 
 No card touches the real laptop (no power settings, screen, sound or installs) or needs Haik's hands. "Contracts
 card": the one card the orchestrator runs alone before the track builds.
@@ -355,3 +356,9 @@ Where each item this track owns is built. "Integration" is planned after the tra
   uninstall hook runs the reset and keeps the logs folder); minors 4, 6 and 7 as the review says, 5 leaner (a failed
   reset locks once); the listing test drops the backup privilege on its thread; four notices shortened to fit four
   lines. Not pushed: GitHub rejects the SSH key since about 13:50. Next: the reviewer checks the three majors' fixes.
+- 2026-11-04 14:46 (orchestrator `wakeshot-27`): `p2-6-props-flake` done. The release property failed in 12 of 40
+  fixed seeds at 4096 cases (about 2 % of CI runs, inferred). Cause 1, a core bug: a sleep route apply sent before
+  the core heard of a user's change to a short key wrote that key, and nothing took it back; now the short apply
+  goes out again without it (also in a work-end countdown). Cause 2: the sim labeled a lost journal's reset default
+  as ours. Three named tests, two lid scenarios. Two rare gaps inferred by the worker (not verified) and a stale
+  comment go to the small card `p2-6-reset-gaps`.

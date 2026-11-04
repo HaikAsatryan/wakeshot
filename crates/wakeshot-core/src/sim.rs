@@ -1878,11 +1878,13 @@ impl World {
             Command::ResetLost { damaged } => {
                 let reset = reset_lost(&mut io, &mut net, *damaged);
                 // What the reset put in force is now the user's own as far as the world goes: rule 7 gives the
-                // default in place of a value no record names.
+                // default in place of a value no record names. So it is not Wakeshot's either, also when the reset's
+                // own load failed on a file that still named the key (`p2-6-props-flake`).
                 if let Some(plan) = reset.plan {
                     for (key, outcome) in &reset.keys {
                         if let KeyReset::Reset { default, .. } = outcome {
                             self.user.insert((plan, *key), *default);
+                            self.plans.state().mark_reset(plan, *key, *default);
                         }
                     }
                 }

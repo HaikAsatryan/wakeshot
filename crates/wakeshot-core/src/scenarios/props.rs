@@ -1554,6 +1554,101 @@ fn a_released_key_waits_for_the_retry_after_a_failed_plan_switch_restore() {
     );
 }
 
+/// `p2-6-props-flake`, the docs pass failure (seed 1 at 4096 cases): the floor countdown's short timeouts are on the
+/// docked plan, and the user sets battery sleep there and switches to Balanced. The switch's read posts `Plan` before
+/// its check's `UserChanged`, so the switch's short apply goes out with battery sleep, and the release must take it
+/// back.
+#[test]
+fn a_short_key_released_while_the_switchs_short_apply_is_on_its_way_is_taken_back() {
+    check_case(
+        WorldStart {
+            automatic: false,
+            owner: false,
+            on_console: false,
+            ..on_battery_at_25()
+        },
+        vec![
+            WorldStep::Lid { closed: true },
+            WorldStep::ConsoleBack,
+            WorldStep::Switch(2),
+            WorldStep::Menu(MenuCommand::KeepAwake(KeepAwake::Minutes(30))),
+            WorldStep::TakeOwner,
+            WorldStep::Run(74_186),
+            WorldStep::Run(121_826),
+            WorldStep::Run(103_988),
+            WorldStep::UserSets {
+                plan: None,
+                key: SettingKey::SleepDc,
+                value: 300,
+            },
+            WorldStep::Switch(0),
+        ],
+        End::LastHold,
+        released_keys_are_not_ours_in_force,
+    );
+}
+
+/// `p2-6-props-flake`, seed 22: no plan switch. The user sets battery sleep over the hold's Never before the floor
+/// restore ran, so the short apply sent behind it takes the user's value as its original, and the release comes after.
+#[test]
+fn a_short_key_released_while_the_short_apply_waits_behind_the_floor_restore_is_taken_back() {
+    check_case(
+        WorldStart {
+            keep_up: false,
+            ..on_battery_at_25()
+        },
+        vec![
+            WorldStep::Agent {
+                pid: 1,
+                now: AgentNow::Working,
+            },
+            WorldStep::Lid { closed: true },
+            WorldStep::Flush,
+            WorldStep::Run(266_501),
+            WorldStep::Battery(10),
+            WorldStep::Run(33_499),
+            WorldStep::UserSets {
+                plan: None,
+                key: SettingKey::SleepDc,
+                value: 300,
+            },
+        ],
+        End::LastHold,
+        released_keys_are_not_ours_in_force,
+    );
+}
+
+/// `p2-6-props-flake`, seed 29 once the short apply race was fixed: the reset of a journal the core lost runs after
+/// the hold's apply wrote entries, and its own load fails, so it writes battery sleep's default over the hold's Never
+/// and sets the file aside (product "User settings safety" 7). That default is no longer Wakeshot's to hold.
+#[test]
+fn a_reset_over_a_running_holds_values_leaves_nothing_of_ours() {
+    check_case(
+        WorldStart {
+            automatic: false,
+            startup_unread: true,
+            keep_up: false,
+            ..on_battery_at_25()
+        },
+        vec![
+            restore_fails(),
+            WorldStep::Agent {
+                pid: 1,
+                now: AgentNow::Working,
+            },
+            WorldStep::Menu(MenuCommand::Automatic(true)),
+            WorldStep::Io,
+            WorldStep::Run(6 * MINUTE),
+            WorldStep::Menu(MenuCommand::Restore),
+            WorldStep::Flush,
+        ],
+        End::LastHold,
+        |world| {
+            released_keys_are_not_ours_in_force(world).and_then(|()| restored_at_the_end(world))
+        },
+    );
+}
+
 /// The lid lock and its retry both fail with the lid closed on our Do nothing, on battery, while the IO thread lags:
 /// the step back takes the requests off and sends the restore at once, and the laptop runs on until the restore lands
 /// (verify minor 4, the props half).
