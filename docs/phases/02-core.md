@@ -137,6 +137,7 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | `p2-core-props` | no | `p2-core-lid`, `p2-ownership-apply` | done (23:29): 13 properties at 10,000 cases; two findings kept as ignored tests |
 | `p2-6-unread-journal` | no | core round B (Log in `p2-core-settings`); runs alone among cards that build | done (committed 02:51): findings 3 and 6, the newer `config.json` write check; 1256 workspace tests |
 | `p2-6-unread-lid-countdown` | no | `p6-int-wiring-fixes` | done (05:28: 3 new scenarios, `startup_unread` drawn in the props, 22 props at 4096 cases 3 of 3) |
+| `p2-6-unread-floor-countdown` | no | `p2-6-unread-lid-countdown` | in progress (started 05:29) |
 
 No card touches the real laptop (no power settings, screen, sound or installs) or needs Haik's hands. "Contracts
 card": the one card the orchestrator runs alone before the track builds.
@@ -294,3 +295,6 @@ Where each item this track owns is built. "Integration" is planned after the tra
   only the start). Mutants: 5 of 7 caught; one mutant grew to 35 GB and was stopped; not rerun. For Haik's review:
   that decision 7; a user's own later change to Sleep starts a waited countdown. Left: the `Floor` countdown has
   the same gap, and two `state.rs` doc lines (`LockWatch`, `work_end_waits`) are stale: a follow-up card.
+- 2026-11-04 05:29 (orchestrator `wakeshot-12`): new card `p2-6-unread-floor-countdown` (the `Floor` countdown's same gap,
+  the two `state.rs` doc lines, whether an empty-copy retry should run every 10 s), started beside
+  `p6-int-update-e2e` stop 1.
