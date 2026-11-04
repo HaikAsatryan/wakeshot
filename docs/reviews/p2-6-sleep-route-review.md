@@ -187,3 +187,82 @@ Counts: 0 blocker, 3 major, 5 minor, plus 1 unverified note.
 - No-work behavior: the short timeouts, the clock gap and the unlock clamp act only while a countdown runs (it needs
   work that ended, a floor step back or Wakeshot's own Do nothing with the lid closed). The reset is the only new
   change with no work going on, and rule 7 accepts it (apart from finding 6).
+
+## Verify (2026-11-04)
+
+Brief from the orchestrator: check only majors 1 to 3 after `docs/tasks/p2-6-sleep-route-fixes.md` (local commit
+9aa92f9): fixed or not, are the tests real, did the fix open a new safety hole nearby; and whether minor 5, done
+leaner, is enough. Read the card's Result and the working tree (no git): `core/lid.rs`, `core/settings.rs`,
+`ownership/reset.rs`, `hooks.rs`, `power/executor.rs`, the new scenarios, the World cases and the lock property. No
+test run.
+
+### Major 1, the window lock with a hold after the unknown window: Fixed
+
+- The hook no longer takes the flag (`core/lid.rs:174-186`). `window_close` now lives until the lid opens
+  (`:358-363`) or `Session(Locked)` (`:611-616`), and is set only for a close into an unlocked session (`:311-313`).
+- `settle_window_lock` (`:197-234`) locks once the journal is known, the lid is closed, the session unlocked, no lock
+  is watched, there is no failed-lock step back, and a hold holds (not held back) or Wakeshot's own Do nothing is in
+  force; it then waits for a read showing the user's own action as not Do nothing and for the 30 s source settle.
+  Both paths of the finding meet this: a hold that starts after the window, and a hold that holds again after a floor
+  step back.
+- `check_lock` (`:782-784`) now counts a window hold as ours, so a requests-only hold gets the retry and the step back
+  (minor 7 too); the step back is not met by a third lock (`:206`).
+- Tests are real: `scenarios/lid.rs:1096` (main path, also the copy still showing the old Do nothing, and no lock owed
+  after a lock), `:1170` (second path, locked 30 s after AC back), `:1252`, `:1282`, `:1315`. The property now starts
+  a stretch at any later step while the lock is owed (`scenarios/props.rs:997-1040`), so random runs judge a hold
+  after the window.
+- New hole: none found. No loop: every lock is watched, and the wait needs no watch out and an unlocked session.
+
+### Major 2, the reset of the four 1-minute keys: Fixed (case A and case B)
+
+- Case A: the reset takes all six keys and resets a value only when it is exactly one Wakeshot writes: 0 for the hold
+  keys, `SHORT_TIMEOUT_S` for the short keys (`ownership/reset.rs:24-35`, `:146-173`). AC sleep at 0 and a screen
+  timeout at 0 stay the user's. Test: the reset routine test, and the World case `scenarios/props.rs:1772` through the
+  real routines (all four short keys end at the plan's defaults).
+- Case B: `done_reset` (`core/settings.rs:355-383`) treats entries found after a damaged set-aside, in a tray that owns
+  the settings, as its own apply that ran in between: `Restore`, the reset again, then the hold's apply and, if in
+  force, the short apply, in that order; once only (`reset_rerun`). The reasoning holds: nothing but the owning tray
+  writes entries. Tests: `scenarios/settings.rs:1176` (order, once only, not for a tray that does not own) and the
+  World case `scenarios/props.rs:1806`. Note, inferred: the World case passes whether or not its IO order really puts
+  the hold's apply between the set-aside and the reset (the first reset alone would also leave the defaults), so the
+  rerun path itself is proven by the scenario test, not by the World case.
+- New hole: none found. The rerun briefly puts the user's lid action back while a hold holds a closed laptop; the lid
+  is already closed and the laptop was locked at the close. A lid close in those moments still locks, since the copy
+  holds the hold's entries, or else the window lock above owes it. A user's own value equal to 0 or 60 s can go to the default in
+  the rerun: the same accepted cost as rule 7 (Haik's review of the orchestrator's decision is still open).
+
+### Major 3, the uninstall hook reset: Fixed
+
+- `on_uninstall` runs `reset_locked` with `damaged: true` on `DoesNotParse` and logs a summary (`hooks.rs:203-246`,
+  `:660-672`). Both ways to `DoesNotParse` work: a file still corrupt is found bad and set aside; a file the restore
+  routine set aside a moment ago is gone, and `damaged` makes the reset run. `damaged: true` is right here; my `false`
+  would have reset nothing in the second case.
+- Test is real: `hooks.rs:1791` runs the real hook env on a temp data folder with a corrupt `journal.json` and the fake
+  plans: lid DC, battery sleep and AC sleep at Wakeshot's values go to the defaults, the user's lid AC stays, the file
+  goes, the logs stay.
+- New hole: none. An unreadable (not corrupt) journal at uninstall still keeps its values after the 25 s of tries; that
+  was not this finding and stays in architecture "Gap left".
+
+### Minor 5, done leaner: enough for the lock rule
+
+A failed reset now locks once, with the chime, a laptop whose lid closed in the window (`core/lid.rs:240-250`,
+`core/settings.rs:406-408`). That closes "runs unlocked" in the likely sub-case (`LockWorkStation` works). Two rare
+leftovers, minor, no need to act now: that lock is not retried, since `check_lock` finds neither our Do nothing nor a
+window hold when nothing holds (`core/lid.rs:782-790`); and the closed laptop still has no path to sleep if the reset
+failed on battery sleep too. Change it when a log shows a failed reset.
+
+### New finding (minor): a damaged file left by others is never reset when its rename fails
+
+- Where: `crates/wakeshot-windows/src/power/executor.rs:379-392` (`mark_seen` now answers `false` on a failed rename),
+  `:198-201` (startup reports a `journal.json.corrupt` left by restore mode, the guard or a hook only through it).
+- Case: restore mode sets a damaged journal aside at sign-in, and the tray's rename to `.seen` fails (an ACL, or a
+  `.seen` held open, as the test `executor.rs:1298` sets up). The tray does not report it, so no reset runs: the
+  crashed tray's lid Do nothing, Never or 1-minute timeouts stay in force, the gap majors 2 and 3 just closed. If the
+  rename works at a later start, the report and the reset come then, maybe days later over the user's own values,
+  which is what minor 6 meant to avoid. My minor 6 fix was worded loosely ("do not report again"); the first report
+  should still go out.
+- Why it matters: rule 7 and Haik's rule for no work going on; rare (a failed rename).
+- Leanest fix: report the file the first time even when the rename fails, and stop the repeats another way, for
+  example delete `journal.json.corrupt` when it cannot be renamed (its values cannot be read anyway).
+
+No new blocker or major.
