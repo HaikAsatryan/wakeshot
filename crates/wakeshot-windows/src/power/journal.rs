@@ -344,8 +344,9 @@ impl GuardControl for RecordingGuard {
 
 /// What a `FileNet` may do with the RunOnce value.
 enum RunOnce {
-    /// The tray: set before the journal, removed in the clean-up. `None`: the exe path is not valid Unicode, so no
-    /// value can name it.
+    /// The tray: set before the journal, set again before each plan read, apply and restore while the tray owns a known
+    /// entry (Windows deletes the value when it runs it; `PowerExecutor`'s `keep_guard`), removed in the clean-up.
+    /// `None`: the exe path is not valid Unicode, so no value can name it.
     SetAndClear {
         auto: AutoStart,
         command: Option<String>,

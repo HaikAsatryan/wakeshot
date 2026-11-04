@@ -905,8 +905,15 @@ Guard:
 Logon restore: while anything is owned, `HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce` value
 `WakeshotRestore` runs `wakeshot-tray.exe --restore` at the next sign-in, also with start at login off. Windows deletes
 the value before it runs the command (Microsoft, "Run and RunOnce Registry Keys"), so the restore mode must not write
-to that key, and its retries (step 7) are the only second chance. Picked over a logon task (Nightcrew's way): one
-value, no task XML. Not tested (Phase 3).
+to that key, and its retries (step 7) are the only second chance. Explorer runs RunOnce once per sign-in, after every
+Run entry (39 to 65 s after sign-in on the test laptop, research "Power track manual checks"), so a value the tray sets
+before that pass is run by that same pass: restore mode finds the owner alive and exits, and the value is gone. So the
+tray sets it again before each plan read, apply and restore while it owns a known entry, as it replaces a guard that
+ended (`PowerExecutor::keep_guard`, `p2-6-runonce-keep`; a value that is there is only read): it is back within one
+plan read, 10 s while anything is owned.
+Picked over a logon task (Nightcrew's way): one value, no task XML. Tested: restore mode's start from RunOnce, its
+journal read and its owner check (research "Power track manual checks"). Not tested yet: its restore of a gone owner's
+journal at sign-in (checklist 5).
 
 Gap left. In these cases nothing restores for a while, so the lid action stays Do nothing and battery sleep Never, and
 a closed laptop at the sign-in screen does not sleep (accepted by Haik, 2026-11-03; the README says so). Until the next
@@ -922,6 +929,10 @@ deleted the RunOnce value before restore mode ran:
 
 - restore mode fails for 2 minutes at sign-in and the tray it starts fails to start;
 - restore mode panics (it aborts, with no retry and no tray start).
+
+Also until Wakeshot next starts, since there is no RunOnce value then: an OS crash, a power cut, or End task on tray
+and guard together in the up to 10 s between a sign-in's RunOnce pass and the tray's next plan read ("Logon restore"),
+or while the tray cannot write the value back (each command logs it).
 
 Until a reinstall, with no warning: an uninstall during a hold whose restore fails for the hook's whole 25 s. The exe
 is gone, hooks show no UI, and the uninstall removes the RunOnce value; the journal stays, so a reinstall's install

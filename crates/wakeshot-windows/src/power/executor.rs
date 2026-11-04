@@ -66,8 +66,10 @@ pub struct Startup {
 ///
 /// - `run` answers `ReadPlan`, `Apply`, `Restore` and `ResetLost`; every other command gives no event and makes no
 ///   call;
-/// - before each of those three, a journal that holds a known entry this tray owns gets a guard (`ensure_guard`), so a
-///   guard that ended is replaced (architecture section 5, "Guard");
+/// - before each of those three, a journal that holds a known entry this tray owns gets its RunOnce value
+///   (`set_run_once`, which reads first and writes only a missing or wrong value) and a guard (`ensure_guard`), so a
+///   value Windows deleted at a sign-in and a guard that ended are replaced (architecture section 5, "Logon restore"
+///   and "Guard");
 /// - `Restore { why: Leftover }` runs only when the journal's owner is Gone or this tray; otherwise it answers a failed
 ///   `Restored` (`OWNER_ALIVE`, `OWNER_UNKNOWN`) with the file's known entries, so the core retries on the tick;
 /// - a restore that sets a corrupt journal aside answers `Done(Restored)`, then `JournalCorrupt`, and the file is
@@ -236,10 +238,14 @@ impl<P: PlanIo, N: SafetyNet> PowerExecutor<P, N> {
         (Some(journal), set_aside)
     }
 
-    /// A guard waits on this tray and restores only a journal that names this tray as owner (`recovery`), so a
-    /// leftover of another owner gets none: it would never act. A failed start is logged and the command still runs:
-    /// RunOnce covers the next sign-in, and the next command tries again. Returns the journal as read, for the
-    /// `Leftover` check.
+    /// Keeps the safety net of a journal this tray owns: the RunOnce value and a guard. A leftover of another owner
+    /// gets neither here: a guard waits on this tray and restores only a journal that names this tray as owner
+    /// (`recovery`), so it would never act, and an apply that takes the journal over sets both in its own step 3.
+    /// The value is set again because Windows deletes it when it runs it: Explorer runs RunOnce once per sign-in,
+    /// after every Run entry, so a hold that started before that pass loses it to a restore mode that finds this tray
+    /// alive and exits (`p3-haik-checks`, Found outside scope 2). A failed write or start is logged and the command
+    /// still runs: the other half of the net still covers most cases, and the next command tries again. Returns the
+    /// journal as read, for the `Leftover` check.
     fn keep_guard(&mut self, what: &str) -> JournalRead {
         let read = self.net.load_journal();
         let owned = match &read {
@@ -252,7 +258,27 @@ impl<P: PlanIo, N: SafetyNet> PowerExecutor<P, N> {
             }
             _ => false,
         };
-        if owned && let Err(f) = self.net.ensure_guard() {
+        if !owned {
+            return read;
+        }
+        // Apply step 3's order: the RunOnce value, then the guard.
+        match self.net.set_run_once() {
+            Ok(true) => {
+                let text = format!(
+                    "RunOnce value was missing while this tray owns journal entries; set again before the {what}"
+                );
+                self.note(Level::Info, &text);
+            }
+            Ok(false) => {}
+            Err(f) => {
+                let text = format!(
+                    "RunOnce value not set before the {what}: {}; it runs without one",
+                    error_text(f)
+                );
+                self.note(Level::Warn, &text);
+            }
+        }
+        if let Err(f) = self.net.ensure_guard() {
             let text = format!(
                 "guard not started before the {what}: {}; it runs without one",
                 error_text(f)
@@ -444,6 +470,7 @@ mod tests {
     use std::fs;
     use std::panic::{AssertUnwindSafe, catch_unwind};
     use std::path::{Path, PathBuf};
+    use std::sync::Mutex;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::thread;
 
@@ -459,8 +486,9 @@ mod tests {
 
     use super::*;
     use crate::log::MemoryLog;
+    use crate::power::journal::{RUN_ONCE_NAME, RecordingGuard};
     use crate::process::FakeLiveness;
-    use crate::store::{DataFile, NamedMutex};
+    use crate::store::{AutoStart, DataFile, NamedMutex, ScratchKey, StartKey};
 
     const BALANCED: Guid = Guid(0x381b4222_f694_41f0_9685_ff5bb260df2e);
     const OTHER: Guid = Guid(0xa000_0000_0000_0000_0000_0000_0000_0001);
@@ -594,12 +622,17 @@ mod tests {
         }
 
         fn warned(&self, part: &str) -> bool {
+            self.count(Level::Warn, part) > 0
+        }
+
+        fn count(&self, level: Level, part: &str) -> usize {
             self.log
                 .lines
                 .lock()
                 .unwrap()
                 .iter()
-                .any(|(level, _, text)| *level == Level::Warn && text.contains(part))
+                .filter(|(l, _, text)| *l == level && text.contains(part))
+                .count()
         }
     }
 
@@ -739,9 +772,9 @@ mod tests {
             })]
         );
 
-        // Restore calls: load (the guard check), ensure_guard, then the routine: load, active plan, plan list, three
-        // reads, the marks' save, three writes, active plan, set_active.
-        let at = rig.script_next(13, Action::Fail(31));
+        // Restore calls: load (the safety net check), set_run_once, ensure_guard, then the routine: load, active plan,
+        // plan list, three reads, the marks' save, three writes, active plan, set_active.
+        let at = rig.script_next(14, Action::Fail(31));
         let events = executor.run(&restore(RestoreWhy::WorkEnded));
         assert_eq!(rig.calls()[at], Call::SetActive(BALANCED));
         let journal = rig.fake.state().known_entries();
@@ -788,8 +821,8 @@ mod tests {
         let rig = Rig::new("plan-err-check");
         overridden(&rig.fake, ME, &ALL, vec![]);
         rig.fake.state().user_write(BALANCED, SettingKey::LidAc, 3);
-        // Calls: load, ensure_guard, values.
-        rig.script_next(2, Action::Fail(5));
+        // Calls: load, set_run_once, ensure_guard, values.
+        rig.script_next(3, Action::Fail(5));
         assert_eq!(
             rig.executor().run(&Command::ReadPlan),
             [
@@ -803,8 +836,8 @@ mod tests {
     fn failed_entry_read_keeps_the_entry_and_plan_is_ok() {
         let rig = Rig::new("entry-err");
         overridden(&rig.fake, ME, &[(BALANCED, SettingKey::LidDc)], vec![]);
-        // Calls: load, ensure_guard, values, load, active plan, read of the entry.
-        let at = rig.script_next(5, Action::Fail(5));
+        // Calls: load, set_run_once, ensure_guard, values, load, active plan, read of the entry.
+        let at = rig.script_next(6, Action::Fail(5));
         let events = rig.executor().run(&Command::ReadPlan);
         assert_eq!(rig.calls()[at], Call::Read(BALANCED, SettingKey::LidDc));
         let values = PlanValues {
@@ -1057,8 +1090,8 @@ mod tests {
                 rig.executor().run(command);
                 let s = rig.fake.state();
                 assert_eq!(
-                    s.calls[..2],
-                    [Call::LoadJournal, Call::EnsureGuard],
+                    s.calls[..3],
+                    [Call::LoadJournal, Call::SetRunOnce, Call::EnsureGuard],
                     "{case}"
                 );
                 assert_eq!(s.guards_started, started, "{case}");
@@ -1068,7 +1101,7 @@ mod tests {
         // A failed start is logged, and the command still runs.
         let rig = Rig::new("guard-fails");
         overridden(&rig.fake, ME, &ALL, vec![]);
-        rig.script_next(1, Action::Fail(1450));
+        rig.script_next(2, Action::Fail(1450));
         let values = PlanValues {
             lid_ac: 0,
             lid_dc: 0,
@@ -1083,8 +1116,205 @@ mod tests {
         assert_eq!(rig.fake.state().guard, FakeGuard::None);
     }
 
+    /// `p3-haik-checks` Found outside scope 2: Explorer's RunOnce pass of a sign-in ran restore mode while this tray
+    /// lived, so Windows deleted the value. Each command sets it again before its own work, and says so only when it
+    /// was missing.
     #[test]
-    fn no_guard_when_nothing_owned() {
+    fn run_once_set_again_while_owned() {
+        let commands = [
+            ("plan read", Command::ReadPlan),
+            ("apply", all_three()),
+            ("restore", restore(RestoreWhy::WorkEnded)),
+            ("restore", restore(RestoreWhy::Leftover)),
+        ];
+        for (what, command) in &commands {
+            for present in [false, true] {
+                let case = format!("{command:?}, value present {present}");
+                let rig = Rig::new("run-once-again");
+                overridden(&rig.fake, ME, &ALL, vec![]);
+                {
+                    let mut s = rig.fake.state();
+                    s.run_once = present;
+                    s.guard = FakeGuard::Running;
+                }
+                // Seen at the guard call, right after the value's: a restore removes it again in its clean-up.
+                let seen = Arc::new(Mutex::new(None));
+                let seen_in = seen.clone();
+                rig.script_next(
+                    2,
+                    Action::Run(Box::new(move |s: &mut FakeState| {
+                        *seen_in.lock().unwrap() = Some(s.run_once);
+                    })),
+                );
+
+                rig.executor().run(command);
+
+                assert_eq!(*seen.lock().unwrap(), Some(true), "{case}");
+                assert_eq!(
+                    rig.calls()[..3],
+                    [Call::LoadJournal, Call::SetRunOnce, Call::EnsureGuard],
+                    "{case}"
+                );
+                let said = format!(
+                    "RunOnce value was missing while this tray owns journal entries; set again before the {what}"
+                );
+                assert_eq!(
+                    rig.count(Level::Info, &said),
+                    usize::from(!present),
+                    "{case}"
+                );
+            }
+        }
+
+        // The plan read every 10 s of a hold keeps it: deleted at any time, it is back on the next read.
+        let rig = Rig::new("run-once-reads");
+        overridden(&rig.fake, ME, &ALL, vec![]);
+        let mut executor = rig.executor();
+        let values = PlanValues {
+            lid_ac: 0,
+            lid_dc: 0,
+            sleep_dc: 0,
+            ..user_values(BALANCED)
+        };
+        for _ in 0..2 {
+            rig.fake.state().run_once = false;
+            assert_eq!(executor.run(&Command::ReadPlan), [Event::Plan(Ok(values))]);
+            assert!(rig.fake.state().run_once);
+            assert_eq!(executor.run(&Command::ReadPlan), [Event::Plan(Ok(values))]);
+            assert!(rig.fake.state().run_once);
+        }
+        assert_eq!(rig.count(Level::Info, "set again before the plan read"), 2);
+        assert_eq!(rig.fake.state().known_entries().len(), 3);
+
+        // A failed write is logged like a failed guard start: the guard is still started and the command still runs.
+        let rig = Rig::new("run-once-fails");
+        overridden(&rig.fake, ME, &ALL, vec![]);
+        rig.fake.state().run_once = false;
+        rig.script_next(1, Action::Fail(5));
+        let mut executor = rig.executor();
+        assert_eq!(executor.run(&Command::ReadPlan), [Event::Plan(Ok(values))]);
+        assert!(rig.warned(
+            "RunOnce value not set before the plan read: FakePlans::set_run_once failed with 5; it runs without one"
+        ));
+        let s = rig.fake.state();
+        assert!(!s.run_once);
+        assert_eq!((s.guard, s.guards_started), (FakeGuard::Running, 1));
+        assert_eq!(s.known_entries().len(), 3);
+        drop(s);
+        // The next command tries again.
+        assert_eq!(executor.run(&Command::ReadPlan), [Event::Plan(Ok(values))]);
+        assert!(rig.fake.state().run_once);
+    }
+
+    /// The same with the tray's real safety net over a test RunOnce key, which Windows never runs: the value comes back
+    /// as the tray writes it, a value that is there is not written again, and the restore's clean-up removes it for
+    /// good.
+    #[test]
+    fn run_once_comes_back_with_the_real_net() {
+        const EXE: &str = r"C:\Wakeshot executor test\wakeshot-tray.exe";
+        let key = ScratchKey::new("power::executor::run_once_comes_back_with_the_real_net");
+        let auto = AutoStart::at(key.path());
+        let rig = Rig::new("run-once-real");
+        let net = FileNet::tray(
+            rig.dir.data(),
+            auto.clone(),
+            Path::new(EXE),
+            RecordingGuard::default(),
+            rig.log.clone(),
+        );
+        let mut executor = rig.executor_over(net);
+        let value = || auto.get(StartKey::RunOnce, RUN_ONCE_NAME);
+        let command = Some(format!("\"{EXE}\" --restore"));
+        let written = || rig.count(Level::Info, "RunOnce value WakeshotRestore set to");
+
+        let events = executor.run(&all_three());
+        assert!(
+            matches!(
+                events.as_slice(),
+                [Event::Done(Outcome::Applied { result: Ok(()), .. })]
+            ),
+            "{events:?}"
+        );
+        assert_eq!(value(), Ok(command.clone()));
+        assert_eq!(written(), 1);
+
+        // Explorer's RunOnce pass deletes it before it runs restore mode, which finds this tray alive and exits.
+        assert_eq!(auto.remove(StartKey::RunOnce, RUN_ONCE_NAME), Ok(true));
+        executor.run(&Command::ReadPlan);
+        assert_eq!(value(), Ok(command.clone()));
+        assert_eq!(written(), 2);
+        assert_eq!(rig.count(Level::Info, "set again before the plan read"), 1);
+        executor.run(&Command::ReadPlan);
+        assert_eq!(value(), Ok(command));
+        assert_eq!(written(), 2, "a value that is there is only read");
+
+        executor.run(&restore(RestoreWhy::WorkEnded));
+        assert_eq!(value(), Ok(None));
+        assert!(!rig.dir.data().file(DataFile::Journal).exists());
+        executor.run(&Command::ReadPlan);
+        assert_eq!(value(), Ok(None), "nothing owned: no value");
+        assert_eq!(written(), 2);
+    }
+
+    /// The plan read's safety net calls are stop points too. A stop at any call of a plan read, the RunOnce value
+    /// deleted at sign-in, writes no plan value and leaves every value reachable through the journal; the value is back
+    /// once its call ran; the next start restores every value.
+    #[test]
+    fn plan_read_stop_points() {
+        let start = WalkStart {
+            name: "this tray's three entries, RunOnce deleted at sign-in",
+            set: |fake| {
+                overridden(fake, ME, &ALL, vec![]);
+                let mut s = fake.state();
+                s.run_once = false;
+                s.guard = FakeGuard::Running;
+            },
+            has_unknown: false,
+        };
+        let calls = {
+            let rig = walk_rig(&start);
+            rig.executor().run(&Command::ReadPlan);
+            rig.calls()
+        };
+        assert_eq!(
+            calls[..3],
+            [Call::LoadJournal, Call::SetRunOnce, Call::EnsureGuard]
+        );
+
+        for (k, call) in calls.iter().enumerate() {
+            let case = format!("{}: stop at call {k} ({call:?})", start.name);
+            let rig = walk_rig(&start);
+            rig.fake.script(k, Action::Stop);
+            let mut executor = rig.executor();
+            let ran = catch_unwind(AssertUnwindSafe(|| executor.run(&Command::ReadPlan)));
+            assert!(ran.is_err(), "{case}: no stop");
+            {
+                let s = rig.fake.state();
+                assert!(
+                    !s.calls
+                        .iter()
+                        .any(|c| matches!(c, Call::Write(..) | Call::SetActive(_))),
+                    "{case}: {:?}",
+                    s.calls
+                );
+                assert!(s.held_without_entry().is_empty(), "{case}");
+                let entries = s.known_entries();
+                assert_eq!(entries.len(), 3, "{case}");
+                for e in entries {
+                    assert_eq!(e.original, user_value(e.key), "{case}: {e:?}");
+                }
+                // A stop panics before its call does anything, so the value is back only after call 1.
+                assert_eq!(s.run_once, k > 1, "{case}");
+            }
+
+            // The tray is gone now: its next start restores.
+            let next = rig.executor().startup();
+            assert_restored(&rig, &start, &next, &format!("{case}, then a start"));
+        }
+    }
+
+    #[test]
+    fn no_safety_net_when_nothing_owned() {
         type Start = (&'static str, fn(&FakePlans));
         let starts: [Start; 4] = [
             ("no journal", |_| {}),
@@ -1109,24 +1339,28 @@ mod tests {
             for command in &commands {
                 let rig = Rig::new("no-guard");
                 start(&rig.fake);
+                // Cleared first, so a value there after the command could only come from it.
+                rig.fake.state().run_once = false;
                 rig.set_alive(DEAD, Alive::Unknown);
                 rig.executor().run(command);
                 let s = rig.fake.state();
                 assert!(
-                    !s.calls.contains(&Call::EnsureGuard),
+                    !s.calls.contains(&Call::EnsureGuard) && !s.calls.contains(&Call::SetRunOnce),
                     "{name} {command:?}: {:?}",
                     s.calls
                 );
                 assert_eq!(s.guards_started, 0, "{name} {command:?}");
+                assert!(!s.run_once, "{name} {command:?}");
             }
         }
 
-        // A fresh apply starts its guard in its own safety net step, not before it.
+        // A fresh apply sets its RunOnce value and starts its guard in its own safety net step, not before it.
         let rig = Rig::new("no-guard-apply");
         rig.executor().run(&all_three());
         let calls = rig.calls();
         assert_eq!(calls[..2], [Call::LoadJournal, Call::LoadJournal]);
         assert_eq!(calls.iter().filter(|c| **c == Call::EnsureGuard).count(), 1);
+        assert_eq!(calls.iter().filter(|c| **c == Call::SetRunOnce).count(), 1);
     }
 
     #[test]
