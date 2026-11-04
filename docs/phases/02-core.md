@@ -140,7 +140,7 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | `p2-6-unread-floor-countdown` | no | `p2-6-unread-lid-countdown` | done (05:58: 4 new scenarios; 1284 workspace tests; 8 of 10 mutants caught) |
 | `p2-6-record-lost` | no (Haik's rule of 2026-11-04 in `product.md`) | nothing | done (11:13: 1312 workspace tests; 14 of 14 mutants killed; 12 worker decisions) |
 | `p2-6-sleep-route` | no (Haik's rule of 2026-11-04; his lid test is in `p6-int-haik-checks`) | `p2-6-record-lost`, `p3-idle-sleep-check` | done (12:16: 1340 workspace tests; 13 of 13 mutants killed; 17 worker decisions) |
-| `p2-6-sleep-route-fixes` | no | `p2-6-sleep-route` | ready |
+| `p2-6-sleep-route-fixes` | no | `p2-6-sleep-route` | in progress (12:40) |
 
 No card touches the real laptop (no power settings, screen, sound or installs) or needs Haik's hands. "Contracts
 card": the one card the orchestrator runs alone before the track builds.

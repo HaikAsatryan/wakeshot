@@ -6,7 +6,7 @@ Real laptop: **whole laptop**: an install, lid closes, locks, one hibernate, Swi
 no cargo command runs from Part A step 2 to the end of Part C. Haik's own plan is never written: the session runs on
 an active plan copy.
 Build folder: `CARGO_TARGET_DIR=<scratchpad>\p6-int-haik-checks\target`.
-Runs after: `p6-int-update-e2e`, `p3-haik-checks`, `p5-haik-check`. Parallel with: nothing.
+Runs after: `p6-int-update-e2e`, `p3-haik-checks`, `p5-haik-check`, `p2-6-sleep-route-fixes`. Parallel with: nothing.
 
 ## Goal
 
@@ -105,6 +105,25 @@ minutes).** Haik's dock is always plugged in (2026-11-03), so this block runs.
 3. Haik's plan active; delete the copy; uninstall silently; check Run, RunOnce, the Path entry and the data folder are
    gone; AFTER equals BEFORE; delete the scripts.
 4. `docs/research.md`: a section "Integration checklist with Haik": each item, Haik's words, the log facts.
+
+### Changes of 2026-11-04 (orchestrator `wakeshot-12`; apply them when you write the final steps in Part A)
+
+Haik decided on 2026-11-04 that after a closed-lid work end, and at the battery floor, the laptop sleeps, not
+hibernates (`docs/product.md` work end rule; cards `p2-6-sleep-route` and `p2-6-sleep-route-fixes`). So:
+
+1. The work end block (Part B, `wakeshot run -- ping -n 91` with the lid closed): expect sleep, not hibernate. About
+   5 minutes with no input after the work ends, the "going to sleep" sound, then Windows sleeps the laptop within
+   about a minute (Modern Standby; the screen comes on by itself at lid open; locked). After sign-in, check that the
+   copy's screen and sleep timeouts are its own again. Part C reads the `SleepCheck` and the short timeout write and
+   restore in the log, and Kernel-Power 506 and 507 in the System log (no hibernate expected).
+2. The battery floor block: the same sleep route once the lid is closed under the floor; record what happens.
+3. The dim timeout (review note in `docs/reviews/p2-6-sleep-route-review.md`): Part A records the copy's dim timeout
+   on battery; Part C says whether the screen went off at 60 s or only after the dim time.
+4. New block, last (needs one sign-out): Settings > Apps > Startup: turn Wakeshot off. Part A reads the
+   `StartupApproved\Run\Wakeshot` bytes before and after (`p6-startup-switch-check`: the off value was only written by a
+   script there). Haik signs out and in once. See: no Wakeshot icon after sign-in (start at login is off). Then he turns
+   it on again in the same page. A sign-out ends every agent: the orchestrator stops spawning first, and Haik starts
+   `/orchestrate` again after sign-in.
 
 ## Acceptance checks
 

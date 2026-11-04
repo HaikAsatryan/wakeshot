@@ -426,3 +426,9 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   the agent and lid rows in bold; LidGuard, Agents Don't Sleep and Nightcrew left the README. Lines wrong by
   `product.md` fixed (sleep, not hibernate; the lost journal; notice titles), two marked to check after
   `p2-6-sleep-route`. 10 worker decisions for Haik's review; Haik reads the table. `product.md` line 3 status updated.
+- 2026-11-04 13:38 (orchestrator `wakeshot-12`, decision for Haik's review): `p6-media` Part A started before
+  `p5-haik-check`: the icon loop, the video pipeline with stand-in screen pictures, `media/README.md` and
+  `CREDITS.md`, the speed-number script. Waits: speed numbers (installed release, idle laptop), final captures
+  (screen slot), the Claude Code session captures, Haik's look. `p6-int-haik-checks` got its 2026-11-04 changes
+  (sleep, not hibernate; the dim timeout; a Startup switch block with one sign-out) and now runs after
+  `p2-6-sleep-route-fixes`.
