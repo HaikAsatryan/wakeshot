@@ -443,7 +443,8 @@ the lid sleeps the laptop as usual, and on battery Windows ends the request abou
 
 Uninstall Wakeshot like any app, from Settings > Apps. The uninstall:
 
-1. removes start at login, the sign-in restore entry and the `Path` entry first;
+1. removes start at login (with its switch in Settings > Apps > Startup), the sign-in restore entry and the `Path`
+   entry first;
 2. puts your power settings back if a hold was running, trying for up to 25 seconds;
 3. deletes `%LocalAppData%\Wakeshot` whole, after a good restore or when there was nothing to restore;
 4. deletes the app folder, the Start menu shortcut and the app's entry in the Apps list.

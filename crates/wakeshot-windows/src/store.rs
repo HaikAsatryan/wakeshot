@@ -488,7 +488,11 @@ pub enum StartKey {
     RunOnce,
 }
 
-/// The Run and RunOnce values under one base key: the real one, or a test key.
+/// Under an `AutoStart` base: where Windows keeps the Settings > Apps > Startup switch, one value per Run value, with
+/// the same name (research "Start at login switch check").
+const APPROVED_RUN: &str = r"Explorer\StartupApproved\Run";
+
+/// The Run and RunOnce values under one base key, the real one or a test key, and the Run value's switch value.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AutoStart {
     base: String,
@@ -601,7 +605,22 @@ impl AutoStart {
 
     /// `true`: the value existed and is gone now.
     pub fn remove(&self, key: StartKey, name: &str) -> Result<bool, WinError> {
-        let subkey = self.subkey("RegDeleteKeyValueW", key)?;
+        Self::delete(&self.subkey("RegDeleteKeyValueW", key)?, name)
+    }
+
+    /// The switch value of the Run value `name`, which Windows writes once the user has used Settings > Apps > Startup.
+    /// Only Windows writes it, so this only deletes it. `true`: the value existed and is gone now; a missing value or
+    /// key is not an error, as in `remove`.
+    pub fn remove_approval(&self, name: &str) -> Result<bool, WinError> {
+        let subkey = wide("RegDeleteKeyValueW", OsStr::new(&self.approval_key()))?;
+        Self::delete(&subkey, name)
+    }
+
+    fn approval_key(&self) -> String {
+        format!(r"{}\{APPROVED_RUN}", self.base)
+    }
+
+    fn delete(subkey: &[u16], name: &str) -> Result<bool, WinError> {
         let name = wide("RegDeleteKeyValueW", OsStr::new(name))?;
         // SAFETY: names are NUL-terminated and live for the call.
         let deleted = unsafe {
@@ -623,6 +642,66 @@ impl AutoStart {
             StartKey::RunOnce => "RunOnce",
         };
         wide(call, OsStr::new(&format!(r"{}\{leaf}", self.base)))
+    }
+}
+
+/// The switch value as Windows writes it, for tests only: Wakeshot never writes it.
+#[cfg(test)]
+impl AutoStart {
+    /// A `REG_BINARY` value; the key is made when it is missing.
+    pub(crate) fn set_approval(&self, name: &str, data: &[u8]) -> Result<(), WinError> {
+        use windows::Win32::System::Registry::REG_BINARY;
+        let subkey = wide("RegCreateKeyExW", OsStr::new(&self.approval_key()))?;
+        let name = wide("RegSetValueExW", OsStr::new(name))?;
+        let mut opened = HKEY::default();
+        // SAFETY: `subkey` is NUL-terminated and lives for the call; the key is written to a live local.
+        let created = unsafe {
+            RegCreateKeyExW(
+                HKEY_CURRENT_USER,
+                PCWSTR(subkey.as_ptr()),
+                None,
+                PCWSTR::null(),
+                REG_OPTION_NON_VOLATILE,
+                KEY_SET_VALUE,
+                None,
+                &raw mut opened,
+                None,
+            )
+        };
+        reg_ok("RegCreateKeyExW", created)?;
+        // SAFETY: the key is new and owned only here.
+        let opened = unsafe { Owned::new(opened) };
+        // SAFETY: an open key with `KEY_SET_VALUE`; `name` is NUL-terminated and `data` lives for the call.
+        let set =
+            unsafe { RegSetValueExW(*opened, PCWSTR(name.as_ptr()), None, REG_BINARY, Some(data)) };
+        reg_ok("RegSetValueExW", set)
+    }
+
+    /// The value's bytes; `None`: no such value, or no such key.
+    pub(crate) fn approval(&self, name: &str) -> Result<Option<Vec<u8>>, WinError> {
+        use windows::Win32::System::Registry::RRF_RT_REG_BINARY;
+        let subkey = wide("RegGetValueW", OsStr::new(&self.approval_key()))?;
+        let name = wide("RegGetValueW", OsStr::new(name))?;
+        // The value is 12 bytes as Windows writes it; 64 leaves room for any test value.
+        let mut buf = vec![0u8; 64];
+        let mut got = buf.len() as u32;
+        // SAFETY: names are NUL-terminated and live for the call; `buf` holds `got` bytes.
+        let read = unsafe {
+            RegGetValueW(
+                HKEY_CURRENT_USER,
+                PCWSTR(subkey.as_ptr()),
+                PCWSTR(name.as_ptr()),
+                RRF_RT_REG_BINARY,
+                None,
+                Some(buf.as_mut_ptr().cast()),
+                Some(&raw mut got),
+            )
+        };
+        if read != ERROR_SUCCESS {
+            return missing_is_none(win32("RegGetValueW", read));
+        }
+        buf.truncate(got as usize);
+        Ok(Some(buf))
     }
 }
 
@@ -1329,6 +1408,47 @@ mod tests {
         let err = auto.get(StartKey::Run, "Other").unwrap_err();
         println!("a DWORD read as REG_SZ: {err:?}");
         assert_eq!(err.call, "RegGetValueW");
+    }
+
+    #[test]
+    fn auto_start_removes_the_switch_value() {
+        assert_eq!(
+            AutoStart::real().approval_key(),
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+        );
+        let key = ScratchKey::new("store::auto_start_removes_the_switch_value");
+        let auto = AutoStart::at(key.path());
+        auto.set(StartKey::Run, "Wakeshot", "x").unwrap();
+        // No switch key yet, as on a PC where nobody used the switch.
+        assert_eq!(auto.remove_approval("Wakeshot"), Ok(false));
+        assert_eq!(auto.approval("Wakeshot"), Ok(None));
+
+        // Off: state 3, then the FILETIME of the switch-off. On: state 2 and zeros.
+        let off = [3, 0, 0, 0, 0xE1, 0x58, 0x96, 0xF6, 0x02, 0x6C, 0xDD, 0x01];
+        let on = [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        auto.set_approval("Wakeshot", &off).unwrap();
+        auto.set_approval("Other", &on).unwrap();
+        assert_eq!(auto.approval("Wakeshot"), Ok(Some(off.to_vec())));
+        // The Run value of the same name lives in another key, and each delete leaves the other.
+        assert_eq!(auto.remove(StartKey::Run, "Wakeshot"), Ok(true));
+        assert_eq!(auto.approval("Wakeshot"), Ok(Some(off.to_vec())));
+        auto.set(StartKey::Run, "Wakeshot", "x").unwrap();
+        assert_eq!(auto.remove_approval("Wakeshot"), Ok(true));
+        assert_eq!(auto.approval("Wakeshot"), Ok(None));
+        assert_eq!(
+            auto.get(StartKey::Run, "Wakeshot"),
+            Ok(Some("x".to_owned()))
+        );
+        assert_eq!(auto.remove_approval("Wakeshot"), Ok(false));
+        assert_eq!(auto.approval("Other"), Ok(Some(on.to_vec())));
+        assert_eq!(
+            auto.remove_approval("bad\0name").unwrap_err().code,
+            ERROR_INVALID_PARAMETER.0
+        );
+
+        let path = key.path().to_owned();
+        drop(key);
+        assert!(!key_exists(&path));
     }
 
     #[test]

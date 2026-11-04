@@ -957,8 +957,11 @@ Velopack's kill never leaves a Run value or a Path entry that names a deleted fo
 install) writes the Run value and adds the CLI folder to the user Path; updated adds only the Path entry, so a Run value
 the user removed stays removed. Both then run the restore routine if a journal exists and its owner is dead. Uninstall
 removes the Run value, the RunOnce value and the Path entry first (the exe they name is being removed, so RunOnce goes
-even when the restore then fails), then restores, then cleans the data folder: after a restore that worked or found no
-journal, `%LocalAppData%\Wakeshot` goes whole; otherwise `journal.json` and `logs\` stay (section 5, "Gap left"). A
+even when the restore then fails), and right after the Run value its `Explorer\StartupApproved\Run\Wakeshot` value:
+Windows writes that one for the Settings > Apps > Startup switch, install and updated leave it, so an off switch
+outlasts `winget upgrade`, and uninstall removes it, so a later install starts as on a new PC
+(`p6-uninstall-startup-approval`). Then it restores, then cleans the data folder: after a restore that worked or found
+no journal, `%LocalAppData%\Wakeshot` goes whole; otherwise `journal.json` and `logs\` stay (section 5, "Gap left"). A
 failed restore is tried again every 2 s until the hook's inner limit, counted from its start: 25 s for install and
 uninstall, 10 s for updated (section 5, restore step 7). An owner that is alive or Unknown, or a journal that does not
 parse or holds only a newer version's entries, ends the tries at once with one log line; the journal stays as it is. The

@@ -57,6 +57,10 @@ pub trait HookEnv {
     fn set_run(&mut self) -> Result<String, WinError>;
     /// `true`: there was one.
     fn remove_run(&mut self) -> Result<bool, WinError>;
+    /// The Run value's `StartupApproved` value, which Windows writes once the user has used the Settings > Apps >
+    /// Startup switch. Only the uninstall removes it: install and update leave it, so the user's off choice outlasts
+    /// `winget upgrade`. `true`: there was one.
+    fn remove_approval(&mut self) -> Result<bool, WinError>;
     /// The tray exe's folder in the user Path, where `wakeshot.exe` sits beside it.
     fn add_path(&mut self) -> Result<PathChange, WinError>;
     fn remove_path(&mut self) -> Result<PathChange, WinError>;
@@ -183,12 +187,14 @@ pub fn on_updated(env: &mut impl HookEnv, version: &str) {
 }
 
 /// `--veloapp-uninstall`: the Run value, the RunOnce value and the Path entry go first, since the exe they name is
-/// being removed, then the restore, then the data folder step. The tray icons' `NotifyIconSettings` entries stay:
-/// Windows wrote them, not Wakeshot (`05-tray-ux.md`; change it when Haik wants a fully clean uninstall: remove the
-/// three entries by GUID here, after the restore).
+/// being removed, then the restore, then the data folder step. The Run value's `StartupApproved` value goes with it,
+/// though Windows wrote it, so a later install starts as on a new PC (`p6-uninstall-startup-approval`). The tray
+/// icons' `NotifyIconSettings` entries stay: Windows wrote them, not Wakeshot (`05-tray-ux.md`; change it when Haik
+/// wants a fully clean uninstall: remove the three entries by GUID here, after the restore).
 pub fn on_uninstall(env: &mut impl HookEnv, version: &str) {
     let started = begin(env, Hook::Uninstall, version);
     remove_run(env);
+    remove_approval(env);
     remove_run_once(env);
     remove_path(env);
     let step = match restore(env, Hook::Uninstall, started) {
@@ -237,6 +243,23 @@ fn set_run(env: &mut impl HookEnv) {
 fn remove_run(env: &mut impl HookEnv) {
     let removed = env.remove_run();
     removed_line(env, removed, &format!("Run value {RUN_NAME}"));
+}
+
+fn remove_approval(env: &mut impl HookEnv) {
+    let value = format!("StartupApproved value {RUN_NAME}");
+    let (level, text) = match env.remove_approval() {
+        Ok(true) => (Level::Info, format!("{value} removed")),
+        Ok(false) => (Level::Info, format!("{value} was not there")),
+        // A warning, not an error like the others: it names no exe, so a value left behind breaks nothing.
+        Err(e) => (
+            Level::Warn,
+            format!(
+                "{value} not removed: {}; a later install keeps its Settings > Apps > Startup switch as it was",
+                error_text(e)
+            ),
+        ),
+    };
+    env.log(level, &text);
 }
 
 fn remove_run_once(env: &mut impl HookEnv) {
@@ -436,7 +459,8 @@ pub struct Places {
     pub exe: PathBuf,
 }
 
-/// The real `HookEnv`: `store::AutoStart` for the Run and RunOnce values (their one writer, review m12), `install`
+/// The real `HookEnv`: `store::AutoStart` for the Run and RunOnce values and the Run value's `StartupApproved` value
+/// (their one writer, review m12), `install`
 /// for the Path entry, `power::journal::restore_locked` with `FileNet::restore_only` for one restore attempt, the
 /// same single call the guard and restore mode make.
 pub struct RealHookEnv<P> {
@@ -524,6 +548,10 @@ impl<P: PlanIo> HookEnv for RealHookEnv<P> {
 
     fn remove_run(&mut self) -> Result<bool, WinError> {
         self.auto.remove(StartKey::Run, RUN_NAME)
+    }
+
+    fn remove_approval(&mut self) -> Result<bool, WinError> {
+        self.auto.remove_approval(RUN_NAME)
     }
 
     fn add_path(&mut self) -> Result<PathChange, WinError> {
@@ -770,12 +798,17 @@ mod tests {
         call: "RegSetValueExW",
         code: 5,
     };
+    /// The `StartupApproved` value forms: state 3 and the FILETIME of the switch-off, or state 2 and zeros (research
+    /// "Start at login switch check").
+    const SWITCH_OFF: [u8; 12] = [3, 0, 0, 0, 0xE1, 0x58, 0x96, 0xF6, 0x02, 0x6C, 0xDD, 0x01];
+    const SWITCH_ON: [u8; 12] = [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
     /// One call to the fake, in order. `TryRestore` holds the fake clock when it started.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     enum Call {
         SetRun,
         RemoveRun,
+        RemoveApproval,
         AddPath,
         RemovePath,
         RemoveRunOnce,
@@ -798,6 +831,8 @@ mod tests {
         registry_error: Option<WinError>,
         broadcast_error: Option<WinError>,
         undeleted: Vec<Undeleted>,
+        /// Whether the user ever used the Settings switch, so there is a `StartupApproved` value to remove.
+        switch_used: bool,
     }
 
     impl FakeEnv {
@@ -817,6 +852,7 @@ mod tests {
                 registry_error: None,
                 broadcast_error: None,
                 undeleted: Vec::new(),
+                switch_used: true,
             }
         }
 
@@ -876,6 +912,11 @@ mod tests {
 
         fn remove_run(&mut self) -> Result<bool, WinError> {
             self.step(Call::RemoveRun, true)
+        }
+
+        fn remove_approval(&mut self) -> Result<bool, WinError> {
+            let there = self.switch_used;
+            self.step(Call::RemoveApproval, there)
         }
 
         fn add_path(&mut self) -> Result<PathChange, WinError> {
@@ -965,6 +1006,7 @@ mod tests {
         on_uninstall(&mut env, "0.1.1");
         let want = [
             Call::RemoveRun,
+            Call::RemoveApproval,
             Call::RemoveRunOnce,
             Call::RemovePath,
             TRY,
@@ -972,6 +1014,44 @@ mod tests {
         ];
         assert_eq!(order(&env), want);
         assert_eq!(env.count("data folder deleted"), 1);
+    }
+
+    #[test]
+    fn only_uninstall_removes_the_switch_value() {
+        let answers = [
+            Attempt::Restored,
+            Attempt::Nothing,
+            FAIL,
+            Attempt::OwnerAlive(OWNER),
+            Attempt::OwnerUnknown(OWNER),
+            Attempt::Unrestorable(Unrestorable::DoesNotParse),
+        ];
+        for answer in answers {
+            // Every hook Setup, an update and `winget upgrade` run, with the switch value there.
+            let mut env = FakeEnv::new(&[answer, answer]);
+            on_install(&mut env, "0.1.0");
+            on_obsolete(&mut env, "0.1.0");
+            on_updated(&mut env, "0.1.1");
+            assert!(!env.calls.contains(&Call::RemoveApproval), "{answer:?}");
+            assert_eq!(env.count("StartupApproved"), 0, "{answer:?}");
+
+            on_uninstall(&mut env, "0.1.1");
+            let removes = env.calls.iter().filter(|&&c| c == Call::RemoveApproval);
+            assert_eq!(removes.count(), 1, "{answer:?}");
+            assert_eq!(
+                env.count("StartupApproved value Wakeshot removed"),
+                1,
+                "{answer:?}"
+            );
+        }
+
+        // A user who never used the switch.
+        let mut env = FakeEnv::new(&[Attempt::Restored]);
+        env.switch_used = false;
+        on_uninstall(&mut env, "0.1.1");
+        assert_eq!(order(&env)[..2], [Call::RemoveRun, Call::RemoveApproval]);
+        assert_eq!(env.count("StartupApproved value Wakeshot was not there"), 1);
+        assert_eq!(env.at_level(Level::Info), env.lines().len());
     }
 
     #[test]
@@ -1001,7 +1081,12 @@ mod tests {
 
         let mut env = FakeEnv::new(&attempts);
         on_uninstall(&mut env, "0.1.1");
-        let mut want = vec![Call::RemoveRun, Call::RemoveRunOnce, Call::RemovePath];
+        let mut want = vec![
+            Call::RemoveRun,
+            Call::RemoveApproval,
+            Call::RemoveRunOnce,
+            Call::RemovePath,
+        ];
         want.extend(tries);
         want.push(Call::Clean(DataFolder::DeleteAll));
         assert_eq!(order(&env), want);
@@ -1027,14 +1112,19 @@ mod tests {
         assert_eq!(env.tries(), every_2s(6));
         assert_eq!(env.count("no time for another within 10 s"), 1);
 
-        // Uninstall: Run, RunOnce and Path go first anyway; the journal and the logs stay.
+        // Uninstall: Run, its switch value, RunOnce and Path go first anyway; the journal and the logs stay.
         let mut env = FakeEnv::new(&[]);
         on_uninstall(&mut env, "0.1.1");
         assert_eq!(env.tries(), every_2s(13));
         let calls = order(&env);
         assert_eq!(
-            calls[..3],
-            [Call::RemoveRun, Call::RemoveRunOnce, Call::RemovePath]
+            calls[..4],
+            [
+                Call::RemoveRun,
+                Call::RemoveApproval,
+                Call::RemoveRunOnce,
+                Call::RemovePath
+            ]
         );
         assert_eq!(
             calls.last(),
@@ -1061,6 +1151,7 @@ mod tests {
         on_uninstall(&mut env, "0.1.1");
         let want = [
             Call::RemoveRun,
+            Call::RemoveApproval,
             Call::RemoveRunOnce,
             Call::RemovePath,
             TRY,
@@ -1089,7 +1180,7 @@ mod tests {
             let mut env = FakeEnv::new(&[answer]);
             on_uninstall(&mut env, "0.1.1");
             assert_eq!(
-                order(&env)[3..],
+                order(&env)[4..],
                 [TRY, Call::Clean(DataFolder::KeepJournalAndLogs)],
                 "{answer:?}"
             );
@@ -1103,7 +1194,7 @@ mod tests {
             let mut env = FakeEnv::new(&[Attempt::Unrestorable(why)]);
             on_uninstall(&mut env, "0.1.1");
             assert_eq!(
-                order(&env)[3..],
+                order(&env)[4..],
                 [TRY, Call::Clean(DataFolder::KeepJournalAndLogs)],
                 "{why:?}"
             );
@@ -1166,9 +1257,15 @@ mod tests {
         let mut env = FakeEnv::new(&[Attempt::Restored]);
         env.registry_error = Some(DENIED);
         on_uninstall(&mut env, "0.1.1");
-        assert_eq!(order(&env).len(), 5);
+        assert_eq!(order(&env).len(), 6);
         assert_eq!(env.at_level(Level::Error), 3, "{:?}", env.lines());
-        assert_eq!(env.count("RegSetValueExW failed with 5"), 3);
+        assert_eq!(env.count("RegSetValueExW failed with 5"), 4);
+        // The switch value names no exe, so a value left behind is a warning.
+        assert_eq!(env.at_level(Level::Warn), 1, "{:?}", env.lines());
+        assert_eq!(
+            env.count("StartupApproved value Wakeshot not removed: RegSetValueExW failed with 5"),
+            1
+        );
 
         // A failed broadcast keeps the change: a warning, not an error.
         let mut env = FakeEnv::new(&[Attempt::Restored]);
@@ -1434,6 +1531,9 @@ mod tests {
             )
             .unwrap();
         rig.auto.set(StartKey::Run, "Other", "other.exe").unwrap();
+        // The user switched start at login off in Settings, and another app on.
+        rig.auto.set_approval(RUN_NAME, &SWITCH_OFF).unwrap();
+        rig.auto.set_approval("Other", &SWITCH_ON).unwrap();
         let other = Path::new(r"C:\Other\bin");
         rig.path.add(other).unwrap();
         rig.path.add(rig.folder()).unwrap();
@@ -1448,11 +1548,14 @@ mod tests {
 
         assert_originals(&fake);
         assert_eq!(rig.auto.get(StartKey::Run, RUN_NAME), Ok(None));
+        assert_eq!(rig.auto.approval(RUN_NAME), Ok(None));
         assert_eq!(rig.auto.get(StartKey::RunOnce, RUN_ONCE_NAME), Ok(None));
         assert_eq!(
             rig.auto.get(StartKey::Run, "Other"),
             Ok(Some("other.exe".to_owned()))
         );
+        assert_eq!(rig.auto.approval("Other"), Ok(Some(SWITCH_ON.to_vec())));
+        assert!(rig.log.has("StartupApproved value Wakeshot removed"));
         assert_eq!(rig.path.remove(rig.folder()), Ok(PathChange::Unchanged));
         assert_eq!(rig.path.add(other), Ok(PathChange::Unchanged));
         assert!(!rig.dir.root().exists(), "the data folder is gone");
@@ -1481,6 +1584,32 @@ mod tests {
         on_updated(&mut env, "0.1.1");
         assert!(rig.log.has("CLI folder already in the user Path"));
         assert!(rig.log.has("restore: no journal, nothing to restore"));
+    }
+
+    #[test]
+    fn real_install_and_updated_keep_the_switch_value() {
+        let rig = Rig::new("hooks::tests::real_install_and_updated_keep_the_switch_value");
+        // A fresh install writes no switch value: Windows writes it once the user uses the switch.
+        let mut env = rig.env(applied(), Box::new(SystemLiveness));
+        on_install(&mut env, "0.1.0");
+        assert_eq!(rig.auto.approval(RUN_NAME), Ok(None));
+
+        // The user switched it off; then Setup over the install (`winget upgrade`) and an update.
+        rig.auto.set_approval(RUN_NAME, &SWITCH_OFF).unwrap();
+        let mut env = rig.env(applied(), Box::new(SystemLiveness));
+        on_install(&mut env, "0.1.0");
+        on_obsolete(&mut env, "0.1.0");
+        on_updated(&mut env, "0.1.1");
+        assert_eq!(rig.auto.approval(RUN_NAME), Ok(Some(SWITCH_OFF.to_vec())));
+        assert!(!rig.log.has("StartupApproved"));
+
+        // The uninstall removes it; a second one finds nothing left.
+        let mut env = rig.env(applied(), Box::new(SystemLiveness));
+        on_uninstall(&mut env, "0.1.1");
+        assert_eq!(rig.auto.approval(RUN_NAME), Ok(None));
+        on_uninstall(&mut env, "0.1.1");
+        assert!(rig.log.has("StartupApproved value Wakeshot removed"));
+        assert!(rig.log.has("StartupApproved value Wakeshot was not there"));
     }
 
     #[test]
@@ -1656,5 +1785,6 @@ mod tests {
         // The steps that need neither still run.
         assert_eq!(env.remove_run_once(), Ok(true));
         assert_eq!(env.remove_run(), Ok(false));
+        assert_eq!(env.remove_approval(), Ok(false));
     }
 }

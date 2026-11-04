@@ -3,30 +3,35 @@
 <#
 .SYNOPSIS
 Installs, updates and uninstalls Wakeshot for real on this PC and checks that the real hooks put back a journaled
-power value each time, write and remove the Run value, the RunOnce value and the Path entry, and leave the PC as it
-was. One line per check; exit 0 when all pass, 1 when any fails, 2 when it refuses to run.
+power value each time, write and remove the Run value, the RunOnce value and the Path entry, keep the Settings switch
+value until the uninstall removes it, and leave the PC as it was. One line per check; exit 0 when all pass, 1 when
+any fails, 2 when it refuses to run.
 
 .DESCRIPTION
-The steps of docs/tasks/p6-install-e2e.md:
+The steps of docs/tasks/p6-install-e2e.md, with the switch value of docs/tasks/p6-uninstall-startup-approval.md:
 
-1. BEFORE: the Run and RunOnce keys, the user Path (type and bytes), the active plan and its lid, sleep and energy
-   saver values. A data folder %LocalAppData%\Wakeshot is moved into -WorkDir, since the uninstall deletes it.
+1. BEFORE: the Run, RunOnce and StartupApproved\Run keys, the user Path (type and bytes), the active plan and its
+   lid, sleep and energy saver values. A data folder %LocalAppData%\Wakeshot is moved into -WorkDir, since the
+   uninstall deletes it.
 2. A copy of the active plan named "Wakeshot test e2e", never made active. Every journal below names only the copy.
 3. Packs 0.1.0 and 0.1.1 of the exes in -ExeDir with pack.ps1 (the build is the caller's).
-4. Setup.exe --silent of 0.1.0, then the install checks of smoke-test.ps1.
-5. A hold: the copy's DC lid action set to Do nothing and a journal that owns it, its owner a process this script
-   started and ended. Then Setup.exe --silent of 0.1.0 over the install, as winget upgrade runs it: the install hook
-   must put the value back.
+4. Setup.exe --silent of 0.1.0, then the install checks of smoke-test.ps1; the install writes no switch value.
+5. Start at login switched off: the StartupApproved\Run value Windows writes for the Settings > Apps > Startup switch,
+   in its off form. A hold: the copy's DC lid action set to Do nothing and a journal that owns it, its owner a process
+   this script started and ended. Then Setup.exe --silent of 0.1.0 over the install, as winget upgrade runs it: the
+   install hook must put the value back and leave the switch value as it is.
 6. The same hold; 0.1.1 staged in packages\ and applied with Update.exe apply --silent --norestart (research.md,
-   "Velopack checks for Wakeshot", point 8): the updated hook must put it back, and current must keep its path.
+   "Velopack checks for Wakeshot", point 8): the updated hook must put it back and leave the switch value, and
+   current must keep its path.
 7. The same hold and a test RunOnce value; Update.exe --uninstall --silent: the uninstall hook must put it back and
-   remove the Run, RunOnce and Path values; the data, install and temp folders, the uninstall key and the shortcut go.
+   remove the Run, switch, RunOnce and Path values; the data, install and temp folders, the uninstall key and the
+   shortcut go.
 8. AFTER: the copy deleted, the data folder put back, every BEFORE value compared, no process this script started
    left.
 
-Whatever stops the run, the end uninstalls, removes the test RunOnce value, puts back the user Path bytes, the active
-plan and its values if they differ from BEFORE, deletes the copy and moves the data folder back. A hold never names
-the real plan, so no step can change it unless a hook writes the wrong plan.
+Whatever stops the run, the end uninstalls, removes the test RunOnce and switch values, puts back the user Path bytes,
+the active plan and its values if they differ from BEFORE, deletes the copy and moves the data folder back. A hold
+never names the real plan, so no step can change it unless a hook writes the wrong plan.
 
 Run it unelevated (Medium), as users run Wakeshot: an elevated run installs with a token no user has. -AllowElevated
 is for a CI runner, where every process is elevated. It refuses while Wakeshot is installed, a journal exists, or a
@@ -90,6 +95,9 @@ $RunSub = 'Software\Microsoft\Windows\CurrentVersion\Run'
 $RunOnceSub = 'Software\Microsoft\Windows\CurrentVersion\RunOnce'
 $RunName = 'Wakeshot'
 $RunOnceName = 'WakeshotRestore'
+# Where Windows keeps the Settings > Apps > Startup switch, one value per Run value with the same name.
+$ApprovedParent = 'Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved'
+$ApprovedSub = "$ApprovedParent\Run"
 $EnvSub = 'Environment'
 # What the install hook writes (06-ship.md, "Package and install values") and what the tray writes while it holds
 # (power/journal.rs).
@@ -425,6 +433,24 @@ function Test-HoldBack([string] $Check) {
     Test-Check "$Check`: journal.json gone" (-not (Test-Path -LiteralPath $Journal)) "$Journal still there"
 }
 
+# Start at login switched off, as Windows writes it: state 3, then the FILETIME of the switch-off (research.md, "Start
+# at login switch check"; the bytes of the real switch are not verified). Keys this run makes are listed deepest
+# first, so the end deletes only those.
+function Set-SwitchOff {
+    foreach ($sub in $ApprovedParent, $ApprovedSub) {
+        if (-not (Test-RegKey $sub)) { $script:MadeKeys.Insert(0, $sub) }
+    }
+    $bytes = [byte[]](@(3, 0, 0, 0) + [BitConverter]::GetBytes([DateTime]::UtcNow.ToFileTimeUtc()))
+    $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($ApprovedSub)
+    try { $key.SetValue($RunName, $bytes, 'Binary') } finally { $key.Dispose() }
+    "type 3, $($bytes.Length) bytes: $([BitConverter]::ToString($bytes))"
+}
+
+function Test-SwitchKept([string] $Check) {
+    $now = [WakeshotE2e.Reg]::Raw($ApprovedSub, $RunName)
+    Test-Check "$Check`: StartupApproved value $RunName unchanged (start at login stays off)" ($now -ceq $script:SwitchOff) "'$now', want '$($script:SwitchOff)'"
+}
+
 # A process started from the install folder: hooks end before Setup and Update.exe exit, so after them any such
 # process is a started tray, which would hold this PC awake for real.
 function Get-InstalledProcesses {
@@ -504,6 +530,7 @@ function Get-Traces {
     if (Test-RegKey $UninstallSub) { $traces += "uninstall key HKCU\$UninstallSub" }
     if ($null -ne (Get-RegValue $RunSub $RunName)) { $traces += "Run value $RunName" }
     if ($null -ne (Get-RegValue $RunOnceSub $RunOnceName)) { $traces += "RunOnce value $RunOnceName" }
+    if ($null -ne (Get-RegValue $ApprovedSub $RunName)) { $traces += "StartupApproved value $RunName" }
     if ((Get-CurrentInPath) -gt 0) { $traces += "user Path entry $Current" }
     if (Test-Path -LiteralPath $Shortcut) { $traces += "shortcut $Shortcut" }
     if (Test-Path -LiteralPath $VeloTemp) { $traces += "temp folder $VeloTemp" }
@@ -568,6 +595,8 @@ Step 'step 1: BEFORE'
 $Before = [ordered]@{
     Run = Get-KeyState $RunSub
     RunOnce = Get-KeyState $RunOnceSub
+    Approved = Get-KeyState $ApprovedSub
+    ApprovedKey = Test-RegKey $ApprovedSub
     Path = Get-PathState
     Active = $active
     Plans = @(Get-Plans | Where-Object Name -cne $CopyName | ForEach-Object { "$($_.Id) $($_.Name)" })
@@ -575,6 +604,7 @@ $Before = [ordered]@{
 }
 Say "INFO  Run: $(Format-KeyState $Before.Run)"
 Say "INFO  RunOnce: $(Format-KeyState $Before.RunOnce)"
+Say "INFO  StartupApproved\Run: key exists $($Before.ApprovedKey), $(Format-KeyState $Before.Approved)"
 $pathLength = if ($null -eq $Before.Path.Bytes) { 'missing' } else { "$($Before.Path.Bytes.Length) bytes" }
 Say "INFO  user Path: type $($Before.Path.Type), $pathLength, $(Get-Hash $Before.Path.Raw)"
 Say "INFO  plans: $($Before.Plans -join '; '); active $active"
@@ -596,6 +626,8 @@ if (Test-Path -LiteralPath $DataDir) {
 
 $script:Copy = $null
 $script:CopyLidDc = $null
+$script:SwitchOff = $null
+$script:MadeKeys = [Collections.Generic.List[string]]::new()
 $installedOnce = $false
 try {
     # ---- Step 2: the plan copy.
@@ -670,6 +702,7 @@ try {
     $run = Get-RegValue $RunSub $RunName
     Test-Check "step 4: Run value $RunName is the quoted current\wakeshot-tray.exe" ($run -ceq $RunCommand) "'$run', want '$RunCommand'"
     Test-Check 'step 4: user Path has the current folder once' ((Get-CurrentInPath) -eq 1) "$(Get-CurrentInPath) entries"
+    Test-Check "step 4: no StartupApproved value $RunName (only Windows writes it)" ($null -eq (Get-RegValue $ApprovedSub $RunName)) 'the install wrote one'
     $hookText = Read-NewText $HookLog $hookFrom
     $hookFrom = Get-FileLength $HookLog
     Show-Lines "step 4: $HookLog, this step" $hookText
@@ -688,7 +721,10 @@ try {
 
     # ---- Step 5: Setup over the install restores.
 
-    Step "step 5: hold, then Setup.exe --silent of $OldVersion over the install"
+    Step "step 5: start at login switched off, hold, then Setup.exe --silent of $OldVersion over the install"
+    $script:SwitchOff = Set-SwitchOff
+    Say "INFO  step 5: StartupApproved value $RunName written: $($script:SwitchOff)"
+    Test-Check "step 5: StartupApproved value $RunName reads back" ([WakeshotE2e.Reg]::Raw($ApprovedSub, $RunName) -ceq $script:SwitchOff) "'$([WakeshotE2e.Reg]::Raw($ApprovedSub, $RunName))'"
     $null = Set-Hold 'step 5'
     $code = Invoke-Exe $Setup @('--silent')
     $script:Times['setup over install'] = $script:LastSeconds
@@ -705,6 +741,7 @@ try {
         (Hook-Line "restore: the journal's values are back"),
         (Hook-Line 'install hook done after'))
     Test-Check "step 5: Run value $RunName unchanged" ((Get-RegValue $RunSub $RunName) -ceq $RunCommand) "'$(Get-RegValue $RunSub $RunName)'"
+    Test-SwitchKept 'step 5'
     Test-Check 'step 5: user Path has the current folder once' ((Get-CurrentInPath) -eq 1) "$(Get-CurrentInPath) entries"
 
     # ---- Step 6: an update restores.
@@ -738,6 +775,7 @@ try {
     $newBorn = if (Test-Path -LiteralPath $Current) { (Get-Item -LiteralPath $Current).CreationTimeUtc } else { $null }
     Say "INFO  step 6: current created $($currentBorn.ToString('o')) before, $(if ($newBorn) { $newBorn.ToString('o') } else { 'none' }) after"
     Test-Check "step 6: Run value $RunName unchanged" ((Get-RegValue $RunSub $RunName) -ceq $RunCommand) "'$(Get-RegValue $RunSub $RunName)'"
+    Test-SwitchKept 'step 6'
     Test-Check 'step 6: user Path has the current folder once' ((Get-CurrentInPath) -eq 1) "$(Get-CurrentInPath) entries"
 
     # ---- Step 7: an uninstall during a hold restores and removes everything.
@@ -747,6 +785,7 @@ try {
     $runOnceKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($RunOnceSub)
     try { $runOnceKey.SetValue($RunOnceName, $RunOnceCommand, 'String') } finally { $runOnceKey.Dispose() }
     Test-Check "step 7: RunOnce value $RunOnceName set" ((Get-RegValue $RunOnceSub $RunOnceName) -ceq $RunOnceCommand) "'$(Get-RegValue $RunOnceSub $RunOnceName)'"
+    Test-SwitchKept 'step 7, before the uninstall'
     $hookText = Read-NewText $HookLog 0
     Set-Content -LiteralPath (Join-Path $WorkDir 'wakeshot-before-uninstall.log') -Value $hookText -Encoding utf8NoBOM
     $quiet = Get-QuietUninstall
@@ -764,6 +803,7 @@ try {
     Test-Check "step 7: the copy's DC lid action is back to $($script:CopyLidDc)" ($live -eq $script:CopyLidDc) "reads $live"
     Test-RealPlan 'step 7'
     Test-Check "step 7: Run value $RunName gone" ($null -eq (Get-RegValue $RunSub $RunName)) 'still there'
+    Test-Check "step 7: StartupApproved value $RunName gone" ($null -eq (Get-RegValue $ApprovedSub $RunName)) "still there: $([WakeshotE2e.Reg]::Raw($ApprovedSub, $RunName))"
     Test-Check "step 7: RunOnce value $RunOnceName gone" ($null -eq (Get-RegValue $RunOnceSub $RunOnceName)) 'still there'
     Test-Check 'step 7: user Path entry gone' ((Get-CurrentInPath) -eq 0) "$Current still in Path"
     Test-Check 'step 7: user Path has its old type and bytes' ((Get-PathState).Raw -ceq $Before.Path.Raw) 'differs from BEFORE'
@@ -799,11 +839,22 @@ try {
             }
         },
         {
-            # Refused at the start when either was there, so any value now is this run's.
-            foreach ($v in @(@($RunSub, $RunName), @($RunOnceSub, $RunOnceName))) {
+            # Refused at the start when any was there, so any value now is this run's.
+            foreach ($v in @(@($RunSub, $RunName, 'Run'), @($ApprovedSub, $RunName, 'StartupApproved'), @($RunOnceSub, $RunOnceName, 'RunOnce'))) {
                 if ($null -ne (Get-RegValue $v[0] $v[1])) {
                     [WakeshotE2e.Reg]::Delete($v[0], $v[1])
-                    Fail "step 8: $($v[1]) was still there" 'removed now'
+                    Fail "step 8: $($v[2]) value $($v[1]) was still there" 'removed now'
+                }
+            }
+        },
+        {
+            foreach ($sub in $script:MadeKeys) {
+                $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($sub)
+                if ($null -eq $key) { continue }
+                try { $empty = $key.ValueCount -eq 0 -and $key.SubKeyCount -eq 0 } finally { $key.Dispose() }
+                if ($empty) {
+                    [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKey($sub)
+                    Say "INFO  step 8: deleted HKCU\$sub, which this run made"
                 }
             }
         },
@@ -875,6 +926,10 @@ try {
         Test-Check 'step 8: Run key equals BEFORE' ($diff.Count -eq 0) ($diff -join '; ')
         $diff = @(Compare-KeyState $Before.RunOnce (Get-KeyState $RunOnceSub))
         Test-Check 'step 8: RunOnce key equals BEFORE' ($diff.Count -eq 0) ($diff -join '; ')
+        $diff = @(Compare-KeyState $Before.Approved (Get-KeyState $ApprovedSub))
+        $keyNow = Test-RegKey $ApprovedSub
+        if ($keyNow -ne $Before.ApprovedKey) { $diff += "the key exists: $keyNow, BEFORE $($Before.ApprovedKey)" }
+        Test-Check 'step 8: StartupApproved\Run key equals BEFORE' ($diff.Count -eq 0) ($diff -join '; ')
         $pathNow = Get-PathState
         Test-Check 'step 8: user Path type and bytes equal BEFORE' ($pathNow.Raw -ceq $Before.Path.Raw) "BEFORE $(Get-Hash $Before.Path.Raw), now $(Get-Hash $pathNow.Raw)"
         $now = Get-ActivePlan

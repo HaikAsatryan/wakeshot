@@ -3535,6 +3535,17 @@ release build of commit cd3d498 (velopack 1.2.161 with the four hook callbacks),
   timer says 0.1 s; why the start of new exes is that slow is not verified), the updated hook 672 ms (was 197 ms).
   Setup over the install 0.5 s, apply 1.0 s, uninstall 0.4 s and the install folder gone 3.1 s after, as before.
   **Verified** (test).
+- **Uninstall removes the Settings switch value, 2026-11-04 06:37:15 to 06:37:52** (card
+  `p6-uninstall-startup-approval`), the x64 release build of commit 75233b6 plus that card's `store.rs` and
+  `hooks.rs`, with `e2e.ps1` extended for the switch value, the same launcher, at Medium: exit 0, 88 of 88 checks
+  passed (the 81 before plus 7). The install wrote no `Explorer\StartupApproved\Run\Wakeshot` value. The script then
+  wrote it in the off form (`03 00 00 00` and the FILETIME of the write, research "Start at login switch check"; not
+  the real switch, the session was locked): Setup over the install and the update kept its 12 bytes, and the
+  uninstall removed it with the Run, RunOnce and Path values. The other `StartupApproved\Run` values (none here) and
+  every other BEFORE value were equal at the end; an elevated read before and after gave the same state. The
+  uninstall hook's own log line goes with the data folder, so the missing value is the proof. Times: install 6.1 s,
+  Setup over the install 0.5 s, apply 0.9 s, uninstall 0.3 s (hook 112 ms by Velopack), install folder gone 3.1 s
+  after. **Verified** (test).
 
 ## Wiring fixes checks
 

@@ -55,7 +55,7 @@ sign-off):
 | install (also Setup.exe over an install, which is what `winget upgrade` runs) | 30 s | write the Run value and the Path entry; then the restore routine if a journal exists and its owner is Gone, again every 2 s until 25 s |
 | obsolete (old version, before an update) | 15 s | log only: updates apply only when nothing is overridden, and the updated hook restores anyway |
 | updated (new version) | 15 s | the Path entry (no change when `current` keeps its path); then restore as at install, until 10 s |
-| uninstall | 30 s | remove the Run value, the RunOnce value and the Path entry; then restore with retries until 25 s; then the data folder (Question 2) |
+| uninstall | 30 s | remove the Run value, its `StartupApproved` switch value, the RunOnce value and the Path entry; then restore with retries until 25 s; then the data folder (Question 2) |
 
 - Registry first, restore last: a restore call that hangs is killed at the limit, and must not leave a Run value or a
   Path entry pointing into a deleted folder. This changes the order in `architecture.md` section 6 ("restores ...
@@ -164,7 +164,7 @@ those one at a time across all tracks.
 | `p6-pages` | yes: one look before it goes live at v1 | `p6-readme`; the tray track's `p5-icon-art` and `p5-haik-check` (Haik's icon pick rewrites `assets/wakeshot.ico`; review m3) | ready |
 | `p6-startup-switch-check` | no | `p6-install-e2e` | done (06:23: the off choice survives Setup over the install by the keys; uninstall leaves the StartupApproved value) |
 | `p6-tray-size` | no (stop 2, a dependency change, waits for the orchestrator) | `p6-int-update-wiring` | blocked: stop 1 done 06:35; stop 2 (go given) runs alone among builders after `p6-uninstall-startup-approval` |
-| `p6-uninstall-startup-approval` | no (orchestrator decision for his review) | `p6-startup-switch-check` | in progress (started 06:24) |
+| `p6-uninstall-startup-approval` | no (orchestrator decision for his review) | `p6-startup-switch-check` | done (06:45: 1287 workspace tests; `e2e.ps1` 88 of 88) |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
 dependency 110K, pack and release 110K, install e2e 130K, winget 60K, README 70K, Pages 60K. About 880K in all.
@@ -369,3 +369,10 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   option, Windows' own TLS (SChannel) through a patched copy of velopack kept in the repo: 1,865,728 bytes, and
   the ARM64 tray builds without clang (checked by the worker; an HTTPS check against GitHub passed). It means
   keeping a patched dependency; his call.
+- 2026-11-04 06:45: `p6-uninstall-startup-approval` done: `AutoStart::remove_approval` deletes
+  `Explorer\StartupApproved\Run\Wakeshot` (missing is not an error); only `on_uninstall` calls it, right after the
+  Run value (a fake and a real test show install and update never touch it). `e2e.ps1` seeds the off form before
+  the uninstall: 88 of 88 at Medium, the laptop as before. 5 worker decisions for Haik's review in the card. Hooks
+  table uninstall row updated here. Left for the next docs pass: `architecture.md` section 6 "Registry values
+  Wakeshot writes" and the `store.rs` module doc could name the switch value; the README registry and "What stays"
+  lists wait for the README finish.
