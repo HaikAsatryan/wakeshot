@@ -1,6 +1,6 @@
 # Integration: end-to-end tests of the real exes in dry run
 
-Phase: 6. Status: ready. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 130K tokens.
+Phase: 6. Status: in progress. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 130K tokens.
 Real laptop: Part A no (code). Part B: **screen** (a dry-run tray icon, its balloons, pictures; one screen or sound card
 at a time, across all tracks) and the **agent-session lane** (one Claude Code test session, as `p4-live-claude` ran
 them). No power setting is written: the dry-run tray uses `DryRunPower`, dry-run requests, lock and hibernate.
@@ -87,6 +87,26 @@ Problems seen but not fixed.
 ## Log
 
 - 2026-11-03: card written by `p6-plan-integration`.
+- 2026-11-04 04:01: started by `wakeshot-worker`. Two stops: stop 1 writes the suite (deliverables 1 and 2) and
+  makes it compile; stop 2 runs it when the laptop lane is free.
+- 2026-11-04 04:19: stop 1 done, before any fix and without any run. `tests/e2e/mod.rs` (harness) and
+  `tests/e2e_dry_run.rs` (12 tests, all `#[ignore]`, all `real_e2e_*`) written. `rustfmt --edition 2024 --check` on
+  both, clippy x64 `-p wakeshot-tray` with and without `--all-targets` clean; `wakeshot-cli` built (x64) into the
+  card's target folder; plain `cargo test --locked -p wakeshot-tray`: 8 + 5 pass, the 12 new ones ignored. No tray
+  started. Decided by the worker, for Haik's review (none changes the product):
+  1. The CLI runs as the test's own child (High in an agent shell; a user's terminal is Medium), so its output and
+     exit code come back directly; the tray stays Medium, so files cross the two levels. Change it when a check needs
+     a Medium CLI: `spawn_outside_tree` under `cmd /c` with output to files.
+  2. "`run` whose wrapper is ended by pid": `wakeshot run` puts its child in no job, so ending the wrapper leaves the
+     child running and its hold rightly stays. The test checks that, then ends the child by pid and checks the hold
+     drops within one safety tick (Gone) and the tray deletes the file.
+  3. The second start runs through Explorer too (Medium), in a `.cmd` that waits for it and writes its exit code;
+     "at once" is checked as under 10 s including Explorer and `cmd`, plus no second start line in the log.
+  4. "Reads as plain English" is checked by rule (no Rust debug form, escaped path, JSON file content, control
+     character; at least one word) and by reading the printed log at the run; no ERROR line in a plain session.
+  5. The Claude Code session check is a 12th test, `real_e2e_claude_session_timeline`, which does nothing unless
+     `WAKESHOT_E2E_CLAUDE_WATCH_S` is set: it starts the tray on the real `~\.claude` and prints every change of the
+     holding list with its time, to read against the test session (other sessions count too).
 
 ## Result
 

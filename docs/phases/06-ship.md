@@ -157,7 +157,7 @@ those one at a time across all tracks.
 | `p6-install-e2e` | no; real laptop: installs, the real Run value and Path, a throwaway plan copy | `p6-velopack-dependency`, `p6-pack-and-release`; `p3-power-plan` (its first test shows a write to an inactive copy leaves the real plan alone) | done (committed 03:57): `packaging/e2e.ps1`, 81 of 81 checks twice at Medium; AFTER equals BEFORE |
 | `p6-launch-research` | yes: reads its Result (rival pick, Store recommendation) before the README, winget and Store cards are rewritten; no installs | none | done: its Result waits for Haik's read |
 | `p6-winget-manifest` | no | `p6-pack-and-release`; `p6-launch-research` (the winget rules for an app that updates itself) | done (committed 02:25): templates and `fill.ps1`; `winget validate` passed on the local packs |
-| `p6-readme` | yes: a read at the Phase 6 sign-off; the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3, sign-off item 12) are in, all defaults | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-claude`; the tray track's `p5-haik-check` (review m2); `p6-launch-research` (its scope grows from that Result, Haik 2026-11-04); `p6-media` | ready |
+| `p6-readme` | yes: a read at the Phase 6 sign-off; the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3, sign-off item 12) are in, all defaults | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-claude`; the tray track's `p5-haik-check` (review m2); `p6-launch-research` (its scope grows from that Result, Haik 2026-11-04); `p6-media` | in progress (started 04:02 as a draft before `p5-haik-check` and `p6-media`; orchestrator decision, work log 04:02) |
 | `p6-media` | yes: watches the video and the loop and says yes or what to change; about 10 min off the PC for the captures | `p6-launch-research` (tool, storyboard, shot list); `p5-haik-check` (final icon); integration's `p6-int-real-e2e` (the real app) | ready |
 | `p6-pages` | yes: one look before it goes live at v1 | `p6-readme`; the tray track's `p5-icon-art` and `p5-haik-check` (Haik's icon pick rewrites `assets/wakeshot.ico`; review m3) | ready |
 
@@ -319,3 +319,7 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   `pack.ps1` help needs a blank line under `#Requires`; `packaging/README.md` should list `e2e.ps1`. Velopack's own
   logs stay in `%LocalAppData%\velopack` (deleting them is optional, Haik's call). The worker's note that `CLAUDE.md`
   still says 3 h and 4 h is wrong: it says 5 h (checked 03:57).
+- 2026-11-04 04:02 (orchestrator `wakeshot-12`, decision for Haik's review): `p6-readme` started as a draft before
+  its Runs after `p5-haik-check` and `p6-media` are done (both need Haik). Why: it needs no laptop, the night's laptop
+  lane is serial, and everything else it states is done. The draft takes the product text from the code as it is
+  and leaves one marked comment per media spot; its Result lists the lines to check after Haik's pick and the media.

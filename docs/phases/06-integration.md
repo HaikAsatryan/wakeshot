@@ -206,7 +206,7 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | `p6-int-tray-mode` | no | Part B: screen, about 10 min (a dry-run icon) | `p6-int-io-thread`, `p6-int-window`, `p6-int-dispatch`, `p6-int-startup`, `p3-requests`, `p3-system-events`, `p3-hibernate`, `p3-recovery`, `p4-watch-thread`, `p4-claude-transcript`, `p4-cron`, `p5-tray-icon`, `p5-menu-view`, `p5-notices`, `p5-sounds` | blocked: waiting for the screen slot (Part A done, 11 tests; smoke test passed 02:58 in the locked session; the picture waits for Haik) |
 | `p6-int-update-wiring` | no | no | `p6-int-tray-mode`, `p6-velopack-dependency`, `p6-update-schedule` | done (committed 03:54): 15 `tray_mode` tests; smoke passed; ARM64 tray CI only |
 | `p6-int-wiring-fixes` | no | no | `p6-int-tray-mode` Part A, `p6-velopack-dependency`, `p6-int-update-wiring` | in progress (started 03:55) |
-| `p6-int-dry-run-e2e` | no | screen (dry-run icon, balloons, pictures); agent-session lane (one Claude Code test session) | `p6-int-update-wiring`, `p4-cli-args`, `p4-cli-run`, `p4-cli-commands`, `p4-cli-restore`, `p4-live-claude` | ready |
+| `p6-int-dry-run-e2e` | no | screen (dry-run icon, balloons, pictures); agent-session lane (one Claude Code test session) | `p6-int-update-wiring`, `p4-cli-args`, `p4-cli-run`, `p4-cli-commands`, `p4-cli-restore`, `p4-live-claude` | in progress (started 04:01: Part A, the suite, beside `p6-int-wiring-fixes`; the suite runs after it) |
 | `p6-int-real-e2e` | no | global: power settings on active plan copies, RunOnce, a guard | `p6-int-dry-run-e2e`, `p3-real-checks` | ready |
 | `p6-int-update-e2e` | no | global: installs, Run, RunOnce, Path, a user environment value, an active plan copy | `p6-int-real-e2e`, `p6-install-e2e`, `p6-pack-and-release`, `p6-hooks` | ready |
 | `p6-int-haik-checks` | yes: about 42 min (27, 18 of hands, plus 15 with the dock) | whole laptop: lid, lock, hibernate, switch user, battery; no other agent or cargo command | `p6-int-update-e2e`, `p3-haik-checks`, `p5-haik-check` | ready |
@@ -340,3 +340,7 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   Worker notes: the local feed works only for an installed debug tray, so it is `p6-int-update-e2e`'s, not
   `p6-int-dry-run-e2e`'s; an installed tray left running past 5 minutes asks GitHub once (no release yet; what
   `GithubSource` answers then is not verified). 7 worker decisions, for Haik's review, in the card.
+- 2026-11-04 04:02 (orchestrator `wakeshot-12`, took over from `wakeshot-46` at 04:00): `p6-int-dry-run-e2e` started
+  at 04:01 for its suite only (deliverables 1 and 2) beside `p6-int-wiring-fixes`, which owns `dispatch.rs`,
+  `io_thread.rs`, `tray_mode.rs` and the `startup.rs` log lines. The worker starts no tray until the orchestrator
+  resumes it, after `p6-int-wiring-fixes` and the `packaging/e2e.ps1` rerun.
