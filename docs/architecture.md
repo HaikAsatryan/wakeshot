@@ -1108,18 +1108,32 @@ Journal format:
   downgrade in those minutes leaves the 1-minute timeouts until a newer version runs.
 
 Registry values Wakeshot writes, all under HKCU, all removed by uninstall: `...\CurrentVersion\Run\Wakeshot` (start at
-login, set by the install hook); `...\CurrentVersion\RunOnce\WakeshotRestore` (only while overriding). Windows itself
-writes `Control Panel\NotifyIconSettings\<id>` for the icon and a `NotifyIconGeneratedAumid_<id>` key for balloons.
-`store::AutoStart` is the one code that writes or removes the Run and RunOnce values (the hooks and the journal call
-it; review m12), and at uninstall it also removes the Run value's `StartupApproved` switch value
-(`p6-uninstall-startup-approval`); `install` keeps only the Path entry.
+login, set by the install hook); `...\CurrentVersion\RunOnce\WakeshotRestore` (only while overriding);
+`Software\Classes\AppUserModelId\velopack.HaikAsatryan.Wakeshot` with `DisplayName` "Wakeshot" and `IconUri` naming
+`current\wakeshot-notice.png` (the notice header's name and picture, set by the install and updated hooks). Windows
+itself writes `Control Panel\NotifyIconSettings\<id>` for the icon, a `NotifyIconGeneratedAumid_<id>` key for the
+balloons of a tray run from `target\`, and `...\Notifications\Settings\velopack.HaikAsatryan.Wakeshot` for the
+installed tray's balloons; uninstall leaves these. `store::AutoStart` is the one code that writes or removes the Run
+and RunOnce values (the hooks and the journal call it; review m12), and at uninstall it also removes the Run value's
+`StartupApproved` switch value (`p6-uninstall-startup-approval`); `install` keeps only the Path entry;
+`notify::NoticeAppId` is the one code that writes or removes the app id key.
+
+The notice header (`p6-notice-app-icon`): `VelopackApp::run` gives every start of an installed tray (Start menu, Run
+value, restart after an update) the explicit app id `velopack.HaikAsatryan.Wakeshot`, the Start menu shortcut's id, and
+Windows files the balloons under it. With no key for that id the header showed a plain white square. So the package
+ships `wakeshot-notice.png` (48 px, the app icon from `tray::art`, kept equal to `assets/` by a test) beside the tray
+exe, and the hooks write the key that names it; Velopack puts the file in place and removes it with the app. A tray run
+from `target\` has no explicit id and keeps the shell's generated one; so does a dry run from `target\`, while a dry
+run started from an installed copy gets the real id (research "Notice header icon checks").
 
 Velopack hooks (Phase 6, `hooks.rs`): the registry steps come first and the restore last, so a restore that hangs until
 Velopack's kill never leaves a Run value or a Path entry that names a deleted folder. Install (also Setup.exe over an
-install) writes the Run value and adds the CLI folder to the user Path; updated adds only the Path entry, so a Run value
-the user removed stays removed. Both then run the restore routine if a journal exists and its owner is dead. Uninstall
-removes the Run value, the RunOnce value and the Path entry first (the exe they name is being removed, so RunOnce goes
-even when the restore then fails), and right after the Run value its `Explorer\StartupApproved\Run\Wakeshot` value:
+install) writes the Run value, adds the CLI folder to the user Path and writes the notice app id key; updated adds the
+Path entry and writes the key (so an update from a version without it gets it), and leaves the Run value, so one the
+user removed stays removed. Both then run the restore routine if a journal exists and its owner is dead. Uninstall
+removes the Run value, the RunOnce value, the Path entry and the notice app id key first (the files they name are being
+removed, so RunOnce goes even when the restore then fails), and right after the Run value its
+`Explorer\StartupApproved\Run\Wakeshot` value:
 Windows writes that one for the Settings > Apps > Startup switch, install and updated leave it, so an off switch
 outlasts `winget upgrade`, and uninstall removes it, so a later install starts as on a new PC
 (`p6-uninstall-startup-approval`). Then it restores, then cleans the data folder: after a restore that worked or found

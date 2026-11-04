@@ -27,6 +27,7 @@ use windows::Win32::Foundation::{ERROR_INVALID_PARAMETER, ERROR_NO_UNICODE_TRANS
 use crate::WinError;
 use crate::install::{PathChange, UserPath};
 use crate::log::{self, Level, Log, Proc};
+use crate::notify::{NOTICE_APP_ID, NOTICE_ICON_FILE, NoticeAppId};
 use crate::power::journal::{FileNet, NoGuard, RUN_ONCE_NAME, reset_locked, restore_locked};
 use crate::power::plan::Win32Power;
 use crate::process::{Liveness, SystemLiveness};
@@ -65,6 +66,11 @@ pub trait HookEnv {
     /// The tray exe's folder in the user Path, where `wakeshot.exe` sits beside it.
     fn add_path(&mut self) -> Result<PathChange, WinError>;
     fn remove_path(&mut self) -> Result<PathChange, WinError>;
+    /// The notice header's name and picture: the app id key (`notify::NoticeAppId`), with the PNG that ships beside
+    /// the tray exe.
+    fn register_notices(&mut self) -> Result<Registered, WinError>;
+    /// `true`: there was one.
+    fn remove_notices(&mut self) -> Result<bool, WinError>;
     /// `true`: there was one.
     fn remove_run_once(&mut self) -> Result<bool, WinError>;
     /// One restore attempt, if a journal exists and its owner is Gone.
@@ -104,6 +110,15 @@ pub enum Unrestorable {
     /// It holds only entries of a newer version, which keep the user's values for that version (architecture section
     /// 6, "Journal format").
     NewerVersion,
+}
+
+/// What `register_notices` wrote.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Registered {
+    /// The name, and the picture in this file.
+    WithIcon(PathBuf),
+    /// The name only: this file was not there, so the header shows Windows' default picture.
+    NoIcon(PathBuf),
 }
 
 /// The uninstall's data folder step (Question 2 of `p6-plan-ship`: the default, Haik 2026-11-03 18:09).
@@ -161,12 +176,13 @@ impl Hook {
     }
 }
 
-/// `--veloapp-install` (also Setup.exe over an install, which is what `winget upgrade` runs): the Run value and the
-/// Path entry, then the restore.
+/// `--veloapp-install` (also Setup.exe over an install, which is what `winget upgrade` runs): the Run value, the
+/// Path entry and the notice app id, then the restore.
 pub fn on_install(env: &mut impl HookEnv, version: &str) {
     let started = begin(env, Hook::Install, version);
     set_run(env);
     add_path(env);
+    register_notices(env);
     restore(env, Hook::Install, started);
     end(env, Hook::Install, started);
 }
@@ -180,26 +196,30 @@ pub fn on_obsolete(env: &mut impl HookEnv, version: &str) {
     env.log(Level::Info, &text);
 }
 
-/// `--veloapp-updated`, on the new version: the Path entry (no change while `current` keeps its path), then the
-/// restore. The Run value is left as it is, so a user who removed it keeps it removed.
+/// `--veloapp-updated`, on the new version: the Path entry (no change while `current` keeps its path) and the notice
+/// app id (so an update from a version without it gets it), then the restore. The Run value is left as it is, so a
+/// user who removed it keeps it removed.
 pub fn on_updated(env: &mut impl HookEnv, version: &str) {
     let started = begin(env, Hook::Updated, version);
     add_path(env);
+    register_notices(env);
     restore(env, Hook::Updated, started);
     end(env, Hook::Updated, started);
 }
 
-/// `--veloapp-uninstall`: the Run value, the RunOnce value and the Path entry go first, since the exe they name is
-/// being removed, then the restore, then the data folder step. The Run value's `StartupApproved` value goes with it,
-/// though Windows wrote it, so a later install starts as on a new PC (`p6-uninstall-startup-approval`). The tray
-/// icons' `NotifyIconSettings` entries stay: Windows wrote them, not Wakeshot (`05-tray-ux.md`; change it when Haik
-/// wants a fully clean uninstall: remove the three entries by GUID here, after the restore).
+/// `--veloapp-uninstall`: the Run value, the RunOnce value, the Path entry and the notice app id go first, since the
+/// files they name are being removed, then the restore, then the data folder step. The Run value's `StartupApproved`
+/// value goes with it, though Windows wrote it, so a later install starts as on a new PC
+/// (`p6-uninstall-startup-approval`). The tray icons' `NotifyIconSettings` entries and the app id's
+/// `Notifications\Settings` key stay: Windows wrote them, not Wakeshot (`05-tray-ux.md`; change it when Haik wants a
+/// fully clean uninstall: remove the three entries by GUID and that key here, after the restore).
 pub fn on_uninstall(env: &mut impl HookEnv, version: &str) {
     let started = begin(env, Hook::Uninstall, version);
     remove_run(env);
     remove_approval(env);
     remove_run_once(env);
     remove_path(env);
+    remove_notices(env);
     let step = match restore(env, Hook::Uninstall, started) {
         Attempt::Restored | Attempt::Nothing => DataFolder::DeleteAll,
         Attempt::Unrestorable(Unrestorable::DoesNotParse) => {
@@ -305,6 +325,49 @@ fn remove_approval(env: &mut impl HookEnv) {
 fn remove_run_once(env: &mut impl HookEnv) {
     let removed = env.remove_run_once();
     removed_line(env, removed, &format!("RunOnce value {RUN_ONCE_NAME}"));
+}
+
+/// Warnings, not errors: only the picture and name in the notice header are at stake.
+fn register_notices(env: &mut impl HookEnv) {
+    let id = format!("notice app id {NOTICE_APP_ID}");
+    let (level, text) = match env.register_notices() {
+        Ok(Registered::WithIcon(icon)) => (
+            Level::Info,
+            format!("{id} registered with its icon {}", icon.display()),
+        ),
+        Ok(Registered::NoIcon(icon)) => (
+            Level::Warn,
+            format!(
+                "{id} registered without its icon: {} not found; notices show a plain square in their header",
+                icon.display()
+            ),
+        ),
+        Err(e) => (
+            Level::Warn,
+            format!(
+                "{id} not registered: {}; notices show a plain square in their header",
+                error_text(e)
+            ),
+        ),
+    };
+    env.log(level, &text);
+}
+
+fn remove_notices(env: &mut impl HookEnv) {
+    let id = format!("notice app id {NOTICE_APP_ID}");
+    let (level, text) = match env.remove_notices() {
+        Ok(true) => (Level::Info, format!("{id} removed")),
+        Ok(false) => (Level::Info, format!("{id} was not there")),
+        // A warning: the key names only a picture, and nothing starts from it.
+        Err(e) => (
+            Level::Warn,
+            format!(
+                "{id} not removed: {}; it names an icon the uninstall deletes",
+                error_text(e)
+            ),
+        ),
+    };
+    env.log(level, &text);
 }
 
 fn removed_line(env: &impl HookEnv, removed: Result<bool, WinError>, value: &str) {
@@ -497,21 +560,24 @@ pub struct Places {
     pub dir: DataDir,
     pub auto: AutoStart,
     pub path: UserPath,
+    pub notices: NoticeAppId,
     pub names: Names,
-    /// The tray exe the Run value starts. Its folder is the Path entry: `wakeshot.exe` sits beside it.
+    /// The tray exe the Run value starts. Its folder is the Path entry (`wakeshot.exe` sits beside it) and holds the
+    /// notice icon.
     pub exe: PathBuf,
 }
 
 /// The real `HookEnv`: `store::AutoStart` for the Run and RunOnce values and the Run value's `StartupApproved` value
-/// (their one writer, review m12), `install`
-/// for the Path entry, `power::journal::restore_locked` with `FileNet::restore_only` for one restore attempt, the
-/// same single call the guard and restore mode make.
+/// (their one writer, review m12), `install` for the Path entry, `notify::NoticeAppId` for the notice app id,
+/// `power::journal::restore_locked` with `FileNet::restore_only` for one restore attempt, the same single call the
+/// guard and restore mode make.
 pub struct RealHookEnv<P> {
     /// An `Err` fails only the steps that need it, so the registry steps still run.
     dir: Result<DataDir, WinError>,
     exe: Result<PathBuf, WinError>,
     auto: AutoStart,
     path: UserPath,
+    notices: NoticeAppId,
     names: Names,
     plans: P,
     net: Result<FileNet<NoGuard>, WinError>,
@@ -539,6 +605,7 @@ impl RealHookEnv<Win32Power> {
             exe: std::env::current_exe().map_err(|e| io_error("GetModuleFileNameW", &e)),
             auto,
             path: UserPath::real(),
+            notices: NoticeAppId::real(),
             names: Names::real(),
             plans: Win32Power::new(log.clone()),
             net,
@@ -557,6 +624,7 @@ impl<P: PlanIo> RealHookEnv<P> {
             exe: Ok(places.exe),
             auto: places.auto,
             path: places.path,
+            notices: places.notices,
             names: places.names,
             plans,
             net: Ok(net),
@@ -603,6 +671,22 @@ impl<P: PlanIo> HookEnv for RealHookEnv<P> {
 
     fn remove_path(&mut self) -> Result<PathChange, WinError> {
         self.path.remove(self.cli_folder()?)
+    }
+
+    fn register_notices(&mut self) -> Result<Registered, WinError> {
+        let icon = self.cli_folder()?.join(NOTICE_ICON_FILE);
+        // A file that cannot be read counts as missing: a key that names it would show nothing either.
+        if icon.is_file() {
+            self.notices.register(Some(&icon))?;
+            Ok(Registered::WithIcon(icon))
+        } else {
+            self.notices.register(None)?;
+            Ok(Registered::NoIcon(icon))
+        }
+    }
+
+    fn remove_notices(&mut self) -> Result<bool, WinError> {
+        self.notices.remove()
     }
 
     fn remove_run_once(&mut self) -> Result<bool, WinError> {
@@ -837,6 +921,7 @@ mod tests {
     use wakeshot_core::ownership::reset::KeyReset;
     use wakeshot_core::process::FileTime;
     use wakeshot_core::settings::{Guid, Journal, JournalEntry, PlanValues, SettingKey};
+    use windows::Win32::System::Registry::REG_EXPAND_SZ;
 
     use super::*;
     use crate::install::PATH_VALUE;
@@ -859,10 +944,10 @@ mod tests {
         call: "RegSetValueExW",
         code: 5,
     };
-    /// The `StartupApproved` value forms: state 3 and the FILETIME of the switch-off, or state 2 and zeros (research
-    /// "Start at login switch check").
-    const SWITCH_OFF: [u8; 12] = [3, 0, 0, 0, 0xE1, 0x58, 0x96, 0xF6, 0x02, 0x6C, 0xDD, 0x01];
-    const SWITCH_ON: [u8; 12] = [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    /// The `StartupApproved` value forms the real Settings switch wrote on build 26300: state 1 and the FILETIME of the
+    /// switch-off, or 12 zero bytes for on (research "Start at login switch check", "The value's format").
+    const SWITCH_OFF: [u8; 12] = [1, 0, 0, 0, 0x9D, 0xAA, 0x39, 0x37, 0xA4, 0x6C, 0xDD, 0x01];
+    const SWITCH_ON: [u8; 12] = [0; 12];
 
     /// One call to the fake, in order. `TryRestore` holds the fake clock when it started.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -872,6 +957,8 @@ mod tests {
         RemoveApproval,
         AddPath,
         RemovePath,
+        RegisterNotices,
+        RemoveNotices,
         RemoveRunOnce,
         TryRestore(u64),
         ResetLost,
@@ -895,6 +982,8 @@ mod tests {
         undeleted: Vec<Undeleted>,
         /// Whether the user ever used the Settings switch, so there is a `StartupApproved` value to remove.
         switch_used: bool,
+        /// Whether the notice icon ships beside the exe.
+        notice_icon: bool,
     }
 
     impl FakeEnv {
@@ -915,6 +1004,7 @@ mod tests {
                 broadcast_error: None,
                 undeleted: Vec::new(),
                 switch_used: true,
+                notice_icon: true,
             }
         }
 
@@ -991,6 +1081,19 @@ mod tests {
             self.step(Call::RemovePath, change)
         }
 
+        fn register_notices(&mut self) -> Result<Registered, WinError> {
+            let icon = PathBuf::from(r"C:\x\current\wakeshot-notice.png");
+            let wrote = match self.notice_icon {
+                true => Registered::WithIcon(icon),
+                false => Registered::NoIcon(icon),
+            };
+            self.step(Call::RegisterNotices, wrote)
+        }
+
+        fn remove_notices(&mut self) -> Result<bool, WinError> {
+            self.step(Call::RemoveNotices, true)
+        }
+
         fn remove_run_once(&mut self) -> Result<bool, WinError> {
             self.step(Call::RemoveRunOnce, true)
         }
@@ -1063,7 +1166,10 @@ mod tests {
     fn each_hook_calls_in_order() {
         let mut env = FakeEnv::new(&[Attempt::Restored]);
         on_install(&mut env, "0.1.0");
-        assert_eq!(order(&env), [Call::SetRun, Call::AddPath, TRY]);
+        assert_eq!(
+            order(&env),
+            [Call::SetRun, Call::AddPath, Call::RegisterNotices, TRY]
+        );
         let lines = env.lines();
         assert_eq!(
             lines[0],
@@ -1083,7 +1189,7 @@ mod tests {
 
         let mut env = FakeEnv::new(&[Attempt::Restored]);
         on_updated(&mut env, "0.1.1");
-        assert_eq!(order(&env), [Call::AddPath, TRY]);
+        assert_eq!(order(&env), [Call::AddPath, Call::RegisterNotices, TRY]);
         assert_eq!(env.count("updated hook for version 0.1.1 started"), 1);
 
         let mut env = FakeEnv::new(&[Attempt::Restored]);
@@ -1093,11 +1199,42 @@ mod tests {
             Call::RemoveApproval,
             Call::RemoveRunOnce,
             Call::RemovePath,
+            Call::RemoveNotices,
             TRY,
             Call::Clean(DataFolder::DeleteAll),
         ];
         assert_eq!(order(&env), want);
         assert_eq!(env.count("data folder deleted"), 1);
+    }
+
+    #[test]
+    fn notice_app_id_lines() {
+        let mut env = FakeEnv::new(&[Attempt::Nothing, Attempt::Nothing]);
+        on_install(&mut env, "0.1.0");
+        on_uninstall(&mut env, "0.1.0");
+        assert_eq!(
+            env.count(
+                r"notice app id velopack.HaikAsatryan.Wakeshot registered with its icon C:\x\current\wakeshot-notice.png"
+            ),
+            1
+        );
+        assert_eq!(
+            env.count("notice app id velopack.HaikAsatryan.Wakeshot removed"),
+            1
+        );
+        assert_eq!(env.at_level(Level::Info), env.lines().len());
+
+        // The icon file is missing: the name is still written, and the line says what the header shows.
+        let mut env = FakeEnv::new(&[Attempt::Nothing]);
+        env.notice_icon = false;
+        on_updated(&mut env, "0.1.1");
+        assert_eq!(env.at_level(Level::Warn), 1, "{:?}", env.lines());
+        assert_eq!(
+            env.count(
+                r"registered without its icon: C:\x\current\wakeshot-notice.png not found; notices show a plain square"
+            ),
+            1
+        );
     }
 
     #[test]
@@ -1154,14 +1291,14 @@ mod tests {
 
         let mut env = FakeEnv::new(&attempts);
         on_install(&mut env, "0.1.0");
-        assert_eq!(order(&env)[2..], tries);
+        assert_eq!(order(&env)[3..], tries);
         assert_eq!(env.tries(), [0, 2_000, 4_000]);
         assert_eq!(env.count("next try in 2 s"), 2);
         assert_eq!(env.count("the journal's values are back"), 1);
 
         let mut env = FakeEnv::new(&attempts);
         on_updated(&mut env, "0.1.1");
-        assert_eq!(order(&env)[1..], tries);
+        assert_eq!(order(&env)[2..], tries);
 
         let mut env = FakeEnv::new(&attempts);
         on_uninstall(&mut env, "0.1.1");
@@ -1170,6 +1307,7 @@ mod tests {
             Call::RemoveApproval,
             Call::RemoveRunOnce,
             Call::RemovePath,
+            Call::RemoveNotices,
         ];
         want.extend(tries);
         want.push(Call::Clean(DataFolder::DeleteAll));
@@ -1183,7 +1321,10 @@ mod tests {
         on_install(&mut env, "0.1.0");
         let every_2s = |n: u64| (0..n).map(|i| i * RETRY_EVERY_MS).collect::<Vec<_>>();
         assert_eq!(env.tries(), every_2s(13));
-        assert_eq!(order(&env)[..2], [Call::SetRun, Call::AddPath]);
+        assert_eq!(
+            order(&env)[..3],
+            [Call::SetRun, Call::AddPath, Call::RegisterNotices]
+        );
         assert_eq!(env.count("no time for another within 25 s"), 1);
         assert_eq!(
             env.count("the tray restores the values at its next start"),
@@ -1196,18 +1337,20 @@ mod tests {
         assert_eq!(env.tries(), every_2s(6));
         assert_eq!(env.count("no time for another within 10 s"), 1);
 
-        // Uninstall: Run, its switch value, RunOnce and Path go first anyway; the journal and the logs stay.
+        // Uninstall: Run, its switch value, RunOnce, Path and the notice app id go first anyway; the journal and the
+        // logs stay.
         let mut env = FakeEnv::new(&[]);
         on_uninstall(&mut env, "0.1.1");
         assert_eq!(env.tries(), every_2s(13));
         let calls = order(&env);
         assert_eq!(
-            calls[..4],
+            calls[..5],
             [
                 Call::RemoveRun,
                 Call::RemoveApproval,
                 Call::RemoveRunOnce,
-                Call::RemovePath
+                Call::RemovePath,
+                Call::RemoveNotices
             ]
         );
         assert_eq!(
@@ -1225,11 +1368,14 @@ mod tests {
 
         let mut env = FakeEnv::timed(&hang);
         on_install(&mut env, "0.1.0");
-        assert_eq!(order(&env), [Call::SetRun, Call::AddPath, TRY]);
+        assert_eq!(
+            order(&env),
+            [Call::SetRun, Call::AddPath, Call::RegisterNotices, TRY]
+        );
 
         let mut env = FakeEnv::timed(&hang);
         on_updated(&mut env, "0.1.1");
-        assert_eq!(order(&env), [Call::AddPath, TRY]);
+        assert_eq!(order(&env), [Call::AddPath, Call::RegisterNotices, TRY]);
 
         let mut env = FakeEnv::timed(&hang);
         on_uninstall(&mut env, "0.1.1");
@@ -1238,6 +1384,7 @@ mod tests {
             Call::RemoveApproval,
             Call::RemoveRunOnce,
             Call::RemovePath,
+            Call::RemoveNotices,
             TRY,
             Call::Clean(DataFolder::KeepJournalAndLogs),
         ];
@@ -1251,20 +1398,24 @@ mod tests {
             on_install(&mut env, "0.1.0");
             assert_eq!(
                 order(&env),
-                [Call::SetRun, Call::AddPath, TRY],
+                [Call::SetRun, Call::AddPath, Call::RegisterNotices, TRY],
                 "{answer:?}"
             );
             assert_eq!(env.count("pid 9120, start 5"), 1, "{answer:?}");
 
             let mut env = FakeEnv::new(&[answer]);
             on_updated(&mut env, "0.1.1");
-            assert_eq!(order(&env), [Call::AddPath, TRY], "{answer:?}");
+            assert_eq!(
+                order(&env),
+                [Call::AddPath, Call::RegisterNotices, TRY],
+                "{answer:?}"
+            );
             assert_eq!(env.count("pid 9120, start 5"), 1, "{answer:?}");
 
             let mut env = FakeEnv::new(&[answer]);
             on_uninstall(&mut env, "0.1.1");
             assert_eq!(
-                order(&env)[4..],
+                order(&env)[5..],
                 [TRY, Call::Clean(DataFolder::KeepJournalAndLogs)],
                 "{answer:?}"
             );
@@ -1277,7 +1428,7 @@ mod tests {
         let mut env = FakeEnv::new(&[Attempt::Unrestorable(Unrestorable::NewerVersion)]);
         on_uninstall(&mut env, "0.1.1");
         assert_eq!(
-            order(&env)[4..],
+            order(&env)[5..],
             [TRY, Call::Clean(DataFolder::KeepJournalAndLogs)]
         );
         assert_eq!(env.count("no restore"), 1);
@@ -1287,7 +1438,7 @@ mod tests {
         let mut env = FakeEnv::new(&[Attempt::Unrestorable(Unrestorable::DoesNotParse)]);
         on_uninstall(&mut env, "0.1.1");
         assert_eq!(
-            order(&env)[4..],
+            order(&env)[5..],
             [
                 TRY,
                 Call::ResetLost,
@@ -1358,19 +1509,32 @@ mod tests {
         let mut env = FakeEnv::new(&[Attempt::Restored]);
         env.registry_error = Some(DENIED);
         on_install(&mut env, "0.1.0");
-        assert_eq!(order(&env), [Call::SetRun, Call::AddPath, TRY]);
+        assert_eq!(
+            order(&env),
+            [Call::SetRun, Call::AddPath, Call::RegisterNotices, TRY]
+        );
         assert_eq!(env.at_level(Level::Error), 2, "{:?}", env.lines());
+        // Only the notice header is at stake: a warning.
+        assert_eq!(env.at_level(Level::Warn), 1, "{:?}", env.lines());
+        assert_eq!(
+            env.count("not registered: RegSetValueExW failed with 5; notices show a plain square"),
+            1
+        );
 
         let mut env = FakeEnv::new(&[Attempt::Restored]);
         env.registry_error = Some(DENIED);
         on_uninstall(&mut env, "0.1.1");
-        assert_eq!(order(&env).len(), 6);
+        assert_eq!(order(&env).len(), 7);
         assert_eq!(env.at_level(Level::Error), 3, "{:?}", env.lines());
-        assert_eq!(env.count("RegSetValueExW failed with 5"), 4);
-        // The switch value names no exe, so a value left behind is a warning.
-        assert_eq!(env.at_level(Level::Warn), 1, "{:?}", env.lines());
+        assert_eq!(env.count("RegSetValueExW failed with 5"), 5);
+        // The switch value names no exe and the app id only a picture, so a value left behind is a warning.
+        assert_eq!(env.at_level(Level::Warn), 2, "{:?}", env.lines());
         assert_eq!(
             env.count("StartupApproved value Wakeshot not removed: RegSetValueExW failed with 5"),
+            1
+        );
+        assert_eq!(
+            env.count("velopack.HaikAsatryan.Wakeshot not removed: RegSetValueExW failed with 5"),
             1
         );
 
@@ -1387,22 +1551,22 @@ mod tests {
 
     #[test]
     fn slow_registry_steps_come_out_of_the_restore_time() {
-        // Two steps of 5 s: tries at 10, 12, ... 24 s.
+        // Three steps of 5 s: tries at 15, 17, ... 25 s.
         let mut env = FakeEnv::new(&[]);
         env.step_ms = 5_000;
         on_install(&mut env, "0.1.0");
-        let want: Vec<u64> = (5..13).map(|i| i * RETRY_EVERY_MS).collect();
+        let want: Vec<u64> = (0..6).map(|i| 15_000 + i * RETRY_EVERY_MS).collect();
         assert_eq!(env.tries(), want);
 
-        // A 9 s broadcast leaves the updated hook one try.
+        // Two steps of 4.5 s (a slow Path broadcast) leave the updated hook one try.
         let mut env = FakeEnv::new(&[]);
-        env.step_ms = 9_000;
+        env.step_ms = 4_500;
         on_updated(&mut env, "0.1.1");
         assert_eq!(env.tries(), [9_000]);
 
         // Past the limit already: still one try.
         let mut env = FakeEnv::new(&[]);
-        env.step_ms = 12_000;
+        env.step_ms = 6_000;
         on_updated(&mut env, "0.1.1");
         assert_eq!(env.tries(), [12_000]);
         assert!(!env.calls.contains(&WAIT));
@@ -1549,6 +1713,7 @@ mod tests {
         exe: PathBuf,
         auto: AutoStart,
         path: UserPath,
+        notices: NoticeAppId,
         log: Arc<Tee>,
     }
 
@@ -1563,6 +1728,7 @@ mod tests {
             let scratch = ScratchKey::new(test);
             let auto = AutoStart::at(scratch.path());
             let path = UserPath::at(scratch.path(), PATH_VALUE, || Ok(()));
+            let notices = NoticeAppId::at(scratch.path());
             let log = Arc::new(Tee {
                 file: Some(LogWriter::open(&dir.logs(), Proc::Hook).unwrap()),
                 memory: MemoryLog::default(),
@@ -1574,6 +1740,7 @@ mod tests {
                 exe,
                 auto,
                 path,
+                notices,
                 log,
             }
         }
@@ -1583,6 +1750,7 @@ mod tests {
                 dir: self.dir.clone(),
                 auto: self.auto.clone(),
                 path: self.path.clone(),
+                notices: self.notices.clone(),
                 names: Names::test(self.scratch.path().rsplit('\\').next().unwrap_or("hooks")),
                 exe: self.exe.clone(),
             };
@@ -1591,6 +1759,14 @@ mod tests {
 
         fn folder(&self) -> &Path {
             self.exe.parent().unwrap()
+        }
+
+        /// The notice icon beside the exe, as the package ships it.
+        fn ship_notice_icon(&self) -> PathBuf {
+            let icon = self.folder().join(NOTICE_ICON_FILE);
+            fs::create_dir_all(self.folder()).unwrap();
+            fs::write(&icon, b"\x89PNG").unwrap();
+            icon
         }
 
         fn save_journal(&self, file: &JournalFile) {
@@ -1644,6 +1820,9 @@ mod tests {
         let other = Path::new(r"C:\Other\bin");
         rig.path.add(other).unwrap();
         rig.path.add(rig.folder()).unwrap();
+        rig.notices
+            .register(Some(&rig.folder().join(NOTICE_ICON_FILE)))
+            .unwrap();
         rig.save_journal(&journal(dead_owner(), vec![]));
         fs::write(rig.dir.file(DataFile::Config), b"{\"version\":1}").unwrap();
         fs::create_dir_all(rig.dir.holds()).unwrap();
@@ -1663,6 +1842,11 @@ mod tests {
         );
         assert_eq!(rig.auto.approval("Other"), Ok(Some(SWITCH_ON.to_vec())));
         assert!(rig.log.has("StartupApproved value Wakeshot removed"));
+        assert!(!rig.notices.exists(), "the notice app id key is gone");
+        assert!(
+            rig.log
+                .has("notice app id velopack.HaikAsatryan.Wakeshot removed")
+        );
         assert_eq!(rig.path.remove(rig.folder()), Ok(PathChange::Unchanged));
         assert_eq!(rig.path.add(other), Ok(PathChange::Unchanged));
         assert!(!rig.dir.root().exists(), "the data folder is gone");
@@ -1691,6 +1875,49 @@ mod tests {
         on_updated(&mut env, "0.1.1");
         assert!(rig.log.has("CLI folder already in the user Path"));
         assert!(rig.log.has("restore: no journal, nothing to restore"));
+    }
+
+    #[test]
+    fn real_install_and_updated_register_the_notice_app_id() {
+        let rig = Rig::new("hooks::tests::real_install_and_updated_register_the_notice_app_id");
+        let icon = rig.ship_notice_icon();
+        let icon_text = icon.display().to_string();
+        let expand = |text: &str| Ok(Some((REG_EXPAND_SZ, text.to_owned())));
+
+        let mut env = rig.env(applied(), Box::new(SystemLiveness));
+        on_install(&mut env, "0.1.0");
+        assert_eq!(rig.notices.value("DisplayName"), expand("Wakeshot"));
+        assert_eq!(rig.notices.value("IconUri"), expand(&icon_text));
+        assert!(rig.log.has(&format!(
+            "notice app id velopack.HaikAsatryan.Wakeshot registered with its icon {icon_text}"
+        )));
+
+        // An update whose package lacks the icon: the name stays, and the key names no file that is gone.
+        fs::remove_file(&icon).unwrap();
+        let mut env = rig.env(applied(), Box::new(SystemLiveness));
+        on_updated(&mut env, "0.1.1");
+        assert_eq!(rig.notices.value("DisplayName"), expand("Wakeshot"));
+        assert_eq!(rig.notices.value("IconUri"), Ok(None));
+        assert!(
+            rig.log
+                .has(&format!("without its icon: {icon_text} not found"))
+        );
+
+        // The icon is back with the next update.
+        rig.ship_notice_icon();
+        let mut env = rig.env(applied(), Box::new(SystemLiveness));
+        on_updated(&mut env, "0.1.2");
+        assert_eq!(rig.notices.value("IconUri"), expand(&icon_text));
+
+        // The uninstall takes the key; a second one finds nothing.
+        let mut env = rig.env(applied(), Box::new(SystemLiveness));
+        on_uninstall(&mut env, "0.1.2");
+        assert!(!rig.notices.exists());
+        on_uninstall(&mut env, "0.1.2");
+        assert!(
+            rig.log
+                .has("notice app id velopack.HaikAsatryan.Wakeshot was not there")
+        );
     }
 
     #[test]
@@ -1929,9 +2156,15 @@ mod tests {
         );
         assert_eq!(env.set_run().unwrap_err().call, "GetModuleFileNameW");
         assert_eq!(env.add_path().unwrap_err().call, "GetModuleFileNameW");
+        assert_eq!(
+            env.register_notices().unwrap_err().call,
+            "GetModuleFileNameW"
+        );
+        assert!(!rig.notices.exists(), "no key without the exe's folder");
         // The steps that need neither still run.
         assert_eq!(env.remove_run_once(), Ok(true));
         assert_eq!(env.remove_run(), Ok(false));
         assert_eq!(env.remove_approval(), Ok(false));
+        assert_eq!(env.remove_notices(), Ok(false));
     }
 }

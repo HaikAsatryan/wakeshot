@@ -4480,3 +4480,57 @@ sim, scenarios and props only; no real laptop.
 - **Long property run.** `PROPTEST_CASES=10000`, release, `scenarios::props` and `lid_events_in_any_order`: 36 tests
   passed in 20 s. `coverage_tally` (256 cases): 13 step backs after an AC loss, 3 AC returns under the floor before
   a step back while holding. **Verified** (runs).
+
+## Notice header icon checks
+
+Checked 2026-11-05 from 02:25 for card `docs/tasks/p6-notice-app-icon.md` (the white square in the notice header,
+`p6-int-haik-checks` finding 5). Sources read, not tested on screen: the Microsoft docs repo, the Windows App SDK and
+velopack 1.2.161 source. What the header shows after the change: Part B of the card, with Haik.
+
+- **Velopack already gives every start the same app id.** `VelopackApp::run()` (velopack 1.2.161 `src/app.rs`, lines
+  147 to 159) calls `SetCurrentProcessExplicitAppUserModelID` for every start that is not a fast hook, with the
+  manifest's `shortcutAumid` or else `velopack.<pack id>` (`locator.rs` `get_app_user_model_id`). That covers the
+  Start menu shortcut, the Run value at sign-in, a restart after an update and a direct start of `current\` alike, so
+  the tray needs no call of its own. `pack.ps1` names no AUMID, so the id is `velopack.HaikAsatryan.Wakeshot`, the
+  Start menu shortcut's too. An exe run from `target\` is not installed, `run()` returns before the call, and the
+  shell files its balloons under its own `NotifyIconGeneratedAumid_<id>`. A `--dry-run` started from an installed
+  copy gets the real id as well (`velo::startup` runs before the mode is read). **Verified** (source). The card's guess
+  that a start from the Run value gets the generated id was wrong for an installed exe (source; not seen on screen).
+- **Microsoft's page on the registration is gone.** "Send a local toast notification from other types of unpackaged
+  apps" redirects to `windows/apps/develop/notifications/app-notifications-other-frameworks`, which returns 404
+  (curl, 2026-11-05); the docs repo replaced it on 2025-07-28 with a page on the Windows App SDK APIs and no registry
+  values. The last version in `MicrosoftDocs/windows-dev-docs` (commit 2e559c1, ms.date 2020-11-17) shows the key
+  `HKEY_LOCAL_MACHINE\Software\Classes\AppUserModelId\<AUMID>` with `DisplayName` and `IconUri` (`REG_EXPAND_SZ`,
+  example `C:\icon.png`), `IconBackgroundColor` (`REG_SZ`, `AARRGGBB`) and `CustomActivator` (`REG_SZ`, a COM class
+  for clicks). It names no picture size. **Verified** (`gh api`, the file at that commit).
+- **What the Windows App SDK writes for an unpackaged app.** `AppNotificationManager::Register` writes
+  `HKCU\Software\Classes\AppUserModelId\<id>` with `DisplayName` and `IconUri` (both `REG_EXPAND_SZ`, a plain file
+  path) and `CustomActivator`, and no `IconBackgroundColor` (`dev/AppNotifications/AppNotificationUtility.cpp`
+  `RegisterAssets`). With no icon it deletes `IconUri`, with the comment "If no icon is specified in the Registry, the
+  OS will render a default icon for App Notifications". Its own icon is the exe's small icon saved as a PNG under
+  `%LocalAppData%\Microsoft\WindowsAppSDK\`, "good enough for an App Notification icon since higher quality doesn't
+  really impact in a substantial way"; it accepts `.bmp`, `.ico`, `.jpg` and `.png` (`ShellLocalization.cpp`).
+  **Verified** (source on GitHub, last change 2024-06-30). That the white square in Haik's photo is that default
+  picture: likely (inferred from the comment and from there being no key), **not verified**.
+- **The shell's own generated keys on this laptop.** `%TEMP%\NotifyIconGeneratedAumid_*.png`: four at 28 by 28 and
+  one at 56 by 56, all RGBA (read 02:30). So the shell sizes its own header picture near the small icon size.
+  `HKCU\Software\Classes\AppUserModelId` held no Wakeshot key; `HKCU\...\Notifications\Settings\
+  velopack.HaikAsatryan.Wakeshot` is still there from the 01:5x uninstall (`PeriodicNotificationCount` 14), Windows'
+  own, left alone. **Verified** (reads).
+- **Reading a shortcut's app id.** `Shell.Application` `ParseName(<lnk>).ExtendedProperty('System.AppUserModel.ID')`
+  gave the ids of five Start menu shortcuts on this laptop (for example `com.squirrel.Postman.Postman`), so `e2e.ps1`
+  reads the installed shortcut's id this way. **Verified** (run).
+- **The key writer.** `notify::NoticeAppId` against scratch keys under `HKCU\Software\Wakeshot-test`: `DisplayName`
+  and `IconUri` come back as `REG_EXPAND_SZ` with the path as given, an Armenian folder name too; a register with no
+  icon deletes the old `IconUri`; `RegDeleteTreeW` plus `RegDeleteKeyW` takes the key with a subkey in it, and a
+  second remove answers "was not there". **Verified** (tests `app_id_key_is_written_and_removed`,
+  `real_install_and_updated_register_the_notice_app_id`).
+- **End to end on a local pack.** `packaging/e2e.ps1` at Medium (a `.cmd` opened with `explorer.exe`), 02:49:45 to
+  02:50:16, on a release x64 build of the tree: 102 checks passed, 0 failed, exit 0. After Setup.exe `--silent`, after
+  Setup.exe over the install and after `Update.exe apply` of 0.1.1, the key held `DisplayName` "Wakeshot" and `IconUri`
+  `%LocalAppData%\HaikAsatryan.Wakeshot\current\wakeshot-notice.png` (both type 2, `REG_EXPAND_SZ`), that file was
+  byte-equal to `assets/wakeshot-notice.png`, and each hook logged "notice app id velopack.HaikAsatryan.Wakeshot
+  registered with its icon ...". The installed Start menu shortcut's `System.AppUserModel.ID` was
+  `velopack.HaikAsatryan.Wakeshot`. After `Update.exe --uninstall --silent` the key was gone; no install trace, the
+  real plan's values and hash as before (lid 1 and 1, sleep 18000 and 18000, `C64AFDB1CFDD13CF`). The 0.1.0 to 0.1.1
+  delta was 6,934 bytes. **Verified** (the run's log in the card's scratch folder).

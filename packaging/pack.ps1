@@ -6,9 +6,13 @@ Packs one Velopack release of Wakeshot for one CPU: Setup.exe, the full package,
 given, the portable zip and the release index.
 
 .DESCRIPTION
-Copies only wakeshot-tray.exe and wakeshot.exe into a staging folder and runs `vpk pack` with the values in
-docs/phases/06-ship.md, "Package and install values". Stops on the first failure with a non-zero exit code. Used the
-same way here and in .github/workflows/release.yml; packaging/README.md says how to run it.
+Copies only wakeshot-tray.exe, wakeshot.exe and the notice icon into a staging folder and runs `vpk pack` with the
+values in docs/phases/06-ship.md, "Package and install values". Stops on the first failure with a non-zero exit code.
+Used the same way here and in .github/workflows/release.yml; packaging/README.md says how to run it.
+
+The notice icon (assets/wakeshot-notice.png) ships beside the tray exe: the install and updated hooks point the notice
+app id's IconUri at it, so the header of each Wakeshot notice shows the app icon (crates/wakeshot-windows/src/notify.rs,
+NoticeAppId). Velopack then puts it in place with each install and update and removes it with the app.
 
 .EXAMPLE
 ./packaging/pack.ps1 -Version 0.1.0 -Cpu x64 -ExeDir target/x86_64-pc-windows-msvc/release -OutDir out/x64 -Icon assets/wakeshot.ico
@@ -34,6 +38,10 @@ param(
     # The icon of Setup.exe and Update.exe.
     [string] $Icon,
 
+    # The notice icon. It ships beside the tray exe as wakeshot-notice.png, the name the hooks look for
+    # (notify.rs NOTICE_ICON_FILE), whatever its name here.
+    [string] $NoticeIcon = (Join-Path $PSScriptRoot '..\assets\wakeshot-notice.png'),
+
     # A folder with earlier full packages (`vpk download github` writes one). vpk builds the delta against the newest
     # one of this CPU. A folder that does not exist means there is no earlier release.
     [string] $PreviousDir,
@@ -50,6 +58,7 @@ $PSNativeCommandUseErrorActionPreference = $false
 $PackId = 'HaikAsatryan.Wakeshot'
 $Channel = "win-$Cpu"
 $Exes = 'wakeshot-tray.exe', 'wakeshot.exe'
+$NoticeIconName = 'wakeshot-notice.png'
 # The PE header's Machine field: a mixed-up exe folder must not ship x64 code in the ARM64 channel.
 $Machine = @{ x64 = 0x8664; arm64 = 0xAA64 }[$Cpu]
 
@@ -84,6 +93,8 @@ foreach ($exe in $Exes) {
 }
 
 if ($Icon -and -not (Test-Path -LiteralPath $Icon -PathType Leaf)) { Fail "icon $Icon not found" }
+# Without it every notice header shows a plain square, so a pack without it is refused rather than shipped.
+if (-not (Test-Path -LiteralPath $NoticeIcon -PathType Leaf)) { Fail "notice icon $NoticeIcon not found" }
 
 # vpk reads every option it has from a VPK_* variable too (`vpk pack -H`), so a stray one would change the package
 # without showing up in the command line below.
@@ -108,6 +119,7 @@ $staging = Join-Path ([IO.Path]::GetTempPath()) "wakeshot-pack-$([guid]::NewGuid
 New-Item -ItemType Directory -Path $staging | Out-Null
 try {
     foreach ($exe in $Exes) { Copy-Item -LiteralPath (Join-Path $ExeDir $exe) -Destination $staging }
+    Copy-Item -LiteralPath $NoticeIcon -Destination (Join-Path $staging $NoticeIconName)
 
     # -r is always given: without it vpk packs for x86 (research/distribution.md, section 1).
     $vpkArgs = @(

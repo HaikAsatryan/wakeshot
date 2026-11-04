@@ -5,15 +5,28 @@
 //! A notice is a balloon on Wakeshot's own tray icon: Windows 11 shows it as a banner with no app registration and
 //! does not keep it in the notification centre (research, "Balloon on Windows 11"; `Shell_NotifyIconW` Remarks). The
 //! balloon changes only the info fields of the icon `TrayIcon` owns, so the icon and its tooltip stay as they are.
+//!
+//! The banner's header (name and picture) comes from the app id Windows files the balloon under. An installed tray
+//! has Velopack's id, whose key the hooks write ([`NoticeAppId`]); without that key the header showed a plain white
+//! square (`docs/tasks/p6-notice-app-icon.md`).
 
 #[cfg(any(test, feature = "test-support"))]
 use std::cell::RefCell;
-use std::ffi::c_void;
+use std::ffi::{OsStr, c_void};
+use std::os::windows::ffi::OsStrExt;
+use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use wakeshot_core::text::{self, NoticeClick, NoticeText};
 use wakeshot_core::view::Notice;
-use windows::Win32::Foundation::{GetLastError, HWND, SetLastError, WIN32_ERROR};
+use windows::Win32::Foundation::{
+    ERROR_FILE_NOT_FOUND, ERROR_INVALID_PARAMETER, ERROR_PATH_NOT_FOUND, ERROR_SUCCESS,
+    GetLastError, HWND, SetLastError, WIN32_ERROR,
+};
+use windows::Win32::System::Registry::{
+    HKEY, HKEY_CURRENT_USER, KEY_SET_VALUE, REG_EXPAND_SZ, REG_OPTION_NON_VOLATILE,
+    RegCreateKeyExW, RegDeleteKeyW, RegDeleteTreeW, RegDeleteValueW, RegSetValueExW,
+};
 use windows::Win32::UI::HiDpi::GetSystemMetricsForDpi;
 use windows::Win32::UI::Shell::{
     NIF_GUID, NIF_INFO, NIIF_INFO, NIIF_LARGE_ICON, NIIF_NONE, NIIF_NOSOUND, NIIF_USER,
@@ -22,7 +35,7 @@ use windows::Win32::UI::Shell::{
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateIconFromResourceEx, DestroyIcon, HICON, LR_DEFAULTCOLOR, SM_CXICON,
 };
-use windows::core::GUID;
+use windows::core::{GUID, Owned, PCWSTR};
 
 use crate::WinError;
 use crate::tray::icon::taskbar_dpi;
@@ -333,6 +346,228 @@ fn large_icon_size() -> u32 {
 /// A poisoned lock only means a panic elsewhere, and the panic hook aborts in every profile; the data is still whole.
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// The app id Windows files the installed tray's balloons under. `VelopackApp::run` gives every start of an installed
+/// exe this explicit id, from the Start menu, the Run value or a restart after an update: "velopack." and the pack id,
+/// the id of its Start menu shortcut too (velopack 1.2.161 `app.rs` and `locator.rs`; research "Velopack checks for
+/// Wakeshot", AUMID). It changes only if `pack.ps1` names an AUMID or Velopack changes its rule; `packaging/e2e.ps1`
+/// checks the installed shortcut's id against it. A build run from `target\` has no explicit id, so the shell files
+/// its balloons under its own `NotifyIconGeneratedAumid_<id>` and this key plays no part.
+pub const NOTICE_APP_ID: &str = "velopack.HaikAsatryan.Wakeshot";
+
+/// The picture of the notice header: the app icon as a PNG, which `packaging/pack.ps1` ships beside the tray exe, so
+/// Velopack puts it in place at each install and update and takes it away at uninstall.
+pub const NOTICE_ICON_FILE: &str = "wakeshot-notice.png";
+
+/// The PNG's side in pixels. Microsoft names no size for `IconUri`; the header draws the picture at a small icon's
+/// size (16 px at 100%, so 24 at 150% and 32 at 200%), and 48 scales down to the two most common laptop scales by a
+/// whole factor. A design call; change it when the header looks soft at some scale.
+pub const NOTICE_ICON_SIZE: u32 = 48;
+
+/// The name in the notice header.
+pub const NOTICE_NAME: &str = "Wakeshot";
+
+/// `HKCU\Software\Classes\AppUserModelId\velopack.HaikAsatryan.Wakeshot`: the name and picture Windows shows in the
+/// header of each notice filed under [`NOTICE_APP_ID`]. Without it the header showed a plain white square
+/// (`p6-int-haik-checks` finding 5): Windows' default picture for an id with no `IconUri` (Windows App SDK
+/// `AppNotificationUtility.cpp`, "the OS will render a default icon"). The hooks are its one writer: install and
+/// updated write it, uninstall removes it.
+///
+/// The values are the two Windows itself writes for the shell's generated balloon ids and that the Windows App SDK
+/// writes for unpackaged apps, both `REG_EXPAND_SZ` as Microsoft's page ("Send a local toast notification from other
+/// types of unpackaged apps", now removed from Learn) shows them. Its `IconBackgroundColor` and `CustomActivator` are
+/// left out: neither of those writers sets a background colour, and a balloon click reaches the tray's own window,
+/// not a COM activator.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NoticeAppId {
+    key: String,
+}
+
+impl NoticeAppId {
+    pub fn real() -> Self {
+        Self::at(r"Software\Classes\AppUserModelId")
+    }
+
+    /// `base` is a key under `HKCU`; the app id's key is its subkey.
+    pub fn at(base: &str) -> Self {
+        Self {
+            key: format!(r"{base}\{NOTICE_APP_ID}"),
+        }
+    }
+
+    /// Writes `DisplayName` and, given an icon, `IconUri` with its path; the key is made when it is missing. With no
+    /// icon an `IconUri` left from before is deleted, so the key never names a picture that is gone.
+    pub fn register(&self, icon: Option<&Path>) -> Result<(), WinError> {
+        let key = create_key(&self.key)?;
+        set_expand(&key, "DisplayName", OsStr::new(NOTICE_NAME))?;
+        match icon {
+            Some(path) => set_expand(&key, "IconUri", path.as_os_str()),
+            None => delete_value(&key, "IconUri"),
+        }
+    }
+
+    /// The key with whatever is in it, Windows' own additions too. `true`: it existed and is gone now.
+    pub fn remove(&self) -> Result<bool, WinError> {
+        let key = wide("RegDeleteTreeW", OsStr::new(&self.key))?;
+        // SAFETY: `key` is NUL-terminated and lives for the call.
+        let tree = unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, PCWSTR(key.as_ptr())) };
+        if missing(tree) {
+            return Ok(false);
+        }
+        reg_ok("RegDeleteTreeW", tree)?;
+        // The emptied key itself, should the tree delete leave it, as `store`'s scratch keys assume too.
+        // SAFETY: as above.
+        let gone = unsafe { RegDeleteKeyW(HKEY_CURRENT_USER, PCWSTR(key.as_ptr())) };
+        if !missing(gone) {
+            reg_ok("RegDeleteKeyW", gone)?;
+        }
+        Ok(true)
+    }
+}
+
+fn create_key(path: &str) -> Result<Owned<HKEY>, WinError> {
+    let name = wide("RegCreateKeyExW", OsStr::new(path))?;
+    let mut key = HKEY::default();
+    // SAFETY: `name` is NUL-terminated and lives for the call; the key is written to a live local.
+    let created = unsafe {
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(name.as_ptr()),
+            None,
+            PCWSTR::null(),
+            REG_OPTION_NON_VOLATILE,
+            KEY_SET_VALUE,
+            None,
+            &raw mut key,
+            None,
+        )
+    };
+    reg_ok("RegCreateKeyExW", created)?;
+    // SAFETY: the key is new and owned only here.
+    Ok(unsafe { Owned::new(key) })
+}
+
+fn set_expand(key: &Owned<HKEY>, name: &str, value: &OsStr) -> Result<(), WinError> {
+    let name = wide("RegSetValueExW", OsStr::new(name))?;
+    let data: Vec<u8> = wide("RegSetValueExW", value)?
+        .iter()
+        .flat_map(|unit| unit.to_le_bytes())
+        .collect();
+    // SAFETY: an open key with `KEY_SET_VALUE`; `name` is NUL-terminated, `data` holds the terminator too.
+    let set = unsafe {
+        RegSetValueExW(
+            **key,
+            PCWSTR(name.as_ptr()),
+            None,
+            REG_EXPAND_SZ,
+            Some(data.as_slice()),
+        )
+    };
+    reg_ok("RegSetValueExW", set)
+}
+
+/// A missing value is not an error.
+fn delete_value(key: &Owned<HKEY>, name: &str) -> Result<(), WinError> {
+    let name = wide("RegDeleteValueW", OsStr::new(name))?;
+    // SAFETY: an open key with `KEY_SET_VALUE`; `name` is NUL-terminated and lives for the call.
+    let deleted = unsafe { RegDeleteValueW(**key, PCWSTR(name.as_ptr())) };
+    if missing(deleted) {
+        return Ok(());
+    }
+    reg_ok("RegDeleteValueW", deleted)
+}
+
+/// NUL-terminated UTF-16. An inner NUL would cut the text short and name another key or file, so it is refused.
+fn wide(call: &'static str, text: &OsStr) -> Result<Vec<u16>, WinError> {
+    let mut units: Vec<u16> = text.encode_wide().collect();
+    if units.contains(&0) {
+        return Err(WinError {
+            call,
+            code: ERROR_INVALID_PARAMETER.0,
+        });
+    }
+    units.push(0);
+    Ok(units)
+}
+
+fn missing(result: WIN32_ERROR) -> bool {
+    result == ERROR_FILE_NOT_FOUND || result == ERROR_PATH_NOT_FOUND
+}
+
+fn reg_ok(call: &'static str, result: WIN32_ERROR) -> Result<(), WinError> {
+    if result == ERROR_SUCCESS {
+        Ok(())
+    } else {
+        Err(WinError {
+            call,
+            code: result.0,
+        })
+    }
+}
+
+/// The key's values read back, for tests only.
+#[cfg(test)]
+impl NoticeAppId {
+    /// The value's type and text, unexpanded; `None`: no such value, or no such key.
+    pub(crate) fn value(
+        &self,
+        name: &str,
+    ) -> Result<Option<(windows::Win32::System::Registry::REG_VALUE_TYPE, String)>, WinError> {
+        use windows::Win32::System::Registry::{
+            REG_VALUE_TYPE, RRF_NOEXPAND, RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ, RegGetValueW,
+        };
+        let key = wide("RegGetValueW", OsStr::new(&self.key))?;
+        let name = wide("RegGetValueW", OsStr::new(name))?;
+        let mut kind = REG_VALUE_TYPE::default();
+        let mut buf = vec![0u16; 1024];
+        let mut size = u32::try_from(buf.len() * 2).unwrap_or(u32::MAX);
+        // SAFETY: names are NUL-terminated and live for the call; `buf` holds `size` bytes.
+        let read = unsafe {
+            RegGetValueW(
+                HKEY_CURRENT_USER,
+                PCWSTR(key.as_ptr()),
+                PCWSTR(name.as_ptr()),
+                RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ | RRF_NOEXPAND,
+                Some(&raw mut kind),
+                Some(buf.as_mut_ptr().cast()),
+                Some(&raw mut size),
+            )
+        };
+        if missing(read) {
+            return Ok(None);
+        }
+        reg_ok("RegGetValueW", read)?;
+        buf.truncate(size as usize / 2);
+        while buf.last() == Some(&0) {
+            buf.pop();
+        }
+        Ok(Some((kind, String::from_utf16_lossy(&buf))))
+    }
+
+    /// Whether the key itself exists.
+    pub(crate) fn exists(&self) -> bool {
+        use windows::Win32::System::Registry::{KEY_READ, RegOpenKeyExW};
+        let Ok(key) = wide("RegOpenKeyExW", OsStr::new(&self.key)) else {
+            return false;
+        };
+        let mut opened = HKEY::default();
+        // SAFETY: `key` is NUL-terminated and lives for the call; the key is written to a live local.
+        let result = unsafe {
+            RegOpenKeyExW(
+                HKEY_CURRENT_USER,
+                PCWSTR(key.as_ptr()),
+                None,
+                KEY_READ,
+                &raw mut opened,
+            )
+        };
+        if result == ERROR_SUCCESS {
+            // SAFETY: the key is new and owned only here; it closes at once.
+            drop(unsafe { Owned::new(opened) });
+        }
+        result == ERROR_SUCCESS
+    }
 }
 
 #[cfg(test)]
@@ -698,5 +933,105 @@ mod tests {
         // 32 px at 100% to 128 px at 400%.
         assert!((32..=128).contains(&size), "{size}");
         assert_eq!(size % 8, 0, "{size}");
+    }
+
+    use std::path::PathBuf;
+
+    use windows::Win32::System::Registry::REG_VALUE_TYPE;
+
+    use crate::store::ScratchKey;
+
+    fn expand(text: &str) -> Result<Option<(REG_VALUE_TYPE, String)>, WinError> {
+        Ok(Some((REG_EXPAND_SZ, text.to_owned())))
+    }
+
+    #[test]
+    fn app_id_key_is_written_and_removed() {
+        let scratch = ScratchKey::new("notify::tests::app_id_key_is_written_and_removed");
+        let id = NoticeAppId::at(scratch.path());
+        assert!(!id.exists());
+        assert_eq!(id.remove(), Ok(false), "nothing to remove yet");
+
+        let icon = Path::new(
+            r"C:\Users\Ա Բ\AppData\Local\HaikAsatryan.Wakeshot\current\wakeshot-notice.png",
+        );
+        id.register(Some(icon)).unwrap();
+        assert_eq!(id.value("DisplayName"), expand("Wakeshot"));
+        assert_eq!(id.value("IconUri"), expand(&icon.display().to_string()));
+        // Each install and update writes it again.
+        id.register(Some(icon)).unwrap();
+        assert_eq!(id.value("IconUri"), expand(&icon.display().to_string()));
+
+        // No icon file: the name stays and the old picture goes.
+        id.register(None).unwrap();
+        assert_eq!(id.value("DisplayName"), expand("Wakeshot"));
+        assert_eq!(id.value("IconUri"), Ok(None));
+
+        // What Windows may add under the key goes with it.
+        let extra = create_key(&format!(r"{}\Extra", id.key)).unwrap();
+        set_expand(&extra, "Some", OsStr::new("value")).unwrap();
+        drop(extra);
+        assert_eq!(id.remove(), Ok(true));
+        assert!(!id.exists());
+        assert_eq!(id.remove(), Ok(false), "a second uninstall finds nothing");
+    }
+
+    #[test]
+    fn app_id_key_refuses_an_inner_nul() {
+        let scratch = ScratchKey::new("notify::tests::app_id_key_refuses_an_inner_nul");
+        let id = NoticeAppId::at(scratch.path());
+        let bad = Path::new("C:\\x\0y.png");
+        assert_eq!(
+            id.register(Some(bad)),
+            Err(WinError {
+                call: "RegSetValueExW",
+                code: ERROR_INVALID_PARAMETER.0,
+            })
+        );
+        assert_eq!(id.value("IconUri"), Ok(None));
+    }
+
+    #[test]
+    fn real_app_id_key_is_under_the_classes_key() {
+        assert_eq!(
+            NoticeAppId::real().key,
+            r"Software\Classes\AppUserModelId\velopack.HaikAsatryan.Wakeshot"
+        );
+    }
+
+    fn notice_icon_path() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets")
+            .join(NOTICE_ICON_FILE)
+    }
+
+    fn notice_icon_png() -> Vec<u8> {
+        art::png(&art::app_icon(NOTICE_ICON_SIZE))
+    }
+
+    #[test]
+    fn notice_icon_file_matches_the_art() {
+        let file = std::fs::read(notice_icon_path()).expect("assets/wakeshot-notice.png");
+        let side = |at: usize| u32::from_be_bytes(file[at..at + 4].try_into().unwrap());
+        assert_eq!((side(16), side(20)), (NOTICE_ICON_SIZE, NOTICE_ICON_SIZE));
+        // Exact: the art uses no sin or cos and the PNG writer has no randomness, so x64 and ARM64 write the same bytes.
+        assert!(
+            file == notice_icon_png(),
+            "assets/{NOTICE_ICON_FILE} differs from the art: run `cargo test --locked -p wakeshot-windows \
+             notify::tests::write_notice_icon -- --ignored`"
+        );
+    }
+
+    /// Writes `assets/wakeshot-notice.png`, or into `WAKESHOT_ART_DIR` when it is set (a trial that leaves the repo
+    /// alone), as `tray::art::write_art_files` does for the ICO.
+    #[test]
+    #[ignore = "writes the notice icon"]
+    fn write_notice_icon() {
+        let path = match std::env::var_os("WAKESHOT_ART_DIR") {
+            Some(dir) => PathBuf::from(dir).join(NOTICE_ICON_FILE),
+            None => notice_icon_path(),
+        };
+        std::fs::write(&path, notice_icon_png()).expect("write");
+        println!("wrote {}", path.display());
     }
 }

@@ -3,9 +3,9 @@
 <#
 .SYNOPSIS
 Installs, updates and uninstalls Wakeshot for real on this PC and checks that the real hooks put back a journaled
-power value each time, write and remove the Run value, the RunOnce value and the Path entry, keep the Settings switch
-value until the uninstall removes it, and leave the PC as it was. One line per check; exit 0 when all pass, 1 when
-any fails, 2 when it refuses to run.
+power value each time, write and remove the Run value, the RunOnce value, the Path entry and the notice app id key
+(with the icon beside the tray exe), keep the Settings switch value until the uninstall removes it, and leave the PC as
+it was. One line per check; exit 0 when all pass, 1 when any fails, 2 when it refuses to run.
 
 .DESCRIPTION
 The steps of docs/tasks/p6-install-e2e.md, with the switch value of docs/tasks/p6-uninstall-startup-approval.md:
@@ -15,7 +15,9 @@ The steps of docs/tasks/p6-install-e2e.md, with the switch value of docs/tasks/p
    uninstall deletes it.
 2. A copy of the active plan named "Wakeshot test e2e", never made active. Every journal below names only the copy.
 3. Packs 0.1.0 and 0.1.1 of the exes in -ExeDir with pack.ps1 (the build is the caller's).
-4. Setup.exe --silent of 0.1.0, then the install checks of smoke-test.ps1; the install writes no switch value.
+4. Setup.exe --silent of 0.1.0, then the install checks of smoke-test.ps1; the install writes no switch value; the
+   notice app id key names Wakeshot and current\wakeshot-notice.png, and the shortcut carries that app id
+   (docs/tasks/p6-notice-app-icon.md). Steps 5 and 6 check the key again, step 7 that it is gone.
 5. Start at login switched off: the StartupApproved\Run value Windows writes for the Settings > Apps > Startup switch,
    in its off form. A hold: the copy's DC lid action set to Do nothing and a journal that owns it, its owner a process
    this script started and ended. Then Setup.exe --silent of 0.1.0 over the install, as winget upgrade runs it: the
@@ -101,6 +103,13 @@ $TrayLock = 'Local\Wakeshot.Tray'
 $ApprovedParent = 'Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved'
 $ApprovedSub = "$ApprovedParent\Run"
 $EnvSub = 'Environment'
+# The app id Velopack gives the installed tray and its shortcut, and the key that names Wakeshot and its icon in the
+# header of each notice filed under it (notify.rs NoticeAppId). Windows' own Notifications\Settings key of that id is
+# not ours and is left alone.
+$AppId = "velopack.$PackId"
+$NoticeSub = "Software\Classes\AppUserModelId\$AppId"
+$NoticeIcon = Join-Path $Current 'wakeshot-notice.png'
+$NoticeIconSource = Join-Path $PSScriptRoot '..\assets\wakeshot-notice.png'
 # What the install hook writes (06-ship.md, "Package and install values") and what the tray writes while it holds
 # (power/journal.rs).
 $RunCommand = "`"$TrayExe`""
@@ -448,6 +457,25 @@ function Set-SwitchOff {
     "type 3, $($bytes.Length) bytes: $([BitConverter]::ToString($bytes))"
 }
 
+function Read-RegText([string] $Sub, [string] $Name) {
+    $type = [uint32]0
+    $bytes = [WakeshotE2e.Reg]::Read($Sub, $Name, [ref]$type)
+    $text = if ($null -eq $bytes) { $null } else { [Text.Encoding]::Unicode.GetString($bytes).TrimEnd([char]0) }
+    [pscustomobject]@{ Type = $type; Text = $text }
+}
+
+# The notice app id key as the install and updated hooks write it: the name, and IconUri naming the icon beside the
+# tray exe, both REG_EXPAND_SZ (2) as Microsoft's page shows them; the icon is the one in assets\.
+function Test-NoticeKey([string] $Check) {
+    $name = Read-RegText $NoticeSub 'DisplayName'
+    Test-Check "$Check`: notice app id DisplayName is Wakeshot (REG_EXPAND_SZ)" ($name.Text -ceq 'Wakeshot' -and $name.Type -eq 2) "type $($name.Type), '$($name.Text)'"
+    $uri = Read-RegText $NoticeSub 'IconUri'
+    Test-Check "$Check`: notice app id IconUri is current\wakeshot-notice.png (REG_EXPAND_SZ)" ($uri.Text -ceq $NoticeIcon -and $uri.Type -eq 2) "type $($uri.Type), '$($uri.Text)', want '$NoticeIcon'"
+    $same = (Test-Path -LiteralPath $NoticeIcon -PathType Leaf) -and
+        ((Get-FileHash -LiteralPath $NoticeIcon).Hash -eq (Get-FileHash -LiteralPath $NoticeIconSource).Hash)
+    Test-Check "$Check`: current\wakeshot-notice.png is assets\wakeshot-notice.png" $same "$NoticeIcon missing or different"
+}
+
 function Test-SwitchKept([string] $Check) {
     $now = [WakeshotE2e.Reg]::Raw($ApprovedSub, $RunName)
     Test-Check "$Check`: StartupApproved value $RunName unchanged (start at login stays off)" ($now -ceq $script:SwitchOff) "'$now', want '$($script:SwitchOff)'"
@@ -534,6 +562,7 @@ function Get-Traces {
     if ($null -ne (Get-RegValue $RunOnceSub $RunOnceName)) { $traces += "RunOnce value $RunOnceName" }
     if ($null -ne (Get-RegValue $ApprovedSub $RunName)) { $traces += "StartupApproved value $RunName" }
     if ((Get-CurrentInPath) -gt 0) { $traces += "user Path entry $Current" }
+    if (Test-RegKey $NoticeSub) { $traces += "notice app id key HKCU\$NoticeSub" }
     if (Test-Path -LiteralPath $Shortcut) { $traces += "shortcut $Shortcut" }
     if (Test-Path -LiteralPath $VeloTemp) { $traces += "temp folder $VeloTemp" }
     # Setup over an install renames the old folder to HaikAsatryan.<random> for its rollback (research.md, point 1).
@@ -713,6 +742,9 @@ try {
     if (Test-Path -LiteralPath $Shortcut) {
         $target = (New-Object -ComObject WScript.Shell).CreateShortcut($Shortcut).TargetPath
         Test-Check 'step 4: Start menu shortcut' (Test-SamePath $target $TrayExe) "$Shortcut points at '$target', want $TrayExe"
+        # The same id VelopackApp::run gives the tray at every start, so it must name the notice app id key.
+        $lnkId = (New-Object -ComObject Shell.Application).NameSpace((Split-Path $Shortcut)).ParseName((Split-Path $Shortcut -Leaf)).ExtendedProperty('System.AppUserModel.ID')
+        Test-Check "step 4: the shortcut's app id is $AppId, the notice key's name" ($lnkId -ceq $AppId) "'$lnkId'"
     } else {
         Fail 'step 4: Start menu shortcut' "$Shortcut not found"
     }
@@ -728,6 +760,7 @@ try {
     Test-Check "step 4: Run value $RunName is the quoted current\wakeshot-tray.exe" ($run -ceq $RunCommand) "'$run', want '$RunCommand'"
     Test-Check 'step 4: user Path has the current folder once' ((Get-CurrentInPath) -eq 1) "$(Get-CurrentInPath) entries"
     Test-Check "step 4: no StartupApproved value $RunName (only Windows writes it)" ($null -eq (Get-RegValue $ApprovedSub $RunName)) 'the install wrote one'
+    Test-NoticeKey 'step 4'
     $hookText = Read-NewText $HookLog $hookFrom
     $hookFrom = Get-FileLength $HookLog
     Show-Lines "step 4: $HookLog, this step" $hookText
@@ -736,6 +769,7 @@ try {
         (Hook-Line "Run value $RunName set to $RunCommand"),
         # WARN when telling running programs failed, which this check does not judge.
         'hook\s+(INFO|WARN)\s+hook: CLI folder added to the user Path',
+        (Hook-Line "notice app id $AppId registered with its icon $NoticeIcon"),
         (Hook-Line 'restore: no journal, nothing to restore'),
         (Hook-Line 'install hook done after'))
     # The winget pipeline runs installed exes with no arguments and flags a non-zero exit (research/distribution.md,
@@ -763,10 +797,12 @@ try {
     Show-Lines "step 5: $HookLog, this step" $hookText
     Test-HookLines 'step 5' $hookText @(
         (Hook-Line "install hook for version $OldVersion started"),
+        (Hook-Line "notice app id $AppId registered with its icon $NoticeIcon"),
         (Hook-Line "restore: the journal's values are back"),
         (Hook-Line 'install hook done after'))
     Test-Check "step 5: Run value $RunName unchanged" ((Get-RegValue $RunSub $RunName) -ceq $RunCommand) "'$(Get-RegValue $RunSub $RunName)'"
     Test-SwitchKept 'step 5'
+    Test-NoticeKey 'step 5'
     Test-Check 'step 5: user Path has the current folder once' ((Get-CurrentInPath) -eq 1) "$(Get-CurrentInPath) entries"
 
     # ---- Step 6: an update restores.
@@ -790,8 +826,10 @@ try {
     Test-HookLines 'step 6' $hookText @(
         (Hook-Line "obsolete hook for version $OldVersion"),
         (Hook-Line "updated hook for version $NewVersion started"),
+        (Hook-Line "notice app id $AppId registered with its icon $NoticeIcon"),
         (Hook-Line "restore: the journal's values are back"),
         (Hook-Line 'updated hook done after'))
+    Test-NoticeKey 'step 6'
     $sq = Join-Path $Current 'sq.version'
     $sqText = if (Test-Path -LiteralPath $sq) { Get-Content -LiteralPath $sq -Raw } else { '' }
     Test-Check "step 6: current\sq.version is $NewVersion" ($sqText -match "<version>$([regex]::Escape($NewVersion))</version>") 'no such version element'
@@ -830,6 +868,7 @@ try {
     Test-Check "step 7: Run value $RunName gone" ($null -eq (Get-RegValue $RunSub $RunName)) 'still there'
     Test-Check "step 7: StartupApproved value $RunName gone" ($null -eq (Get-RegValue $ApprovedSub $RunName)) "still there: $([WakeshotE2e.Reg]::Raw($ApprovedSub, $RunName))"
     Test-Check "step 7: RunOnce value $RunOnceName gone" ($null -eq (Get-RegValue $RunOnceSub $RunOnceName)) 'still there'
+    Test-Check 'step 7: notice app id key gone' (-not (Test-RegKey $NoticeSub)) "HKCU\$NoticeSub still there"
     Test-Check 'step 7: user Path entry gone' ((Get-CurrentInPath) -eq 0) "$Current still in Path"
     Test-Check 'step 7: user Path has its old type and bytes' ((Get-PathState).Raw -ceq $Before.Path.Raw) 'differs from BEFORE'
     # Question 2 of the ship track: the data folder goes after a good restore.
@@ -870,6 +909,10 @@ try {
                     [WakeshotE2e.Reg]::Delete($v[0], $v[1])
                     Fail "step 8: $($v[2]) value $($v[1]) was still there" 'removed now'
                 }
+            }
+            if (Test-RegKey $NoticeSub) {
+                [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($NoticeSub, $false)
+                Fail "step 8: notice app id key HKCU\$NoticeSub was still there" 'removed now'
             }
         },
         {

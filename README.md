@@ -479,9 +479,9 @@ What stays:
 - After a damaged file was reset: `logs\` in `%LocalAppData%\Wakeshot`, since the log holds your old values.
 - The installer's own logs: `%LocalAppData%\velopack\velopack.log` and
   `%LocalAppData%\velopack\velopack_HaikAsatryan.Wakeshot.log`. Delete them by hand if you like.
-- Windows' own record of the tray icons it has seen: `HKCU\Control Panel\NotifyIconSettings\<id>` and the
-  notification key `...\Notifications\Settings\NotifyIconGeneratedAumid_<id>`. Windows writes these itself, for
-  every tray icon it shows, and Wakeshot leaves them in place.
+- Windows' own record of the tray icons it has seen, `HKCU\Control Panel\NotifyIconSettings\<id>`, and of the apps
+  that showed notices, `...\Notifications\Settings\velopack.HaikAsatryan.Wakeshot`. Windows writes these itself, for
+  every tray icon and every app that notifies, and Wakeshot leaves them in place.
 
 </details>
 

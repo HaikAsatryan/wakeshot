@@ -36,7 +36,9 @@ const LOCAL_FEED: &str = "WAKESHOT_UPDATE_FEED";
 /// removes `VELOPACK_RESTART` before it returns, so nothing later can tell.
 static RESTARTED: OnceLock<String> = OnceLock::new();
 
-/// Runs `VelopackApp` with the hook callbacks; for a hook, Velopack runs it and exits the process here.
+/// Runs `VelopackApp` with the hook callbacks; for a hook, Velopack runs it and exits the process here. Any other
+/// start of an installed exe gets Velopack's explicit app id here, the one `notify::NOTICE_APP_ID` names and the hooks
+/// register, so the tray's balloons show its name and icon however it was started (`p6-notice-app-icon`).
 pub fn startup() {
     VelopackApp::build()
         // A staged update applied here would skip the core's apply rules and kill every process started from the
