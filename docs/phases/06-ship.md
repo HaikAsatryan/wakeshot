@@ -394,3 +394,6 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   the guard); one `taskbar_dpi` (`tray/icon.rs`, used by `notify.rs`); `store.rs` module doc and `architecture.md`
   sections 6 and 11 (the switch value, `idna_adapter`, 160 lock packages). fmt, clippy, debug workspace tests pass.
   2 worker decisions for Haik's review in the card.
+- 2026-11-04 07:16: CI green on 2bcfd21 (all three jobs). Release dry run on 2bcfd21 (run 41765357171, by hand: packs
+  and smoke-tests, uploads nothing): Version, x64 and ARM64 build, pack and smoke test passed; publish and winget
+  skipped as a dry run should. The size change packs on both CPUs.

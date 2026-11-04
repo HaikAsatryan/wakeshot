@@ -214,8 +214,15 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   `p2-6-unread-lid-countdown`, and a README draft (waits for `p5-haik-check` and `p6-media`). CI green on abd3061.
   A cargo-mutants mutant took 32 GB at about 05:20; Claude Code ended two other keep-awake holders for low memory.
   Running: `p2-6-unread-floor-countdown`.
-- Next (orchestrator): the continuation prompt of session `wakeshot-12` (its scratchpad, `continuation.md`). A docs
-  pass (round 4) after `p2-6-unread-floor-countdown`. Every other card left needs Haik: the screen Part B runs
-  (`p5-tray-icon`, `p5-menu-view`, `p5-notices`, the `p6-int-tray-mode` and `p6-int-dry-run-e2e` pictures), his
-  checks (`p3-haik-checks`, `p5-haik-check`, `p6-int-haik-checks`), `p6-media`, then the README finish and
-  `p6-pages`.
+- 2026-11-04 07:10: since 05:51 (session `wakeshot-12`): done and committed: `p2-6-unread-floor-countdown`, docs pass
+  round 4, `p6-startup-switch-check` (the off switch survives `Setup.exe` over the install by the keys; uninstall left
+  its value), `p6-uninstall-startup-approval` (uninstall now removes it; `e2e.ps1` 88 of 88), `p6-tray-size` (release
+  tray 3.95 to 2.71 MB: `opt-level = "z"` and the IDNA stub), `p6-small-fixes`. Pushed 2bcfd21: CI green on all
+  three jobs, and the release dry run (run 41765357171) packed and smoke-tested both CPUs (07:16). Nothing runs now.
+- Next (orchestrator): every card left needs Haik. In order: his read of tonight's decisions (phase work logs,
+  2026-11-04 lines); a screen session (unlocked, hands off about 20 min) for the Part B runs of `p5-tray-icon`,
+  `p5-menu-view`, `p5-notices`, the `p6-int-tray-mode` and `p6-int-dry-run-e2e` pictures, the update notice and the
+  real Settings start-up switch; `p5-haik-check`; `p3-haik-checks`; `p6-int-haik-checks`; `p6-media`; then the README
+  finish and `p6-pages`. Open calls for him: `p6-int-wiring-fixes` decision 7 (a lock on a user's own Do nothing
+  while the journal is unknown), the SChannel option of `p6-tray-size` (1.87 MB and no clang, but a patched
+  velopack), the clang install, the winget token owner, actionlint on `release.yml`.
