@@ -397,3 +397,16 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
 - 2026-11-04 07:16: CI green on 2bcfd21 (all three jobs). Release dry run on 2bcfd21 (run 41765357171, by hand: packs
   and smoke-tests, uploads nothing): Version, x64 and ARM64 build, pack and smoke test passed; publish and winget
   skipped as a dry run should. The size change packs on both CPUs.
+- 2026-11-04 09:56 (orchestrator `wakeshot-12`): Haik's answers to the open calls (his words in quotes): the update
+  check keeps rustls with `ring` ("do as you think will be perfect"; option A of `p6-tray-size`): no patched
+  velopack, no clang install, the ARM64 tray stays CI only. Change it when a user reports a failed update behind a
+  company network, or velopack ships a TLS option. An upstream issue asking velopack for a native TLS feature is
+  drafted; it is posted only after Haik reads the text. The winget token is on his own account ("My account is
+  ok"): a classic token with `public_repo`, set at Phase 8 (orchestrator default: a 1-year expiry). Velopack's
+  test logs in `%LocalAppData%\velopack` go (his "ok"; auto mode refused the delete to the orchestrator, so Haik
+  runs it). The icon pick moves to a separate branding session of Haik's (brand colors first, then the icon states).
+- 2026-11-04 10:13 (orchestrator `wakeshot-12`): Haik deleted `%LocalAppData%\velopack` and ran actionlint 1.7.12 on
+  `release.yml` himself (auto mode refused both to the orchestrator): no findings. The velopack issue is open as
+  velopack/velopack#1146 (an opt-in native TLS feature; #76, the system proxy issue, already names the trust store
+  side). `p6-int-haik-checks` gains two steps when `p2-6-sleep-route` is done: the lid test of the sleep route,
+  and Haik turns off Wakeshot under Settings > Apps > Startup, then signs out and in once (the real switch).

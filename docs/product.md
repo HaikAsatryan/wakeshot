@@ -89,13 +89,13 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   Wakeshot locks it too, once it has been on battery for 30 seconds (Haik, 2026-11-03: the test laptop's dock dropped
   AC for 5.3 s and 6.3 s, so 5 s locked him while he worked on the external screen). If that lock fails, or Windows
   does not report the session locked within 5 seconds, Wakeshot tries once more; if that fails too, it steps back as
-  at the battery floor (releases every request, restores settings) and hibernates the laptop after 5 minutes with no
-  input, so a closed laptop never runs unlocked in a bag (Haik, 2026-11-03; power safety review finding 1). The step
+  at the battery floor (releases every request, restores settings) and puts the laptop to sleep as at work end
+  (below), so a closed laptop never runs unlocked in a bag (Haik, 2026-11-03; power safety review finding 1). The step
   back lasts until the session locks or the lid opens; then the hold runs again. The notice about the failed lock is
   shown again when the user is back at the open laptop, since with the lid closed nobody may have seen it.
 - Sounds wherever they give a useful hint (Haik, 2026-11-03):
   - Lid closed while Wakeshot holds: a short chime says the laptop keeps running.
-  - Work ended with the lid closed: a short "going to sleep" sound right before Wakeshot hibernates the laptop.
+  - Work ended with the lid closed: a short "going to sleep" sound right before Wakeshot puts the laptop to sleep.
   - Battery floor reached.
   - No sound for: a failed restore (the warning notification is enough), a hold that starts or ends with the lid
     open, Keep awake running out, the lid opening, AC lost or back (except when it leaves a closed laptop running on
@@ -109,24 +109,32 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   user who signs in on the external screen with the lid still closed gets it when the lid opens (Haik, 2026-11-03).
 - **Battery floor**: the Windows energy saver threshold; 20% when it is Never or Always. No Wakeshot setting. On
   battery below the floor, Wakeshot steps back at once: it releases every request, restores settings and notifies,
-  so Windows rules apply. If the lid is closed, it then hibernates the laptop, but only after the same 5 minutes
-  with no input as at work end (below), so someone typing on an external screen with the lid closed is not put to
-  sleep. If the user's own battery lid action is Do nothing, it does not hibernate, the same rule as at work end
-  (Haik, 2026-11-03). Right before it hibernates, it checks again that the lid is closed and the PC is on battery
-  under the floor: a USB-C dock can drop AC for a few seconds (seen on the test laptop). When AC comes back, the hold
-  resumes.
+  so Windows rules apply. If the lid is closed, it then puts the laptop to sleep the same way as at work end (below;
+  sleep, not hibernate, Haik 2026-11-04), after the same 5 minutes with no input, so someone typing on an external
+  screen with the lid closed is not put to sleep. If the user's own battery lid action is Do nothing, it does not act,
+  the same rule as at work end (Haik, 2026-11-03). Right before it acts, it checks again that the lid is closed and
+  the PC is on battery under the floor: a USB-C dock can drop AC for a few seconds (seen on the test laptop). When AC
+  comes back, the hold resumes.
 - With the lid closed, Wakeshot holds for as long as the work runs: no time limit and no heat guard. Someone who sets
   the lid to Do nothing by hand and puts the laptop in a bag gets no heat check either, and the hardware's own
   protection applies the same in both cases: the CPU slows itself at its limit (not tested here), and Windows shuts
   down at the critical trip point (113 C on the test laptop, `research.md`, "Limits: Kernel-Power 125").
-- When work ends with the lid closed, Wakeshot hibernates the laptop once there has been no input for 5 minutes
-  (Haik, 2026-11-03), so someone typing on an external screen with the lid closed is not put to sleep. It must act
-  itself: putting the lid action back does not sleep a laptop whose lid is already closed (tested), and after a
-  release its apps most likely run until the user's own sleep timeout (inferred; not tested with the lid closed).
-  Method: `SetSuspendState(TRUE)` after `IsPwrHibernateAllowed` and enabling SeShutdownPrivilege; on this Modern
-  Standby laptop `SetSuspendState(FALSE)` hibernates too (tested). Check the lid right before the call. If hibernate
-  is not allowed or the call fails: release every request, restore settings and notify; Windows then most likely
-  stops the laptop at the user's sleep timeout. Until the lid opens, Wakeshot then locks the laptop, with the lid-close
+- When work ends with the lid closed, Wakeshot puts the laptop to sleep once there has been no input for 5 minutes
+  (Haik, 2026-11-03), so someone typing on an external screen with the lid closed is not put to sleep. The rule
+  (Haik, 2026-11-04): when Wakeshot is done, the laptop ends up where Windows would have put it, and with the lid
+  closed that is sleep. It must act itself: putting the lid action back does not sleep a laptop whose lid is already
+  closed (tested), and after a release its apps most likely run until the user's own sleep timeout (inferred; not
+  tested with the lid closed). On Modern Standby, Windows gives apps no call that starts sleep (Microsoft Q&A; on this
+  laptop `SetSuspendState(FALSE)` hibernates, tested), so Wakeshot uses Windows' own idle sleep: after the sound it
+  sets the sleep timeout of the plan in use, on AC and DC, to 1 minute where the user's own is longer, marked in the
+  journal as Wakeshot's. It goes back at lid open, at the first unlock after a wake, when a hold starts, and at
+  every other restore point; not at a wake alone, so a laptop that wakes with the lid closed sleeps again.
+  Not verified yet: that idle sleep starts while the lid is closed (`p3-idle-sleep-check`). If the laptop has not
+  slept 5 minutes later, with the lid still closed and no input since, Wakeshot hibernates it, so a lid close's sleep
+  is matched even when another app holds the PC awake: `SetSuspendState(TRUE)` after `IsPwrHibernateAllowed` and
+  enabling SeShutdownPrivilege, with the lid checked right before the call. If hibernate is not allowed or the call
+  fails: notify; the short sleep timeout stays until the lid opens, so Windows sleeps the laptop once nothing holds
+  it. Until the lid opens, Wakeshot then locks the laptop, with the lid-close
   chime, whenever it has had no input for 5 minutes and is unlocked, at most every 5 minutes, so it does not run
   unlocked for hours (worker's call 2026-11-04, for Haik's review; power safety verify minor 1). A notice shown while
   the lid was closed and the session unlocked, which nobody may have seen, is shown again when the user is back at
@@ -144,6 +152,15 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
 4. Follow a power plan switch: restore the old plan, apply to the new one.
 5. Restore on: work end, quit, sign-out, next start, uninstall, and app crash or kill (guard process).
 6. If a company policy blocks the write, run with power requests only and tell the user.
+7. A journal that cannot be read (Haik, 2026-11-04): Wakeshot tries again every 30 seconds for 2 minutes; a damaged
+   file ends that at once. Then, on the plan in use, each setting Wakeshot writes that holds exactly the value
+   Wakeshot writes (lid Do nothing, sleep Never) goes to Windows' default for that plan; any other value is the
+   user's and stays. The log gets each old and new value, the bad file is set aside, and one notice says what was
+   reset and that a user who had their own values should set them again. During the 2 minutes Wakeshot neither
+   locks at a lid close nor counts down; if the lid is closed when they end and nothing holds, the work end rule
+   puts the laptop to sleep. Rare cost: a user's own Do nothing or Never meets a lost journal and goes back to the
+   default, with the notice; a closed laptop that a crashed Wakeshot left at Do nothing may run unlocked for up to
+   about 7 minutes before it sleeps.
 
 The crash gap is accepted (Haik, 2026-11-03): after an OS crash, a power cut or the other cases listed in
 `architecture.md` ("Gap left"), nothing restores before the next sign-in, because that would need admin, or longer
