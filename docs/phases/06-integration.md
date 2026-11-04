@@ -209,7 +209,7 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | `p6-int-log-wording` | no | no | `p6-int-wiring-fixes` | done (05:16) |
 | `p6-int-dry-run-e2e` | no | screen (dry-run icon, balloons, pictures); agent-session lane (one Claude Code test session) | `p6-int-update-wiring`, `p4-cli-args`, `p4-cli-run`, `p4-cli-commands`, `p4-cli-restore`, `p4-live-claude` | blocked: waiting for the screen slot (12 of 12 suite tests passed twice, no fix needed; Claude session check and clean-up done 04:51; pictures left) |
 | `p6-int-real-e2e` | no | global: power settings on active plan copies, RunOnce, a guard | `p6-int-dry-run-e2e`, `p3-real-checks` | done (05:25: 10 of 10 on an active copy; AFTER equals BEFORE; no product fix) |
-| `p6-int-update-e2e` | no | global: installs, Run, RunOnce, Path, a user environment value, an active plan copy | `p6-int-real-e2e`, `p6-install-e2e`, `p6-pack-and-release`, `p6-hooks` | in progress (started 05:16: stop 1, the script and the packs only; the run waits for `p6-int-real-e2e`) |
+| `p6-int-update-e2e` | no | global: installs, Run, RunOnce, Path, a user environment value, an active plan copy | `p6-int-real-e2e`, `p6-install-e2e`, `p6-pack-and-release`, `p6-hooks` | done (05:51: 125 checks passed, 1 skipped: the update notice, held while the session was locked) |
 | `p6-int-haik-checks` | yes: about 42 min (27, 18 of hands, plus 15 with the dock) | whole laptop: lid, lock, hibernate, switch user, battery; no other agent or cargo command | `p6-int-update-e2e`, `p3-haik-checks`, `p5-haik-check` | ready |
 
 Sizes, one worker's context: skeleton 50K, io-thread 120K, window 100K, dispatch 140K, startup 100K, tray-mode 140K,
@@ -387,3 +387,14 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   Orchestrator decision: no final record run (the lid card changes only lid handling, which the suite never
   drives). Its dry-run check recreated the dry-run icon keys: left for `p6-int-dry-run-e2e`'s clean-up after its
   pictures.
+- 2026-11-04 05:38: `p6-int-update-e2e` stop 1 done (`packaging/e2e-update.ps1` with a `-PrepareOnly` switch; debug
+  build and three packs; nothing installed; 8 worker decisions for Haik's review). Stop 2 started, alone on the
+  laptop. Expected: the update notice is held while the session is locked, so that check may SKIP.
+- 2026-11-04 05:51: `p6-int-update-e2e` done: `packaging/e2e-update.ps1` at Medium (05:39 to 05:48), exit 0, 125 passed,
+  1 skipped (the update notice: the core holds notices while the session is locked; `p6-int-haik-checks` or Haik
+  sees it unlocked). The first check came 301 s after start and took 0.0.2 by delta; no apply during 120 s of Keep
+  awake; after `keep-awake off` the copy was restored, the update applied and the new tray started 1.1 s later,
+  `current` kept its path. Setup over the install (checklist 14): the hook restored, no tray after; the `run`
+  wrapper died (exit 1), its `ping` went on (ended by pid), as the README says. Uninstall during a hold: all gone,
+  the data folder too. AFTER equals BEFORE (script and an elevated read). No Rust fix. The product icon entry now
+  points at the removed exe (harmless, note 7); Velopack's own logs grew about 29 KB.

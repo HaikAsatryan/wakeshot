@@ -3691,3 +3691,71 @@ Outputs are in the card's scratchpad folder (`out\suite-1.txt`, `out\suite-2.txt
   **Verified** (test, `Get-ItemProperty`).
 - **`powercfg /duplicatescheme` ends its output without a newline.** A `.cmd` that appends `echo` lines after it puts
   the next text on the same line. **Verified** (test output: "...(Balanced)exit 0").
+
+## Integration update e2e
+
+Checked 2026-11-04 between 05:39 and 05:49 for card `docs/tasks/p6-int-update-e2e.md`, on this laptop, with
+`packaging/e2e-update.ps1`: one full run (05:39:52 to 05:48:13) at Medium, 125 checks passed, 0 failed, 1 skipped (the
+update notice, below). The exes were an x64 debug build of the tree at 05:39 (the feed variable exists in debug
+builds only), packed as 0.0.1, 0.0.2 and 0.0.3 by `pack.ps1`. Every hold wrote a throwaway copy of Haik's plan,
+"Wakeshot int update", which was the active plan from before the install until no process of the install was left.
+"Test" means seen on this laptop.
+
+- **Medium.** A `.cmd` opened with `explorer.exe` ran the script ("Mandatory Label\Medium Mandatory Level"; the script
+  "elevated False"); each tray start went through a second `.cmd` opened with `explorer.exe` (its `whoami /groups`
+  had `S-1-16-8192`). That `.cmd` set `WAKESHOT_UPDATE_FEED` to a local folder and `CLAUDE_CONFIG_DIR` to an empty
+  one. **Verified** (test).
+- **The local feed works.** Velopack's `FileSource` on a folder with `releases.win-x64.json`, `RELEASES-win-x64` and
+  the nupkgs: the installed 0.0.1 tray's first check came 301 s after its start (5 minutes, `update.rs`), found 0.0.2,
+  and downloaded it through the delta: `Update.exe patch` applied the 8,975-byte delta to the installed full package
+  in 0.36 s. The tray logged `update 0.0.2 downloaded` and the core `Update 0.0.2 is ready: it applies once nothing
+  holds and nothing is overridden`. **Verified** (test; Velopack's `velopack_HaikAsatryan.Wakeshot.log`).
+- **The update waits for the hold.** With `wakeshot keep-awake 30m` (lid AC 0, lid DC 0, sleep DC 0 on the copy, 0.9 s
+  after the command; journal of the three keys owned by the tray; RunOnce naming the installed tray), no `Applying
+  update` line came in the 120 s after the ready line, the tray kept running and the copy stayed overridden.
+  **Verified** (test).
+- **Then it applies, in order.** `wakeshot keep-awake off` at 05:47:16.39: the tray wrote the three values back
+  (`power: wrote ... on plan <copy>`), set the copy active, deleted the journal and the RunOnce value, stopped its guard
+  (05:47:16.47); then `Applying update 0.0.2`, `the updater started` (0.10 s later), `Update applied: Wakeshot quits`,
+  `Wakeshot ends with code 0` (05:47:16.58). Update.exe (`--waitPid`, restart true) ran the obsolete hook (19 ms),
+  swapped `current`, ran the updated hook (688 ms; "restore: no journal, nothing to restore") and started the new tray,
+  which logged `Velopack restarted the tray after the update to 0.0.2` at 05:47:17.54: 1.1 s from keep-awake off to
+  the new tray. The old tray's exit code was 0. `current` kept its path (new folder: created 01:40:06Z before,
+  01:47:16Z after, UTC); `sq.version` and DisplayVersion 0.0.2; the Run value and the one Path entry unchanged.
+  **Verified** (test).
+- **The restarted tray keeps the launch's variables.** It logged "Claude Code is watched in the folder
+  CLAUDE_CONFIG_DIR names", so the environment the `.cmd` set reached it through the old tray and Update.exe. That it
+  also had `WAKESHOT_UPDATE_FEED` is likely for the same reason, not verified (it did not run 5 minutes). **Verified**
+  for `CLAUDE_CONFIG_DIR` (test).
+- **The update notice was not seen.** The session was locked all night (LogonUI.exe running since 02:00:38), and the
+  core keeps every notice while the session is locked (`core.rs`, `notify`); no `notice ... Updated` line came, as
+  expected. Whether it shows at the unlock: **not verified** here; it belongs to Haik's checks.
+- **Setup.exe over the install during a hold (`winget upgrade`).** Keep awake on (the 0.0.2 tray, overridden 0.6 s
+  after the command) and `wakeshot run -- ping -n 600 127.0.0.1` (hold file `run-<ping pid>.json`; the tray held for
+  both). 0.0.3's `Setup.exe --silent`: exit 0 in 5.4 s. Setup killed the tray, its guard and the wrapper in the same
+  millisecond, so the guard did not restore; the install hook did (`journal saved`, three `power: wrote` lines, `set
+  active plan <copy>`, `journal deleted`, `RunOnce value WakeshotRestore removed`, `restore: the journal's values are
+  back`, 730 ms by Velopack). The copy's values back, no journal, no RunOnce value, and no process from the install
+  folder afterwards: Wakeshot stays off until the next sign-in (answer 5). The wrapper ended with exit code 1; its
+  `ping` kept running (as the README says) and was ended by its pid. Setup's rename of the old folder for rollback
+  failed once with "Access is denied" right after the kills and worked on its retry 1 s later. **Verified** (test;
+  Velopack's `velopack.log`).
+- **Uninstall during a hold.** A new tray (0.0.3) through the `.cmd`, Keep awake on, then the QuietUninstallString
+  `"<root>\Update.exe" --uninstall --silent` (Settings > Apps runs `UninstallString`, the same without `--silent`):
+  exit 0 in 0.5 s. Update.exe killed the tray and its guard, then ran the uninstall hook (149 ms). The copy's values
+  back; Run, RunOnce and the Path entry gone; Path type and bytes as before; the data folder gone after the good
+  restore (answer 6), so its log is gone too; install folder gone 3.1 s after the exit; uninstall key, Start menu
+  shortcut and `%TEMP%\velopack_HaikAsatryan.Wakeshot` gone. **Verified** (test).
+- **AFTER equals BEFORE.** Run (7 values, same hashes), RunOnce (empty), Path type 2, 332 bytes, hash
+  `A8FDC61D7FFE5745`; Balanced `381b4222-...` active and the only plan; lid 1/1, sleep 18000/18000, energy saver DC 30,
+  all of `powercfg /qh` hash `C64AFDB1CFDD13CF`; no data folder (none before). An elevated read before (05:39:35) and
+  after (05:48:32) gave the same state. All 18 processes the script listed, the two Velopack Update.exe runs the tray
+  started (patch and apply) and the launch chain were gone, checked by pid. **Verified** (test).
+- **Sizes and times** (debug x64): tray 12,585,984 bytes, CLI 1,744,384; `Setup.exe` 14,921,322, full nupkg
+  7,363,690, delta 8,975, portable zip 7,356,214; Setup says the install needs 77.5 MB. Pack 3 to 6 s each. First
+  install 5.2 s (install hook 3.1 s by Velopack: a just-extracted debug exe), tray start to `state.json` 0.9 and 2.9 s.
+  **Verified** (test).
+- **Left by Windows:** the product GUID's `NotifyIconSettings` entry now points at the removed
+  `<root>\current\wakeshot-tray.exe`; Windows keeps one entry per GUID and moves it to the next exe that starts
+  (phase file note 7). Velopack's own logs in `%LocalAppData%\velopack` grew by 13,412 and 15,992 bytes. **Verified**
+  (test).

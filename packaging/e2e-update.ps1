@@ -52,7 +52,7 @@ Where the terminal opens elevated (this laptop's does), a .cmd opened with explo
 "Spike launch and stop checks"); the third example is such a .cmd. Write the exit code as `(echo %ERRORLEVEL%)`: in
 `echo %ERRORLEVEL%> file`, cmd reads `0>` as a redirect of handle 0 and writes nothing.
 
-A run takes about 11 minutes: the tray's first update check comes 5 minutes after it starts, and step 5 then waits 2
+A run takes about 9 minutes: the tray's first update check comes 5 minutes after it starts, and step 5 then waits 2
 more minutes to see that the update does not apply while Keep awake holds. The update notice waits while the session
 is locked, as every notice does; that check is then reported as SKIP.
 
