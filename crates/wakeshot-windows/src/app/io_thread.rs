@@ -24,7 +24,7 @@ use windows::Win32::System::Threading::WaitForSingleObject;
 use crate::WinError;
 use crate::app::Ack;
 use crate::io_queue::IoQueue;
-use crate::log::{Level, Log};
+use crate::log::{self, Level, Log};
 use crate::notify::Notifier;
 use crate::power::executor::PowerExecutor;
 use crate::power::journal::{FileNet, NoGuard};
@@ -33,9 +33,6 @@ use crate::sink::EventSink;
 use crate::store::{self, DataDir, DataFile};
 
 const AREA: &str = "io";
-
-/// `log::LOG_FILE`, private there: the one file every process appends to.
-const LOG_FILE: &str = "wakeshot.log";
 
 /// The answer to a `WriteConfig` that found a newer `config.json` and kept it. 13 (`ERROR_INVALID_DATA`), as
 /// `READ_BACK_DIFFERS` uses where Windows gives no code; the core ignores a `Config` answer.
@@ -264,7 +261,7 @@ impl Runner {
             }
             Command::Log(text) => self.log.line(Level::Info, "core", text),
             Command::OpenLog => {
-                let path = self.dir.logs().join(LOG_FILE);
+                let path = log::log_file(&self.dir.logs());
                 match (self.open)(path.as_os_str()) {
                     Ok(()) => self.note(Level::Info, "log opened with the default app"),
                     Err(e) => {

@@ -25,7 +25,7 @@ use windows::Win32::Foundation::{ERROR_INVALID_PARAMETER, ERROR_NO_UNICODE_TRANS
 
 use crate::WinError;
 use crate::install::{PathChange, UserPath};
-use crate::log::{Level, Log, Proc};
+use crate::log::{self, Level, Log, Proc};
 use crate::power::journal::{FileNet, NoGuard, RUN_ONCE_NAME, restore_locked};
 use crate::power::plan::Win32Power;
 use crate::process::{Liveness, SystemLiveness};
@@ -50,9 +50,6 @@ pub const UNINSTALL_LIMIT_MS: u64 = 25_000;
 pub const RETRY_EVERY_MS: u64 = 2_000;
 
 const AREA: &str = "hook";
-
-/// `log.rs` keeps the name private; `real_delete_all_takes_the_open_log_too` checks the two agree.
-const LOG_FILE: &str = "wakeshot.log";
 
 /// What a hook needs from the PC: the real one is [`RealHookEnv`].
 pub trait HookEnv {
@@ -635,8 +632,12 @@ fn clean_on_disk(dir: &DataDir, step: DataFolder) -> Vec<Undeleted> {
     if !exists || step == DataFolder::KeepJournalAndLogs || !undeleted.is_empty() {
         return undeleted;
     }
-    let log_file = logs.join(LOG_FILE);
-    remove_children(&logs, &[OsStr::new(LOG_FILE)], &mut undeleted);
+    let log_file = log::log_file(&logs);
+    remove_children(
+        &logs,
+        &[log_file.file_name().unwrap_or_default()],
+        &mut undeleted,
+    );
     if !undeleted.is_empty() {
         return undeleted;
     }
@@ -1591,8 +1592,6 @@ mod tests {
         let rig = Rig::new("hooks::tests::real_delete_all_takes_the_open_log_too");
         fill(&rig.dir);
         rig.log.line(Level::Info, AREA, "a line in the open log");
-        // The name this module deletes last is the one `LogWriter` writes.
-        assert!(rig.dir.logs().join(LOG_FILE).is_file());
 
         let mut env = rig.env(applied(), Box::new(SystemLiveness));
         assert_eq!(env.clean_data_folder(DataFolder::DeleteAll), []);
@@ -1624,7 +1623,7 @@ mod tests {
         assert_eq!(left[0].path, rig.dir.holds());
         assert_eq!(left[0].error.call, "remove_dir_all");
         assert_eq!(rig.left(), ["holds", "logs"]);
-        assert!(rig.dir.logs().join(LOG_FILE).is_file(), "the log stays");
+        assert!(log::log_file(&rig.dir.logs()).is_file(), "the log stays");
         assert!(rig.dir.logs().join("wakeshot.1.log").is_file());
         drop(open);
     }

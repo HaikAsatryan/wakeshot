@@ -13,7 +13,8 @@
 //!   core asks for no apply before the thread's own `UpdateReady`. It still stops right after the IO thread finishes.
 //! - The IO thread starts right after `Dispatcher::new`. The core gives the first-run `Notify` before the first `Tray`
 //!   in the `Started` batch; the loop runs that `Tray` (the icon's add) inside `Dispatcher::new`, so the notice only
-//!   reaches the shell once the icon exists. A running IO thread could show it first, and it would fail for good.
+//!   reaches the shell once the icon exists. A running IO thread could show it first and be refused; the notifier
+//!   then keeps it for the add, so the order only spares that refusal.
 //! - The session notifications go when the dispatcher quits, inside the pump: `LoopWindow::run` destroys the window
 //!   before it returns, and Microsoft asks for the unregister before the window is destroyed.
 
@@ -24,16 +25,19 @@ use std::process::ExitCode;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
-use wakeshot_core::command::{Command, CountdownReason, Failure, HibernateEnd, Outcome};
+use wakeshot_core::command::{Command, CountdownReason, Failure, Outcome};
 use wakeshot_core::core::Core;
 use wakeshot_core::event::{Event, SessionChange};
 use wakeshot_core::ownership::io::PlanIo;
 use wakeshot_core::sources::AgentSource;
 use wakeshot_core::sources::claude::{ClaudeSource, claude_folder};
 use wakeshot_core::text::NoticeClick;
-use wakeshot_core::view::{Cue, MenuCommand, TrayView};
-use windows::Win32::Foundation::{ERROR_ACCESS_DENIED, ERROR_NOT_SUPPORTED, HWND};
+use wakeshot_core::view::{Cue, MenuCommand, Notice, TrayView};
+use windows::Win32::Foundation::{
+    ERROR_ACCESS_DENIED, ERROR_NOT_ENOUGH_QUOTA, ERROR_NOT_SUPPORTED, HWND,
+};
 
 use super::dispatch::{Dispatcher, LoopRunners};
 use super::io_thread::{FINISH_MS, IoParts, IoThread};
@@ -44,7 +48,7 @@ use crate::WinError;
 use crate::clock::{self, SystemClock};
 use crate::io_queue::IoQueue;
 use crate::localtime::SystemZone;
-use crate::log::{Level, Log, LogWriter, Proc};
+use crate::log::{self, Level, Log, LogWriter, Proc};
 use crate::notify::BalloonNotifier;
 use crate::power::executor::PowerExecutor;
 use crate::power::hibernate::{DryRunHibernate, HibernateDeps, Win32Hibernate, run_hibernate};
@@ -69,8 +73,12 @@ const AREA: &str = "tray";
 /// The exit code of a tray that could not start: the same 1 the guard and restore mode give after a give-up.
 const EXIT_FAILED: u8 = 1;
 
-/// `log::LOG_FILE`, private there; a balloon click opens it.
-const LOG_FILE: &str = "wakeshot.log";
+/// How often the hibernate thread posts its end while the loop's queue is full (1816), and how long apart. The
+/// dispatcher starts no other hibernate before that end is fed, the battery floor's included, so a lost one would
+/// block them all for the rest of the run. A full queue empties once the loop runs again; a minute covers a loop held
+/// up by a slow shell call. Any other error means the window is gone: the tray quits.
+const HIBERNATE_POST_TRIES: u32 = 60;
+const HIBERNATE_POST_WAIT: Duration = Duration::from_secs(1);
 
 /// What the first-run notice's click opens (track note 3.6 of `05-tray-ux.md`).
 const TASKBAR_SETTINGS: &str = "ms-settings:taskbar";
@@ -288,11 +296,15 @@ where
         Ok(icon) => icon,
         Err(e) => return fatal(&**log, "the tray icon window", e),
     };
-    icon.on_note(icon_notes(Arc::clone(&loop_log)));
     let notifier = Arc::new(BalloonNotifier::new(icon.identity()));
+    icon.on_note(icon_notes(
+        Arc::clone(&loop_log),
+        Arc::clone(&notifier),
+        Arc::clone(&io),
+    ));
     icon.on_balloon_click(balloon_click(
         Arc::clone(&notifier),
-        boot.dir.logs().join(LOG_FILE),
+        log::log_file(&boot.dir.logs()),
         Arc::clone(log),
         Arc::clone(&loop_log),
     ));
@@ -310,7 +322,7 @@ where
     let watch = match WatchThread::start(
         boot.dir.clone(),
         config.clone(),
-        sources(&**log),
+        sources(log),
         Arc::clone(&liveness),
         Arc::clone(&sink),
         Arc::clone(log),
@@ -343,6 +355,7 @@ where
             sound,
             sink: Arc::clone(&sink),
             log: Arc::clone(log),
+            post_wait: HIBERNATE_POST_WAIT,
         },
         settings,
         watch,
@@ -350,7 +363,6 @@ where
         subscriptions,
         lost: LostPosts::default(),
         session: Rc::clone(&session),
-        sink: Arc::clone(&sink),
         log: Arc::clone(&loop_log),
         idle_failed: false,
     };
@@ -437,8 +449,9 @@ fn fatal(log: &dyn Log, what: &str, e: WinError) -> u8 {
 
 /// The watch thread's sources: Claude Code only in v1 (Codex and Copilot after v1; Haik, 2026-11-03). The folder is
 /// found the way Claude Code finds it: `CLAUDE_CONFIG_DIR`, else `.claude` in the profile folder, which
-/// `std::env::home_dir` reads in the same order as Node's `os.homedir` (`USERPROFILE` first).
-fn sources(log: &dyn Log) -> Vec<Box<dyn AgentSource + Send>> {
+/// `std::env::home_dir` reads in the same order as Node's `os.homedir` (`USERPROFILE` first). The zone logs its own
+/// failures: boxed into the source, nobody could ask it for them.
+fn sources(log: &Arc<dyn Log>) -> Vec<Box<dyn AgentSource + Send>> {
     let Some(home) = std::env::home_dir() else {
         log.line(
             Level::Warn,
@@ -457,7 +470,7 @@ fn sources(log: &dyn Log) -> Vec<Box<dyn AgentSource + Send>> {
     let claude = claude_folder(&home, config_dir.as_deref());
     vec![Box::new(ClaudeSource::in_folder(
         claude,
-        Box::new(SystemZone::current()),
+        Box::new(SystemZone::current_logged(Arc::clone(log))),
     ))]
 }
 
@@ -478,8 +491,12 @@ impl Log for QueuedLog {
 }
 
 /// The icon's notes worth a line: a failed add once per outage (the retry runs every 30 s at most), the add that ends
-/// it, a failed change, and a taskbar restart.
-fn icon_notes(log: Arc<dyn Log>) -> icon::NoteHook {
+/// it, a failed change, and a taskbar restart. At each add the notices the shell refused before it are shown again.
+fn icon_notes(
+    log: Arc<dyn Log>,
+    notifier: Arc<BalloonNotifier>,
+    io: Arc<IoQueue>,
+) -> icon::NoteHook {
     Box::new(move |note: &icon::Note| match note {
         icon::Note::AddFailed {
             attempt: 1,
@@ -491,12 +508,15 @@ fn icon_notes(log: Arc<dyn Log>) -> icon::NoteHook {
             );
             log.line(Level::Warn, AREA, &text);
         }
-        icon::Note::Added { attempt } if *attempt > 1 => {
-            log.line(
-                Level::Info,
-                AREA,
-                &format!("tray icon added at try {attempt}"),
-            );
+        icon::Note::Added { attempt } => {
+            if *attempt > 1 {
+                log.line(
+                    Level::Info,
+                    AREA,
+                    &format!("tray icon added at try {attempt}"),
+                );
+            }
+            show_again(notifier.icon_added(), &io, &*log);
         }
         icon::Note::ModifyFailed => {
             log.line(
@@ -514,6 +534,22 @@ fn icon_notes(log: Arc<dyn Log>) -> icon::NoteHook {
         }
         _ => {}
     })
+}
+
+/// The notices the shell refused before the icon's add go to the IO thread again, in order: the loop never waits on
+/// the shell, and the IO thread logs each as it shows it.
+fn show_again(notices: Vec<Notice>, io: &IoQueue, log: &dyn Log) {
+    if notices.is_empty() {
+        return;
+    }
+    let text = format!(
+        "the icon is added: {} notices refused before it are shown again",
+        notices.len()
+    );
+    log.line(Level::Info, AREA, &text);
+    for notice in notices {
+        io.push(Command::Notify(notice));
+    }
 }
 
 /// The menu's notes worth a line (`p5-menu-view`): a failure, which may have lost the pick, and a menu that opened
@@ -888,6 +924,8 @@ struct Hibernator {
     sound: Arc<dyn SoundPlayer>,
     sink: Arc<dyn EventSink>,
     log: Arc<dyn Log>,
+    /// `HIBERNATE_POST_WAIT`; tests wait less.
+    post_wait: Duration,
 }
 
 impl Hibernator {
@@ -918,12 +956,31 @@ impl Hibernator {
             &*self.sound,
             &*self.log,
         );
-        if let Err(e) = self.sink.post(Event::Done(Outcome::Hibernate(end))) {
-            let text = format!(
-                "hibernate result not posted: {} failed with {}; no other hibernate starts in this run",
-                e.call, e.code
-            );
-            self.log.line(Level::Warn, AREA, &text);
+        self.post_end(&Event::Done(Outcome::Hibernate(end)));
+    }
+
+    /// Posts the end, again while the queue is full (`HIBERNATE_POST_TRIES`).
+    fn post_end(&self, event: &Event) {
+        let mut tries = 1;
+        loop {
+            let Err(e) = self.sink.post(event.clone()) else {
+                if tries > 1 {
+                    let text = format!("hibernate result posted at try {tries}");
+                    self.log.line(Level::Info, AREA, &text);
+                }
+                return;
+            };
+            if e.code != ERROR_NOT_ENOUGH_QUOTA.0 || tries >= HIBERNATE_POST_TRIES {
+                let text = format!(
+                    "hibernate result not posted: {} failed with {} at try {tries}; no other hibernate starts in \
+                     this run",
+                    e.call, e.code
+                );
+                self.log.line(Level::Warn, AREA, &text);
+                return;
+            }
+            tries += 1;
+            thread::sleep(self.post_wait);
         }
     }
 }
@@ -941,7 +998,6 @@ struct RealRunners {
     subscriptions: Subscriptions,
     lost: LostPosts,
     session: Rc<SessionSlot>,
-    sink: Arc<dyn EventSink>,
     /// Lines through the IO thread (`QueuedLog`).
     log: Arc<dyn Log>,
     idle_failed: bool,
@@ -998,31 +1054,18 @@ impl LoopRunners for RealRunners {
         reason: CountdownReason,
         floor_pct: u8,
         last_resume_mono_ms: Option<u64>,
-    ) {
-        let Err(e) = self
+    ) -> Result<(), WinError> {
+        let started = self
             .hibernator
-            .start(reason, floor_pct, last_resume_mono_ms)
-        else {
-            return;
-        };
-        let text = format!(
-            "hibernate thread not started: {} failed with {}",
-            e.call, e.code
-        );
-        self.log.line(Level::Warn, AREA, &text);
-        // The dispatcher starts no other hibernate before this answer.
-        if let Err(e) = self
-            .sink
-            .post(Event::Done(Outcome::Hibernate(HibernateEnd::Failed(
-                e.into(),
-            ))))
-        {
+            .start(reason, floor_pct, last_resume_mono_ms);
+        if let Err(e) = &started {
             let text = format!(
-                "hibernate answer not posted: {} failed with {}",
+                "hibernate thread not started: {} failed with {}",
                 e.call, e.code
             );
             self.log.line(Level::Warn, AREA, &text);
         }
+        started.map(|_| ())
     }
 
     fn apply_update(&mut self) {
@@ -1099,9 +1142,11 @@ impl LoopHandler for TrayLoop<'_> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicU32, Ordering};
     use std::sync::mpsc;
-    use std::time::Duration;
 
+    use wakeshot_core::command::HibernateEnd;
     use wakeshot_core::sim::Start;
 
     use super::*;
@@ -1129,6 +1174,7 @@ mod tests {
             sound: Arc::new(FakeSoundPlayer::default()),
             sink: sink.clone(),
             log: log.clone(),
+            post_wait: Duration::ZERO,
         };
         (h, sink, log)
     }
@@ -1155,6 +1201,7 @@ mod tests {
             sound: sound.clone(),
             sink: sink.clone(),
             log: log.clone(),
+            post_wait: Duration::ZERO,
         };
         h.start(CountdownReason::WorkEnded, 20, None)
             .unwrap()
@@ -1187,34 +1234,105 @@ mod tests {
         assert_eq!(sink.events().len(), 1);
     }
 
-    #[test]
-    fn a_hibernate_end_that_cannot_be_posted_is_logged() {
-        let deps = Arc::new(FakeHibernate {
-            lid: Some(false),
-            ..FakeHibernate::default()
-        });
+    /// Fails the first `fail` posts with `code`, then takes them; counts every try.
+    struct FlakySink {
+        fail: u32,
+        code: u32,
+        tries: AtomicU32,
+        posted: Mutex<Vec<Event>>,
+    }
+
+    impl FlakySink {
+        fn new(fail: u32, code: u32) -> Arc<Self> {
+            Arc::new(Self {
+                fail,
+                code,
+                tries: AtomicU32::new(0),
+                posted: Mutex::new(Vec::new()),
+            })
+        }
+    }
+
+    impl EventSink for FlakySink {
+        fn post(&self, event: Event) -> Result<(), WinError> {
+            if self.tries.fetch_add(1, Ordering::SeqCst) < self.fail {
+                return Err(WinError {
+                    call: "PostMessageW",
+                    code: self.code,
+                });
+            }
+            self.posted.lock().unwrap().push(event);
+            Ok(())
+        }
+    }
+
+    /// A hibernate thread whose lid check skips at once, over `sink`.
+    fn run_over(sink: &Arc<FlakySink>) -> Vec<(Level, String)> {
         let log = Arc::new(MemoryLog::default());
-        let sink = Arc::new(FakeEventSink {
-            fail_with: Some(WinError {
-                call: "PostMessageW",
-                code: 1816,
-            }),
-            ..FakeEventSink::default()
-        });
         let h = Hibernator {
-            deps,
+            deps: Arc::new(FakeHibernate {
+                lid: Some(false),
+                ..FakeHibernate::default()
+            }),
             sound: Arc::new(FakeSoundPlayer::default()),
-            sink,
+            sink: Arc::clone(sink) as Arc<dyn EventSink>,
             log: log.clone(),
+            post_wait: Duration::ZERO,
         };
-        h.start(CountdownReason::WorkEnded, 20, None)
+        h.start(CountdownReason::Floor, 20, None)
             .unwrap()
             .join()
             .unwrap();
-        let logged = lines(&log);
+        lines(&log)
+    }
+
+    #[test]
+    fn a_hibernate_end_is_posted_again_while_the_queue_is_full() {
+        let sink = FlakySink::new(2, ERROR_NOT_ENOUGH_QUOTA.0);
+        let logged = run_over(&sink);
+        assert_eq!(sink.tries.load(Ordering::SeqCst), 3);
+        let posted = sink.posted.lock().unwrap().clone();
+        assert!(
+            matches!(
+                posted.as_slice(),
+                [Event::Done(Outcome::Hibernate(HibernateEnd::Skipped(_)))]
+            ),
+            "exactly one end: {posted:?}"
+        );
+        assert!(
+            logged.contains(&(Level::Info, "hibernate result posted at try 3".to_owned())),
+            "{logged:?}"
+        );
+        assert!(
+            logged.iter().all(|(level, _)| *level != Level::Warn),
+            "{logged:?}"
+        );
+    }
+
+    #[test]
+    fn a_hibernate_end_that_cannot_be_posted_is_logged() {
+        // A queue that stays full: every try, then one line.
+        let sink = FlakySink::new(u32::MAX, ERROR_NOT_ENOUGH_QUOTA.0);
+        let logged = run_over(&sink);
+        assert_eq!(sink.tries.load(Ordering::SeqCst), HIBERNATE_POST_TRIES);
+        let warned: Vec<_> = logged.iter().filter(|(l, _)| *l == Level::Warn).collect();
+        assert_eq!(warned.len(), 1, "{logged:?}");
+        assert!(
+            warned[0].1.starts_with(
+                "hibernate result not posted: PostMessageW failed with 1816 at try 60"
+            ),
+            "{logged:?}"
+        );
+
+        // The window is gone (1400, the tray quits): no second try.
+        let sink = FlakySink::new(u32::MAX, 1400);
+        let logged = run_over(&sink);
+        assert_eq!(sink.tries.load(Ordering::SeqCst), 1);
         assert!(
             logged.iter().any(|(level, t)| *level == Level::Warn
-                && t.starts_with("hibernate result not posted: PostMessageW failed with 1816")),
+                && t.starts_with(
+                    "hibernate result not posted: PostMessageW failed with 1400 at try 1"
+                )),
             "{logged:?}"
         );
     }
@@ -1520,7 +1638,16 @@ mod tests {
     #[test]
     fn icon_and_menu_notes_log_only_what_matters() {
         let io = Arc::new(IoQueue::new());
-        let mut icon_hook = icon_notes(Arc::new(QueuedLog(Arc::clone(&io))));
+        // Never shows a notice here, so it makes no shell call.
+        let notifier = Arc::new(BalloonNotifier::new(crate::tray::IconIdentity {
+            hwnd: 0x1234,
+            guid: IconKind::Demo.guid(),
+        }));
+        let mut icon_hook = icon_notes(
+            Arc::new(QueuedLog(Arc::clone(&io))),
+            notifier,
+            Arc::clone(&io),
+        );
         for note in [
             icon::Note::AddFailed {
                 attempt: 1,
@@ -1550,6 +1677,32 @@ mod tests {
                 Command::Log("tray: tray icon added at try 3".into()),
                 Command::Log("tray, warning: menu: TrackPopupMenuEx failed with 1401".into()),
             ]
+        );
+    }
+
+    #[test]
+    fn notices_refused_before_the_add_go_to_the_io_thread_again() {
+        let io = IoQueue::new();
+        let log = MemoryLog::default();
+        show_again(Vec::new(), &io, &log);
+        assert_eq!(io.pop(0), None);
+        assert!(lines(&log).is_empty(), "nothing to say");
+
+        show_again(vec![Notice::FirstRun, Notice::RestoreFailed], &io, &log);
+        let popped: Vec<Command> = std::iter::from_fn(|| io.pop(0)).collect();
+        assert_eq!(
+            popped,
+            [
+                Command::Notify(Notice::FirstRun),
+                Command::Notify(Notice::RestoreFailed),
+            ]
+        );
+        assert_eq!(
+            lines(&log),
+            [(
+                Level::Info,
+                "the icon is added: 2 notices refused before it are shown again".to_owned()
+            )]
         );
     }
 }

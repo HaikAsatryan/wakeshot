@@ -194,6 +194,28 @@ fn restore_with_retry<P: PlanIo, G: GuardControl>(
     log: &dyn Log,
     pause: impl FnOnce(),
 ) -> Startup {
+    let done = retry_unread(executor, log, pause);
+    // An unread journal has its own lines.
+    if done.unread {
+        return done;
+    }
+    // The executor says nothing when there is no journal, so without this line a log could not show that step 6 ran.
+    let text = match &done.journal {
+        None => "startup restore done: no journal entry is left".to_owned(),
+        Some(journal) => format!(
+            "startup restore done: {} journal entries left for the retry on the tick",
+            journal.entries.len()
+        ),
+    };
+    log.line(Level::Info, AREA, &text);
+    done
+}
+
+fn retry_unread<P: PlanIo, G: GuardControl>(
+    executor: &mut PowerExecutor<P, FileNet<G>>,
+    log: &dyn Log,
+    pause: impl FnOnce(),
+) -> Startup {
     let first = executor.startup();
     // Only a read that failed is worth a second try: a missing, corrupt or read file has given its answer.
     if !first.unread {
@@ -551,6 +573,15 @@ mod tests {
                 .filter(|(level, _, text)| *level == Level::Warn && text.contains(part))
                 .count()
         }
+
+        /// The Info lines of this module's area.
+        fn said(&self) -> Vec<String> {
+            lines(&self.log)
+                .into_iter()
+                .filter(|(level, area, _)| *level == Level::Info && *area == AREA)
+                .map(|(_, _, text)| text)
+                .collect()
+        }
     }
 
     fn restored_values() -> Vec<Option<u32>> {
@@ -725,6 +756,10 @@ mod tests {
         );
         assert_eq!(rig.stored(), restored_values());
         assert!(!boot.dir.file(DataFile::Journal).exists());
+        assert_eq!(
+            rig.said(),
+            ["startup restore done: no journal entry is left"]
+        );
     }
 
     #[test]
@@ -748,6 +783,10 @@ mod tests {
             assert!(!paused, "a journal that read is not tried again");
             assert_eq!(rig.stored(), [Some(0); 3]);
             assert!(boot.dir.file(DataFile::Journal).exists());
+            assert_eq!(
+                rig.said(),
+                ["startup restore done: 3 journal entries left for the retry on the tick"]
+            );
         }
     }
 
@@ -770,6 +809,11 @@ mod tests {
             }
         );
         assert!(!paused);
+        // The one line that shows step 6 ran, as the restore at Quit has its own.
+        assert_eq!(
+            rig.said(),
+            ["startup restore done: no journal entry is left"]
+        );
     }
 
     #[test]
@@ -821,6 +865,13 @@ mod tests {
         assert_eq!(rig.warned("still does not read after one retry"), 1);
         // The executor's own line for each of the two reads.
         assert_eq!(rig.warned("startup: journal.json does not read"), 2);
+        assert!(
+            rig.said()
+                .iter()
+                .all(|t| !t.starts_with("startup restore done")),
+            "the warnings say it: {:?}",
+            rig.said()
+        );
     }
 
     #[test]

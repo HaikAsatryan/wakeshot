@@ -2,8 +2,9 @@
 //!
 //! Owner: `p4-cron`.
 
-use std::sync::Mutex;
+use std::fmt;
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::{Arc, Mutex};
 
 use wakeshot_core::sources::cron::LocalOffset;
 use windows::Win32::Foundation::{FILETIME, GetLastError, SYSTEMTIME, WIN32_ERROR};
@@ -13,7 +14,11 @@ use windows::Win32::System::Time::{
     SystemTimeToFileTime, SystemTimeToTzSpecificLocalTimeEx, TIME_ZONE_ID_INVALID,
 };
 
+use crate::log::{Level, Log};
 use crate::{WinError, clock};
+
+/// The zone serves the watch thread's sources.
+const AREA: &str = "watch";
 
 /// 100 ns ticks per millisecond and per minute.
 const TICKS_PER_MS: i64 = 10_000;
@@ -29,23 +34,55 @@ const NO_WIN32_CODE: u32 = u32::MAX;
 ///
 /// Owner: `p4-cron`. Each call converts with Windows' own rules for that year (`SystemTimeToTzSpecificLocalTimeEx`
 /// with the zone's dynamic daylight saving data). A failed call gives the zone's offset as last read now instead,
-/// and keeps the first error for `take_error`, so the caller can log it; nothing here panics.
-#[derive(Debug)]
+/// and keeps the first error for `take_error`, so the caller can log it; nothing here panics. A zone made with
+/// `current_logged` logs each new error itself, once: boxed into a source, nobody can call `take_error`.
 pub struct SystemZone {
     /// `None`: the PC's zone, read again at each call (about 0.3 us), so a zone change applies at once.
     named: Option<DYNAMIC_TIME_ZONE_INFORMATION>,
     /// The offset now, the answer for a failed call; refreshed at each read of the PC's zone.
     fallback_min: AtomicI32,
     error: Mutex<Option<WinError>>,
+    log: Option<ZoneLog>,
+}
+
+/// Where each new error goes, with the errors logged so far: the cron search reads the zone many times, so a failing
+/// call would fill the log.
+struct ZoneLog {
+    to: Arc<dyn Log>,
+    logged: Mutex<Vec<WinError>>,
+}
+
+impl fmt::Debug for SystemZone {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SystemZone")
+            .field("named", &self.named)
+            .field("fallback_min", &self.fallback_min)
+            .field("error", &self.error)
+            .field("logged", &self.log.is_some())
+            .finish()
+    }
 }
 
 impl SystemZone {
     /// The PC's zone, as Settings > Time & language sets it.
     pub fn current() -> Self {
+        Self::current_with(None)
+    }
+
+    /// The PC's zone, logging each new error to `log` once (the tray's Claude source).
+    pub fn current_logged(log: Arc<dyn Log>) -> Self {
+        Self::current_with(Some(ZoneLog {
+            to: log,
+            logged: Mutex::new(Vec::new()),
+        }))
+    }
+
+    fn current_with(log: Option<ZoneLog>) -> Self {
         let zone = Self {
             named: None,
             fallback_min: AtomicI32::new(0),
             error: Mutex::new(None),
+            log,
         };
         if let Err(e) = zone.read_current() {
             zone.keep(e);
@@ -62,6 +99,7 @@ impl SystemZone {
             named: Some(*zone),
             fallback_min: AtomicI32::new(fallback),
             error: Mutex::new(None),
+            log: None,
         };
         if let Err(e) = now {
             zone.keep(e);
@@ -98,6 +136,25 @@ impl SystemZone {
     fn keep(&self, error: WinError) {
         if let Ok(mut slot) = self.error.lock() {
             slot.get_or_insert(error);
+        }
+        let Some(ZoneLog { to: log, logged }) = &self.log else {
+            return;
+        };
+        let new = logged.lock().is_ok_and(|mut seen| {
+            let new = !seen.contains(&error);
+            if new {
+                seen.push(error);
+            }
+            new
+        });
+        if new {
+            let text = format!(
+                "the time zone does not read: {} failed with {}; cron times use the offset read last ({} min)",
+                error.call,
+                error.code,
+                self.fallback_min.load(Ordering::Relaxed)
+            );
+            log.line(Level::Warn, AREA, &text);
         }
     }
 
@@ -175,6 +232,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::log::MemoryLog;
 
     const MINUTE_MS: i64 = 60_000;
     const DAY_MS: i64 = 24 * 60 * MINUTE_MS;
@@ -380,5 +438,54 @@ mod tests {
         let pacific_now = pacific.offset_minutes(clock::now().wall_ms);
         assert_eq!(pacific.offset_minutes(i64::MIN), pacific_now);
         assert!(pacific.take_error().is_some());
+    }
+
+    #[test]
+    fn a_logged_zone_logs_each_new_error_once() {
+        let log = Arc::new(MemoryLog::default());
+        let zone = SystemZone::current_logged(log.clone());
+        let now = zone.offset_minutes(clock::now().wall_ms);
+        assert!(log.lines.lock().unwrap().is_empty(), "the PC's zone reads");
+        for bad in [i64::MIN, i64::MAX, -FILETIME_TO_UNIX_MS - 1, i64::MIN] {
+            assert_eq!(zone.offset_minutes(bad), now, "{bad}");
+        }
+        let lines = log.lines.lock().unwrap().clone();
+        assert_eq!(lines.len(), 1, "one error, many reads: {lines:?}");
+        let (level, area, text) = &lines[0];
+        assert_eq!((*level, *area), (Level::Warn, AREA));
+        assert_eq!(
+            *text,
+            format!(
+                "the time zone does not read: FileTimeToSystemTime failed with 87; cron times use the offset read \
+                 last ({now} min)"
+            )
+        );
+        // `take_error` still works beside the log.
+        assert!(zone.take_error().is_some());
+
+        // Another call or code is new, and logged once too; one already logged stays quiet.
+        let other = WinError {
+            call: "GetDynamicTimeZoneInformation",
+            code: 5,
+        };
+        zone.keep(other);
+        zone.keep(other);
+        zone.keep(WinError {
+            call: "FileTimeToSystemTime",
+            code: ERROR_INVALID_PARAMETER.0,
+        });
+        let lines = log.lines.lock().unwrap().clone();
+        assert_eq!(lines.len(), 2, "{lines:?}");
+        assert!(
+            lines[1]
+                .2
+                .contains("GetDynamicTimeZoneInformation failed with 5"),
+            "{lines:?}"
+        );
+
+        // An unlogged zone writes nowhere.
+        let quiet = SystemZone::current();
+        assert_eq!(quiet.offset_minutes(i64::MIN), now);
+        assert!(quiet.take_error().is_some());
     }
 }

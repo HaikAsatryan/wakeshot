@@ -3526,3 +3526,21 @@ release build of commit cd3d498 (velopack 1.2.161 with the four hook callbacks),
   only the syntax); a blank line between them fixes it, a comment line between them does not. **Verified** (test).
 - **This laptop's `powercfg /q` hides the lid action and the energy saver threshold**: `/q <plan> SUB_BUTTONS
   LIDACTION` prints only the plan header; `/qh` prints the setting and its values. **Verified** (test).
+
+## Wiring fixes checks
+
+Checked 2026-11-04 04:22 to 04:25 for card `docs/tasks/p6-int-wiring-fixes.md`, with one run of the dry-run smoke test
+(`cargo test -p wakeshot-tray --test smoke -- --ignored`, Medium, temp data folder, no power setting written).
+
+- **The dry-run icon's `NotifyIconSettings` entry may hold only `IconSnapshot`.** The run made one new entry under
+  `HKCU\Control Panel\NotifyIconSettings`, id `15983757285637097514` again (the id `p6-int-tray-mode` Part B found).
+  Read about a minute after the tray ended, it had one value, `IconSnapshot`: no `IconGuid` and no `ExecutablePath`.
+  So a clean-up that picks the entry by `IconGuid` can miss it; compare the entry ids before and after the run.
+  **Verified** (test: `Get-ItemProperty`, ids listed before and after).
+- **The `restored` mark in `journal.json` is saved before the writes, in an apply and in a restore.** The dry-run log
+  shows a "journal saved" line with every entry marked (printed in that run as "plan holds the original", this
+  card's first wording) right before "would write lidAc ... 1 to 0" (apply), and again right before "would write
+  lidAc ... 0 to 1" (restore at the hold end); the save after the apply's writes has no mark. So the mark means a
+  change under way, and the journal line now says "being changed". **Verified** (test, and source:
+  `ownership/apply.rs` marks a new entry "until our value is in force", `ownership/restore.rs` marks an entry before
+  it writes the original).

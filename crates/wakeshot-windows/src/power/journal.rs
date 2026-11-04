@@ -572,13 +572,19 @@ fn push_entry(text: &mut String, entry: &JournalFileEntry) {
         JournalKey::Known(key) => write!(text, " {key:?}"),
         JournalKey::Other(name) => write!(text, " {name:?}"),
     };
+    // The `restored` mark is saved before an apply's first write and before a restore writes the original back, so it
+    // tells of a change under way, not one done.
     let _ = write!(
         text,
         " on {}: original {}, written {}{};",
         entry.plan,
         entry.original,
         entry.written,
-        if entry.restored { ", restored" } else { "" }
+        if entry.restored {
+            ", being changed"
+        } else {
+            ""
+        }
     );
 }
 
@@ -933,7 +939,7 @@ mod tests {
             "{saved:?}"
         );
         assert!(saved[0].1.ends_with(
-            "SleepDc on 381b4222-f694-41f0-9685-ff5bb260df2e: original 1, written 0, restored;"
+            "SleepDc on 381b4222-f694-41f0-9685-ff5bb260df2e: original 1, written 0, being changed;"
         ));
 
         // Whatever version the caller passes, the file gets this version (review m2).

@@ -7,7 +7,7 @@
 //! offset, then the monotonic clock in seconds (awake time since boot), process, level, area and text.
 
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 #[cfg(any(test, feature = "test-support"))]
 use std::sync::Mutex;
 
@@ -67,6 +67,12 @@ const FILETIME_TO_UNIX_MS: i64 = 11_644_473_600_000;
 
 const MS_PER_DAY: i64 = 86_400_000;
 
+/// The file every process appends to: `wakeshot.log` in `logs_dir` (`DataDir::logs`). Open log, the balloon click and
+/// the uninstall hook's last delete name it through this, so they never miss the file `LogWriter` writes.
+pub fn log_file(logs_dir: &Path) -> PathBuf {
+    logs_dir.join(LOG_FILE)
+}
+
 /// Appends to the log file, shared by every process.
 #[derive(Debug)]
 pub struct LogWriter {
@@ -78,7 +84,7 @@ impl LogWriter {
     /// Opens `wakeshot.log` in `logs_dir` (`DataDir::logs`), creating both if needed.
     pub fn open(logs_dir: &Path, proc: Proc) -> Result<Self, WinError> {
         std::fs::create_dir_all(logs_dir).map_err(|e| io_error("CreateDirectoryW", &e))?;
-        let name = HSTRING::from(logs_dir.join(LOG_FILE).as_path());
+        let name = HSTRING::from(log_file(logs_dir).as_path());
         // Append rights without FILE_WRITE_DATA make every write land at the end of the file, so another process's
         // lines are never overwritten (Microsoft, "File Access Rights Constants"). std's append mode is not
         // documented to use exactly this mask, so the handle is opened here.
@@ -104,7 +110,7 @@ impl LogWriter {
     /// over 1 MB; the old `wakeshot.2.log` goes. A process that still has the log open keeps appending to the moved
     /// file, so no line is lost. An `Err` leaves every line in one of the three files.
     pub fn roll(logs_dir: &Path) -> Result<(), WinError> {
-        let current = logs_dir.join(LOG_FILE);
+        let current = log_file(logs_dir);
         match file_size(&current)? {
             Some(size) if size > ROLL_OVER_BYTES => {}
             _ => return Ok(()),
@@ -498,7 +504,10 @@ mod tests {
         LogWriter::open(&logs, Proc::Cli)
             .unwrap()
             .line(Level::Warn, "core", "second");
-        let text = fs::read_to_string(logs.join(LOG_FILE)).unwrap();
+        // The file the other modules name through `log_file` is the one written here.
+        let path = log_file(&logs);
+        assert_eq!(path, logs.join("wakeshot.log"));
+        let text = fs::read_to_string(path).unwrap();
         let lines: Vec<_> = text.split_terminator("\r\n").collect();
         assert_eq!(lines.len(), 2, "{text:?}");
         assert!(lines[0].ends_with(" tray    INFO  core: first"), "{text:?}");

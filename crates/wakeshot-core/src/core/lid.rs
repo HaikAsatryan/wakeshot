@@ -22,7 +22,7 @@ use crate::policy::ending::{self, Cancel, Check};
 use crate::policy::floor;
 use crate::policy::lid::{self, DO_NOTHING, SOURCE_SETTLE_MS, Settle};
 use crate::policy::lock::{self, IdleFacts};
-use crate::settings::{JournalEntry, PlanValues, SettingKey};
+use crate::settings::{Guid, JournalEntry, PlanValues, SettingKey};
 use crate::state::{ClosedLid, Countdown, IdleReading, PendingLock, WorkEnd};
 use crate::time::{Deadline, Now};
 use crate::view::{Cue, Notice};
@@ -126,30 +126,57 @@ impl Core {
     /// a lock missed then never comes. The guess takes each lid key a journal entry names, on whichever plan, as ours
     /// in force on one stand-in plan, and any other lid key as Sleep. Only the lid keys are guessed, so only the
     /// lid-close and source lock rules read it; like the in-force view it errs toward a lock.
+    ///
+    /// A journal the copy may not know ([`Core::journal_unknown`]: `journal.json` did not read at start, and no read
+    /// since) may hold a crashed tray's Do nothing on any lid key: then a lid key in force at Do nothing that no entry
+    /// names counts as ours, and before the first plan read both do (`p2-6-unread-journal` Found outside scope 3).
     fn lock_view(&self) -> Option<(PlanValues, Vec<JournalEntry>)> {
-        if self.state.plan.is_some() {
-            return self.in_force();
-        }
-        let active = self.state.journal.first()?.plan;
-        let mut plan = PlanValues {
-            active,
-            lid_ac: SLEEP,
-            lid_dc: SLEEP,
-            sleep_ac: 0,
-            sleep_dc: 0,
-            saver_threshold_dc: 0,
+        let unknown = self.journal_unknown();
+        let (plan, mut journal) = match self.in_force() {
+            Some(view) => view,
+            // No plan id is known either; the guessed entries below name this one.
+            None if unknown => (stand_in(Guid(0), DO_NOTHING), Vec::new()),
+            None => {
+                let active = self.state.journal.first()?.plan;
+                let mut plan = stand_in(active, SLEEP);
+                let mut journal = Vec::new();
+                for key in [SettingKey::LidAc, SettingKey::LidDc] {
+                    if let Some(&entry) = self.state.journal.iter().find(|e| e.key == key) {
+                        set(&mut plan, key, entry.written);
+                        journal.push(JournalEntry {
+                            plan: active,
+                            ..entry
+                        });
+                    }
+                }
+                (plan, journal)
+            }
         };
-        let mut journal = Vec::new();
-        for key in [SettingKey::LidAc, SettingKey::LidDc] {
-            if let Some(&entry) = self.state.journal.iter().find(|e| e.key == key) {
-                set(&mut plan, key, entry.written);
-                journal.push(JournalEntry {
-                    plan: active,
-                    ..entry
-                });
+        if unknown {
+            for key in [SettingKey::LidAc, SettingKey::LidDc] {
+                let named = journal
+                    .iter()
+                    .any(|e| e.plan == plan.active && e.key == key);
+                if value(&plan, key) == DO_NOTHING && !named {
+                    // Any original but Do nothing: `policy::lid::ours` asks only that the two differ.
+                    journal.push(JournalEntry {
+                        plan: plan.active,
+                        key,
+                        original: SLEEP,
+                        written: DO_NOTHING,
+                        restored: false,
+                    });
+                }
             }
         }
         Some((plan, journal))
+    }
+
+    /// The journal may hold entries the copy does not know: a restore is still wanted and the copy names none. So it is
+    /// from a `Started` whose `journal.json` did not read until a restore or apply reads the file (a failed load reports
+    /// nothing, so the copy stays empty), and after any restore that failed to load a journal the copy knew as empty.
+    fn journal_unknown(&self) -> bool {
+        self.state.retry.is_some() && self.state.journal.is_empty()
     }
 
     /// Our Do nothing keeps a closed laptop running on the current source (either one before the first `Power`).
@@ -900,6 +927,19 @@ impl WorkEnd {
     /// The user's own lid action for a power source, as it was when work ended.
     fn own_action(&self, ac: bool) -> u32 {
         if ac { self.own_lid_ac } else { self.own_lid_dc }
+    }
+}
+
+/// A plan no read has shown, for the lock rules' guess: both lid keys at `lid`. Only the lid keys are guessed, so the
+/// rest stay 0 and no rule reads them.
+fn stand_in(active: Guid, lid: u32) -> PlanValues {
+    PlanValues {
+        active,
+        lid_ac: lid,
+        lid_dc: lid,
+        sleep_ac: 0,
+        sleep_dc: 0,
+        saver_threshold_dc: 0,
     }
 }
 

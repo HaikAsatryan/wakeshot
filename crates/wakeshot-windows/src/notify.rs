@@ -88,11 +88,20 @@ pub struct BalloonNotifier {
     /// on it: a shell call that waits on Explorer must not hold up the loop thread.
     large: Mutex<Option<LargeIcon>>,
     click: Mutex<NoticeClick>,
+    kept: Mutex<Kept>,
+}
+
+/// The notices the shell refused since the icon was last added, and how many adds there were.
+#[derive(Default)]
+struct Kept {
+    adds: u64,
+    notices: Vec<Notice>,
 }
 
 impl BalloonNotifier {
     /// Notices on the icon `icon` names (`TrayIcon::identity`), with the product's icon choice. The icon must be
-    /// added (the first `TrayIcon::show`) before the first notice, or `show` fails.
+    /// added (the first `TrayIcon::show`) before the first notice, or `show` fails and the notice waits for
+    /// `icon_added`.
     pub fn new(icon: IconIdentity) -> Self {
         Self::with_choice(icon, IconChoice::PRODUCT)
     }
@@ -109,7 +118,18 @@ impl BalloonNotifier {
             shell,
             large: Mutex::new(None),
             click: Mutex::new(NoticeClick::Nothing),
+            kept: Mutex::new(Kept::default()),
         }
+    }
+
+    /// The icon was just added (`tray::icon::Note::Added`): gives back, in order, each notice the shell refused since
+    /// the last add, for the caller to show again. A tray started at sign-in before the taskbar exists adds its icon
+    /// late, and the first-run notice that came first must not be lost. The caller shows them through the IO thread:
+    /// this never waits on a shell call, so the loop thread may call it.
+    pub fn icon_added(&self) -> Vec<Notice> {
+        let mut kept = lock(&self.kept);
+        kept.adds += 1;
+        std::mem::take(&mut kept.notices)
     }
 
     /// What a click on the balloon opens: the click action of the last balloon Windows took, then `Nothing`, so a
@@ -142,12 +162,35 @@ impl Notifier for BalloonNotifier {
             }
         }
         data.dwInfoFlags = info_flags(&text, choice);
-        let shown = (self.shell)(&data);
+        let shown = self.show_or_keep(notice, &data);
         // An icon of an old size goes only once the shell has the new one.
         drop(old);
         shown?;
         *lock(&self.click) = text.click;
         Ok(())
+    }
+}
+
+impl BalloonNotifier {
+    /// The shell call. A refused notice is kept for the next add (`icon_added`). An add that came while the call ran
+    /// found nothing to give back, and the icon is there now, so the call is made once more at once.
+    fn show_or_keep(&self, notice: &Notice, data: &NOTIFYICONDATAW) -> Result<(), WinError> {
+        let adds = lock(&self.kept).adds;
+        let mut retried = false;
+        loop {
+            let error = match (self.shell)(data) {
+                Ok(()) => return Ok(()),
+                Err(e) => e,
+            };
+            let mut kept = lock(&self.kept);
+            if kept.adds == adds || retried {
+                if !kept.notices.contains(notice) {
+                    kept.notices.push(notice.clone());
+                }
+                return Err(error);
+            }
+            retried = true;
+        }
     }
 }
 
@@ -307,6 +350,9 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::{OnceLock, Weak};
+
     use super::*;
     use crate::tray::icon::IconKind;
     use wakeshot_core::settings::SettingKey;
@@ -469,6 +515,60 @@ mod tests {
         assert_eq!(n.show(&Notice::FirstRun), Err(refused));
         assert_eq!(n.take_click(), NoticeClick::OpenLog);
         assert_eq!(shell.sent().len(), 6, "every notice went to the shell");
+    }
+
+    /// What the shell gives for a balloon on an icon not added yet; the page names no code, so 0.
+    const NO_ICON: WinError = WinError {
+        call: "Shell_NotifyIconW",
+        code: 0,
+    };
+
+    #[test]
+    fn a_refused_notice_waits_for_the_next_add() {
+        let shell = FakeShell::default();
+        let n = shell.notifier(IconChoice::Info);
+        *shell.fail.lock().unwrap() = Some(NO_ICON);
+        assert_eq!(n.show(&Notice::FirstRun), Err(NO_ICON));
+        assert_eq!(n.show(&Notice::FirstRun), Err(NO_ICON));
+        assert_eq!(n.show(&Notice::RestoreFailed), Err(NO_ICON));
+        assert_eq!(n.take_click(), NoticeClick::Nothing, "none showed");
+
+        *shell.fail.lock().unwrap() = None;
+        assert_eq!(
+            n.icon_added(),
+            [Notice::FirstRun, Notice::RestoreFailed],
+            "in order, each once"
+        );
+        assert_eq!(n.icon_added(), [], "given back once");
+        n.show(&Notice::FirstRun).unwrap();
+        assert_eq!(n.take_click(), NoticeClick::OpenTaskbarSettings);
+        assert_eq!(shell.sent().len(), 4, "no call of its own at the add");
+    }
+
+    #[test]
+    fn an_add_during_the_shell_call_tries_the_notice_again_at_once() {
+        let slot: Arc<OnceLock<Weak<BalloonNotifier>>> = Arc::default();
+        let calls = Arc::new(AtomicU32::new(0));
+        let (me, count) = (Arc::clone(&slot), Arc::clone(&calls));
+        let n = Arc::new(BalloonNotifier::with_shell(
+            ID,
+            IconChoice::Info,
+            Box::new(move |_| {
+                if count.fetch_add(1, Ordering::SeqCst) > 0 {
+                    return Ok(());
+                }
+                // The loop thread adds the icon while this first call waits on the shell.
+                let n = me.get().and_then(Weak::upgrade).expect("the notifier");
+                assert_eq!(n.icon_added(), [], "not refused yet");
+                Err(NO_ICON)
+            }),
+        ));
+        slot.set(Arc::downgrade(&n)).unwrap();
+
+        n.show(&Notice::FirstRun).unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert_eq!(n.icon_added(), [], "it showed, so nothing waits");
+        assert_eq!(n.take_click(), NoticeClick::OpenTaskbarSettings);
     }
 
     #[test]

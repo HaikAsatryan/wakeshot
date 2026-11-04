@@ -461,6 +461,127 @@ fn unplugged_before_the_first_plan_read_locks_on_a_crashed_trays_do_nothing_once
     );
 }
 
+// `p2-6-unread-journal` Found outside scope 3: `journal.json` did not read at start, so the copy knows nothing, yet a
+// crashed tray's Do nothing may be in force until a read of the file lands.
+
+fn unread_start() -> Event {
+    Start {
+        journal_unread: true,
+        ..Start::default()
+    }
+    .event()
+}
+
+/// Battery, the lid open, then closed: the commands of the close.
+fn close_on_battery(sim: &mut Sim) -> Vec<Command> {
+    sim.send(lid(false));
+    sim.send(lid(true))
+}
+
+#[test]
+fn a_lid_close_before_any_read_locks_when_the_journal_did_not_read() {
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(false, 80));
+    let out = close_on_battery(&mut sim);
+    let trace = sim.trace();
+    assert_eq!(count(&out, &LOCK), 1, "{trace}");
+    assert_eq!(count(&out, &CHIME), 1, "{trace}");
+    assert!(position(&out, &LOCK) < position(&out, &CHIME), "{trace}");
+
+    // Unplugged with the lid closed: the new source's action may be ours too.
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(true, 80));
+    sim.send(lid(true));
+    let unplugged = sim.now();
+    let mut out = sim.send(power(false, 80));
+    out.extend(sim.run(SOURCE_SETTLE_MS + SECOND));
+    let trace = sim.trace();
+    assert_eq!(count(&out, &LOCK), 1, "{trace}");
+    assert_eq!(
+        lock_times(&sim, unplugged),
+        [i128::from(SOURCE_SETTLE_MS)],
+        "{trace}"
+    );
+}
+
+#[test]
+fn with_an_unread_journal_a_do_nothing_in_force_may_be_ours_until_a_read_lands() {
+    // The plan read shows Do nothing on battery: the crashed tray's or the user's own, and the copy cannot tell.
+    let do_nothing_dc = PlanValues {
+        lid_dc: 0,
+        ..plan(BALANCED)
+    };
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(false, 80));
+    sim.send(read(do_nothing_dc));
+    let out = close_on_battery(&mut sim);
+    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+    assert_eq!(count(&out, &CHIME), 1, "{}", sim.trace());
+
+    // Sleep in force: Windows sleeps the laptop itself, so nothing.
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(false, 80));
+    sim.send(read(plan(BALANCED)));
+    let out = close_on_battery(&mut sim);
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    assert_eq!(plays(&out), 0, "{}", sim.trace());
+
+    // The retry read the file and put every value back: the Do nothing is the user's own now (decision 18).
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(false, 80));
+    sim.send(read(do_nothing_dc));
+    sim.send(restored(None, RestoreWhy::Leftover, Ok(()), vec![]));
+    let out = close_on_battery(&mut sim);
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    assert_eq!(plays(&out), 0, "{}", sim.trace());
+}
+
+#[test]
+fn an_unread_journal_keeps_the_guess_until_a_retry_reads_it() {
+    let do_nothing_dc = PlanValues {
+        lid_dc: 0,
+        ..plan(BALANCED)
+    };
+    // A retry whose load fails again reads nothing: still nothing known, so still a lock.
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(false, 80));
+    sim.send(read(do_nothing_dc));
+    sim.send(restored(
+        None,
+        RestoreWhy::Leftover,
+        Err(RESTORE_FAILED),
+        vec![],
+    ));
+    let out = close_on_battery(&mut sim);
+    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+
+    // A retry that read the file but could not restore (its owner lives): the entries it names decide. Only the
+    // battery sleep key is the crashed tray's, so the Do nothing is the user's own.
+    let alive = Failure {
+        call: "journal owner (alive)",
+        code: 170,
+    };
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(false, 80));
+    sim.send(read(do_nothing_dc));
+    sim.send(restored(
+        None,
+        RestoreWhy::Leftover,
+        Err(alive),
+        entries(BALANCED, &[SettingKey::SleepDc]),
+    ));
+    let out = close_on_battery(&mut sim);
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    assert_eq!(plays(&out), 0, "{}", sim.trace());
+}
+
 // Item 2: the power source changes with the lid closed.
 
 #[test]

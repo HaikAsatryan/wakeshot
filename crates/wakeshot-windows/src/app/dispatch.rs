@@ -19,7 +19,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::Instant;
 
-use wakeshot_core::command::{Command, CountdownReason, Failure, Outcome};
+use wakeshot_core::command::{Command, CountdownReason, Failure, HibernateEnd, Outcome};
 use wakeshot_core::core::Core;
 use wakeshot_core::event::{Event, SessionChange};
 use wakeshot_core::time::{Clock, Deadline, Now};
@@ -62,13 +62,14 @@ pub trait LoopRunners {
     fn play(&mut self, cue: Cue);
 
     /// `Command::Hibernate`: starts the hibernate thread and returns; the thread posts `Done(Hibernate)` once. Never
-    /// called again before that event is fed.
+    /// called again before that event is fed. `Err`: no thread started, so nothing will post; the dispatcher feeds
+    /// `Done(Hibernate(Failed))` at once.
     fn start_hibernate(
         &mut self,
         reason: CountdownReason,
         floor_pct: u8,
         last_resume_mono_ms: Option<u64>,
-    );
+    ) -> Result<(), WinError>;
 
     /// `Command::ApplyUpdate`: hands the update to the update thread.
     fn apply_update(&mut self);
@@ -358,14 +359,17 @@ impl<R: LoopRunners> Dispatcher<R> {
                 // A second thread could put the PC down again as soon as it wakes from the first.
                 if self.hibernating.replace(true) {
                     self.log("A hibernate was asked while one runs: not started".to_owned());
-                } else {
-                    self.runners.borrow_mut().start_hibernate(
-                        reason,
-                        floor_pct,
-                        last_resume_mono_ms,
-                    );
+                    return None;
                 }
-                None
+                let started = self.runners.borrow_mut().start_hibernate(
+                    reason,
+                    floor_pct,
+                    last_resume_mono_ms,
+                );
+                // Fed here, not posted: a lost post would leave the flag set for the rest of the run.
+                started
+                    .err()
+                    .map(|e| Event::Done(Outcome::Hibernate(HibernateEnd::Failed(e.into()))))
             }
             Command::ApplyUpdate => {
                 self.runners.borrow_mut().apply_update();
@@ -607,6 +611,8 @@ mod tests {
         calls: Vec<(Call, Option<Event>)>,
         /// What `requests` answers.
         requests: Result<(), WinError>,
+        /// What `start_hibernate` answers.
+        hibernate: Result<(), WinError>,
         /// Run time of the user's last input; input idle grows from it.
         input_mono: u64,
         /// The answers of `try_settings_owner`, in turn; `false` once used up.
@@ -662,12 +668,13 @@ mod tests {
             reason: CountdownReason,
             floor_pct: u8,
             last_resume_mono_ms: Option<u64>,
-        ) {
+        ) -> Result<(), WinError> {
             self.record(Call::Hibernate {
                 reason,
                 floor_pct,
                 last_resume_mono_ms,
             });
+            self.hibernate
         }
 
         fn apply_update(&mut self) {
@@ -742,6 +749,7 @@ mod tests {
                     back: back.clone(),
                     calls: Vec::new(),
                     requests: Ok(()),
+                    hibernate: Ok(()),
                     input_mono: START.mono_ms,
                     owner: VecDeque::new(),
                     lost: Vec::new(),
@@ -1535,6 +1543,43 @@ mod tests {
         w.d.send(hibernate);
         assert_eq!(w.calls(), [started]);
         assert!(w.queue().is_empty());
+    }
+
+    #[test]
+    fn a_hibernate_thread_that_does_not_start_answers_at_once_and_frees_the_next() {
+        let w = ready();
+        let no_thread = WinError {
+            call: "CreateThread",
+            code: 8,
+        };
+        w.recorder().hibernate = Err(no_thread);
+        let hibernate = Command::Hibernate {
+            reason: CountdownReason::Floor,
+            floor_pct: 20,
+            last_resume_mono_ms: None,
+        };
+        let answer = w.d.send(hibernate.clone());
+        let failed = Event::Done(Outcome::Hibernate(HibernateEnd::Failed(no_thread.into())));
+        assert_eq!(answer.as_ref(), Some(&failed), "no post to lose");
+
+        // `feed` gives a runner's answer to the core, which clears the flag: the next one starts, one at a time.
+        w.d.feed(failed.clone());
+        assert_eq!(w.fed().last(), Some(&failed));
+        w.recorder().hibernate = Ok(());
+        assert_eq!(w.d.send(hibernate.clone()), None);
+        assert_eq!(w.d.send(hibernate), None);
+        let calls = w.calls();
+        let starts = calls
+            .iter()
+            .filter(|c| matches!(c, Call::Hibernate { .. }))
+            .count();
+        assert_eq!(starts, 2, "{calls:?}");
+        let queued = w.queue();
+        let refused = logs(&queued)
+            .into_iter()
+            .filter(|l| l.contains("while one runs"))
+            .count();
+        assert_eq!(refused, 1, "the third waits for the second: {queued:?}");
     }
 
     #[test]
