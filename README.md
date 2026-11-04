@@ -15,25 +15,26 @@ Knows Claude Code today, with no hooks and no edits to its settings. Codex CLI a
 
 ## How it compares
 
-PowerToys Awake, Caffeine and Don't Sleep are the most popular keep-awake tools for Windows that we could count
-(first row). They keep the PC awake while you tell them to, and so does Wakeshot. The two rows in bold are what only
-Wakeshot does. Each rival cell links to the tool's own page or package; all were read on 2026-11-04.
+PowerToys Awake, Caffeine and Don't Sleep are the most popular keep-awake tools for Windows that we could count.
+They keep the PC awake while you tell them to, and so does Wakeshot. The three rows in bold are what only Wakeshot
+does. Each rival cell links to the tool's own page or repo; all were read on 2026-11-04.
 
 | | Wakeshot | PowerToys Awake | Caffeine | Don't Sleep |
 |---|---|---|---|---|
-| How popular is it? | new in 2026 | [140,521 GitHub stars, for all of PowerToys](https://github.com/microsoft/PowerToys) | [367,663 Chocolatey downloads](https://community.chocolatey.org/packages/caffeine) | [38,324 Chocolatey downloads](https://community.chocolatey.org/packages/dontsleep), plus [20,340 portable](https://community.chocolatey.org/packages/dontsleep.portable) |
-| Keep the PC awake for a set time, or until I turn it off? | yes | [yes](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [yes](https://www.zhornsoftware.co.uk/caffeine/) | [yes](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
+| Keep the PC awake for a set time, or until I turn it off? | yes | [yes: until you turn it off, until a date and time, or for hours and minutes you set in Settings](https://learn.microsoft.com/en-us/windows/powertoys/awake); [the tray menu lists 30 min, 1 h and 2 h](https://github.com/microsoft/PowerToys/blob/v0.102.3001/src/modules/awake/Awake/Core/Manager.cs#L508-L517) | [yes](https://www.zhornsoftware.co.uk/caffeine/) | [yes](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
 | Keep the screen on too? | yes, if you ask | [yes, if you ask](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [yes, by default: it fakes a key press](https://www.zhornsoftware.co.uk/caffeine/) | [yes, if you ask](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
 | **Stay awake on its own while my AI agent works, then sleep as usual?** | yes: Claude Code today; Codex CLI and Copilot CLI next | [no](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [no](https://www.zhornsoftware.co.uk/caffeine/) | [no](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
 | Stay awake while a build or a script runs? | yes: `wakeshot run -- <command>`, or a hold file from any script | [until a process ends, from the command line (`--pid`)](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [while a window with a given title is open, or until CPU use drops](https://www.zhornsoftware.co.uk/caffeine/) | [until CPU or network use drops; then it can also sleep or shut down the PC](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
 | **Keep a laptop working with the lid closed?** | yes, while something needs it, and locked; it sleeps once the work is done | [no](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [no](https://www.zhornsoftware.co.uk/caffeine/) | [no](https://www.softwareok.com/?seite=faq-DontSleep&faq=1) |
-| Does my PC still lock when I walk away? | yes: Windows locks it as usual; with the lid closed or Keep screen on, Wakeshot locks it | [not listed; its page says to lock the PC yourself](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [no, by default: its key presses stop the lock](https://www.zhornsoftware.co.uk/caffeine/) | [not listed](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
+| **Does my PC still lock when I walk away?** | yes: Windows locks it as usual; with the lid closed or Keep screen on, Wakeshot locks it | [not listed; its page says to lock the PC yourself](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [no, by default: its key presses stop the lock](https://www.zhornsoftware.co.uk/caffeine/) | [not listed](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
 | Step back when the battery runs low? | yes, at Windows' own energy saver level | [not listed](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [can work only while plugged in (`-onac`)](https://www.zhornsoftware.co.uk/caffeine/) | [can quit or sleep the PC at a battery level you set](https://www.softwareok.com/?seite=Microsoft/DontSleep/History) |
-| Does it change my power settings? | yes, but only the lid, sleep and screen settings, only while needed; put back after, and your own change wins | [no](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [none listed](https://www.zhornsoftware.co.uk/caffeine/) | [no](https://www.softwareok.com/?seite=faq-DontSleep&faq=1) |
 | Updates itself? | yes, only while nothing needs the PC awake | [checks, then shows a notice](https://learn.microsoft.com/en-us/windows/powertoys/install) | [not listed](https://www.zhornsoftware.co.uk/caffeine/) | [an optional auto update](https://www.softwareok.com/?seite=Microsoft/DontSleep/History) |
 | Runs on | Windows 11, x64 and ARM64; macOS later | [Windows 10 and 11, x64 and ARM64](https://learn.microsoft.com/en-us/windows/powertoys/install) | [Windows, x86 and x64](https://www.zhornsoftware.co.uk/caffeine/) | [Windows 7 to 11, x86 and x64](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
 | Download | <!-- media: Wakeshot's x64 Setup.exe size in MB from p6-media, linked to its method in docs/research.md --> | [323.9 MB, all of PowerToys](https://github.com/microsoft/PowerToys/releases/tag/v0.102.3001) | [306 KB zip](https://www.zhornsoftware.co.uk/caffeine/) | [267 KB](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
 | Price | free, open source (MIT) | [free, open source (MIT)](https://github.com/microsoft/PowerToys) | [free (freeware)](https://www.zhornsoftware.co.uk/) | [free (freeware)](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
+
+A small native app: Wakeshot's two exes come to [about 3 MB on x64](docs/research.md#tray-size) and need no .NET or
+other runtime. Velopack's updater (about 5 MB) comes with them.
 
 Why no rival keeps a closed laptop working: Windows takes a lid close as you asking for sleep, and no keep-awake
 request can stop that; only the lid setting can ([Windows power facts](docs/research.md#windows-power-facts)).

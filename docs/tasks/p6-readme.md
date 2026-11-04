@@ -408,3 +408,98 @@ Under the table: the lid fact (`research.md`, "Windows power facts"); "Where the
 3. The crash gap text (`product.md` "User settings safety", README "Limits") names only lid Do nothing and battery
    sleep Never. A crash during a closed-lid sleep step would leave the 1 minute timeouts too (inferred from
    `product.md`; not verified). `architecture.md` "Gap left" is `p2-6-sleep-route`'s this round; README not changed.
+
+## Round 3 (Haik's table comments, 2026-11-04)
+
+Status: done (round 3). Written by the orchestrator. Owns `README.md` (the comparison table and the sentences right
+around it), `site/index.html` (only if it has the same comparison) and this section.
+
+Haik's comments (his words, 2026-11-04 about 16:05):
+
+1. "popularity row not needed." Remove the "How popular is it?" row.
+2. "powertoys awake keep awake time is limited (30mins, 1 hour and 2 hour)". Check the current Microsoft docs for
+   PowerToys Awake first; write the cell to match them, short, with the link.
+3. "locking part can be bold. I think only we do that". Bold the lock row, if the other three cells support it.
+4. "Does it change my power settings remove please". Remove that row.
+5. Not decided yet: a tech stack or lightness row. Not added this round.
+
+### Log
+
+- 2026-11-04 16:05: started by `wakeshot-worker`. `site/index.html` has no comparison yet (only a `waits for the
+  README rework` comment at line 72), so only `README.md` changes.
+- 2026-11-04 16:08: PowerToys Awake docs read in the raw page (`curl`, page `ms.date` 2026-10-14, "Last updated on
+  2026-10-21"). Settings modes, word for word: "Keep awake indefinitely: The computer stays awake indefinitely until
+  you explicitly put the machine to sleep or close/disable the application."; "Keep awake for a time interval: Keep
+  machine awake for a predefined limited time."; "Keep awake until expiration: Keep machine awake until a defined
+  date and time is hit."; a note on "the hours or minutes" of the interval. Tray: "a pre-defined time interval (for
+  example, 30 minutes)"; the tray's times can be changed with `customTrayTimes` in `settings.json`. CLI:
+  `--time-limit` in seconds, `--expire-at`, and no argument means indefinitely. The docs do not list the tray's times.
+- 2026-11-04 16:10: PowerToys source at the latest release tag `v0.102.3001` (`gh api`; same file as `main`):
+  `Manager.cs` lines 508 to 517, `GetDefaultTrayOptions`, gives 30 minutes, 1 hour and 2 hours; `TrayHelper.cs`
+  lines 510 to 519 add "Keep awake indefinitely" and a greyed "Keep awake until expiration" to the tray menu. So
+  Haik is right about the tray menu, but Awake is not limited to those: Settings and the command line take any
+  length, a date and time, or no end.
+- 2026-11-04 16:12: lock row. The three rival cells, read again in the raw pages: PowerToys lists no lock and says
+  "configure your Windows power plan settings directly and lock your computer for security"; Caffeine "won't lock the
+  screen" (its key presses), and `-notwhenlocked` only goes inactive when locked; Don't Sleep's page and FAQ 1 list no
+  lock (it blocks the screen saver, monitor off and logoff). Only doubt: Don't Sleep's History has two fix lines
+  "related to Smart Screen Lock" (9.81, 9.91), with no word on what that is; a web search found nothing. No rival
+  lists a feature that locks the PC, so the row is bold.
+- 2026-11-04 16:14: README edited; checks run (Result).
+- 2026-11-04 16:15: decided by the worker:
+  1. PowerToys timer cell: the docs' three modes in one link to the docs, then the tray's 30 min, 1 h and 2 h linked
+     to the source at the release tag (the docs do not list them). Change it when the docs list the tray times: link
+     the docs only.
+  2. Caption: "(first row)" dropped with the popularity row; "two rows in bold" is now "three"; "page or package" is
+     now "page or repo" (the Chocolatey links left with the row). The counts stay in `launch.md` part 1 for the pick.
+  3. Wakeshot's own cell in the timer row stays "yes": not part of Haik's comments.
+- 2026-11-04 16:25: orchestrator note: Haik agreed (about 16:10) to no stack row and no size row, and one line under
+  the table instead ("A small native app: one exe of about 3 MB, no runtime to install", in spirit). Facts read:
+  release x64 tray 2,706,432 bytes and CLI 557,056 (`p6-tray-size` Result; `research.md` "Tray size"), 3.26 MB
+  together; the shipped ARM64 tray size was never measured (CI only, no clang here), so the line says "on x64";
+  both exes on both targets import only `KERNEL32.dll`, `ntdll.dll` and `api-ms-win-core-synch-l1-2-0.dll`
+  (`research.md` "CRT check"); the install holds `Update.exe`, a root stub `Wakeshot.exe`, both exes under `current\`
+  and a package copy in `packages\` (`research.md` "Velopack checks", point 2), so "one exe" is not true. Velopack's
+  `Update.exe`: 5.2 MB (`research.md` "Size"; `research/distribution.md`), 4.7 MB in the ARM64 package. Line added
+  under the table, linked to "Tray size". `check_readme.py`: pass, 24 of 24 relative links.
+
+### Result (round 3)
+
+Status: done. The card as a whole stays blocked on `p5-haik-check` and `p6-media`, as before.
+
+**Done.** In `README.md`, "How it compares": the "How popular is it?" and "Does it change my power settings?" rows
+are gone; "Does my PC still lock when I walk away?" is bold; the PowerToys cell of the timer row now says "yes: until
+you turn it off, until a date and time, or for hours and minutes you set in Settings; the tray menu lists 30 min, 1 h
+and 2 h". The caption above the table follows (no "first row", "three rows in bold", "page or repo"). The table is
+11 rows, 3 bold. No tech stack, lightness or size row (Haik, about 16:10). One line under the table instead: "A
+small native app: Wakeshot's two exes come to about 3 MB on x64 and need no .NET or other runtime. Velopack's
+updater (about 5 MB) comes with them." (facts: Log 16:25). `site/index.html` not changed: it has no comparison yet.
+
+What the PowerToys docs say (page updated 2026-10-21): three keep-awake modes, "Keep awake indefinitely", "Keep awake
+for a time interval" ("a predefined limited time", set in hours and minutes) and "Keep awake until expiration" ("until
+a defined date and time is hit"). The docs do not list the tray's times; the source at `v0.102.3001` does: 30
+minutes, 1 hour, 2 hours by default, which `customTrayTimes` can change. Haik is right about the tray menu only.
+
+Files changed: `README.md` (lines 18 to 37); this section.
+
+| Check | Outcome |
+|---|---|
+| Relative links and anchors (`check_readme.py` from round 2) | pass: 24 of 24 (the new "Tray size" link) |
+| No em or en dash, no emoji or other non-ASCII; UTF-8, LF, no BOM (same script) | pass |
+| External links (`--web`, one GET each, 16:13) | pass: 14 of 14 unique URLs gave 200, the new source link included |
+| Top at most 15 lines, image tags not counted | pass: 13 non-blank before the table rows, 9 before the heading |
+| GitHub render (`gh api markdown`, gfm) | 4 tables, 9 `<details>`; comparison 11 rows of 5 cells, 3 bold |
+| New rival facts in the raw page or source, not a fetch summary | pass: `curl` (Awake page), `gh api` (source) |
+| Round 3 lines in this card at most 120 characters, ASCII only | pass |
+
+Help block not checked again: not touched.
+
+**Found outside scope (round 3).**
+
+1. `docs/research/launch.md` part 1 and `docs/research.md` do not hold the Awake modes or the tray's default times;
+   this round owned neither file. The facts and how they were checked are in this round's Log (16:08, 16:10).
+2. On timers PowerToys offers more than Wakeshot: Wakeshot has 30 min, 1 h, 2 h, 4 h or until off (`args.rs` line
+   21), with no length of your own and no end time. The timer row stays a parity "yes" for both; Haik may want to
+   know before he calls Awake "limited".
+3. Don't Sleep's History names a "Smart Screen Lock" twice (fix lines 9.81 and 9.91) without saying what it is. If it
+   is a lock that Don't Sleep starts, the bold lock row is wrong for Don't Sleep. Not verified.
