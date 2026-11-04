@@ -157,7 +157,7 @@ those one at a time across all tracks.
 | `p6-install-e2e` | no; real laptop: installs, the real Run value and Path, a throwaway plan copy | `p6-velopack-dependency`, `p6-pack-and-release`; `p3-power-plan` (its first test shows a write to an inactive copy leaves the real plan alone) | done (committed 03:57): `packaging/e2e.ps1`, 81 of 81 checks twice at Medium; AFTER equals BEFORE |
 | `p6-launch-research` | yes: reads its Result (rival pick, Store recommendation) before the README, winget and Store cards are rewritten; no installs | none | done: its Result waits for Haik's read |
 | `p6-winget-manifest` | no | `p6-pack-and-release`; `p6-launch-research` (the winget rules for an app that updates itself) | done (committed 02:25): templates and `fill.ps1`; `winget validate` passed on the local packs |
-| `p6-readme` | yes: a read at the Phase 6 sign-off; the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3, sign-off item 12) are in, all defaults | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-claude`; the tray track's `p5-haik-check` (review m2); `p6-launch-research` (its scope grows from that Result, Haik 2026-11-04); `p6-media` | in progress (started 04:02 as a draft before `p5-haik-check` and `p6-media`; orchestrator decision, work log 04:02) |
+| `p6-readme` | yes: a read at the Phase 6 sign-off; the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3, sign-off item 12) are in, all defaults | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-claude`; the tray track's `p5-haik-check` (review m2); `p6-launch-research` (its scope grows from that Result, Haik 2026-11-04); `p6-media` | blocked: draft done 04:22 (474 lines, 10 media spots, product words from the code as it is); waits for `p5-haik-check` and `p6-media` |
 | `p6-media` | yes: watches the video and the loop and says yes or what to change; about 10 min off the PC for the captures | `p6-launch-research` (tool, storyboard, shot list); `p5-haik-check` (final icon); integration's `p6-int-real-e2e` (the real app) | ready |
 | `p6-pages` | yes: one look before it goes live at v1 | `p6-readme`; the tray track's `p5-icon-art` and `p5-haik-check` (Haik's icon pick rewrites `assets/wakeshot.ico`; review m3) | ready |
 
@@ -323,3 +323,8 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   its Runs after `p5-haik-check` and `p6-media` are done (both need Haik). Why: it needs no laptop, the night's laptop
   lane is serial, and everything else it states is done. The draft takes the product text from the code as it is
   and leaves one marked comment per media spot; its Result lists the lines to check after Haik's pick and the media.
+- 2026-11-04 04:22: `p6-readme` draft done (worker, 04:22): `README.md` rewritten whole; links 23 of 23 and external
+  links 19 of 19 good, help block equal to `args.rs`, top 13 lines. Left: speed and media (`p6-media`), product words
+  (`p5-haik-check`), SmartScreen wording (first pre-release). 12 worker decisions for Haik's review and 6 found
+  outside scope (stale doc lines in `architecture.md` section 5 and `product.md` Distribution; 30 s against 25 s in
+  Phase 1 Question 11) in the card; the doc lines go to the next docs pass.
