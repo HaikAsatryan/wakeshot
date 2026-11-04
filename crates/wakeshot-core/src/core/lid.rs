@@ -1239,6 +1239,11 @@ impl Core {
     /// How the sleep check ended. Passed: the short timeouts. An unknown lid passes too, since the core's own reading
     /// says closed and the short timeouts go back when the lid opens (`Command::SleepCheck`). The lid open ends the
     /// countdown; input, AC and the floor go on as after a hibernate skip.
+    ///
+    /// A pass that a reading since then contradicts counts as a skip for input: the thread checked before input the
+    /// core has heard of, and that reading's drop found no short timeouts to take back, so without this they would go
+    /// out right after input, or the fallback would hibernate 10 s after it where they cannot be written
+    /// (`p2-6-props-rare`). Input restarts the 5 minutes (product, work end).
     pub(super) fn done_sleep_check(
         &mut self,
         result: Result<(), HibernateSkip>,
@@ -1246,6 +1251,16 @@ impl Core {
         out: &mut Vec<Command>,
     ) {
         self.state.hibernating = false;
+        let result = match result {
+            Ok(()) | Err(HibernateSkip::LidUnknown) if self.input_since_due() => {
+                out.push(Command::Log(
+                    "Sleep check passed, but an input reading since it went out shows input"
+                        .to_owned(),
+                ));
+                Err(HibernateSkip::InputSeen)
+            }
+            other => other,
+        };
         match result {
             Ok(()) | Err(HibernateSkip::LidUnknown) => {
                 out.push(Command::Log(
@@ -1261,6 +1276,16 @@ impl Core {
             }
             Err(skip) => self.skip_goes_on(skip, "Sleep check", out),
         }
+    }
+
+    /// The last input reading, clamped at a resume or an unlock as the countdown counts, is under the 5 minutes: input
+    /// came after the reading that made the countdown due, which was at or past them. A resume or an unlock after the
+    /// last reading counts the same, as it does for the countdown.
+    fn input_since_due(&self) -> bool {
+        let clamp = self.countdown_clamp();
+        self.state
+            .idle
+            .is_some_and(|r| ending::clamped_idle_ms(r.ms, r.at_mono, clamp) < ending::IDLE_MS)
     }
 
     /// A last check that found input, AC or the battery above the floor: input brings back the user's own timeouts,

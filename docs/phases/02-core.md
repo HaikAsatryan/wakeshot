@@ -143,6 +143,7 @@ contract: add, never change); `p2-ownership-restore` extends it, and it passes t
 | `p2-6-sleep-route-fixes` | no | `p2-6-sleep-route` | done (13:49: 1355 workspace tests; 13 of 13 mutants killed; 10 worker decisions) |
 | `p2-6-props-flake` | no | `p2-6-sleep-route-fixes` | done (14:45: a core bug and a test world fix; seeds 1 to 100 pass at 4096 cases; 6 of 6 mutants killed) |
 | `p2-6-reset-gaps` | no | `p2-6-props-flake` | done (15:20: both gaps real and fixed; 671 core tests; 10 of 10 hand mutants killed) |
+| `p2-6-props-rare` | no | `p2-6-reset-gaps` | done (15:55: two model gaps, one core gap fixed; core props 10 of 10 runs at 4096, 50 of 50 at 256) |
 
 No card touches the real laptop (no power settings, screen, sound or installs) or needs Haik's hands. "Contracts
 card": the one card the orchestrator runs alone before the track builds.
@@ -370,3 +371,9 @@ Where each item this track owns is built. "Integration" is planned after the tra
   (`rewrite_short`; worker decision, for Haik's review). Found: a product question (the menu restore during a
   work-end countdown) and three more rare props failures not from this card (3 of 6 core runs at 4096 cases):
   next card `p2-6-props-rare`.
+- 2026-11-04 15:57 (orchestrator `wakeshot-27`): `p2-6-props-rare` done. Two closed-lid lock properties: the props
+  model kept the restore retry after a scoped restore that worked; it now ends it as the core does (no core change;
+  worker decision for Haik's review: a hold that starts with the lid already closed is no lock trigger, a user on an
+  external screen). The hibernate property found a core gap: a sleep check pass that came after input still wrote
+  the 1-minute timeouts or sent `Hibernate` 10 s after input; now input under 5 minutes old skips it. Core props at
+  4096 cases 10 of 10 runs, at 256 cases 50 of 50.

@@ -121,8 +121,10 @@ struct Model {
     /// `UserChanged` names. An apply or restore that failed with none read nothing and leaves it.
     mirror: BTreeSet<(Guid, SettingKey)>,
     /// A restore is still wanted (section 5, "A failed `Restore`"): `Started` brought a journal or one that did not
-    /// read, or a restore failed. A restore of every plan that worked ends it; one of one plan leaves it, the side
-    /// that excuses more. A reset that found the journal lost ends it too.
+    /// read, or a restore failed. A restore of every plan that worked ends it. One of one plan that worked ends it
+    /// only while the core applies and no entry is left on another plan, since the retry then takes only those and the
+    /// hold's apply the active plan's ([`Model::nothing_left_to_retry`]); otherwise it leaves it. A reset that found
+    /// the journal lost ends it too.
     retry: bool,
     /// A `ResetLost` went out and its answer has not come (section 3, "A journal that cannot be read").
     resetting: bool,
@@ -265,6 +267,17 @@ impl Model {
         self.resetting || (self.retry && self.mirror.is_empty())
     }
 
+    /// While the core applies, a retry takes only the entries on plans other than the active one, and the hold's
+    /// apply takes over the active plan's (section 3, "A failed `Restore`"): with the mirror exact after a restore
+    /// that worked and no entry on another plan, the retry has nothing left to take. Keeping it would also leave the
+    /// journal looking unknown with an empty mirror, and so owe a window lock the design does not owe
+    /// (`p2-6-props-rare`).
+    fn nothing_left_to_retry(&self) -> bool {
+        self.plan
+            .filter(|_| self.applies())
+            .is_some_and(|p| self.mirror.iter().all(|&(plan, _)| plan == p.active))
+    }
+
     /// The mirror and the restore retry through one answer or user change.
     fn take_journal(&mut self, event: &Event) {
         let keys = |journal: &[JournalEntry]| journal.iter().map(|e| (e.plan, e.key)).collect();
@@ -289,7 +302,7 @@ impl Model {
                     self.mirror = keys(journal);
                 }
                 match result {
-                    Ok(()) if plan.is_none() => self.retry = false,
+                    Ok(()) if plan.is_none() || self.nothing_left_to_retry() => self.retry = false,
                     Ok(()) => {}
                     Err(_) => self.retry = true,
                 }
@@ -2020,6 +2033,143 @@ fn a_lost_journals_reset_over_a_running_holds_values_applies_the_hold_again() {
     check(&world, restored_at_the_end);
     check(&world, released_keys_are_not_ours_in_force);
     check(&world, every_action_is_explained);
+}
+
+// `p2-6-props-rare`: three shrunk cases from `p2-6-reset-gaps` "Found outside scope" 2 and 3. The first two broke the
+// model's restore retry, the third the core.
+
+/// A plan switch's restore of the other plan fails; the tick's retry, scoped while the hold applies, works and leaves
+/// no entry on another plan, so the retry is over and the journal known. The user's own lid action then empties the
+/// mirror, and the lid closes on their own Sleep: no window lock is owed, also once the next hold puts our Do nothing
+/// in force with the lid already closed (no lid close, no lock; Windows would have slept at the close).
+#[test]
+fn a_scoped_retry_that_leaves_no_other_plan_ends_the_wait_and_owes_no_window_lock() {
+    check_case(
+        WorldStart {
+            active: 1,
+            ac: false,
+            ..WorldStart::default()
+        },
+        vec![
+            WorldStep::Agent {
+                pid: 1,
+                now: AgentNow::Working,
+            },
+            WorldStep::Fault {
+                on: FaultOn::AnyCommand,
+                at: 6,
+                code: 2,
+            },
+            WorldStep::UserSets {
+                plan: None,
+                key: SettingKey::SleepDc,
+                value: 300,
+            },
+            WorldStep::Switch(2),
+            WorldStep::UserSets {
+                plan: None,
+                key: SettingKey::LidDc,
+                value: 1,
+            },
+            WorldStep::Run(10 * SECOND),
+            WorldStep::Lid { closed: true },
+            WorldStep::Agent {
+                pid: 1,
+                now: AgentNow::Idle,
+            },
+            WorldStep::Agent {
+                pid: 1,
+                now: AgentNow::Working,
+            },
+            WorldStep::Run(45 * SECOND),
+        ],
+        End::LastHold,
+        |world| closed_laptop_is_locked_in_time(world, false),
+    );
+}
+
+/// The work end's restore fails while the mirror knows the entries; a new hold takes them over; the user switches
+/// plan, and the switch's restore of the old plan works and leaves nothing, so the retry is over. The new plan's apply
+/// then fails its safety net, and the lid closes on the user's own Sleep with the journal known: a later hold's Do
+/// nothing over the closed lid owes no window lock.
+#[test]
+fn a_plan_switchs_restore_that_leaves_nothing_ends_the_wait_and_owes_no_window_lock() {
+    check_case(
+        WorldStart {
+            active: 2,
+            ac: false,
+            battery_pct: 50,
+            ..WorldStart::default()
+        },
+        vec![
+            restore_fails(),
+            WorldStep::Fault {
+                on: FaultOn::Restore,
+                at: 12,
+                code: 2,
+            },
+            WorldStep::RunFile {
+                n: 1,
+                now: FileNow::Alive,
+            },
+            WorldStep::RunFile {
+                n: 1,
+                now: FileNow::Gone,
+            },
+            WorldStep::Agent {
+                pid: 2,
+                now: AgentNow::Working,
+            },
+            WorldStep::Switch(0),
+            WorldStep::Lid { closed: true },
+            WorldStep::Agent {
+                pid: 2,
+                now: AgentNow::Idle,
+            },
+            WorldStep::EndCancelled,
+            WorldStep::Agent {
+                pid: 1,
+                now: AgentNow::Working,
+            },
+            WorldStep::Run(40 * SECOND),
+        ],
+        End::LastHold,
+        |world| closed_laptop_is_locked_in_time(world, true),
+    );
+}
+
+/// The floor countdown's sleep check goes out, then input; the reading that shows it comes while the check is out, and
+/// the check's pass (taken before the input) after it. The session is ending, so the short timeouts cannot be written:
+/// before the fix the fallback was due at once and `Hibernate` went out 10 s after input.
+#[test]
+fn input_while_the_sleep_check_is_out_restarts_the_5_minutes() {
+    check_case(
+        WorldStart {
+            ac: false,
+            battery_pct: 10,
+            owner: false,
+            keep_up: false,
+            ..WorldStart::default()
+        },
+        vec![
+            WorldStep::TakeOwner,
+            WorldStep::Lid { closed: true },
+            WorldStep::Agent {
+                pid: 1,
+                now: AgentNow::Working,
+            },
+            WorldStep::Ac(true),
+            WorldStep::Flush,
+            WorldStep::Ac(false),
+            WorldStep::Run(286_616),
+            WorldStep::Run(13_384),
+            WorldStep::Ending,
+            WorldStep::Input,
+            WorldStep::Run(10 * SECOND),
+        ],
+        End::LastHold,
+        no_hibernate_soon_after_input,
+    );
 }
 
 proptest! {

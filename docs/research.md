@@ -4196,3 +4196,23 @@ rest; each fails on the code before the card and passes now.
 - **The core tests at 4096 random cases failed in 3 of 6 runs on three other properties**, each shrunk case failing
   the same with this card's change taken out (the card's "Found outside scope" 2 and 3). The release property alone,
   seeds 1 to 100 at 4096: 100 passed. **Verified** (the runs).
+
+## Three rare core property failures
+
+`p2-6-props-rare`, 2026-11-04 15:24 to 15:56. Each shrunk case from `p2-6-reset-gaps` written as a test from its
+words fails with the exact recorded message on the code before this card, and its trace was read against the core.
+
+- **Both lid lock failures were the props model, not the core.** The model kept its restore retry after a restore of
+  one plan that worked, while the core ends the retry when it applies and no entry is left on another plan
+  (`done_restored`, architecture "A failed `Restore`": the hold's apply takes over the active plan's entries). With the
+  mirror then empty, the model counted the journal unknown at a lid close on the user's own Sleep, owed the window
+  lock, and blamed the core when a later hold applied Do nothing with the lid already closed. The core's journal was
+  known (the restore read it) and it owed no lock. The model now ends the retry as the design says. **Verified** (both
+  cases pass with the model fix, and fail again with it taken out).
+- **The hibernate failure was the core.** Input came while the sleep check was out; its reading came before the
+  check's answer, which the hibernate thread took before the input. The pass then wrote the 1-minute timeouts right
+  after input, or, where they cannot be written (the session ending), made the fallback due at once, so `Hibernate`
+  went out 10 s after input. Now a pass that comes when the last input reading, clamped at an unlock or a resume, is
+  under 5 minutes counts as a skip for input. **Verified** (named test and one scenario fail without the fix).
+- **After the fixes: the whole core test binary at 4096 cases, 10 of 10 runs passed; at 256 cases (CI's count), 50 of
+  50 passed** (release, one test thread, a random `PROPTEST_RNG_SEED` per run, logged). **Verified** (the runs).

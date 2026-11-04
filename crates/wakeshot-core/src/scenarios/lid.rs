@@ -1958,6 +1958,47 @@ fn a_sleep_check_skipped_for_input_goes_on() {
     );
 }
 
+/// `p2-6-props-rare`: the user comes back while the sleep check is out, before its answer, which the hibernate thread
+/// took before that: input whose reading the core has, or an unlock (a sign-in by face gives no input Windows counts).
+/// That pass is old: no 1-minute timeouts right after it, no fallback, and the countdown waits 5 minutes from it. An
+/// unknown lid passes as `Ok` does, so it is old the same way.
+#[test]
+fn a_sleep_check_that_passed_before_the_user_came_back_counts_as_a_skip_for_input() {
+    for (unlock, result) in [
+        (false, Ok(())),
+        (true, Ok(())),
+        (false, Err(HibernateSkip::LidUnknown)),
+    ] {
+        let case = format!("unlock {unlock}, {result:?}");
+        let mut sim = work_ended_closed(true);
+        if unlock {
+            sim.send(session(SessionChange::Locked));
+        }
+        let out = sim.run(IDLE_MS);
+        assert_eq!(sleep_checks(&out).len(), 1, "{case}\n{}", sim.trace());
+        let back = sim.now();
+        let mut out = if unlock {
+            sim.send(session(SessionChange::Unlocked))
+        } else {
+            sim.input();
+            sim.run(SAFETY_TICK_MS)
+        };
+        out.extend(sim.send(checked(result)));
+        out.extend(sim.run(IDLE_MS - SAFETY_TICK_MS - SECOND));
+        let trace = sim.trace();
+        assert_eq!(count(&out, &short_apply()), 0, "{case}\n{trace}");
+        assert!(fallbacks(&out).is_empty(), "{case}\n{trace}");
+        assert!(sleep_checks(&out).is_empty(), "{case}\n{trace}");
+        sim.run(MINUTE);
+        assert_eq!(
+            sleep_check_times(&sim, back).last(),
+            Some(&i128::from(IDLE_MS)),
+            "{case}\n{}",
+            sim.trace()
+        );
+    }
+}
+
 #[test]
 fn a_sleep_check_skipped_with_the_lid_open_ends_the_countdown() {
     let mut sim = work_ended_closed(true);

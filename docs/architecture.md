@@ -517,7 +517,10 @@ the step back after a failed lock:
 
 1. Due: `SleepCheck`. The hibernate thread checks the lid, idle and (Floor) the battery as before a hibernate, plays
    the sound, and reads the lid once more; an unknown lid does not stop it, since the core's own reading says closed.
-   Input, AC or the floor skip it as they skip a hibernate; the lid open ends the countdown.
+   Input, AC or the floor skip it as they skip a hibernate; the lid open ends the countdown. A pass that comes when
+   the last input reading, clamped at an unlock or a resume as the countdown counts, is under 5 minutes counts as a
+   skip for input: the thread checked before input, an unlock or a resume the core has heard of since
+   (`p2-6-props-rare`).
 2. Passed: `Apply` of the four short keys (sleep after and screen off, AC and DC) at 60 s, less the keys the user
    changed in this countdown or in a stepped-back episode. The apply writes a key only where the value in force is
    longer or Never (`ownership::apply::meets`), as Wakeshot-owned journal entries with the RunOnce value and the
