@@ -1209,7 +1209,7 @@ mod tests {
     /// Balanced, the active plan.
     const P1: Guid = Guid(0x381b4222_f694_41f0_9685_ff5bb260df2e);
 
-    fn haiks() -> PlanValues {
+    fn user_values() -> PlanValues {
         PlanValues {
             active: P1,
             lid_ac: 1,
@@ -1239,9 +1239,9 @@ mod tests {
         ]
     }
 
-    /// Haik's values with our writes for `entries()` stored and in force, as a hold leaves them.
+    /// The user's values with our writes for `entries()` stored and in force, as a hold leaves them.
     fn applied() -> FakePlans {
-        let fake = FakePlans::new(haiks());
+        let fake = FakePlans::new(user_values());
         let mut s = fake.state();
         for e in entries() {
             s.set_stored(e.plan, e.key, e.written, SetBy::Override);

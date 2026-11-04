@@ -424,9 +424,10 @@ a task" guard is an inference (the SDK resume closed the task anyway).
   closes nothing."
 - Rule 5, reminders: "A reminder may also be a background shell that sleeps (handled by rule 3)."
 
-The parts of this file that the resume test contradicted ("Short answer", "Claude Code itself uses two outside
-methods" item 1, the "Wakeup armed" row, rule 3's closing statuses) say now what this test saw, and rules 3 and 5
-hold the texts above. The end to end run ("Phase 4 end to end") saw the same: a resumed `*/5` job came back, its
+The parts of this file that the resume test contradicted ("Short answer", "Claude Code itself uses two outside methods"
+item 1, the "Wakeup armed" row, rule 3's closing statuses) say now what this test saw, and rules 3 and 5 hold the texts
+above; rule 5 applies the resume at the status file's `procStart`, not `startedAt`, as the code does (`claude/mod.rs`,
+`since` from `proc_start`). The end to end run ("Phase 4 end to end") saw the same: a resumed `*/5` job came back, its
 wakeup did not.
 
 ## Phase 4 end to end (2026-11-04)

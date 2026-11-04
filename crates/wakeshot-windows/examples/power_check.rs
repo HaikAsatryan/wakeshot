@@ -3668,7 +3668,7 @@ mod tests {
         assert_eq!(test_copy_pid("Balanced"), None);
     }
 
-    fn haiks() -> PlanValues {
+    fn user_values() -> PlanValues {
         PlanValues {
             active: BALANCED,
             lid_ac: 1,
@@ -3683,7 +3683,7 @@ mod tests {
     fn values_print_and_compare() {
         let start = Seen {
             active: Ok((BALANCED, "Balanced".into())),
-            user: Some((BALANCED, "Balanced".into(), Ok(haiks()))),
+            user: Some((BALANCED, "Balanced".into(), Ok(user_values()))),
             plans: Ok(vec![(BALANCED, "Balanced".into())]),
         };
         let text = lines(&start).join("\n");
@@ -3716,7 +3716,7 @@ mod tests {
     #[test]
     fn apply_writes_only_keys_off_target() {
         assert_eq!(
-            writes_for(&haiks()),
+            writes_for(&user_values()),
             [
                 (SettingKey::LidAc, 0),
                 (SettingKey::LidDc, 0),
@@ -3725,7 +3725,7 @@ mod tests {
         );
         let half = PlanValues {
             lid_dc: 0,
-            ..haiks()
+            ..user_values()
         };
         assert_eq!(
             writes_for(&half),

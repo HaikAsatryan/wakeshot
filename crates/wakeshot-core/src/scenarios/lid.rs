@@ -98,7 +98,7 @@ fn hibernated(end: HibernateEnd) -> Event {
     Event::Done(Outcome::Hibernate(end))
 }
 
-/// Docked use: the user's own lid action on AC is Do nothing, on battery Sleep (Haik's other values).
+/// Docked use: the user's own lid action on AC is Do nothing, on battery Sleep (other test values).
 fn docked() -> PlanValues {
     PlanValues {
         lid_ac: 0,
@@ -210,8 +210,8 @@ fn started_with(values: PlanValues, ac: bool, pct: u8) -> Sim {
     sim
 }
 
-/// A Claude Code session holds with Haik's own values, and the apply worked. The plan is not read again, so the copy
-/// still shows Sleep on both lid keys.
+/// A Claude Code session holds with the test's user values, and the apply worked. The plan is not read again, so the
+/// copy still shows Sleep on both lid keys.
 fn holding(ac: bool) -> Sim {
     let mut sim = started_with(plan(BALANCED), ac, 80);
     sim.send(working(1));
@@ -817,7 +817,8 @@ fn with_an_unread_journal_a_step_back_with_the_lid_open_wants_no_countdown() {
 
 #[test]
 fn closed_then_unplugged_after_signing_in_on_an_external_screen_locks_once_battery_lasted() {
-    // Power verify minor 11: docked with Haik's own values, the lid-close lock, he signs in on the external screen.
+    // Power verify minor 11: docked with the test's user values, the lid-close lock, the user signs in on the external
+    // screen.
     let mut sim = holding(true);
     sim.send(lid(true));
     sim.send(session(SessionChange::Locked));
@@ -1304,7 +1305,7 @@ fn a_power_source_change_onto_the_users_own_do_nothing_cancels_the_countdown_and
 
 #[test]
 fn a_power_source_change_onto_the_users_own_sleep_keeps_the_countdown() {
-    // Haik's own values: Sleep on AC too, so docking changes nothing.
+    // The test's user values: Sleep on AC too, so docking changes nothing.
     let mut sim = work_ended_closed(false);
     sim.input();
     let at = sim.now();
@@ -1458,7 +1459,7 @@ fn a_hibernate_that_resumed_counts_as_a_resume() {
 
 // Item 6: Keep screen on.
 
-/// Keep awake with Keep screen on, applied, on battery: Haik's own battery sleep is 10 minutes.
+/// Keep awake with Keep screen on, applied, on battery: the test's battery sleep is 10 minutes.
 fn screen_on() -> Sim {
     let mut sim = started_with(plan(BALANCED), false, 80);
     sim.send(Event::Menu(MenuCommand::KeepAwake(KeepAwake::UntilOff)));
@@ -1551,7 +1552,7 @@ fn lock_answer(result: Result<(), Failure>) -> Event {
     Event::Done(Outcome::Locked(result))
 }
 
-/// Holding with Haik's values, the lid closed: lock and chime, and the session has not reported `Locked` yet.
+/// Holding with the test's user values, the lid closed: lock and chime, and the session has not reported `Locked` yet.
 fn closed_unconfirmed(ac: bool) -> Sim {
     let mut sim = holding(ac);
     sim.input();
@@ -1831,7 +1832,7 @@ fn a_source_lock_that_fails_twice_steps_back_and_a_redock_onto_the_users_own_do_
 
 #[test]
 fn ac_back_after_a_lock_step_back_keeps_the_work_end_countdown() {
-    // Haik's own values: Sleep on AC too. A lock step back is no floor step back, so AC does not end it.
+    // The test's user values: Sleep on AC too. A lock step back is no floor step back, so AC does not end it.
     let mut sim = closed_unconfirmed(false);
     let input = sim.now();
     failed_twice(&mut sim);
@@ -1866,8 +1867,8 @@ fn ours_read() -> PlanValues {
 
 #[test]
 fn a_work_end_right_after_restore_my_power_settings_reads_the_users_own_lid_action() {
-    // Haik's values. Holding, lid closed and locked, signed in on the external screen: "Restore my power settings".
-    // The plan copy still shows our Do nothing until the next read; the work ends before it.
+    // The test's user values. Holding, lid closed and locked, signed in on the external screen: "Restore my power
+    // settings". The plan copy still shows our Do nothing until the next read; the work ends before it.
     let mut sim = holding(true);
     sim.send(read(ours_read()));
     sim.send(lid(true));
@@ -1961,7 +1962,7 @@ fn a_lock_step_back_before_the_first_plan_read_counts_down_once_the_plan_is_read
     let out = sim.run(MINUTE);
     assert!(hibernates(&out).is_empty(), "{}", sim.trace());
 
-    // The first read answers with Haik's own values.
+    // The first read answers with the test's user values.
     sim.send(read(plan(BALANCED)));
     sim.run(IDLE_MS);
     let trace = sim.trace();

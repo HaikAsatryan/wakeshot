@@ -60,7 +60,7 @@ README line):
   off until the next sign-in (Question 1).
 - Uninstall: what it puts back and removes, and what stays (Question 2), including Windows' own record of the tray
   icons (`NotifyIconSettings`, sign-off item 12: left in place).
-- A credit line for each port from a rival (none so far: `docs/phases/04-sources.md`, note 16); license.
+- A credit line for each port from a rival (none so far: `docs/phases/04-sources.md`, note 17); license.
 
 ## Acceptance checks
 

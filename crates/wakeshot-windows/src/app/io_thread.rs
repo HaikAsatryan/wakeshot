@@ -506,8 +506,8 @@ mod tests {
     /// `finish`'s time in tests: far above what a test needs, so only a blocked thread reaches it.
     const FINISH_WAIT: u32 = 10_000;
 
-    /// Haik's values (CLAUDE.md, "Test laptop").
-    fn haiks() -> PlanValues {
+    /// The user's own values before any hold. Test values only, not read from any laptop.
+    fn user_values() -> PlanValues {
         PlanValues {
             active: BALANCED,
             lid_ac: 1,
@@ -622,7 +622,7 @@ mod tests {
         fn with_sink(tag: &str, sink: FakeEventSink) -> Self {
             Self {
                 dir: TempDir::new(tag),
-                fake: FakePlans::new(haiks()),
+                fake: FakePlans::new(user_values()),
                 names: Names::test(&format!("io-thread-{tag}")),
                 liveness: Arc::default(),
                 queue: Arc::default(),

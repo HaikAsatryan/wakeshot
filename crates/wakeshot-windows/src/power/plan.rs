@@ -819,7 +819,7 @@ mod tests {
     const OTHER: Guid = Guid(0xa000_0000_0000_0000_0000_0000_0000_0001);
     const COPY: Guid = Guid(0xa000_0000_0000_0000_0000_0000_0000_0002);
 
-    fn haiks(plan: Guid) -> PlanValues {
+    fn user_values(plan: Guid) -> PlanValues {
         PlanValues {
             active: plan,
             lid_ac: 1,
@@ -924,8 +924,8 @@ mod tests {
 
     #[test]
     fn dry_run_never_writes_inner() {
-        let fake = FakePlans::new(haiks(BALANCED));
-        fake.add_plan(haiks(OTHER));
+        let fake = FakePlans::new(user_values(BALANCED));
+        fake.add_plan(user_values(OTHER));
         let mut dry = DryRunPower::new(fake.clone(), Arc::new(MemoryLog::default()));
 
         // An apply's calls, a plan read, then a restore's, as the routines make them.
@@ -939,7 +939,8 @@ mod tests {
         dry.set_active(plan).unwrap();
         dry.values().unwrap();
         for key in KEYS {
-            dry.write(plan, key, key_value(&haiks(plan), key)).unwrap();
+            dry.write(plan, key, key_value(&user_values(plan), key))
+                .unwrap();
         }
         dry.write(OTHER, SettingKey::LidDc, 0).unwrap();
         dry.set_active(plan).unwrap();
@@ -952,8 +953,8 @@ mod tests {
             .collect();
         assert!(changed.is_empty(), "{changed:?}");
         for plan in [BALANCED, OTHER] {
-            assert_eq!(state.plans[&plan].stored, haiks(plan));
-            assert_eq!(state.plans[&plan].in_force, haiks(plan));
+            assert_eq!(state.plans[&plan].stored, user_values(plan));
+            assert_eq!(state.plans[&plan].in_force, user_values(plan));
         }
         assert_eq!(state.active, BALANCED);
         assert_eq!(dry.set_active_calls(), [BALANCED, BALANCED]);
@@ -961,8 +962,8 @@ mod tests {
 
     #[test]
     fn dry_run_reads_its_own_writes() {
-        let fake = FakePlans::new(haiks(BALANCED));
-        fake.add_plan(haiks(OTHER));
+        let fake = FakePlans::new(user_values(BALANCED));
+        fake.add_plan(user_values(OTHER));
         let log = Arc::new(MemoryLog::default());
         let mut dry = DryRunPower::new(fake.clone(), log.clone());
 
@@ -976,7 +977,7 @@ mod tests {
             PlanValues {
                 lid_dc: 0,
                 sleep_dc: 0,
-                ..haiks(BALANCED)
+                ..user_values(BALANCED)
             }
         );
         assert_eq!(fake.state().stored(BALANCED, SettingKey::LidDc), Some(1));
@@ -1039,7 +1040,7 @@ mod tests {
         assert_eq!(log.lines.lock().unwrap()[2].0, Level::Warn);
 
         // The dry run: the value its last read returned, then its own last write.
-        let fake = FakePlans::new(haiks(BALANCED));
+        let fake = FakePlans::new(user_values(BALANCED));
         let log = Arc::new(MemoryLog::default());
         let mut dry = DryRunPower::new(fake, log.clone());
         assert_eq!(dry.read(BALANCED, SettingKey::SleepDc), Ok(600));
@@ -1058,11 +1059,11 @@ mod tests {
 
     #[test]
     fn copy_as_active_reports_the_copy_and_keeps_in_force() {
-        let fake = FakePlans::new(haiks(BALANCED));
-        fake.add_plan(haiks(COPY));
+        let fake = FakePlans::new(user_values(BALANCED));
+        fake.add_plan(user_values(COPY));
         let mut io = CopyAsActive::new(fake.clone(), COPY).unwrap();
         assert_eq!(io.active_plan(), Ok(COPY));
-        assert_eq!(io.values().unwrap(), haiks(COPY));
+        assert_eq!(io.values().unwrap(), user_values(COPY));
 
         io.write(COPY, SettingKey::LidDc, 0).unwrap();
         assert_eq!(
@@ -1094,13 +1095,13 @@ mod tests {
                 .any(|c| matches!(c, Call::SetActive(_) | Call::ActivePlan))
         );
         assert_eq!(state.active, BALANCED);
-        assert_eq!(state.plans[&BALANCED].stored, haiks(BALANCED));
+        assert_eq!(state.plans[&BALANCED].stored, user_values(BALANCED));
     }
 
     #[test]
     fn copy_as_active_refuses_other_plans() {
-        let fake = FakePlans::new(haiks(BALANCED));
-        fake.add_plan(haiks(COPY));
+        let fake = FakePlans::new(user_values(BALANCED));
+        fake.add_plan(user_values(COPY));
         let mut io = CopyAsActive::new(fake.clone(), COPY).unwrap();
         let calls_before = fake.state().calls.len();
 
@@ -1120,7 +1121,7 @@ mod tests {
             calls_before,
             "nothing reached the plans"
         );
-        assert_eq!(fake.state().plans[&BALANCED].stored, haiks(BALANCED));
+        assert_eq!(fake.state().plans[&BALANCED].stored, user_values(BALANCED));
         // Reads of other plans are harmless and pass through.
         assert_eq!(io.read(BALANCED, SettingKey::SleepDc), Ok(600));
     }

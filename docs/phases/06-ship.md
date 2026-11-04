@@ -337,3 +337,8 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   help shows in `Get-Help`; `packaging/README.md` lists `e2e.ps1`. 3 worker decisions for Haik's review in the card.
   The worker's note that `CLAUDE.md` still gives 3 h and 4 h: the file says 5 h (line 48, since 01:39), but the copy
   injected into new sessions still shows the old line (seen by `wakeshot-12` at 04:00; cause not verified).
+- 2026-11-04 06:12: docs pass round 4 done (`p2-6-docs-pass`): `architecture.md` sections 3 to 6 and 9 match tonight's
+  cards (one line states the unread-journal lock guess and marks it open for Haik); `product.md` pack id tested;
+  fixtures renamed `user_values` in 11 files (names and comments only); `claude-code-signals.md` closing note says
+  `procStart`. Workspace tests and both clippy forms pass. Open from it: start at login after Setup over the install
+  (not verified), SmartScreen text, the unlocked-session checks, the tray exe at 3.95 MB (was 2.0).

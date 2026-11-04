@@ -175,7 +175,7 @@ mod tests {
         }
     }
 
-    /// Haik's values (Sleep on AC and on battery) after a hold's apply: both lid keys are ours.
+    /// The test's user values (Sleep on AC and on battery) after a hold's apply: both lid keys are ours.
     fn held() -> (PlanValues, Vec<JournalEntry>) {
         (
             plan(DO_NOTHING, DO_NOTHING),

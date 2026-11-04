@@ -427,7 +427,7 @@ mod tests {
         session: 1,
     };
 
-    fn haiks(plan: Guid) -> PlanValues {
+    fn user_values(plan: Guid) -> PlanValues {
         PlanValues {
             active: plan,
             lid_ac: 1,
@@ -521,10 +521,10 @@ mod tests {
         .merge()
     }
 
-    /// P1 active and P2 inactive, both with Haik's values; no journal, RunOnce value or guard.
+    /// P1 active and P2 inactive, both with the user's values; no journal, RunOnce value or guard.
     fn fresh() -> FakePlans {
-        let fake = FakePlans::new(haiks(P1));
-        fake.add_plan(haiks(P2));
+        let fake = FakePlans::new(user_values(P1));
+        fake.add_plan(user_values(P2));
         fake
     }
 
@@ -658,7 +658,7 @@ mod tests {
         }
     }
 
-    /// Haik's values are back on every plan, stored and in force, and no known entry is left.
+    /// The user's values are back on every plan, stored and in force, and no known entry is left.
     fn assert_values_back(fake: &FakePlans, case: &str) {
         let s = fake.state();
         for &plan in s.plans.keys() {

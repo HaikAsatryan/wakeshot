@@ -373,17 +373,21 @@ While holding:
   released on every plan for the rest of the episode and shows a notice. A failed read releases nothing.
 - Plan switch (a `Plan` with a new active id, handled first in that event): `Restore { plan: Some(old) }`, then
   `Apply` to the new plan.
-- Lid closes while the lid action in force is our Do nothing: `Lock` and `Play(LidClosedHolding)` at once, side by
-  side; note `lid_closed_since`. Also with nothing holding, when a restore that failed or has not landed left our Do
-  nothing in force (the countdown below starts too). The lock is watched: a lock that fails, or that no
-  `Session(Locked)` follows within 5 s (`LockWorkStation` only starts it), is sent once more at the next tick; if that
-  one goes the same way, step back as at the floor (requests off, restore, the work-end countdown) until the session
-  locks or the lid opens, then hold again as at a hold start (section 8, "Lock fails"). The same for the source lock
-  below. The lock does not wait for the sound. Tested: the Windows alias sound played in full
-  with the lock 0.2 ms after its call, and our chime was heard both in a session already locked and with its stream
-  running before the lock (research, "Lid-close sound", "Lid-close results"). Not tested: our chime with the lock
-  landing during its stream start, which is the v1 order (checklist 16). Change it when a test shows the lock cuts a
-  sound. A user whose own lid action is Do nothing (docked use) gets no lock and no sound.
+- Lid closes while the lid action in force is our Do nothing: `Lock` and `Play(LidClosedHolding)` at once, side by side;
+  note `lid_closed_since`. Also with nothing holding, when a restore that failed or has not landed left our Do nothing
+  in force (the countdown below starts too). While the mirror may not know `journal.json` (it did not read at start, or
+  a restore failed to load it, and no read of the file since), a lid key in force at Do nothing that no entry names
+  counts as ours, and before the first plan read both lid keys do: a crashed tray's Do nothing may be in force, so this
+  errs toward a lock, also over a user's own Do nothing (`Core::lock_view`, `p6-int-wiring-fixes` decision 7, open for
+  Haik). The lock is watched: a lock that fails, or that no `Session(Locked)` follows within 5 s (`LockWorkStation` only
+  starts it), is sent once more at the next tick; if that one goes the same way, step back as at the floor (requests
+  off, restore, the work-end countdown) until the session locks or the lid opens, then hold again as at a hold start
+  (section 8, "Lock fails"). The same for the source lock below. The lock does not wait for the sound. Tested: the
+  Windows alias sound played in full with the lock 0.2 ms after its call, and our chime was heard both in a session
+  already locked and with its stream running before the lock (research, "Lid-close sound", "Lid-close results"). Not
+  tested: our chime with the lock landing during its stream start, which is the v1 order (checklist 16). Change it when
+  a test shows the lock cuts a sound. A user whose own lid action is Do nothing (docked use) gets no lock and no sound,
+  except while the mirror may not know the journal (above).
 - Power source changes while the lid is closed: if the lid action in force for the new source is our Do nothing, and
   either it was the user's own before (their AC action is Do nothing, ours is the DC one) or the change is AC to
   battery, then once the new source has lasted 30 s: `Lock` and `Play(LidClosedHolding)`. AC to battery covers a user
@@ -428,7 +432,9 @@ on plans other than the active one, one `Restore { plan: Some(p) }` per plan, an
 entries on the active plan and restores those whose key the user released. Otherwise the retry is
 `Restore { plan: None }`, so after a failed apply (`SafetyNet` or `Write`: requests only for the episode) it does not
 wait for an apply that never comes. So a retry never undoes a running hold, and a hold that starts while a restore
-fails rests on entries the journal still holds.
+fails rests on entries the journal still holds. The 10 s read deadline is set only while the mirror holds an entry or
+an apply waits for a plan (`core/settings.rs` `plan_read_due`), so with an empty mirror (a journal that did not read)
+the retry comes at the 30 s safety tick (measured, `p2-6-unread-floor-countdown` Result item 4).
 
 Countdown: due when input idle (clamped at resume as above) reaches 5 minutes (Haik, 2026-11-03). Cancelled by a new
 hold (not while stepped back, at the floor or after a failed lock, since no hold holds then), lid open, or AC back
@@ -557,7 +563,9 @@ How they talk: files only. No pipes, no sockets.
 
 - Other threads post boxed events to the loop window (`PostMessage(hwnd, WM_APP, ...)`), never to the thread: thread
   messages are lost while a modal loop runs, and a menu runs one (Microsoft, `PostThreadMessage` Remarks). A failed
-  post (10,000 message limit) is logged; the next tick recovers.
+  post (10,000 message limit, 1816) is logged as a warning; the next tick recovers. A post after the loop window is
+  gone (1400, as after a quit) is logged once as Info by the IO and watch threads, since nothing is wrong
+  (the `post` of `app/io_thread.rs` and of `watch/thread.rs`; `p6-int-log-wording`).
 - The loop window handles `WM_CLOSE` (also `taskkill` without `/F`) as Quit from the menu. A handler call that
   re-enters (a runner that pumps messages, such as the modal menu) queues its event; the outer call feeds it to the
   core after its own batch.
@@ -567,7 +575,9 @@ How they talk: files only. No pipes, no sockets.
   queued notices and queued `Apply` commands. After `Session(Ending)` the core issues no `Apply`, since the loop keeps
   handling posted events until Windows ends the process. A cancelled end (`WM_ENDSESSION` with FALSE,
   `Session(EndCancelled)`) lifts both. The loop waits up to 4 s for the restore, then returns; Windows ends the process
-  after that. Not tested (Phase 3).
+  after that. Tested with sent messages on an active plan copy: `WM_QUERYENDSESSION` answered TRUE, and the
+  `WM_ENDSESSION` send returned after 39 and 56 ms with the copy restored (research "Integration real e2e"). A real
+  sign-out: not tested (checklist 6).
 
 ### Tray startup
 
@@ -748,7 +758,9 @@ guard, restore mode, Velopack hooks and the CLI, always under `Local\Wakeshot.Jo
    limits (`hooks.rs`, from `p6-velopack-facts`): 25 s for install and uninstall, 10 s for updated, since the updated
    hook always runs a just-extracted exe, which took up to 1.7 s to start. Each limit counts from the hook's start, so
    the registry steps' time comes out of it; a failed run is tried again every 2 s while another try fits, and one try
-   always runs (section 6). `hooks.rs` is built and tested with fakes; `velo.rs` does not call it yet.
+   always runs (section 6). `hooks.rs` is built and tested with fakes, and `velo.rs` calls it from Velopack's hook
+   callbacks. Real installs, updates and uninstalls on the test laptop ran it and put a journaled value back (research
+   "Install end to end checks" and "Integration update e2e").
 
 Liveness, one mapping for hold files, the journal owner, the guard's tray and agent sessions: open the process with
 exactly `SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION` and compare its creation time. On `0x80070057` (no such
@@ -771,7 +783,9 @@ Guard:
   elevated Claude Code sessions"), checks the start time, waits on the handle and on its stop event. Tray gone with a
   journal left that names this tray as its owner: run the restore routine (with the retries above), log, exit. A
   journal that names another tray: exit. A corrupt journal names no one, so the guard leaves it; the RunOnce value is
-  still set, and the next sign-in's restore mode sets it aside (restore step 1). Stop event: exit.
+  still set, and the next sign-in's restore mode sets it aside (restore step 1). Stop event: exit. Tested with the
+  tray ended by pid during a hold on an active plan copy: the copy was back 63 to 87 ms after the end, the RunOnce
+  value gone, the guard's exit code 0 (research "Integration real e2e").
 - No hang check (Phase 0 close; change it when a tray hang shows up in a test or a report).
 - Velopack kills the guard with the tray on update, uninstall and Setup.exe over an install; the hooks restore
   (section 6).
@@ -822,6 +836,11 @@ aside with a warning; the log holds the old values.
   stays awake (card `p3-hibernate`). Not allowed or failed: a notice; settings are already
   restored, so Windows' own timers most likely apply (inferred; with the lid closed not tested, checklist 2); with
   the lid still closed the core then locks it whenever it is left idle (section 3, "Countdown").
+- One hibernate thread at a time: the dispatcher starts none while one runs, from its start to its `Done(Hibernate)`,
+  since a second could put the PC down again as soon as it wakes. The thread's last act posts that end; a post the full
+  queue refuses (1816) is tried again every 1 s, up to 60 tries, and any other error ends the tries with a warning. A
+  thread that cannot start is fed as `Done(Hibernate(Failed))` at once, not posted (`app/dispatch.rs`,
+  `app/tray_mode.rs`; `p6-int-wiring-fixes` item 2).
 
 ### OS events
 
@@ -854,7 +873,10 @@ aside with a warning; the log holds the old values.
   `NotifyIconGeneratedAumid_<NotifyIconSettings id>` and does not store it, so its on/off switch most likely follows
   the icon's settings entry and uninstall has no stored balloon to clear. Never count balloon events:
   `NIN_BALLOONTIMEOUT` came twice in the same millisecond (both in research, "Balloon"). A successful call never proves
-  the user saw a notice. A balloon click (`NIN_BALLOONUSERCLICK`): not tested.
+  the user saw a notice. A balloon click (`NIN_BALLOONUSERCLICK`): not tested. A notice the shell refuses (the icon
+  is not added yet, as at a sign-in before the taskbar exists, or Explorer restarts) is kept, in order and once each,
+  and shown again through the IO thread when the icon is added (`BalloonNotifier::icon_added`); one shown again skips
+  the core's rule that holds notices while the session is locked (`p6-int-wiring-fixes` item 1).
 - Change to registered toasts when a notice needs buttons. Then uninstall must clear the stored toasts
   (`ToastNotificationManager.History.Clear`, not tested) before deleting the app id keys, and Phase 5 checks the toast
   icon's colours on screen (R and B showed swapped; the method is in research.md) and tries a different `DisplayName`
@@ -940,10 +962,13 @@ journal, `%LocalAppData%\Wakeshot` goes whole; otherwise `journal.json` and `log
 failed restore is tried again every 2 s until the hook's inner limit, counted from its start: 25 s for install and
 uninstall, 10 s for updated (section 5, restore step 7). An owner that is alive or Unknown, or a journal that does not
 parse or holds only a newer version's entries, ends the tries at once with one log line; the journal stays as it is. The
-obsolete hook only logs. Updates apply only when nothing holds and nothing is overridden. The `current` folder keeps its
-path across updates, though the folder itself is new each time, so Run, RunOnce and Path can point at it (tested,
-research "Velopack checks for Wakeshot", point 3). Accepted (ship Question 1, Haik 2026-11-03 18:09; the README says
-so): `winget upgrade` runs Setup.exe silent, which does not start the app, and a hook cannot start it
+obsolete hook only logs. Updates apply only when nothing holds and nothing is overridden. Tested on a real install with
+a local feed: a downloaded update did not apply for 120 s while Keep awake held; after Keep awake off the plan copy came
+back, then the update applied and Velopack started the new tray. Setup.exe over the install and an uninstall, each
+during a hold, put the copy back through the hook (checklist 14; research "Integration update e2e"). The `current`
+folder keeps its path across updates, though the folder itself is new each time, so Run, RunOnce and Path can point at
+it (tested, research "Velopack checks for Wakeshot", point 3). Accepted (ship Question 1, Haik 2026-11-03 18:09; the
+README says so): `winget upgrade` runs Setup.exe silent, which does not start the app, and a hook cannot start it
 (`research/distribution.md`), so after such an upgrade Wakeshot is off until the next sign-in or a manual start.
 
 ## 7. Sources
@@ -1051,12 +1076,13 @@ Core (Phase 2):
 - Scenario tests: a `Sim` harness feeds `(Now, Event)` pairs and checks the commands. The fake clock moves `wall_ms`
   and `mono_ms` apart, so suspends and wall clock jumps are covered.
 - Property tests (`proptest`) on random event sequences, including plan switches, failed plan reads, user changes and
-  outcomes that arrive late: owned keys are always restored after the last hold, quit and end of session; a released
-  key is never written again in its episode, on any plan; a restore retry never takes an entry a running hold uses,
-  and after a failed apply it covers every entry; no `Apply` after `Session(Ending)` until `EndCancelled`; no `Apply`
-  and no screen request while another session is on the console; no request is on with no hold; no `Hibernate`
-  within 5 minutes of a resume or of input; no `Lock` when the lid action in force is the user's own; every `Lock`,
-  `Hibernate`, step back and user change comes with a notice or a sound.
+  outcomes that arrive late: owned keys are always restored after the last hold, quit and end of session; a released key
+  is never written again in its episode, on any plan; a restore retry never takes an entry a running hold uses, and
+  after a failed apply it covers every entry; no `Apply` after `Session(Ending)` until `EndCancelled`; no `Apply` and no
+  screen request while another session is on the console; no request is on with no hold; no `Hibernate` within 5 minutes
+  of a resume or of input; no `Lock` when the lid action in force is the user's own, except while a restore retry is
+  wanted and the mirror is empty, where the lock rules lock on any Do nothing by design (section 3, "Lid closes"); every
+  `Lock`, `Hibernate`, step back and user change comes with a notice or a sound.
 - Windows layer unit tests for the IO thread's ownership check, `Apply` and the restore routine, against
   `DryRunPower` with a scripted plan: reads in flight around an `Apply`, two plans in one journal, a failed read, a
   failed or short plan list, a failed active plan read, a failed `PowerSetActiveScheme` then a retry, a stop between
@@ -1083,9 +1109,23 @@ Windows layer (Phase 3), never on the user's real settings:
   own data folder (section 4).
 - All automated tests run in CI. Whether hosted runners have power plans: not verified (the CI card finds out).
 
-Integration (Phase 6): wiring tests with fakes and the real core in CI; process tests of the real exes in dry run; the
-real tray on active plan copies; the update path on a real install with a local feed (debug builds only,
-`WAKESHOT_UPDATE_FEED`); Haik's checklist on an active plan copy.
+Integration (Phase 6): wiring tests with fakes and the real core in CI (`app/` tests); Haik's checklist on an active
+plan copy. The end-to-end suites and scripts below were built and run on the test laptop on 2026-11-04, never in CI:
+each starts the tray, or the whole script, at Medium through `explorer.exe`, and the two suites are `#[ignore]`d tests
+named `real_e2e_*`.
+
+- `crates/wakeshot-tray/tests/e2e_dry_run.rs`: the two exes together in dry run on a temp data folder, 12 tests
+  (research "Integration dry-run e2e").
+- `crates/wakeshot-tray/tests/e2e_real.rs`: the real tray with real holds on plan copies `Wakeshot int A` and `B`,
+  made active before the tray starts: hold start and end, user change, plan switch, Restore my power settings, Quit,
+  end of session and a killed tray (the agent's parts of checklists 4 and 6; checklist 9), and `wakeshot restore`
+  with a dead owner, 10 tests (research "Integration real e2e").
+- `packaging/e2e.ps1`: install, update, Setup.exe over the install and uninstall of packed builds, each hook
+  putting back a journaled value on the inactive copy `Wakeshot test e2e`, 81 checks (research "Install end to end
+  checks").
+- `packaging/e2e-update.ps1`: the update path on a real install with a local feed (debug builds only,
+  `WAKESHOT_UPDATE_FEED`) and checklist 14, on the active copy `Wakeshot int update`, 125 checks (research
+  "Integration update e2e").
 
 Manual checklist for Haik on the test laptop. Rule for any test that uses a plan copy: Settings and the Control Panel
 write some battery values to the user's real plan even while a copy is active (research), so read the real plan before

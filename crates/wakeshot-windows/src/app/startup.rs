@@ -468,8 +468,8 @@ mod tests {
         log.lines.lock().unwrap().clone()
     }
 
-    /// Haik's values (CLAUDE.md, "Test laptop").
-    fn haiks() -> PlanValues {
+    /// The user's own values before any hold. Test values only, not read from any laptop.
+    fn user_values() -> PlanValues {
         PlanValues {
             active: BALANCED,
             lid_ac: 1,
@@ -507,7 +507,7 @@ mod tests {
     impl Rig {
         fn new() -> Self {
             Self {
-                fake: FakePlans::new(haiks()),
+                fake: FakePlans::new(user_values()),
                 liveness: Arc::default(),
                 log: Arc::default(),
             }

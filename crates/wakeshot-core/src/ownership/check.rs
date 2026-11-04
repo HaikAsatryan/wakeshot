@@ -120,7 +120,7 @@ mod tests {
         session: 1,
     };
 
-    fn haiks(plan: Guid) -> PlanValues {
+    fn user_values(plan: Guid) -> PlanValues {
         PlanValues {
             active: plan,
             lid_ac: 1,
@@ -167,12 +167,12 @@ mod tests {
         FakeJournal::File(parts.merge())
     }
 
-    /// P1 active and P2, both with Haik's values, then what an apply left for each entry: an unmarked one holds our 0,
+    /// P1 active and P2, both with user values, then what an apply left for each entry: an unmarked one holds our 0,
     /// stored and in force; a marked one holds `original` stored and our 0 in force (a restore whose call failed).
     /// Also the journal with `other`, the RunOnce value and a running guard.
     fn world(entries: &[JournalEntry], other: Vec<JournalFileEntry>) -> FakePlans {
-        let fake = FakePlans::new(haiks(P1));
-        fake.add_plan(haiks(P2));
+        let fake = FakePlans::new(user_values(P1));
+        fake.add_plan(user_values(P2));
         let mut s = fake.state();
         for e in entries {
             let stored = match e.restored {
@@ -384,7 +384,7 @@ mod tests {
     /// that apply's entries, though the live values differ from what the apply is about to write.
     #[test]
     fn a_check_before_an_apply_never_reports_that_applys_entries() {
-        let fake = FakePlans::new(haiks(P1));
+        let fake = FakePlans::new(user_values(P1));
         assert_eq!(run(&fake), quiet(vec![]));
         assert_eq!(calls(&fake), [Call::LoadJournal]);
 
@@ -422,7 +422,7 @@ mod tests {
 
     #[test]
     fn an_unreadable_or_corrupt_journal_is_reported_and_left() {
-        let fake = FakePlans::new(haiks(P1));
+        let fake = FakePlans::new(user_values(P1));
         fake.state().journal = FakeJournal::Unreadable(32);
         let r = run(&fake);
         assert_eq!(r.failures.iter().map(|f| f.code).collect::<Vec<_>>(), [32]);

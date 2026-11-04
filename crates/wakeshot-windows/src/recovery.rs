@@ -894,7 +894,7 @@ mod tests {
         outside_tree: true,
     };
 
-    fn haiks(plan: Guid) -> PlanValues {
+    fn user_values(plan: Guid) -> PlanValues {
         PlanValues {
             active: plan,
             lid_ac: 1,
@@ -976,7 +976,7 @@ mod tests {
         .merge()
     }
 
-    /// Two plans with Haik's values, P1 active, and what an apply by `owner` left: the values in `rows` and a journal
+    /// Two plans with user values, P1 active, and what an apply by `owner` left: the values in `rows` and a journal
     /// with their entries and `other`; the RunOnce value and the guard as given.
     fn world(
         owner: JournalOwner,
@@ -985,8 +985,8 @@ mod tests {
         run_once: bool,
         guard: FakeGuard,
     ) -> FakePlans {
-        let fake = FakePlans::new(haiks(P1));
-        fake.add_plan(haiks(P2));
+        let fake = FakePlans::new(user_values(P1));
+        fake.add_plan(user_values(P2));
         let mut s = fake.state();
         for &(e, live) in rows {
             let active = e.plan == s.active;
@@ -1507,7 +1507,7 @@ mod tests {
 
     #[test]
     fn guard_with_no_journal_does_nothing() {
-        let fake = FakePlans::new(haiks(P1));
+        let fake = FakePlans::new(user_values(P1));
         let run = Run::new(TestOs::waking(Wake::TrayGone));
         let end = run.guard(&fake, &guard_args(tray_of(TRAY)));
         assert_eq!(end, GuardEnd::TrayGone(Recovered::Nothing));
@@ -1517,7 +1517,7 @@ mod tests {
 
     #[test]
     fn restore_mode_missing_journal() {
-        let fake = FakePlans::new(haiks(P1));
+        let fake = FakePlans::new(user_values(P1));
         let run = Run::new(TestOs::default());
         let end = run.restore_mode(&fake);
         assert_eq!(end, Recovered::Nothing);
@@ -1826,7 +1826,7 @@ mod tests {
     /// One active plan with our values for `entries` stored and in force. The fake's own journal stays missing: the
     /// journal is `FileNet`'s here.
     fn applied(entries: &[JournalEntry]) -> FakePlans {
-        let fake = FakePlans::new(haiks(P1));
+        let fake = FakePlans::new(user_values(P1));
         let mut s = fake.state();
         for e in entries {
             s.set_stored(e.plan, e.key, e.written, SetBy::Override);

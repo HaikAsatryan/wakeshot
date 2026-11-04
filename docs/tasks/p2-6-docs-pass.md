@@ -1,6 +1,6 @@
 # Docs pass for Phases 2 to 6: make the docs match the built code
 
-Phase: 6. Status: rounds 1, 2 and 3 done; round 4 ready. Needs Haik: no.
+Phase: 6. Status: rounds 1 to 4 done. Needs Haik: no.
 Runs after: the Phase 2 to 6 track cards named below. Parallel with: `p6-int-window`, `p6-int-startup`, `p5-text`,
 the power fix round (core), the Claude parsing review.
 
@@ -390,8 +390,8 @@ Open items: Found outside scope 1 to 3; the lists above.
 
 ## Round 4 (2026-11-04)
 
-Status: ready. Written by the orchestrator (session `wakeshot-12`). Runs after `p2-6-unread-floor-countdown` (it edits
-`core/lid.rs`, `scenarios/lid.rs`, `state.rs` and `docs/architecture.md`).
+Status: done. Written by the orchestrator (session `wakeshot-12`). Runs after `p2-6-unread-floor-countdown` (it
+edits `core/lid.rs`, `scenarios/lid.rs`, `state.rs` and `docs/architecture.md`).
 
 Items (from the orchestrator):
 
@@ -417,6 +417,113 @@ Items (from the orchestrator):
 
 ### Log
 
+- 2026-11-04 05:59: round 4 started, Status in progress.
+- 2026-11-04 06:02: item 1 done (section 5 step 7: `velo.rs` `startup` calls `hooks::on_install`, `on_obsolete`,
+  `on_updated`, `on_uninstall`; real runs cited by research heading). Item 2 done (`product.md` Distribution, the
+  dotted pack id tested, research "Velopack checks for Wakeshot" point 1). Item 3 done (`p6-readme.md` cites note 17;
+  `04-sources.md` note 17 is "No rival code is ported"). Item 4: `haiks` renamed `user_values` in 11 files (it sits
+  beside the existing `user_value(key)` helpers); comments that called plan values Haik's now say test or user values,
+  also `sim.rs` `world_plan`'s "Balanced: Haik's own", which round 3 missed. `power/plan.rs` reformatted by rustfmt
+  (one call grew past the width); `cargo fmt --all --check` exit 0. Values and logic unchanged.
+- 2026-11-04 06:07: item 5 already in: rule 5 in the rules table holds the resume text (at `procStart`, as
+  `claude/mod.rs` builds `since` from `proc_start`) and the reminder line; the "Rule changes" closing note now says
+  the rule uses `procStart`, where the proposal said `startedAt`. Item 6, the nine cards read: in
+  `architecture.md` section 3 "Lid closes" the unread journal lock guess (`core/lid.rs` `lock_view`,
+  `journal_unknown`); section 9's lock property names its exception (`scenarios/props.rs`
+  `no_lock_on_the_users_own_do_nothing`); section 5 one hibernate thread at a time and its post retry
+  (`dispatch.rs`, `tray_mode.rs` `post_end`); section 5 notices: refused ones shown again at the icon add
+  (`notify.rs` `icon_added`, `tray_mode.rs` `show_again`); section 4 end of session and section 5 guard: what the
+  real e2e tested; section 6 hooks: what the update e2e tested; section 9 Integration: the four suites as built.
+  Already done by the cards themselves: the countdown waits (section 3), `state.rs` lines, `open_log.rs`. Long lines
+  rewrapped with a scratch script (words unchanged).
+- 2026-11-04 06:11: item 6, two more lines from the same cards: section 4's failed post line (1400 after a quit is
+  Info on the IO and watch threads, `p6-int-log-wording`); section 3's retry paragraph (with an empty mirror the
+  retry comes at the 30 s safety tick: `core/settings.rs` `plan_read_due`, `p2-6-unread-floor-countdown` Result 4).
+  Decided by the worker, for Haik's review: (1) the fixture name is `user_values`, next to the existing
+  `user_value(key)` helpers, and the comments say "the test's user values" or "user values"; change it when a
+  fixture reads real values (then a name like `stop_points.rs` `users_values`). (2) Section 3 states
+  `p6-int-wiring-fixes` decision 7 as built and marks it open for Haik, rather than leaving the lock rule unstated
+  until he decides; change it when he rules on it. (3) Item 7: the phase file lines that quote the old journal text
+  are work log records, so they stay.
+- 2026-11-04 06:11: checks run (Result); build folder deleted. Status done.
+
 ### Found outside scope
 
+For Haik (decisions, not doc lines):
+
+1. `p6-int-wiring-fixes` decision 7: while the journal is unknown, the lid-close lock and chime also come over a
+   user's own Do nothing. Tied to it: a journal that stays unreadable keeps both waited countdowns waiting
+   (`p2-6-unread-floor-countdown` Found outside scope 2); the `may_own()` condition on the first-read wait, which a
+   surviving mutant (M10) shows no test pins (its Found outside scope 3). Section 3 now states decision 7 as built
+   and marks it open for Haik.
+
+Needs a test (not a doc change):
+
+2. Start at login after Setup.exe over the install (`p6-readme` Found outside scope 6): `hooks.rs` `on_install` calls
+   `set_run` every time, and `winget upgrade` runs Setup.exe (section 6). Whether the user's off switch in Settings >
+   Apps > Startup keeps it off is not verified (`06-ship.md` line 43). Test: switch it off, run Setup.exe over the
+   install, read the Run value and `HKCU\...\Explorer\StartupApproved\Run` (most likely where that switch is kept;
+   not verified), sign out and in.
+3. SmartScreen's text for an unsigned `Setup.exe` (`p6-readme` Found outside scope 5): a capture at the first public
+   pre-release.
+4. With the session unlocked: the "Wakeshot updated to (version)" notice after an update (`p6-int-update-e2e` Found
+   outside scope 1); the `UserChanged` notice at an unlock (`p6-int-real-e2e` Open items); the dry-run pictures
+   (`p6-int-dry-run-e2e` "Steps left"), whose clean-up also takes the dry-run icon keys `p6-int-real-e2e` left (its
+   Found outside scope 1).
+
+For the orchestrator (files this round may not edit):
+
+5. `p6-int-tray-mode.md` "Notes for the Part B run" picks the icon entry by `IconGuid`, which the entry may lack;
+   compare ids before and after instead (`p6-int-wiring-fixes` Found outside scope 6). The old journal text and log
+   problems that card's Found outside scope 4 and `p6-int-log-wording` Found outside scope 2 name in
+   `docs/phases/06-integration.md` (lines 326 and 365) are work log records, so they stay (item 7).
+6. `docs/research/claude-code-signals.md` "Rule changes" keeps the proposal's `startedAt` (a dated record); its
+   closing note now says the rule as built uses `procStart`.
+
+Minor, left:
+
+7. Lines over 120 characters that are not mine: `scenarios/lid.rs` 868, `power/executor.rs` 126,
+   `examples/power_check.rs` 3332, `wakeshot-cli/src/restore.rs` 277; `docs/architecture.md` 396 and 415 (round 3
+   Found outside scope 2); `docs/product.md` 24.
+8. The release tray exe grew from 2.0 to 3.95 MB with `p6-int-update-wiring` (`url`, `idna`, `icu_*` now built;
+   `p6-install-e2e` rerun Found outside scope 2). If size matters, the `velo.rs` owner can check which Velopack
+   feature pulls them.
+
 ### Result
+
+Done 2026-11-04 06:11. Every item was checked in the code or the source card first.
+
+| # | Outcome |
+|---|---|
+| 1 | Done: section 5 step 7, `velo.rs` calls `hooks.rs` from Velopack's hook callbacks; real installs, updates and uninstalls ran it (research "Install end to end checks", "Integration update e2e") |
+| 2 | Done: `product.md` Distribution, the dotted pack id is tested (research "Velopack checks for Wakeshot", point 1) |
+| 3 | Done: `p6-readme.md` cites `04-sources.md` note 17 |
+| 4 | Done: `haiks` renamed `user_values` in 11 files; every comment that called plan values Haik's now says test or user values (22 comments, also `sim.rs` `world_plan`); no value or logic changed; tests pass |
+| 5 | Already in: rule 5 holds the resume text (at `procStart`, as built) and the reminder line; the "Rule changes" note now names `procStart` |
+| 6 | Done: section 3 the unread journal lock guess and the empty-mirror retry at 30 s; section 4 failed posts (1400 is Info) and the tested end of session; section 5 the tested guard, one hibernate thread at a time and its post retry, refused notices shown again; section 6 what the update e2e tested; section 9 the lock property's exception and the four e2e suites. Rest listed under Found outside scope |
+| 7 | Kept: Phase 1 Question 11's 30 s, work logs and dated research, `CLAUDE.md` |
+
+Files changed: `docs/architecture.md` (sections 3, 4, 5, 6, 9), `docs/product.md` (Distribution, item 2),
+`docs/research/claude-code-signals.md` ("Rule changes" closing note), `docs/tasks/p6-readme.md` (the citation),
+this card. Rust, names and comments only: `wakeshot-core` `ownership/apply.rs`, `check.rs`, `fake.rs`, `restore.rs`,
+`policy/lid.rs`, `sim.rs`, `scenarios/lid.rs`; `wakeshot-windows` `power/executor.rs`, `power/plan.rs` (also
+rustfmt), `recovery.rs`, `hooks.rs`, `app/io_thread.rs`, `app/startup.rs`, `app/dispatch.rs`,
+`examples/power_check.rs`; `wakeshot-cli` `restore.rs`.
+
+Checks (build folder `<scratchpad>\p2-6-docs-pass-r4\target`, no `RUSTFLAGS`, all `--locked`):
+
+| Check | Outcome |
+|---|---|
+| `cargo fmt --all --check` | exit 0 (after rustfmt on `power/plan.rs`, where one renamed call grew past the width) |
+| `cargo clippy --workspace --locked --all-targets --target x86_64-pc-windows-msvc -- -D warnings` | exit 0 |
+| The same without `--all-targets` | exit 0 |
+| ARM64 clippy, `-p wakeshot-core -p wakeshot-windows -p wakeshot-cli`, with and without `--all-targets` | exit 0 both; tray ARM64: CI only (clang) |
+| `cargo test --workspace --locked`, once at the end | exit 0, nothing failed (99 s) |
+| Changed files: no CR byte, em dash, en dash or emoji; final newline | pass (scratch script, 21 files) |
+| No line of mine over 120 characters outside tables | pass; older long lines listed under Found outside scope 7 |
+| Not touched: `docs/phases/`, `docs/plan.md`, `CLAUDE.md`, `README.md`, other cards but `p6-readme.md`'s citation | pass, from my edit record (no git) |
+| Build folder and scratch scripts deleted | yes, checked gone 06:11 |
+
+Decided by the worker, for Haik's review: Log 06:11, items 1 to 3.
+
+Open items: Found outside scope 1 (Haik), 2 to 4 (tests), 5 (orchestrator), 7 and 8 (minor).

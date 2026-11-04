@@ -495,7 +495,7 @@ mod tests {
     const BALANCED: Guid = Guid(0x381b4222_f694_41f0_9685_ff5bb260df2e);
     const OTHER: Guid = Guid(0xa000_0000_0000_0000_0000_0000_0000_0001);
 
-    fn haiks(plan: Guid) -> PlanValues {
+    fn user_values(plan: Guid) -> PlanValues {
         PlanValues {
             active: plan,
             lid_ac: 1,
@@ -540,7 +540,7 @@ mod tests {
 
     #[test]
     fn write_is_stored_and_in_force_only_after_set_active() {
-        let fake = FakePlans::new(haiks(BALANCED));
+        let fake = FakePlans::new(user_values(BALANCED));
         let mut plans = fake.clone();
         plans.write(BALANCED, SettingKey::LidDc, 0).unwrap();
         assert_eq!(fake.state().stored(BALANCED, SettingKey::LidDc), Some(0));
@@ -557,7 +557,7 @@ mod tests {
 
     #[test]
     fn both_seams_log_into_one_call_list() {
-        let fake = FakePlans::new(haiks(BALANCED));
+        let fake = FakePlans::new(user_values(BALANCED));
         write_then_activate(&mut fake.clone(), &mut fake.clone()).unwrap();
         let state = fake.state();
         assert_eq!(
@@ -579,7 +579,7 @@ mod tests {
 
     #[test]
     fn fail_returns_the_code_and_changes_nothing() {
-        let fake = FakePlans::new(haiks(BALANCED));
+        let fake = FakePlans::new(user_values(BALANCED));
         fake.script(5, Action::Fail(87));
         let err = write_then_activate(&mut fake.clone(), &mut fake.clone()).unwrap_err();
         assert_eq!(
@@ -605,7 +605,7 @@ mod tests {
 
     #[test]
     fn stop_ends_the_run_and_the_next_start_sees_the_state() {
-        let fake = FakePlans::new(haiks(BALANCED));
+        let fake = FakePlans::new(user_values(BALANCED));
         fake.script(6, Action::Stop);
         let run = catch_unwind(AssertUnwindSafe(|| {
             write_then_activate(&mut fake.clone(), &mut fake.clone())
@@ -624,8 +624,8 @@ mod tests {
 
     #[test]
     fn run_changes_the_state_between_two_calls() {
-        let fake = FakePlans::new(haiks(BALANCED));
-        fake.add_plan(haiks(OTHER));
+        let fake = FakePlans::new(user_values(BALANCED));
+        fake.add_plan(user_values(OTHER));
         fake.script(4, Action::Run(Box::new(|s| s.switch_plan(OTHER))));
         fake.script(
             5,
@@ -640,7 +640,7 @@ mod tests {
 
     #[test]
     fn safety_net_states() {
-        let fake = FakePlans::new(haiks(BALANCED));
+        let fake = FakePlans::new(user_values(BALANCED));
         let mut net = fake.clone();
         assert_eq!(net.load_journal(), JournalRead::Missing);
         fake.state().journal = FakeJournal::Corrupt;
@@ -670,7 +670,7 @@ mod tests {
 
     #[test]
     fn writes_take_their_label_from_the_journal_entry() {
-        let fake = FakePlans::new(haiks(BALANCED));
+        let fake = FakePlans::new(user_values(BALANCED));
         let mut plans = fake.clone();
         plans.write(BALANCED, SettingKey::LidAc, 0).unwrap();
         assert_eq!(
@@ -703,8 +703,8 @@ mod tests {
 
     #[test]
     fn labels_move_with_the_values() {
-        let fake = FakePlans::new(haiks(BALANCED));
-        fake.add_plan(haiks(OTHER));
+        let fake = FakePlans::new(user_values(BALANCED));
+        fake.add_plan(user_values(OTHER));
         fake.state().journal = FakeJournal::File(journal());
         let mut plans = fake.clone();
         plans.write(BALANCED, SettingKey::LidDc, 0).unwrap();
@@ -740,8 +740,8 @@ mod tests {
 
     #[test]
     fn held_counts_stored_values_and_the_active_plans_in_force_values() {
-        let fake = FakePlans::new(haiks(BALANCED));
-        fake.add_plan(haiks(OTHER));
+        let fake = FakePlans::new(user_values(BALANCED));
+        fake.add_plan(user_values(OTHER));
         let mut state = fake.state();
         assert!(state.held().is_empty());
         state.set_stored(OTHER, SettingKey::SleepDc, 0, SetBy::Override);

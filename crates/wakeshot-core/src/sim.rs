@@ -706,7 +706,7 @@ const FLUSH_LIMIT: usize = 10_000;
 
 /// The user's own values of each world plan, which differ, so a value put back on the wrong plan shows:
 ///
-/// - Balanced: Haik's own ([`plan`]).
+/// - Balanced: the test's user values ([`plan`]).
 /// - [`OTHER_PLAN`]: the lid on battery is the user's own Do nothing, on AC Hibernate; energy saver Never (floor 20).
 /// - [`DOCKED_PLAN`]: the lid on AC is the user's own Do nothing (docked use), on battery Sleep; energy saver 30 %.
 pub fn world_plan(id: Guid) -> PlanValues {

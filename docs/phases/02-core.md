@@ -311,3 +311,4 @@ Where each item this track owns is built. "Integration" is planned after the tra
   decision 7); before the first plan read a step back with the lid closed and nothing owned never counts down,
   after it it does (orchestrator default: leave it; with nothing owned the user's own lid action was in force at
   the close, so Windows already acted on it).
+- 2026-11-04 06:03: CI green on 31a770a (the Floor countdown fix), all three jobs.

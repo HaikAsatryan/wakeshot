@@ -894,7 +894,7 @@ mod tests {
             .collect()
     }
 
-    /// Started on AC with the lid open and Haik's own values read; nothing holds. Queue and calls emptied.
+    /// Started on AC with the lid open and the test's user values read; nothing holds. Queue and calls emptied.
     fn ready() -> World {
         let w = World::new(vec![started()]);
         w.post(power(true));

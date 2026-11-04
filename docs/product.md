@@ -204,8 +204,9 @@ lid action stays Do nothing and battery sleep Never. The README says so.
 - A 30 second promo video with sound and effects, animated in code from the real icon art and screenshots, showing
   only what Wakeshot really does (Haik, 2026-11-04). For the README, the Pages page and the Store listing.
 - Velopack pack id `HaikAsatryan.Wakeshot` (install folder `%LocalAppData%\HaikAsatryan.Wakeshot`); data folder
-  `%LocalAppData%\Wakeshot`, outside the install folder (Haik, 2026-11-03). Whether Velopack accepts a dot in the pack
-  id: not verified; Phase 6 checks it before the first release.
+  `%LocalAppData%\Wakeshot`, outside the install folder (Haik, 2026-11-03). Velopack accepts the dot in the pack id:
+  pack, install, updates, Setup over an install and uninstall all worked with it (tested, research "Velopack checks
+  for Wakeshot", point 1).
 - Velopack: per-user install without admin, auto-update from GitHub Releases, applied only when nothing holds and no
   setting is overridden. The install, update and uninstall hooks restore power settings from the journal. A
   `winget upgrade` during `wakeshot run` still kills the wrapper; the README says so.

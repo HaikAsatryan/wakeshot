@@ -450,8 +450,8 @@ mod tests {
         (BALANCED, SettingKey::SleepDc),
     ];
 
-    /// Haik's values (CLAUDE.md, "Test laptop").
-    fn haiks(plan: Guid) -> PlanValues {
+    /// The user's own values before any hold. Test values only, not read from any laptop.
+    fn user_values(plan: Guid) -> PlanValues {
         PlanValues {
             active: plan,
             lid_ac: 1,
@@ -516,7 +516,7 @@ mod tests {
     impl Rig {
         fn new(tag: &str) -> Self {
             Self {
-                fake: FakePlans::new(haiks(BALANCED)),
+                fake: FakePlans::new(user_values(BALANCED)),
                 liveness: Arc::default(),
                 log: Arc::default(),
                 names: Names::test(&format!("power-io-{tag}")),
@@ -663,7 +663,7 @@ mod tests {
             lid_ac: 0,
             lid_dc: 2,
             sleep_dc: 900,
-            ..haiks(BALANCED)
+            ..user_values(BALANCED)
         };
         assert_eq!(
             events,
@@ -775,7 +775,7 @@ mod tests {
         assert_eq!(rig.calls()[at], Call::Read(BALANCED, SettingKey::LidDc));
         let values = PlanValues {
             lid_dc: 0,
-            ..haiks(BALANCED)
+            ..user_values(BALANCED)
         };
         assert_eq!(events, [Event::Plan(Ok(values))]);
         assert_eq!(
@@ -794,7 +794,7 @@ mod tests {
         let mut executor = rig.executor_over(FileNet::dry_run(rig.dir.data(), rig.log.clone()));
 
         // Only a restore sets the file aside: a plan read and an apply leave it.
-        let values = Ok(haiks(BALANCED));
+        let values = Ok(user_values(BALANCED));
         assert_eq!(executor.run(&Command::ReadPlan), [Event::Plan(values)]);
         let events = executor.run(&all_three());
         assert!(matches!(
@@ -987,7 +987,7 @@ mod tests {
             lid_ac: 0,
             lid_dc: 0,
             sleep_dc: 0,
-            ..haiks(BALANCED)
+            ..user_values(BALANCED)
         };
         assert_eq!(
             rig.executor().run(&Command::ReadPlan),
@@ -1333,7 +1333,7 @@ mod tests {
             // (`p2-ownership-apply` Found outside scope 8); one more on an inactive plan.
             name: "one entry on the active plan, one on another",
             set: |fake| {
-                fake.add_plan(haiks(OTHER));
+                fake.add_plan(user_values(OTHER));
                 overridden(
                     fake,
                     DEAD,

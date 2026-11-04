@@ -255,7 +255,7 @@ mod tests {
     const DO_NOTHING: u32 = 0;
     const SLEEP: u32 = 1;
 
-    /// Haik's values with our Do nothing on battery: what a hold leaves.
+    /// The test's user values with our Do nothing on battery: what a hold leaves.
     fn plans() -> FakePlans {
         FakePlans::new(PlanValues {
             active: BALANCED,

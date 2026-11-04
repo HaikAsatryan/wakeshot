@@ -283,7 +283,7 @@ mod tests {
         session: 1,
     };
 
-    fn haiks(plan: Guid) -> PlanValues {
+    fn user_values(plan: Guid) -> PlanValues {
         PlanValues {
             active: plan,
             lid_ac: 1,
@@ -350,11 +350,11 @@ mod tests {
         .merge()
     }
 
-    /// Two plans with Haik's values, P1 active, and what an apply owned by `TRAY` left: the values in `rows`, a
+    /// Two plans with the user's values, P1 active, and what an apply owned by `TRAY` left: the values in `rows`, a
     /// journal with their entries and `other`, the RunOnce value, a running guard.
     fn world(rows: &[(JournalEntry, Live)], other: Vec<JournalFileEntry>) -> FakePlans {
-        let fake = FakePlans::new(haiks(P1));
-        fake.add_plan(haiks(P2));
+        let fake = FakePlans::new(user_values(P1));
+        fake.add_plan(user_values(P2));
         let mut s = fake.state();
         for &(e, live) in rows {
             let active = e.plan == s.active;
@@ -453,7 +453,7 @@ mod tests {
 
     #[test]
     fn missing_journal_does_nothing() {
-        let fake = FakePlans::new(haiks(P1));
+        let fake = FakePlans::new(user_values(P1));
         let r = run(&fake, None);
         let nothing = Restored {
             found: Found::Nothing,
