@@ -31,7 +31,7 @@ settings, so a full dev edition is not the fix.
    its HKCU Uninstall key exists), or a real journal or `WakeshotRestore` value exists. Read-only.
 2. `power_check` real-settings commands and `packaging/e2e.ps1` call it first and stop on a hit, changing nothing.
 3. A line in `CLAUDE.md` "Test laptop": quit the installed Wakeshot before real-settings tests (the same rule as
-   Nightcrew).
+   for any other keep-awake app).
 
 ## Acceptance checks
 

@@ -50,8 +50,8 @@ the plan and fix this file.
   working on whatever does not depend on the answer.
 - Keep your context small: read agents' final replies and card Result sections, not transcripts or whole reports,
   unless a decision depends on them.
-- Power settings on the test laptop are Haik's real settings. Before any card that changes them, make sure Nightcrew
-  is uninstalled (see `CLAUDE.md`, Test laptop). If it still runs, ask Haik to quit it from its tray. Never kill it
+- Power settings on the test laptop are Haik's real settings. Before any card that changes them, make sure no other
+  keep-awake app runs (see `CLAUDE.md`, Test laptop). If one does, ask Haik to quit it from its tray. Never kill it
   by name.
 - At about 150K to 250K tokens, update the phase file and the plan Status, then stop at a clean point.
 

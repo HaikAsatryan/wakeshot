@@ -12,7 +12,7 @@ Replace the guesses behind "User settings safety" in `docs/product.md` with test
 
 - `CLAUDE.md`
 - `docs/research.md`: "Windows power facts"
-- `docs/research/rivals-nightcrew-lidguard.md`: the settings safety sections
+- `docs/research/rivals-lidguard.md`: the settings safety sections
 - `docs/product.md`: "Power behavior" and "User settings safety"
 
 ## Questions to answer

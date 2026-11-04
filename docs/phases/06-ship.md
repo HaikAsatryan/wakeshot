@@ -240,7 +240,7 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   panic tests (delete commands in the card).
 - 2026-11-04 00:40: `p6-launch-research` running (no build: the exe sizes are left for `p6-media`). Session `wakeshot-12`'s launch planning is committed.
 - 2026-11-04 01:13: `p6-launch-research` done and committed (`docs/research/launch.md`). Rivals: PowerToys Awake,
-  LidGuard and Agents Don't Sleep (new: Rust/Tauri, lid closed, battery floor); Nightcrew in reserve. The README admits
+  LidGuard and Agents Don't Sleep (new: Rust/Tauri, lid closed, battery floor). The README admits
   two gaps: v1 knows only Claude Code; the download is likely bigger than Agents Don't Sleep's 1.9 MB. Store: not at
   launch (an EXE needs every file signed by a trusted CA; Azure Artifact Signing takes individuals in the US and Canada
   only; SignPath declines new projects; MSIX has no uninstall hook; winget may prefer a Store copy, winget-cli #4347).
@@ -424,7 +424,7 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   `p5-haik-check` words, `p2-6-sleep-route` wording, README comparison, SmartScreen words, winget line.
 - 2026-11-04 11:52: `p6-readme` round 2 done (Haik's ask: compare only with very popular tools, on features): PowerToys
   Awake (140,521 stars), Caffeine (367,663 Chocolatey downloads), Don't Sleep (38,324 plus 20,340 portable); 13 rows,
-  the agent and lid rows in bold; LidGuard, Agents Don't Sleep and Nightcrew left the README. Lines wrong by
+  the agent and lid rows in bold; LidGuard and Agents Don't Sleep left the README. Lines wrong by
   `product.md` fixed (sleep, not hibernate; the lost journal; notice titles), two marked to check after
   `p2-6-sleep-route`. 10 worker decisions for Haik's review; Haik reads the table. `product.md` line 3 status updated.
 - 2026-11-04 13:38 (orchestrator `wakeshot-12`, decision for Haik's review): `p6-media` Part A started before

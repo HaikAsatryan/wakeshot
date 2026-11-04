@@ -69,7 +69,7 @@ Commands: `rustfmt --edition 2024 --check <owned files>`; `cargo clippy --locked
 wakeshot-windows store::`. Record each outcome. After the tests: no `HKCU\Software\Wakeshot-test` key of this run's pids
 and no `%LocalAppData%\Wakeshot` folder made by the tests.
 
-Facts checked here (the `MoveFileExW` atomic write, Nightcrew's way, "not tested by us") go to `docs/research.md`.
+Facts checked here (the `MoveFileExW` atomic write, "not tested by us") go to `docs/research.md`.
 
 - Check rule: `docs/plan.md` "How we work" step 2 and "Checks while other cards run" in this track's phase file. A
   failure in a file another card owns goes in the Log: wait and run again; if it is still there when this card's own
@@ -94,7 +94,7 @@ None. Every choice below is technical, so the worker made it.
 Problems seen but not fixed.
 
 - `docs/architecture.md` section 6 says writes go "temp file, flush, then `MoveFileExW(REPLACE_EXISTING |
-  WRITE_THROUGH)` (Nightcrew's way; not tested by us)". Now tested, and not enough alone: `MoveFileExW` fails with 5
+  WRITE_THROUGH)` (not tested by us)". Now tested, and not enough alone: `MoveFileExW` fails with 5
   while any reader has the target open. `store::write_atomic` falls back to a POSIX rename by handle (decision 2).
   The line needs that fallback and a pointer to `docs/research.md` "Store checks". Not this card's file.
 - Temp files `<name>.<pid>.<n>.tmp` left by a process that stopped between the temp write and the move are never

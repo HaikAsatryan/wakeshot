@@ -915,7 +915,7 @@ leftover of another tray that this tray cannot restore yet (owner alive or Unkno
 gets the value too, so the next sign-in still restores it if this tray dies first; restore mode checks the owner, so
 for a live or Unknown one the value costs only a start that exits. Only a journal this tray owns gets a guard (a guard
 waits on this tray).
-Picked over a logon task (Nightcrew's way): one value, no task XML. Tested (research "Power track manual checks"):
+Picked over a logon task: one value, no task XML. Tested (research "Power track manual checks"):
 restore mode's start from RunOnce, its journal read, its owner check, and its restore of a gone owner's journal at
 sign-in (checklist 5, one sign-in, 2026-11-04). Shown only by tests: a hold that starts before its sign-in's RunOnce
 pass gets the value back at its next plan read.
@@ -1040,7 +1040,7 @@ Every file is UTF-8 JSON with `"version": 1`. A reader takes its own version and
 is ignored and logged, and never written over (the tray's menu then changes Automatic for this run only, and `wakeshot
 automatic` refuses with a message); the journal is the one exception (below). The reader reads `VersionProbe` first, so
 a newer file whose fields changed shape is still recognized as newer. Writes go to a temp file, flush, then
-`MoveFileExW(REPLACE_EXISTING | WRITE_THROUGH)` (Nightcrew's way). That gives 5 while a reader has the target open, so
+`MoveFileExW(REPLACE_EXISTING | WRITE_THROUGH)`. That gives 5 while a reader has the target open, so
 `store::write_atomic` then renames by handle with POSIX semantics (`SetFileInformationByHandle(FileRenameInfoEx)`), as
 Rust's `std::fs::rename` does; that works while the reader shares delete (tested, research "Store checks"). What a power
 cut right after the move leaves: not tested.

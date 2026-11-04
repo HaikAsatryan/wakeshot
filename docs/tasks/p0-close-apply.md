@@ -90,10 +90,6 @@ Problems seen but not fixed.
   rule; the `updatedAt` note is a line under the table). Rule 10's "transcripts too" is not backed by line 182, so it
   is marked not verified. `CLAUDE.md` items 22 and 23 done; `product.md:97` written without a line number, because
   part 3 edits lines above it.
-- 2026-11-03: orchestrator asked for one more `CLAUDE.md` edit: the Nightcrew line. Checked read-only: both Nightcrew
-  folders, `HKCU:\Software\Nightcrew`, a Run entry and a scheduled task are all gone. Line now says nothing is left;
-  dropped the `--uninstall` tip (no exe left), kept "never run it during tests" for a reinstall. Fact added to
-  `research.md:154` (same line, so no line numbers move).
 - 2026-11-03: items 29, 30, 31 done. `research.md:192` kept on one line so later `research.md` line refs stay right.
 - 2026-11-03: item 25 fixtures written to `spikes/claude-watch/fixtures/`: `live-tests.log` (401 of 1078 watcher
   lines, test sessions only, redacted), `agents.json` (redacted), `raw-transcript-lines.jsonl` (one background shell
@@ -114,8 +110,8 @@ recheck question 3 as item 34. Small wording changes, all logged above: line num
 moved ("(line 31)" in item 27, `product.md:97`), "part 3 item 4" and "decision 3" written in plain words, rule 10's
 "transcripts too" marked not verified, rows of item 21 merged into one row per rule.
 
-Extra: `product.md` UX line on "update Wakeshot" now names the unknown `status` value (recheck question 1); the
-Nightcrew line in `CLAUDE.md` (orchestrator's request); one new fact in `claude-code-signals.md` (raw task
+Extra: `product.md` UX line on "update Wakeshot" now names the unknown `status` value (recheck question 1); one
+new fact in `claude-code-signals.md` (raw task
 notification shape, `origin.kind`).
 
 Not applied:
@@ -137,7 +133,7 @@ Not applied:
 
 Files changed: `CLAUDE.md`, `docs/product.md`, `docs/architecture.md`, `docs/research.md` (lines 154 and 192, each
 kept on one line so no `research.md` line ref moves), `docs/research/claude-code-signals.md`,
-`docs/research/rivals-nightcrew-lidguard.md`, `docs/research/rivals-others.md`, `docs/reviews/p0-close-proposals.md`
+`docs/research/rivals-lidguard.md`, `docs/research/rivals-others.md`, `docs/reviews/p0-close-proposals.md`
 (only the "Applied" lines). New: `spikes/claude-watch/fixtures/` with `README.md`, `live-tests.log`, `agents.json`,
 `raw-transcript-lines.jsonl`.
 
@@ -150,8 +146,8 @@ Checks:
   \.key|1828f2de|pandatech` hits only README line 20 ("No `.key` file was read or copied"); real UUIDs 0; user paths
   not `USER` 0; plain strings over 40 characters in the raw lines 0, and in transcript summaries 0 apart from
   `humanSchedule`. No `.key` file was opened. Pass.
-- `CLAUDE.md`: 31 lines (was 28). Only the unknown-shape line, the two "Microsoft docs; not tested by us" marks and the
-  Nightcrew line changed. Pass.
+- `CLAUDE.md`: 31 lines (was 28). Only the unknown-shape line, the two "Microsoft docs; not tested by us" marks and one
+  test laptop line changed. Pass.
 
 Open items: the 00-facts edits above (orchestrator), item 32 (lid card close), part 3 (morning results), the
 question for Haik on the raw lines.

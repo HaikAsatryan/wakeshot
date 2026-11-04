@@ -238,7 +238,7 @@ Run every 5 to 10 s, or on a folder change event for `sessions\` plus a slow tim
 | 8 | `<cwd>\.claude\scheduled_tasks.lock` with a live `pid` that matches a session | That session has used `/loop` or cron at some point. Use only to decide to scan its transcript | Low as a work signal |
 | 9 | Treat a pending timer as "work soon" only if it fires within 1 hour (decided, `product.md:34-35`). Otherwise let the PC sleep; the job fires once on wake | Policy | Decided |
 | 10 | `claude agents --json`: dropped for v1. It starts a 335 MB process, has open bug #101182, and `bg` sessions write status files too (line 182; that they write transcripts the same way is not verified) | Background sessions incl. pending loops | Not used in v1 |
-| 11 | Fallback when the status file is missing or unknown: transcript or `tasks\*.output` size grew in the last 60 s. Dropped (Phase 1 design, `architecture.md` section 7): it contradicts the unknown-format rule, where a file that does not parse gives no signal and an unknown `status` counts as working while the process lives | Activity | Not used in v1 (Nightcrew uses this) |
+| 11 | Fallback when the status file is missing or unknown: transcript or `tasks\*.output` size grew in the last 60 s. Dropped (Phase 1 design, `architecture.md` section 7): it contradicts the unknown-format rule, where a file that does not parse gives no signal and an unknown `status` counts as working while the process lives | Activity | Not used in v1 |
 
 `updatedAt` is not a heartbeat or a last-write time (change 9 below).
 
@@ -250,7 +250,7 @@ Never read `*.key`, `.credentials.json`, or connect to `messagingSocketPath`.
 Claude Code 2.1.316 on the Windows laptop. Test sessions ran in throwaway folders in the worker's scratch folder.
 `spikes/claude-watch/ccdrive.py` drove them in a pseudo console (or over stream-json for the SDK path), and the
 watcher `spikes/claude-watch` logged every status file change and the matching transcript lines. Model: Haiku, to save
-tokens; the status code does not depend on the model. Nightcrew was not running.
+tokens; the status code does not depend on the model.
 
 | # | Test | Observed | Verdict |
 |---|---|---|---|

@@ -4,7 +4,7 @@ Card: `docs/tasks/p0-architecture-review.md`. Reviewer: `wakeshot-reviewer`, 202
 
 Read: `CLAUDE.md`, `docs/product.md`, `docs/architecture.md`, `docs/plan.md`, `docs/phases/00-facts.md`,
 `docs/research.md`, all `docs/tasks/p0-*.md` cards, `docs/research/distribution.md`,
-`docs/research/claude-code-signals.md`, `docs/research/rivals-nightcrew-lidguard.md`, parts of
+`docs/research/claude-code-signals.md`, `docs/research/rivals-lidguard.md`, parts of
 `docs/research/rivals-others.md`, and spike code where a finding needed it (`spikes/lid-sleep/src/modes.rs`,
 `events.rs`, `ticks.rs`, `spikes/claude-watch/src/procs.rs`, `summary.rs`, `spikes/power-settings/src/watch.rs`).
 Nothing was run except read-only file reads. The orchestrator's keep-awake process is test setup and is ignored.
@@ -83,12 +83,12 @@ change is needed for 1 to 4; `--work`, `--max-minutes` and `--end` exist (`spike
   `winget upgrade` runs Setup.exe over the install: it kills the tray app and the guard (both run from that folder),
   runs no uninstall or obsolete hook, and deletes the old folder (the trial's test file was gone). If an agent was
   working, the lid action stays Do nothing (and the DC timer, if written) and the journal with Haik's original values
-  is gone. The next start finds no journal, so Do nothing looks like the user's own value: Nightcrew's bug `787bee4`
-  (`rivals-nightcrew-lidguard.md:192`). Config and logs go too. The guard cannot help here: Velopack kills it in every
+  is gone. The next start finds no journal, so Do nothing looks like the user's own value.
+  Config and logs go too. The guard cannot help here: Velopack kills it in every
   flow (`distribution.md:36-49`).
 - Fix: keep data outside the pack folder (another pack id such as `WakeshotApp`, or another data folder name). Make
   the `--veloapp-install` and `--veloapp-updated` hooks run "restore if a journal exists", like app start. Keep a
-  second copy of the original values outside that folder (an HKCU key, as Nightcrew does), or use the self-marking plan
+  second copy of the original values outside that folder (an HKCU key), or use the self-marking plan
   copy (finding 15). Optional: winget `UpgradeBehavior: uninstallPrevious`, so the uninstall hook runs first (not
   verified with Velopack). Uninstall is safe only because its hook runs after the kill and before the folder removal
   (`distribution.md:36-39`); a failed hook does not stop it, so keep that hook small.
@@ -110,7 +110,7 @@ change is needed for 1 to 4; `--work`, `--max-minutes` and `--end` exist (`spike
 - What breaks: lid closed, laptop in a bag, agent working. The one thread blocks (a deadlock, a stuck WinRT call, a
   slow file read). The request stays held because the process lives. The time limit, the battery floor and any heat
   check run on that same thread, so none fires; the guard sees a live process. The laptop runs until Windows' critical
-  battery action, or forever on AC. Nightcrew shipped this exact bug (`7ccb678`, `rivals-nightcrew-lidguard.md:195`).
+  battery action, or forever on AC.
 - Fix: the guard checks the tray window every 30 s with `SendMessageTimeout(WM_NULL)` and `SMTO_ABORTIFHUNG`; after
   about 2 minutes with no answer it ends the tray process (Windows then drops the requests) and restores. Run the guard
   whenever a hold is active, not only while settings are overridden. Keep blocking calls off the loop thread.
@@ -127,14 +127,14 @@ change is needed for 1 to 4; `--work`, `--max-minutes` and `--end` exist (`spike
 **5. Docked use is defined only by the user's own lid action.** Depends on: `p0-spike-lid-sleep` step D (and new D
 from test 1).
 - Where: `product.md:53-54`, `58-59`; `00-facts.md:46`; `p0-spike-lid-sleep.md:221-222`; LidGuard fixes `f3bac30`,
-  `9c5f2c2` (`rivals-nightcrew-lidguard.md:218-219`).
+  `9c5f2c2` (`rivals-lidguard.md` 5).
 - What breaks: Haik's own setup is lid action Sleep plus the DELL. While an agent works, Wakeshot sets Do nothing, so a
   lid close keeps the DELL on. Wakeshot then locks him at once, hibernates him at the time limit, and sleeps the PC
   "soon after" work ends, while he types on the DELL.
 - Fix: docked means the user's lid action is Do nothing, or an external display is active (`QueryDisplayConfig`). When
   docked, skip lock, sound, time limit and end-of-work sleep. If the count drops to internal only while the lid is
   closed, apply the closed-lid rules then. Before any end-of-work sleep or hibernate, also require some minutes with no
-  input (Nightcrew's "unattended", `rivals-nightcrew-lidguard.md:172`).
+  input.
 
 **6. The idle lock rule fires in the wrong case.** Depends on: `p0-spike-lid-sleep` step H (test 3).
 - Where: `product.md:52-53`; `research.md:41-42`, `365-368`, `399-402`.
@@ -148,12 +148,12 @@ from test 1).
 
 **7. `busy` has no time limit.**
 - Where: `product.md:28` against `40-41`; `claude-code-signals.md:64-65` (no heartbeat);
-  `rivals-nightcrew-lidguard.md:243-244` (port 3).
+  `rivals-lidguard.md` (port 2).
 - What breaks: a hung `claude.exe` (a stuck MCP call, a network stall) keeps `busy` and a live pid. With the lid open
   on AC the PC never sleeps, all weekend: the one-signal-with-no-expiry shape that `product.md:40-41` rules out.
 - Fix, Haik's call for the value: `busy` with no growth of the transcript, subagent transcripts or task output files
   for about 2 hours stops holding, with a notification. It must be long: a quiet foreground command also shows `busy`
-  with no growth (`rivals-nightcrew-lidguard.md:116`, Avoid 3). Unknown status values (treated as busy by rule 3) get
+  with no growth (`rivals-lidguard.md` 2, Avoid 3). Unknown status values (treated as busy by rule 3) get
   the same cap.
 
 **8. Updates can land in the middle of work.**
@@ -193,14 +193,14 @@ state between reads and re-reads a transcript from its start after a Wakeshot re
 
 **12. KISS: three mechanisms to see the user's setting changes.** `p0-spike-power-settings.md:175-177` proposes the
 registry notification (undocumented key), the setting notification and a slow poll. A poll of the few values every 5
-to 10 s while overriding costs under 1 ms per read (`research.md:335`) and is what Nightcrew ships
-(`rivals-nightcrew-lidguard.md:147`). Keep the power source and active plan notifications the core needs anyway. Add
+to 10 s while overriding costs under 1 ms per read (`research.md:335`).
+Keep the power source and active plan notifications the core needs anyway. Add
 the registry watch only if a 10 s delay proves to be a real problem.
 
 **13. "One thread" does not match the callback notifications.** `architecture.md:33`; the spikes use
 `DEVICE_NOTIFY_CALLBACK`, which runs on a system thread and needs a locked queue
 (`spikes/lid-sleep/src/events.rs:27-30`, `143-157`). Fix: the tray already owns a hidden window, so register with the
-window handle and handle `WM_POWERBROADCAST` (Nightcrew's way, `rivals-nightcrew-lidguard.md:170`), or have callbacks
+window handle and handle `WM_POWERBROADCAST`, or have callbacks
 only post a message to the loop. Say which in Phase 1.
 
 **14. "Cleanup runs on drop" does not hold where it matters.** `product.md:20-21` gives drop cleanup as a reason for
@@ -210,7 +210,7 @@ panic hook runs before the abort, so restore there; keep the guard and the resto
 
 **15. The lost-journal risk favors the plan copy.** Depends on: `p0-spike-power-settings` step B.
 `architecture.md:59-61` picks in-place edits. With in-place edits a lost journal leaves Do nothing in the user's plan
-with no marker (Nightcrew's "+7 s" trick is the only one, `rivals-nightcrew-lidguard.md:145`). A copy marks itself:
+with no marker. A copy marks itself:
 its name and description (`PowerWriteFriendlyName`, `PowerWriteDescription`, the latter not tested) can carry the
 original plan GUID, so restore needs no journal: switch to that GUID, delete the copy. The copy's cost is real (a
 change the user makes during a hold lands on the copy, `p0-spike-power-settings.md:181-184`). Weigh both after B.
@@ -222,7 +222,7 @@ plans live under HKLM (`research.md:328-329`). With fast user switching, B's Wak
 
 **17. Guard gaps (not verified).** `architecture.md:45-46`. If the guard is a child of the tray, Task Manager's "End
 task" on the app group may end both: start it detached and test in Phase 3. If the user turns off start at login, the
-"next start" restore never comes after a crash; Nightcrew's logon task covers that (`rivals-nightcrew-lidguard.md:157`).
+"next start" restore never comes after a crash; a logon task would cover that.
 Decide whether it is worth it.
 
 **18. No heat guard in the product.** `product.md:56-59` has none, though the spike found a sensor that works without

@@ -3,7 +3,7 @@
 Phase: 6. Status: done. Needs Haik: yes: he reads the Result (rival pick, Store recommendation) before the README,
 winget and Store cards are rewritten. Agent: `wakeshot-worker`. Size: about 110K tokens.
 Real laptop: no. No installs of any rival or store app; downloads go to `<scratchpad>\p6-launch-research\` and are
-never run (Nightcrew and similar tools change the same power settings, `CLAUDE.md`).
+never run (keep-awake tools change the same power settings, `CLAUDE.md`).
 Runs after: none. Parallel with: any card (owns only the files below).
 Build folder: none (no Rust).
 
@@ -17,7 +17,7 @@ cards are written on facts, not memory.
 ## Read first
 
 - `docs/product.md`: "The job", "Platform and stack", "Distribution".
-- `docs/research/rivals-nightcrew-lidguard.md`, `docs/research/rivals-others.md` (rivals already studied).
+- `docs/research/rivals-lidguard.md`, `docs/research/rivals-others.md` (rivals already studied).
 - `docs/research/distribution.md` sections 1 and 2 (Velopack, winget), and its Store line in `product.md`.
 - `docs/phases/06-ship.md`: "Package and install values", "Updates", "Not in this track".
 - `docs/tasks/p6-readme.md`, `p6-winget-manifest.md`, `p6-pages.md` (what is planned now).
@@ -147,7 +147,7 @@ Problems seen but not fixed.
   `docs/research/launch.md`.
 - 2026-11-04 00:57: parts 1 and 2 facts read (stars, release sizes, READMEs, winget source and issues, Velopack lock
   code at tag 1.2.161, winget-pkgs merge times). Rival pick so far: PowerToys Awake, LidGuard (13), Agents Don't
-  Sleep (10); Nightcrew (9) in reserve. Writing parts 1 and 2 of `launch.md`.
+  Sleep (10). Writing parts 1 and 2 of `launch.md`.
 - 2026-11-04 01:00: parts 1 and 2 written to `docs/research/launch.md`. Waiting for the Store and media helpers.
 - 2026-11-04 01:05: Store helper reported; worker re-read the fee page, policy 10.2.9, the Artifact Signing countries
   and winget-cli #4347. Part 3 written: no Store at launch (signing is not free for Haik today). Storyboard and shot
@@ -167,7 +167,7 @@ web reading for parts 3 and 4; the worker re-read the facts each answer turns on
 
 **Rival pick** (stars `gh api`, 2026-11-04 00:45): PowerToys Awake (140,491, for all of PowerToys: the general tool
 readers have), LidGuard (13: the most-starred agent-aware tool on Windows), Agents Don't Sleep (10, new: the next one
-with a Windows release, and the closest pitch to ours). Nightcrew (9) in reserve. LidKeeper (10) left out: no release,
+with a Windows release, and the closest pitch to ours). LidKeeper (10) left out: no release,
 a script. Draft table with a link per cell in part 1. Honest gaps for the README: v1 knows only Claude Code (rivals
 list 4 to 8 agents, each tested end to end on one), and the download will likely be larger than Agents Don't Sleep's
 1.9 MB (Velopack's `Update.exe` is about 5 MB), so lead with RAM, CPU and delays. Exe sizes: not measured (p6-media
@@ -223,7 +223,7 @@ settings back, Keep awake, speed, end card; shots S1 to S10).
 
 - `p6-readme`: Read first adds `docs/research/launch.md` parts 1 and 4. Rival table: the three above, from the draft
   table in part 1, stars read again that day, PowerToys stars marked "for all of PowerToys", every cell with its link
-  and date; the PowerToys 14.3 MB only with "test harness"; Nightcrew's CPU line only as their claim. Top: the GIF loop
+  and date; the PowerToys 14.3 MB only with "test harness". Top: the GIF loop
   in `<picture>`, then the pitch, speed numbers, install line, then the video as a bare `github.com/user-attachments`
   URL line. A State, Icon, Description table for the three icons, light and dark. "Claude Code today; Codex and
   Copilot CLI next." Install section adds part 2 rule 9 (`--all` skips Wakeshot; an explicit `winget upgrade` ends a

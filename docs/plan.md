@@ -109,7 +109,6 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   `.claude/skills/orchestrate/SKILL.md`. If a session does not list the agent types (they load at Claude Code start),
   use a general-purpose agent on Opus, xhigh effort, told to follow the agent file.
 - Build Tools 2026 (18.11.2) installed 2026-11-03: MSVC 14.51 with x64 and ARM64 targets, Windows SDK 10.0.26100.
-- Nightcrew uninstalled 2026-11-03; Haik's power values restored and checked.
 - The orchestrator session runs elevated, so `powercfg /requests` works from it. Spikes test writes through an
   unelevated token, because Wakeshot runs unelevated.
 - Phase 0: research, toolchain, distribution facts, Claude live tests, unelevated liveness, spike safety fixes and

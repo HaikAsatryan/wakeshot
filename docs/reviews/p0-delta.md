@@ -142,7 +142,7 @@ New: "- Change only the power settings a test proves necessary: the lid action a
 battery Windows ends every request about 5 minutes after the sleep timeout, lid open or closed (tested,
 `research.md`, "Battery rule"). Wakeshot writes the battery sleep timer together with the lid action when a hold
 starts, also on AC, so an unplug or a short AC drop on a USB-C dock never meets that rule first. Value in Phase 1:
-Never, or a value Settings cannot set, so that it marks itself (Nightcrew's +7 s, `research.md:165-166`)."
+Never, or a value Settings cannot set, so that it marks itself."
 If M1 is not run, append: "Not tested: that the raised timer stops the rule."
 
 **Item 2, hibernate off or failing.** Outcome: `SetSuspendState(FALSE)` and `(TRUE)` both hibernate here (S4,
@@ -196,9 +196,9 @@ lid action is Do nothing)."
 
 **Item 4, plan copy or in place.** Outcome: in place stays. Confidence: medium. Reasons in section 5.
 
-`architecture.md:77-78`. Old: "- A second copy of the original values lives outside the data folder (an HKCU key, as
-Nightcrew does), unless the plan copy is picked after the power settings spike (it marks itself)."
-New: "- A second copy of the original values lives outside the data folder (an HKCU key, as Nightcrew does). It is
+`architecture.md:77-78`. Old: "- A second copy of the original values lives outside the data folder (an HKCU key),
+unless the plan copy is picked after the power settings spike (it marks itself)."
+New: "- A second copy of the original values lives outside the data folder (an HKCU key). It is
 needed: Wakeshot edits the plan in place (Power settings ownership below)."
 
 `architecture.md:90-92`. Old: "Lid strategy: edit the active plan in place, not a temporary copy of the plan, unless

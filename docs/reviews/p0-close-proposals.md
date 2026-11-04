@@ -29,7 +29,7 @@ lid-closed time limit runs out?
 **Default: no.** The time limit (and the heat guard, decision 2) apply only when the lid is closed and no external
 screen is active. Reason: the limit exists for the laptop in a bag (`product.md:40-41`). A laptop that drives a cabled
 screen is on a desk. Hibernating it stops the agent work the product exists to protect. LidGuard also skips its
-suspend while any external screen is on (`rivals-nightcrew-lidguard.md:172`).
+suspend while any external screen is on (`rivals-lidguard.md` 4).
 
 **Other choice.** An overnight agent run on a docked, closed laptop is hibernated at the limit, and the work stops.
 
@@ -38,10 +38,10 @@ Built with either answer:
 - The lock rule stays as fixed (`product.md:52-54`): for the lock, docked means the user's own lid action is Do
   nothing. Your lid action is Sleep, so a lid close on the DELL still locks: by your own setting a lid close means
   "sleep". The review's "an external screen means docked, so no lock" is not adopted, because no fact contradicts the
-  fixed rule. Nightcrew fixed its docked bug the same way (`rivals-nightcrew-lidguard.md:194`). To work on the DELL
+  fixed rule. To work on the DELL
   with the lid closed, set your lid action to Do nothing.
-- The time-limit hibernate and the end-of-work sleep or hibernate run only after some minutes with no input
-  (Nightcrew's "unattended", `rivals-nightcrew-lidguard.md:172`, `174`). Without this, Wakeshot can hibernate someone
+- The time-limit hibernate and the end-of-work sleep or hibernate run only after some minutes with no input.
+  Without this, Wakeshot can hibernate someone
   who types on an external screen with the lid closed, against `architecture.md:36-37` ("never hibernates the PC in
   front of the user").
 - When the user's own lid action is Do nothing, Wakeshot changed nothing, so at work end it only releases ("then let
@@ -65,7 +65,7 @@ minutes: hibernate (or the hibernate-off fallback, part 3 item 2) and notify. No
 it and skip the guard. Reason: the hot laptop in a bag is the story behind the time limit (`product.md:40-41`), but
 the limit bounds how long, not how hot. The sensor reads without admin and follows CPU load within seconds
 (`research.md:478-487`). LidGuard ships a similar rule: hibernate at 93 C with the lid closed and no external
-screen (`rivals-nightcrew-lidguard.md:175`).
+screen (`rivals-lidguard.md` 4).
 
 **Other choice.** A closed laptop in a bag runs hot until the time limit. Only Windows' own critical shutdown at
 113 C (`_CRT`, `research.md:485`) stops it earlier.
@@ -236,14 +236,13 @@ applied, new items 26 to 33 applied.
     - The `--veloapp-install` and `--veloapp-updated` hooks run "restore if a journal exists", like app start. The
       uninstall hook restores, removes start at login and any logon task, and stays small (30 s limit; a failed hook
       does not stop the uninstall).
-    - A second copy of the original values lives outside the data folder (an HKCU key, as Nightcrew does), unless
+    - A second copy of the original values lives outside the data folder (an HKCU key), unless
       part 3 item 4 picks the plan copy, which marks itself.
     - Phase 6 checks winget `UpgradeBehavior: uninstallPrevious` (not verified with Velopack).
 
     Fact: Velopack installs to `%LocalAppData%\{packId}`. Setup.exe over an install (what `winget upgrade` does) kills
     the app, runs no uninstall hook and deletes the folder (`distribution.md:43-46`, `114-116`, tested). With pack id
-    `Wakeshot` the journal with the user's original values is gone, and Do nothing then looks like the user's own value
-    (Nightcrew bug `787bee4`, `rivals-nightcrew-lidguard.md:192`).
+    `Wakeshot` the journal with the user's original values is gone, and Do nothing then looks like the user's own value.
 
     **Recheck: Keep.** It fixes our own design (the blocker), not another program's bug. The HKCU copy guards the
     user's original values if our own journal is lost; part 3 item 4 can still make it unneeded.
@@ -252,13 +251,13 @@ applied, new items 26 to 33 applied.
 
 13. **One loop thread, and nothing blocks it** (findings 13 and 3). "Runtime", line 33. Old: "One thread, one Windows
     message loop". New: "One loop thread owns all state. Power and session notifications come to the tray's hidden
-    window (`WM_POWERBROADCAST`, Nightcrew's way, `rivals-nightcrew-lidguard.md:170`). Where only a callback exists, the
+    window (`WM_POWERBROADCAST`). Where only a callback exists, the
     callback only posts a message to the loop. Calls that can block (file reads, WinRT) run off the loop thread. Phase
     1 lists which." Fact: the spikes' `DEVICE_NOTIFY_CALLBACK` runs on a system thread
     (`spikes/lid-sleep/src/events.rs:27-30`). Registration with a window handle is documented but not tested here.
 
-    **Recheck: Keep.** This is how Wakeshot can "simply not have" Nightcrew's frozen-tick bug (`7ccb678`, Haik's
-    words in decision 3): nothing that can block runs on the loop thread.
+    **Recheck: Keep.** This is how Wakeshot can "simply not have" a frozen-loop bug (Haik's words in
+    decision 3): nothing that can block runs on the loop thread.
 
     Applied 2026-11-03.
 
@@ -267,10 +266,10 @@ applied, new items 26 to 33 applied.
     are overridden. Restores at once if the tray app dies. Every 30 s it sends the tray window `WM_NULL` with
     `SendMessageTimeout` and `SMTO_ABORTIFHUNG`. After about 2 minutes with no answer it ends the tray process (Windows
     then drops its power requests) and restores." Fact: a live but hung process keeps its request, and the time limit
-    and battery floor run on the same thread (Nightcrew bug `7ccb678`, `rivals-nightcrew-lidguard.md:195`).
+    and battery floor run on the same thread.
 
-    **Recheck: Drop (default, question 2).** The hang check is an extra safeguard against a hang in our own tray, the
-    bug Nightcrew shipped. Item 13 removes its cause, which is decision 3's "we can simply not have that bug". The
+    **Recheck: Drop (default, question 2).** The hang check is an extra safeguard against a hang in our own tray.
+    Item 13 removes its cause, which is decision 3's "we can simply not have that bug". The
     guard stays as `architecture.md:45-46` has it: it runs while settings are overridden and restores at once if the
     tray app dies. Without the hang check it has no job during a hold with nothing overridden: if the tray dies then,
     Windows drops its requests by itself. Change it when: a tray hang shows up in Phase 3 tests or in a user report.
@@ -278,7 +277,7 @@ applied, new items 26 to 33 applied.
 15. **Guard: start detached; logon restore** (finding 17). Same place. New: "Start the guard detached, not as a child
     of the tray; Phase 3 tests what Task Manager's End task ends. While settings are overridden, register a logon
     restore, so a crash with start at login turned off still restores at the next sign-in; remove it at restore.
-    Phase 1 picks the mechanism (Nightcrew uses a logon task, `rivals-nightcrew-lidguard.md:157`)." Not verified:
+    Phase 1 picks the mechanism." Not verified:
     whether End task on the app group ends a child guard too.
 
     **Recheck: Keep.** It covers a user's End task and a power cut with start at login off: real events, not another
@@ -322,8 +321,7 @@ applied, new items 26 to 33 applied.
 19. **See the user's changes with a poll** (finding 12). "Runtime". New: "While overriding, read the overridden
     values every 10 s, plus the power source and active plan notifications the core needs anyway. No registry watch:
     its key path is not a documented API (`research.md:381`). Add it only if a 10 s delay proves a real problem."
-    Fact: a read of five values takes under 1 ms (`research.md:385`); Nightcrew polls the same way
-    (`rivals-nightcrew-lidguard.md:147`).
+    Fact: a read of five values takes under 1 ms (`research.md:385`).
 
     **Recheck: Keep.** It serves product rule 3 (the user's change wins).
 
@@ -494,13 +492,13 @@ which edits the same lines later.
     Phase 0)" in this same line.
 
     Applied 2026-11-03.
-29. **Rival ports not adopted** (decisions 2 and 3). `docs/research/rivals-nightcrew-lidguard.md`, "Port to
+29. **Rival ports not adopted** (decisions 2 and 3). `docs/research/rivals-lidguard.md`, "Port to
     Wakeshot".
-    - Lines 243-244, port 3. Old: "3. **Bound every "still working" signal by time.** LidGuard's 59 h leak came from
-      one signal with no expiry. Give "busy" with no transcript growth a long cap, and drop Remote Control waiting
+    - Port 2 (then lines 243-244, port 3). Old: "3. **Bound every "still working" signal by time.** LidGuard's 59 h
+      leak came from one signal with no expiry. Give "busy" with no transcript growth a long cap, and drop Remote Control waiting
       after the planned limit." Append: "Not adopted for `busy` (decision 3, 2026-11-03: signals are checked against
       facts). Kept: Remote Control waiting ends after 1 hour (`product.md:31`)."
-    - Lines 263-265, port 15. Old: "15. **Heat guard** (LidGuard): read
+    - Port 8 (then lines 263-265, port 15). Old: "15. **Heat guard** (LidGuard): read
       `Win32_PerfFormattedData_Counters_ThermalZoneInformation` (works without admin on this laptop) and hibernate
       above a fixed threshold while lid-closed. Cheap, and it addresses the "hot in a bag" report. Threshold needs
       testing; ACPI zones may lag CPU heat (U)." Append: "Not adopted (decision 2, 2026-11-03: no heat guard)."
@@ -516,13 +514,7 @@ which edits the same lines later.
     and no lid-closed time limit (decisions 2 and 3, 2026-11-03)."
 
     Applied 2026-11-03.
-31. **Nightcrew UX note** (decision 3). `docs/research.md`, line 192.
-    Old: "- "Stay awake for approvals", "Lid-closed limit" and "Battery floor" are settings that should be fixed
-    behavior."
-    New: "- "Stay awake for approvals" and "Battery floor" are settings that should be fixed behavior. "Lid-closed
-    limit" should not exist at all (decision 3, 2026-11-03)."
-
-    Applied 2026-11-03.
+31. Removed 2026-11-04: the research note it edited is gone.
 32. **Lid spike design notes** (decisions 1 and 2). `docs/tasks/p0-spike-lid-sleep.md`, "Implications for the design",
     lines 176-179. That card is still open (blocked on the morning steps), so apply this when it closes.
     - Old: "- Docked check: count active `QueryDisplayConfig` paths whose output technology is not internal. No WMI.
@@ -536,7 +528,7 @@ which edits the same lines later.
 
     Moot: neither old line is left in `p0-spike-lid-sleep.md` after its Result was rewritten (delta review, m8).
 33. **Phase log design inputs superseded** (decisions 1 to 3). `docs/phases/00-facts.md`, work log, the entry
-    "`rivals-nightcrew-lidguard.md` done" (lines 52-55 today; find by text, the card table above keeps growing).
+    "`rivals-lidguard.md` done" (lines 52-55 today; find by text, the card table above keeps growing).
     Append to each line:
     - "Every "still working" signal needs a time limit. LidGuard issue #5: one lost "work ended" event left the lid on
       Do nothing for 59 hours; laptop got hot in a bag." Append: "(superseded: decision 3, signals are checked against
@@ -620,8 +612,8 @@ delta review reads the logs first.
 
    Applied 2026-11-03.
 
-5. **Clock across standby** (finding 23, the clock bullet). The gaps in steps E to I. `architecture.md:36` and
-   `research.md:170` rely on a clock that ignores sleep, but `QueryUnbiasedInterruptTime` matched interrupt time
+5. **Clock across standby** (finding 23, the clock bullet). The gaps in steps E to I. `architecture.md:36`
+   relies on a clock that ignores sleep, but `QueryUnbiasedInterruptTime` matched interrupt time
    across Modern Standby sessions (`research.md:508-510`). If the gaps show it does not skip standby, line 36 becomes:
    "detect sleep by wall-clock jumps against a short tick, plus suspend and display notifications"
    (`p0-spike-lid-sleep.md:182-183`).

@@ -11,7 +11,7 @@ Find, with a small Rust program, how Wakeshot keeps a closed laptop safe and put
 
 - `CLAUDE.md`
 - `docs/research.md`: "Windows power facts" and what `p0-spike-power-settings` added
-- `docs/research/rivals-nightcrew-lidguard.md`: lid closed sections
+- `docs/research/rivals-lidguard.md`: lid closed sections
 - `docs/research/rivals-others.md`: traps list
 - `docs/product.md`: "Power behavior"
 
@@ -114,10 +114,9 @@ standby entry while a request is held. Any run with `RESULT: work ended early at
 - `p0-spike-power-settings` step C says "The orchestrator stops its keep-awake process (PID 16788)". The process now
   is PID 11284 (seen in `Get-Process`, started 02:26:43). Not edited, as told. (Moot since 03:52: the steps now live
   in `docs/phases/00-morning-steps.md`, which names 11284.)
-- `docs/research.md` lists Nightcrew's "Clock that ignores sleep time (`QueryUnbiasedInterruptTime`)" as worth
-  copying. Tonight interrupt time and unbiased time were equal after 9.5 hours with several Modern Standby sessions, so
-  that clock may count Modern Standby as awake time on this laptop. Morning gaps settled it: unbiased time skips the
-  suspended time; the night hold kept the PC from suspending. So the Nightcrew line stays right.
+- `QueryUnbiasedInterruptTime`: tonight interrupt time and unbiased time were equal after 9.5 hours with several
+  Modern Standby sessions, so that clock may count Modern Standby as awake time on this laptop. Morning gaps settled
+  it: unbiased time skips the suspended time; the night hold kept the PC from suspending.
 - The lid spike's second RESULT line in E says "no standby" while the System log has 506 Idle Timeout: the spike
   judges standby by gaps only. Not fixed (log reads only).
 - Step F3 (screen off) runs only if F1 "did not sleep". F1 hibernated instead (TargetState 5), so the Modern Standby

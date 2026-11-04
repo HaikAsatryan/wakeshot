@@ -125,7 +125,7 @@ Problems seen but not fixed.
      Stars not read again: the research read them today (00:45), the day this README is written. A final pass on a
      later day reads them again with the pick rule (`launch.md` part 1).
   5. Rival cells that rest on our own code reading (LidGuard's crash restore, battery floor, lock) link to our report
-     `docs/research/rivals-nightcrew-lidguard.md`, the source the research cites.
+     `docs/research/rivals-lidguard.md`, the source the research cites.
   6. Table changes from the research's draft: a "Runs on" row (the rivals are cross-platform: an honest gap); "web
      UI" without "WebView2" for Agents Don't Sleep (`launch.md`: not checked on a PC); PowerToys "Locks a closed
      laptop" is "n/a: no lid support", not "no"; PowerToys battery floor "none listed" (the page lists none).
@@ -284,7 +284,7 @@ now says so.
    on Windows (Wakeshot is Windows only; macOS is planned). PowerToys Awake is the obvious first; research the others
    (for example Caffeine by Zhorn Software, Don't Sleep, Mouse Jiggler; check what Haik may mean by "insomnia"; say
    what you checked and why each is in or out). Read each fact from the tool's own page or repo, and give one read
-   date. The small agent-aware tools (LidGuard, Agents Don't Sleep, Nightcrew) leave the table; drop them from the
+   date. The small agent-aware tools (LidGuard, Agents Don't Sleep) leave the table; drop them from the
    README unless one line elsewhere still helps the reader (say which, or none).
 2. The table compares features, rows as the reader's questions, so it shows plainly: the popular tools keep the PC
    awake while you tell them to; Wakeshot also does this, this and this. Wakeshot's rows come from `docs/product.md`
@@ -316,7 +316,7 @@ now says so.
      with the largest public count, GitHub stars or else Chocolatey downloads. Change it when a tool with a larger
      count anyone can check turns up (Microsoft Store rating counts were not checked), or Haik names another.
   2. Out: Mouse Jiggler (fewer downloads than either, and it fakes mouse moves); "Insomnia" (two tools by that name,
-     neither with a count: `launch.md`); LidGuard, Agents Don't Sleep and Nightcrew leave the README whole. No line
+     neither with a count: `launch.md`); LidGuard and Agents Don't Sleep leave the README whole. No line
      elsewhere keeps them: next to the popular three they only send readers to tiny rivals. Change it when Haik wants
      an "other agent-aware tools" line.
   3. The first row is how popular each is, in its own unit, with "new in 2026" for Wakeshot: it shows why these three,
@@ -354,7 +354,7 @@ blocked on `p5-haik-check` and `p6-media`, as before.
 
 **Done.** The comparison is now Wakeshot against PowerToys Awake (140,521 GitHub stars, for all of PowerToys),
 Caffeine (367,663 Chocolatey downloads) and Don't Sleep (38,324 plus 20,340 portable), on 13 feature rows asked as
-the reader's questions. LidGuard, Agents Don't Sleep and Nightcrew are gone from the README. Lines wrong by
+the reader's questions. LidGuard and Agents Don't Sleep are gone from the README. Lines wrong by
 `product.md` fixed (sleep, not hibernate; lost journal to Windows defaults; the 1 minute timeouts; notice titles).
 Sunrise media comments in place. README: 492 lines, 9 media spots.
 

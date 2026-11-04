@@ -49,7 +49,7 @@ Codex and Copilot live tests (Phase 4). Product code.
 - 2026-11-03: worker started. Plan: Rust watcher in `spikes/claude-watch/`, then run as many live tests as possible
   without Haik by driving test `claude` sessions in a pseudo console; leave only the rest for Haik.
 - 2026-11-03 01:27: watcher `spikes/claude-watch/` built (15 unit tests, clippy and fmt clean) and running with
-  `--kinds`. Nightcrew process not running at this time (`Get-Process nightcrew` found none).
+  `--kinds`.
 - 2026-11-03 01:28: test driver `spikes/claude-watch/ccdrive.py` (pywinpty + pyte, venv in the scratch folder). It
   strips `CLAUDE*`, `CLAUDECODE` and `AI_AGENT` from the env: this shell has `CLAUDE_CODE_CHILD_SESSION` set, which
   would stop the test session from writing a status file. Test sessions use `--model haiku` to save tokens; cwd is
@@ -115,8 +115,7 @@ Codex and Copilot live tests (Phase 4). Product code.
   result (01:51:46) until it ended (01:52:16) and its notification turn finished (01:52:20).
 - 2026-11-03 01:59: loop fallback (t2, after the 01:39:00 wakeup fire with no reschedule): a hidden
   `scheduled_task_fire` (`taskKind: "loop"`, `cron: "0 2 * * *"`, new `taskId`) at 01:59:24.6, with no transcript line
-  before it. All test sessions closed with `/exit` or stdin close; watcher and drivers stopped by PID. Nightcrew was
-  not running at any check.
+  before it. All test sessions closed with `/exit` or stdin close; watcher and drivers stopped by PID.
 - 2026-11-03 02:01: results table, proposed rule changes and open steps written to
   `docs/research/claude-code-signals.md`; summary in `docs/research.md`. Final fmt, clippy, tests pass.
 

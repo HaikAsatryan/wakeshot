@@ -4,7 +4,7 @@ Goal: replace every guess the design depends on with a tested fact, before writi
 
 ## Done
 
-- [x] Research reports in `docs/research/`: `rivals-nightcrew-lidguard.md`, `rivals-others.md`,
+- [x] Research reports in `docs/research/`: `rivals-lidguard.md`, `rivals-others.md`,
   `claude-code-signals.md`, `other-agent-signals.md`.
 
 ## Task cards (`docs/tasks/`)
@@ -54,9 +54,9 @@ tests in parallel; (3) lid spike; (4) architecture review.
   - App rules must match by exe name, not full path.
   - Rejected by earlier decision: "hold 2h" menu item (product.md: no "Hold awake" mode; the CLI covers it).
     (superseded: Keep awake now has 2 hours, product.md UX)
-- 2026-11-03: `rivals-nightcrew-lidguard.md` done. Both repos MIT: porting with attribution is allowed. Design inputs:
+- 2026-11-03: `rivals-lidguard.md` done. LidGuard is MIT: porting with attribution is allowed. Design inputs:
   - Claude status stays `busy` after a turn ends while background subagents run (seen on this laptop). Background
-    shell tasks and `/loop` timers still untested. Neither rival handles timers or Remote Control.
+    shell tasks and `/loop` timers still untested. LidGuard does not handle timers or Remote Control.
   - Every "still working" signal needs a time limit. LidGuard issue #5: one lost "work ended" event left the lid on Do
     nothing for 59 hours; laptop got hot in a bag. (superseded: decision 3, signals are checked against facts)
   - Docked detection: also check external displays (LidGuard WMI rule), not only the user's lid action.
@@ -64,9 +64,6 @@ tests in parallel; (3) lid spike; (4) architecture review.
   - Heat guard candidate: thermal zone reads without admin here (about 50 C). Verify in spikes.
     (not adopted: decision 2)
   - On Modern Standby, Sleep can fail with "not supported": use screen off or hibernate (feeds spike C5).
-  - Nightcrew re-reads the plan every 10 s while holding: user change becomes the new baseline, plan switch moves the
-    override (its PR #14 fixed sleep mid-work). Compare with an event-driven watch in spike C3.
-  - Time limit on "waiting for approval" (we have 1 h; Nightcrew has none).
   - Do not copy: LidGuard denies the agent's permission prompts when the lid is closed.
 - 2026-11-03: `claude-code-signals.md` done. Key facts (details and 13 live tests in the report):
   - `status` is `busy`, `idle`, `waiting` (with `waitingFor`) or `shell` (background shell or shell Monitor running
@@ -96,17 +93,9 @@ tests in parallel; (3) lid spike; (4) architecture review.
   added to `plan.md`.
 - 2026-11-03: Orchestrator: `/orchestrate` skill written. Build Tools 2026 18.11.2 installed by winget with the
   VCTools workload and the VC.Tools.ARM64 component (MSVC 14.51.36231, Windows SDK 10.0.26100.0). Round 1 started.
-- 2026-11-03: Power values while Nightcrew 0.3.1 holds (Balanced plan, read with `powercfg /q` and `/qh`): lid action
-  0 (Do nothing) on AC and DC, sleep after 0 (never) on AC and 32407 s on DC. Haik's own values are in `CLAUDE.md`.
-  Check them after the Nightcrew uninstall.
-- 2026-11-03: Card `p0-toolchain` done (rustup 1.29.2, Rust 1.99.1, x64 and ARM64 builds pass). `nightcrew.exe
-  --uninstall` with Nightcrew still running: waited about 3 minutes, exit code 1, changed nothing (Run key, "Nightcrew
-  Watchdog" task and the power values above all stayed). Cause not known. Asked Haik to quit Nightcrew from its tray
-  first. Round 2 changed to tray spike and Claude live tests: the live tests card does not allow a parallel card that
+- 2026-11-03: Card `p0-toolchain` done (rustup 1.29.2, Rust 1.99.1, x64 and ARM64 builds pass). Round 2
+  changed to tray spike and Claude live tests: the live tests card does not allow a parallel card that
   changes power settings, so the power settings spike runs after it.
-- 2026-11-03: Haik quit Nightcrew from the tray. `--uninstall` then took under 90 s, exit 0. Checked after: lid action
-  1 (Sleep) on AC and DC, sleep after 10800 s AC and 600 s DC (Haik's values), Run key, "Nightcrew Watchdog" task and
-  `HKCU\Software\Nightcrew` gone, exe folder left in place. Laptop on battery until Haik plugs in AC.
 - 2026-11-03: Card `p0-distribution-facts` done (`docs/research/distribution.md`). Velopack 1.2.161 tested here with
   Rust: pack, per-user install, update, uninstall and all hooks work. Design risk for the review and Phase 1:
   Velopack kills the app without warning on update, uninstall and reinstall, and Setup.exe over an existing install
@@ -184,8 +173,7 @@ tests in parallel; (3) lid spike; (4) architecture review.
   for other programs' bugs; drop the fixed lid-closed time limit; signals are checked against facts (process alive,
   timer due time), not capped by time (details in `docs/reviews/p0-close-proposals.md`). Cleanup: three `cctest*` entries removed from
   `~/.claude.json` (backup in the orchestrator scratchpad), five test transcript folders deleted from
-  `~/.claude/projects`. Deleting `%LOCALAPPDATA%\Programs\Nightcrew` was blocked by the auto mode check; left to Haik.
-  `%LOCALAPPDATA%\Nightcrew` (log and settings) also remains.
+  `~/.claude/projects`.
 - 2026-11-03 09:30: Haik answered the decisions but has not yet said yes to part 2 of the close list. Decision 3 asks
   to recheck every part 2 item first. Card `p0-close-recheck` started (docs only, may run during the morning steps).
   Found: item 25 (live-test fixtures) said to copy shapes before the `cctest*` transcript folders were deleted; they
@@ -216,8 +204,6 @@ tests in parallel; (3) lid spike; (4) architecture review.
   Its two questions taken at the defaults (Haik delegated): Haik restarts Explorer himself in T10 (an agent killing
   Explorer would close his shell); Haik pastes the run commands himself. A reviewer checks the cut list for safety
   before step 0.
-- 2026-11-03 (morning): Checked: `%LOCALAPPDATA%\Programs\Nightcrew` and `%LOCALAPPDATA%\Nightcrew` are both gone (Haik
-  deleted them). No Nightcrew files left.
 - 2026-11-03 (morning): Card `p0-close-apply` done. Part 2 applied to `product.md`, `architecture.md`, `research.md`,
   `claude-code-signals.md` and `CLAUDE.md`, plus item 34 (battery floor waits for no input). Dropped: 3, 7, 14.
   Waiting: 32 (when the lid card closes) and part 3 (morning results). Items 24 and 33 applied here by the

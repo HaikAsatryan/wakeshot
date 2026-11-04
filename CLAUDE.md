@@ -51,6 +51,4 @@ Start here: `docs/plan.md` (how we work, phases, status, next step). Then:
   and DC, sleep after 5 h on AC and on battery (Haik's own change 2026-11-04 00:31; read 01:39: AC and DC 18000).
   A USB-C dock (DELL) with an external screen is always plugged in; its cable can drop AC for a few
   seconds.
-- Nightcrew 0.3.1 was uninstalled 2026-11-03 (values above restored and checked). Nothing of it is left: no exe or
-  data folder, no `HKCU\Software\Nightcrew` key, no Run entry, no scheduled task. If it is ever installed again, never
-  run it during tests: it changes the same power settings.
+- Never run another keep-awake app during tests: it changes the same power settings.

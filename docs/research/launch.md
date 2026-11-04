@@ -23,7 +23,6 @@ claude, keep awake codex, lid closed, ai agents awake windows, lid windows agent
 | `airtaxi/LidGuard` | agent aware | 13 | 2026-04-29 | 2026-09-28 | NuGet `lidguard` 2.1.7, 2026-09-28 | Windows, Linux, macOS |
 | `itsmbaqer/agents-dont-sleep` (Agents Don't Sleep) | agent aware | 10 | 2026-09-23 | 2026-09-28 | v0.4.0, 2026-09-29 | macOS, Windows, Linux; new since the 2026-11-03 reports |
 | `Luchioxy/LidKeeper` | agent aware | 10 | 2026-06-01 | 2026-06-01 | none (a PowerShell script piped from the web) | one day of commits, process-name polling; left out |
-| `leikauskas/nightcrew` | agent aware | 9 | 2026-10-13 | 2026-10-23 | v0.3.1, 2026-10-18 | Windows only |
 | `stanley-projects/Insomnia` | agent aware | 7 | 2026-03-24 | 2026-09-07 | v1.4.3, 2026-05-28 | Electron |
 | `yansslo/nosleep`, `peterintech/nosleepp`, `KujalaLucien/vibe-coding-always-on` | agent aware | 4, 3, 3 | 2026 | 2026 | | CLIs or small trays, left out |
 
@@ -38,8 +37,7 @@ All verified (gh, 2026-11-04). Stars move daily; `p6-readme` reads them again on
    Wakeshot's own pitch ("awake only while your agents are working", lid closed, settings put back). LidKeeper has the
    same 10 stars but no release and no tray; it is a script.
 
-Reserve: **Nightcrew** (9 stars). It is the closest in design (Windows only, no hooks, puts settings back) and the one
-Haik used, but it trails by one star. Rule for `p6-readme`: PowerToys Awake plus the two most-starred agent-aware tools
+Rule for `p6-readme`: PowerToys Awake plus the two most-starred agent-aware tools
 that run on Windows and ship a release, read on the day the README is written; on a tie, the one with the newer
 release. Decided by the worker, for Haik's review.
 
@@ -73,7 +71,7 @@ Each line is verified at the link on 2026-11-04 unless marked.
   `%ProgramFiles%` (install page). Also in the Store and winget (`Microsoft.PowerToys`).
 - License MIT, free (`gh api`).
 
-**LidGuard** (`airtaxi/LidGuard`, HEAD `3ff7893`, 2026-09-28, the same commit `rivals-nightcrew-lidguard.md` read)
+**LidGuard** (`airtaxi/LidGuard`, HEAD `3ff7893`, 2026-09-28, the same commit `rivals-lidguard.md` read)
 
 - Stack: C#, ".NET 10 NativeAOT global tool distribution for Windows, systemd/logind Linux, and macOS" (README,
   https://github.com/airtaxi/LidGuard). Installed with `dotnet tool install --global lidguard` (README), and .NET
@@ -87,7 +85,7 @@ Each line is verified at the link on 2026-11-04 unless marked.
 - Agents: "Codex, Claude Code, GitHub Copilot CLI, and OpenCode" through hooks and plugins it installs in each agent's
   config, plus an MCP route for others. "Currently officially tested with Codex on Windows" (README).
 - Lid closed: yes, optional; it sets the lid action to Do nothing on AC and DC while a session holds and puts it back
-  (README "Lid-close handling"; code in `rivals-nightcrew-lidguard.md` 3.1). It does not touch the sleep timer (same
+  (README "Lid-close handling"; code in `rivals-lidguard.md` 3.1). It does not touch the sleep timer (same
   report).
 - Crash safety: restores only at the next `lidguard` command or hook (same report, 3.2 "Killed process").
 - Battery safety: no battery floor (same report, 4). Optional "Emergency Hibernation" on high temperature (README).
@@ -121,15 +119,6 @@ Each line is verified at the link on 2026-11-04 unless marked.
   Releases). Not verified that no other update path exists.
 - Network: "no telemetry. The only requests are the usage-limit reads, every 5 minutes, to Anthropic's and OpenAI's
   usage endpoints." (README). License MIT, free; unsigned ("The builds aren't code-signed yet").
-
-**Nightcrew** (reserve; `leikauskas/nightcrew`, HEAD `9b4fd7d`, 2026-10-23)
-
-- C#, .NET Framework 4.8, WPF (`docs/research.md`, "Nightcrew review"). v0.3.1 `nightcrew.exe` 1,758,720 bytes (1.8 MB),
-  portable, no installer. README: "It is one 1.7 MB exe in the tray. It uses less than 1% of one CPU core." (a
-  published claim, method not given).
-- Claude Code and Codex, no hooks; lid closed yes; writes lid action and sleep timers and puts them back; watchdog task;
-  battery floor 20%; locks at lid close (`rivals-nightcrew-lidguard.md` sections 1 to 4). Update by hand: quit, replace
-  the exe, start (README "Update"). MIT, free.
 
 ### Wakeshot's row
 
@@ -169,8 +158,7 @@ number. ARM64: "not measured" unless a device is at hand.
 | End delay | `statusUpdatedAt` of the write that sets `idle`, against the log line for the hold end. Same 5 runs. |
 
 The rivals publish almost none of these. The README may set Wakeshot's numbers next to the PowerToys PR's 14.3 MB
-private memory only with the note that it was a different harness, and next to Nightcrew's "less than 1% of one CPU
-core" only as their claim.
+private memory only with the note that it was a different harness.
 
 ### Draft table for `p6-readme`
 
@@ -230,8 +218,8 @@ What was checked:
 
 Pick: PowerToys Awake (stars); Caffeine by Zhorn Software (the most Chocolatey downloads of any keep-awake tool
 found); Don't Sleep by SoftwareOK (the next, both packages together). Out: Mouse Jiggler (fewer downloads than
-either, and it fakes mouse moves, the other class named in "Candidates"); LidGuard, Agents Don't Sleep and Nightcrew,
-by Haik's rule. Decided by the worker, for Haik's review.
+either, and it fakes mouse moves, the other class named in "Candidates"); LidGuard and Agents Don't Sleep, by
+Haik's rule. Decided by the worker, for Haik's review.
 
 Facts per tool, each verified in the raw page text (`curl`) on 2026-11-04 unless marked:
 
@@ -548,11 +536,6 @@ headers, not in a browser. The worker read again the Remotion license, the attac
 
 ### What the rivals and well-liked tools show
 
-- **Nightcrew**: a full-width banner (alt text is the tagline), 2 badges, two short paragraphs with numbers ("one 1.7
-  MB exe", "less than 1% of one CPU core"), then a bare `https://github.com/user-attachments/assets/...` line that
-  plays as a 48 s video. Then Install, a wide "night in four steps" picture, a panel screenshot floated right, one
-  `<details>`, Update, Uninstall. Its pictures are built from HTML sources in `docs/assets/src/`, so they can be
-  rebuilt. Verified (README).
 - **LidGuard**: tagline as H1, 4 badges, "Demo" with a 1.76 MB GIF; the rest is a long wall of text with no folding.
 - **Agents Don't Sleep**: banner, 4 badges, a story in three sentences, a "Without it / With it" table, a tour with
   the four tray states in one picture and the menu, then settings in `<details open>` blocks, each with a screenshot

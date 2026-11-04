@@ -1,6 +1,6 @@
 # Other keep-awake and lid tools
 
-Collected 2026-11-03. Nightcrew and LidGuard are covered in a separate report. Marks: **verified** means read in
+Collected 2026-11-03. LidGuard is covered in a separate report. Marks: **verified** means read in
 the source (code, docs, issue text) at the URL given; **unverified** means a secondary source, a summary, or not read
 in full.
 
