@@ -251,7 +251,7 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
 | 2 | Lid closed, no request, on battery, past the timeout | `p3-haik-checks` (optional) |
 | 3 | Re-take after Start > Sleep, on battery | `p3-haik-checks` |
 | 4 | End task on the tray, then its group: the guard restores | `p3-haik-checks` (Task Manager); also `p6-int-real-e2e` (the real tray killed by pid during a hold) |
-| 5 | Tray and guard killed, sign out and in: RunOnce restores | `p3-haik-checks` |
+| 5 | Tray and guard killed, sign out and in: RunOnce restores | `p3-haik-checks` B2 (not shown there); shown by the `p2-6-runonce-keep` B2 redo (2026-11-04) |
 | 6 | Sign out during a hold: restored before the session ends | `p3-haik-checks`; also `p6-int-real-e2e` (end-of-session messages sent to the real tray) |
 | 7 | Work ends with the lid closed: hibernate after 5 min; not while typing on an external screen | `p6-int-haik-checks` block 4; the external screen part in block 6 (dock) |
 | 8 | Battery floor with a dock AC drop; dock lid cases, unplugged | `p6-int-haik-checks` block 5 (floor, no dock) and block 6 (dock; Haik's is always plugged in) |

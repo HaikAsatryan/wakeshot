@@ -253,7 +253,10 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   (orchestrator decision, for Haik's review); 570 tests pass. Review minor 3 (README gap list) waits: `README.md` has
   uncommitted edits not made by this session or its agents (asked Haik whose). New card `p6-real-install-guard`
   (later, before Haik installs the first release). Haik's call: notices stay `Shell_NotifyIcon` banners.
-- Next (orchestrator): Haik does the B2 redo (card `p2-6-runonce-keep` "Part B", about 6 minutes; its sign-out ends
-  this session). When he says "B2 done" with what steps 3 and 5 showed, a new worker runs the card's "After Haik's
-  steps". Then the README gap line (review minor 3), `p6-int-haik-checks` (about 45 min, with its 2026-11-04
-  changes), `p6-media` Part B, the README and Pages finish.
+- 2026-11-04 22:50: `p2-6-runonce-keep` done: Haik's B2 redo passed (restore at the next sign-in on the fixed code;
+  his values same). README: Haik's trim (dd72a4d), the gap bullet, the flat contents list under Details. Haik:
+  `p6-media` Part B waits until his design review of the final software.
+- Next (orchestrator): `p6-int-haik-checks` (about 42 min with Haik at the laptop, nothing else runs), then Haik's
+  design review of the final software, then `p6-media` Part B, the README and Pages finish. Haik's review of the
+  RunOnce fix decisions (`p2-6-runonce-keep` Decisions, finding 6) is open. `p6-real-install-guard` before he
+  installs the first release.
