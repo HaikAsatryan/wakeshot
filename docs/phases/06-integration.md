@@ -437,3 +437,12 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   never steps back) takes the lean fix, an AC return restarts the grace only once AC has lasted 30 s (replaces worker
   decision 4); minor 2 takes the code fix, the closed-lid unplug lock keeps its retry and notice during a floor step
   back. All four go to the same worker; no re-check (no blocker or major).
+- 2026-11-05 ~04:30 (orchestrator): `p6-notice-app-icon` Part A done (17c8eb4): the install and updated hooks write
+  `HKCU\Software\Classes\AppUserModelId\velopack.HaikAsatryan.Wakeshot` (`DisplayName`, `IconUri` to a 48 px PNG
+  shipped beside the tray), uninstall removes it; Velopack gives that id to every start of an installed exe, so no
+  tray code; `e2e.ps1` 102 of 102; 8 worker decisions for Haik's review in the card; Part B waits for Haik at the
+  screen. `p2-6-floor-grace` fix round done (c0cea9a): 704 core tests, 37 props at 10000 cases three runs, 10 of 10
+  hand mutants; worker decision 7 (a lock after the last unplug of a flapping charger stays and fires after 30 s on
+  battery) for Haik's review. Left as a known minor, for Haik's call (default: next core round): two sounds overlap
+  when a lid close in the unknown journal window meets an unplug under the floor (`p2-6-floor-grace` Found outside
+  scope 4). Running: the whole-workspace checks, docs pass round 7.
