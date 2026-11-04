@@ -176,14 +176,14 @@ While something holds:
 
 The facts and our tests behind the table: [Windows power facts](docs/research.md#windows-power-facts). Wakeshot writes
 them also when plugged in, so unplugging, or a USB-C dock that drops power for a few seconds, never meets the battery
-rule first. Sleep while plugged in is never touched: there a power request is enough. While a hold runs, Windows
-Settings shows these values; that is Wakeshot, and they go back when the hold ends.
+rule first. During a hold, sleep while plugged in is never touched: there a power request is enough. While a hold
+runs, Windows Settings shows these values; that is Wakeshot, and they go back when the hold ends.
 
 **After work ends with the lid closed**, Wakeshot puts the laptop to sleep, where Windows would have put it. Apps
 cannot start sleep on a Modern Standby laptop (most laptops of the last years), so Wakeshot sets the screen and sleep
 timeouts of the plan in use to 1 minute where yours are longer, and Windows' own idle sleep does the rest. They go
-back when you open the lid, unlock after a wake, at any input, when a new hold starts and at every point below.
-<!-- sleep-route: check this paragraph against p2-6-sleep-route's Result and architecture.md once that card is done. -->
+back when you open the lid, when you unlock, at any input, when a new hold starts and at every point below; not when
+the laptop only wakes with the lid closed, so it sleeps again.
 
 How your values come back:
 
@@ -226,13 +226,13 @@ Wakeshot never lowers your security.
 - **Unplug a closed laptop that runs only because of Wakeshot.** It locks once the laptop has been on battery for
   30 seconds, so a dock's short power drop does not lock you while you work on the external screen.
 - **If the lock fails.** Wakeshot tries once more. If that fails too, it stops holding, puts your settings back and
-  puts the laptop to sleep after 5 minutes with no input, so a closed laptop never runs unlocked in a bag.
+  puts the laptop to sleep after 5 minutes with no input, so a closed laptop never runs unlocked in a bag. The hold
+  comes back once the lid opens or the PC locks.
 - **Work ends with the lid closed.** Your settings come back at once. After 5 minutes with no input, a short "going to
   sleep" sound plays and Wakeshot puts the laptop to sleep ([how](#what-it-changes-on-your-pc)). Open the lid during
   the sound to stop it. Typing on an external screen counts as input, so a docked laptop is not put to sleep under
   your hands. If it has not slept 5 minutes later, Wakeshot hibernates it. If hibernate is off or fails, a notice says
   so, and until the lid opens Wakeshot locks it whenever it is idle for 5 minutes.
-  <!-- sleep-route: check this bullet, the lock-fail and battery floor bullets, "A night with Wakeshot" steps 3 and 5 and the notice table against p2-6-sleep-route's Result once that card is done. -->
 - **Open the lid and sign in.** A notice says how long the PC ran with the lid closed and what held it, such as "The
   PC kept running for 2 h 15 min with the lid closed. What held it: Claude Code."
 - **Battery floor.** Wakeshot uses Windows' own energy saver level (20% when energy saver is set to Never or Always);
@@ -302,7 +302,7 @@ notice:
 | Wakeshot cannot keep the PC awake | Windows did not accept the power request |
 | Could not put back your power settings | A restore failed; Wakeshot keeps trying, and the log has your old values |
 | Power settings set to Windows defaults | Wakeshot could not read the file with your saved values, so its own values went to Windows defaults; the log has your old values |
-| Check your lid and sleep settings | The same, but setting Windows defaults failed too: set them by hand |
+| Check your power settings | The same, but setting Windows defaults failed too: set them by hand |
 | Wakeshot could not lock the PC | Windows did not lock; with the lid closed Wakeshot tries once more |
 | The PC did not go to sleep | With the lid closed, the PC did not sleep and could not hibernate |
 
@@ -384,8 +384,9 @@ For your own lengths and labels, write a hold file: [docs/hold-files.md](docs/ho
 
 **After a crash, your settings can stay changed for a while.** In these cases nothing puts them back right away: the
 lid action stays Do nothing and battery sleep Never, so closing the lid does not sleep the laptop, and a closed laptop
-at the sign-in screen does not sleep either. A restore before sign-in would most likely need a task that runs at
-boot, and that needs admin rights, which Wakeshot never asks for.
+at the sign-in screen does not sleep either. After work that ended with the lid closed, the screen and sleep
+timeouts can stay at 1 minute instead. A restore before sign-in would most likely need a task that runs at boot, and
+that needs admin rights, which Wakeshot never asks for.
 
 - Until your next sign-in:
   - Windows crashes, or the power is cut, during a hold;
@@ -400,11 +401,13 @@ boot, and that needs admin rights, which Wakeshot never asks for.
 
 **A lost record of your values goes to Windows defaults.** If Wakeshot cannot read the file with your saved values
 for 2 minutes of run time (a damaged file: at once), it sets the file aside. On the plan in use, each setting that
-holds exactly the value Wakeshot writes (lid Do nothing, sleep Never) goes to Windows' default for that plan; any
-other value is yours and stays. A notice says what was reset, and the log has the old values. So if you had set Do
-nothing or Never yourself, set it again (Windows' default battery sleep was 3 minutes on our test laptop). During
-those 2 minutes a lid close gets no lock, and with nothing holding, a closed laptop that a crashed Wakeshot left at
-Do nothing may run unlocked for up to about 7 minutes before it sleeps.
+holds exactly the value Wakeshot writes (lid Do nothing, battery sleep Never, and the 1-minute screen and sleep
+timeouts after a closed-lid work end) goes to Windows' default for that plan; any other value is yours and stays. A
+notice says what was reset, and the log has the old values. So if you had set Do nothing, Never or 1 minute
+yourself, set it again (Windows' default battery sleep was 3 minutes on our test laptop). An uninstall that finds a
+damaged file does the same reset, with no notice. During those 2 minutes a lid close gets no lock, and with nothing
+holding, a closed laptop that a crashed Wakeshot left at Do nothing may run unlocked for up to about 7 minutes before
+it sleeps.
 
 **A failed restore brings Wakeshot back.** When the guard or the restore at sign-in cannot put your settings back for
 2 minutes, it starts Wakeshot, even with start at login off, so you see the warning and the retries go on. That
@@ -460,7 +463,9 @@ Uninstall Wakeshot like any app, from Settings > Apps. The uninstall:
 
 1. removes start at login (with its switch in Settings > Apps > Startup), the sign-in restore entry and the `Path`
    entry first;
-2. puts your power settings back if a hold was running, trying for up to 25 seconds;
+2. puts your power settings back if Wakeshot had changed them, trying for up to 25 seconds; if the file with your
+   saved values is damaged, it sets each setting that holds exactly Wakeshot's value to Windows' default instead (see
+   [Limits](#limits));
 3. deletes `%LocalAppData%\Wakeshot` whole, after a good restore or when there was nothing to restore;
 4. deletes the app folder, the Start menu shortcut and the app's entry in the Apps list.
 
@@ -469,6 +474,7 @@ What stays:
 - After a restore that failed: `journal.json` and `logs\` in `%LocalAppData%\Wakeshot`, so a reinstall can still put
   your values back; the log holds them if you prefer to set them by hand. Until then the lid action stays Do nothing
   and battery sleep Never (see [Limits](#limits)).
+- After a damaged file was reset: `logs\` in `%LocalAppData%\Wakeshot`, since the log holds your old values.
 - The installer's own logs: `%LocalAppData%\velopack\velopack.log` and
   `%LocalAppData%\velopack\velopack_HaikAsatryan.Wakeshot.log`. Delete them by hand if you like.
 - Windows' own record of the tray icons it has seen: `HKCU\Control Panel\NotifyIconSettings\<id>` and the

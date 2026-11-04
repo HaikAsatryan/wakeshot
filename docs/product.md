@@ -125,7 +125,8 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   (Haik, 2026-11-04): when Wakeshot is done, the laptop ends up where Windows would have put it, and with the lid
   closed that is sleep. It must act itself: putting the lid action back does not sleep a laptop whose lid is already
   closed (tested), and after a release the laptop runs until the user's own screen timeout turns the screen off and
-  the sleep timeout has passed (tested with the lid closed on battery, `p3-idle-sleep-check`). On Modern Standby, Windows gives apps no call that starts sleep (Microsoft Q&A; on this
+  the sleep timeout has passed (tested with the lid closed on battery, `p3-idle-sleep-check`). On Modern Standby,
+  Windows gives apps no call that starts sleep (Microsoft Q&A; on this
   laptop `SetSuspendState(FALSE)` hibernates, tested), so Wakeshot uses Windows' own idle sleep: after the sound it
   sets the screen and sleep timeouts of the plan in use, on AC and DC, to 1 minute where the user's own is longer,
   marked in the journal as Wakeshot's. The screen one is needed: on this laptop the sleep came when the screen
@@ -161,7 +162,8 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
    Wakeshot writes that holds exactly the value Wakeshot writes (lid Do nothing, battery sleep Never, and the
    1-minute screen and sleep timeouts of the work end rule; the timeouts added by an orchestrator decision of
    2026-11-04, for Haik's review) goes to Windows' default for that plan; any other value is the user's and stays.
-   The uninstall hook runs the same reset on a damaged journal, since no tray starts after it (log only, no notice). For battery sleep that default is 180 seconds on the test
+   The uninstall hook runs the same reset on a damaged journal, since no tray starts after it (log only, no notice). For
+   battery sleep that default is 180 seconds on the test
    laptop (`research.md`, "Windows defaults of the three keys"), so a user whose own value was Never gets 3 minutes.
    The log gets each old and new value, the bad file is set aside, and one notice says what was reset and that a user
    who had their own values should set them again. During the 2 minutes Wakeshot neither locks at a lid close nor
@@ -206,7 +208,8 @@ The README says so.
   Windows' own; the brand colours (night violet, sun gold) are only in the app icon, the page and the media. It must
   look good, be crisp at every display scale, and be correct on light and dark taskbars and in high contrast. The menu
   follows the Windows mode (`SystemUsesLightTheme`, the taskbar's), like the icon: it opens from the taskbar, next to
-  Windows' own tray flyouts, so an app-mode menu would clash with a dark taskbar. The menu looks like Windows 11's own new menus (owner-drawn items, round corners; Haik liked the
+  Windows' own tray flyouts, so an app-mode menu would clash with a dark taskbar. The menu looks like Windows 11's own
+  new menus (owner-drawn items, round corners; Haik liked the
   `p1-tray-menu-look` pictures, 2026-11-03), and each item has a small icon, as in those menus (Haik's ask).
 - The tooltip and the menu name what holds the PC awake.
 - First run: a notification that offers to pin the icon (a new tray icon lands in the `^` overflow: seen in the tray

@@ -3261,10 +3261,19 @@ with Part B.
 Part B screen run, 2026-11-04 11:51 to 12:04 (`ux_notices`, debug build of the f47391d export, at Medium; the DELL
 at 150%). Pictures `docs/research/img/ux/notice-*.png`, on a plain grey window.
 
-- **Text fit.** Windows shows at most five body lines and cuts the rest mid-word. Cut in the `--all` run:
-  `restored-by-user` ("...but only while the lid is"), `lock-failed` ("...and hibernat"), `update-wakeshot` ("...awake
-  f"), `journal-lost` ("Click to see the c"). The other ten fit. The header shows the exe name (`ux_notices.exe`)
-  and the small tray glyph.
+- **Text fit.** Windows shows the title and at most four body lines; the fourth runs on past its wrap point and is
+  cut mid-word at the edge. Cut in the `--all` run: `restored-by-user` ("...but only while the lid is"), `lock-failed`
+  ("...and hibernat"), `update-wakeshot` ("...awake f"), `journal-lost` ("Click to see the c"). The other ten fit. The
+  header shows the exe name (`ux_notices.exe`) and the small tray glyph. Corrected 2026-11-04 (`p2-6-docs-pass` round
+  6): this line first said "at most five body lines"; each cut picture shows four under a one-line title.
+- **A wrap model of the body** (`p2-6-sleep-route-fixes`, then `p2-6-docs-pass` round 6, 2026-11-04): a greedy word
+  wrap with GDI `TextRenderer` widths of Segoe UI. Calibrated on 41 body lines read off 13 of the pictures: at 18 px
+  the widest line shown whole is 343 px and the narrowest that wrapped 344 px (at 21 px: 399 and 404), so any width
+  in between gives back every wrap in the pictures. Each body the two cards worded takes four lines in it, also with a
+  6% narrower line; about 150 UTF-16 units of these words fit, which `text.rs` uses as its stand-in. Units are not
+  width: a 60-character hold reason in capitals in the closed-lid report takes a fifth line at the narrower width. The
+  banner's real font and size were not read; only the pictures were matched. **Verified** against the pictures only;
+  the new words were not shown on the screen yet (`p5-haik-check`).
 - **Warnings read as warnings.** Every `warning true` notice shows Windows' yellow warning triangle; the rest show
   the chosen large icon. Silent ones (`step-back`, `idle-locked`, `updated`) were sent with `NIIF_NOSOUND` (the
   demo's flag line); no sound check was run.
@@ -4097,6 +4106,15 @@ test on a throwaway plan copy that was never active.
 - **What it means for a user.** A lost journal's reset of battery sleep gives 3 minutes on this laptop, not the 15 an
   older table names; a user whose own value was Never (rule 7's accepted cost) gets 3 minutes and the notice. Whether
   Settings' "Restore default settings for this plan" gives the same values: not tested (it would write Haik's plan).
+- **Added 2026-11-04: the short keys.** The lost-journal reset now also puts back the sleep route's 1-minute keys
+  (`p2-6-sleep-route-fixes`). Balanced's defaults by the API: sleep AC 300, screen off AC 300 and on battery 180 (with
+  sleep DC 180 and lid 1 and 1, as above). The registry table again holds older values: sleep AC 1800, screen off AC
+  600 and on battery 300. The API's sleep values match Microsoft's page above (plugged in 5 minutes, battery 3).
+  **Verified** twice, read only: by `p2-6-sleep-route-fixes` about 13:15 (test `real_defaults_of_the_active_plan_read`,
+  now all six keys), and by `p2-6-docs-pass` round 6 about 14:03 (`PowerReadACDefaultIndex` and
+  `PowerReadDCDefaultIndex` with the Balanced personality from a PowerShell script, and the `DefaultPowerSchemeValues`
+  registry values; `powercfg /qh` and `/list` the same before and after). So a reset screen timeout gives 5 minutes
+  plugged in and 3 on battery on this laptop. Not checked: whether Microsoft's page names the screen defaults.
 
 ## The screen timeout setting
 

@@ -631,9 +631,9 @@ Open items: Found outside scope 1 (README worker), 2 and 3 (`p2-6-sleep-route` o
 
 ## Round 6 (2026-11-04)
 
-Status: ready. Written by the orchestrator (session `wakeshot-12`). Runs after `p2-6-sleep-route-fixes` (done, local
-commit 9aa92f9). Owns: `README.md`, `site/index.html` (only its sleep wording spot), `crates/wakeshot-core/src/text.rs`
-(two notices), `docs/research.md` (the two lines below), and this section.
+Status: done. Written by the orchestrator (session `wakeshot-12`). Runs after `p2-6-sleep-route-fixes`
+(done, local commit 9aa92f9). Owns: `README.md`, `site/index.html` (only its sleep wording spot),
+`crates/wakeshot-core/src/text.rs` (two notices), `docs/research.md` (the two lines below), and this section.
 
 Items (from the orchestrator; sources: `p2-6-sleep-route-fixes` Found outside scope 1, 3, 4, 7 and
 `p2-6-sleep-route` Found outside scope):
@@ -658,3 +658,84 @@ Items (from the orchestrator; sources: `p2-6-sleep-route-fixes` Found outside sc
 ### Log
 
 - 2026-11-04: round 6 written by the orchestrator (session `wakeshot-12`).
+- 2026-11-04 13:50: round 6 started, Status in progress.
+- 2026-11-04 about 13:55: item 3 measured. The fixes card's scripts were gone, so I rebuilt its model in a scratch
+  PowerShell script: GDI `TextRenderer` widths of Segoe UI at 18 px and 21 px, greedy wrap, width taken from the 13
+  `p5-notices` pictures (41 body lines read off them): widest line shown whole 343 px, narrowest line that wrapped
+  344 px at 18 px (399 and 404 at 21 px), so every picture's wraps come back. It agrees with the fixes card: its five
+  bodies take four lines, `HibernateFailed` and the many-holds report five. `text.rs` changed (Result); new test.
+- 2026-11-04 about 13:59: core tests: one run had one property failure outside my files (Found outside scope 1), the
+  rerun and five runs of that test at 4096 cases passed; clippy on the core clean.
+- 2026-11-04 about 14:02: items 1 and 2 done after reading `core/lid.rs` (`end_short` callers, `take_unlocked`,
+  `end_lock_step_back`), `settings.rs` (`HOLD`, `SHORT`), `hooks.rs` (`on_uninstall`, `reset_lost`, the uninstall test
+  that leaves only `logs`), `power/hibernate.rs` (`run_sleep_check`: the lid once more after the sound).
+- 2026-11-04 14:05: item 4 done. The short keys' defaults read again myself, read only (research entry says how);
+  same values as the fixes card. `powercfg /qh` and `/list` the same before and after.
+- 2026-11-04 14:06: checks run (Result); build folder and scratch scripts deleted, checked gone. Status done.
+
+### Found outside scope
+
+1. **A core property failed once** (`crates/wakeshot-core/src/scenarios/props.rs`, not mine, nothing of mine feeds it):
+   `scenarios::props::a_released_key_is_never_ours_in_force_again_in_its_episode`, at the default 256 cases, in my
+   first `cargo test -p wakeshot-core` run: "SleepDc was released in this episode, yet ours is in force on
+   381b4222-..., at run 300000 ms". Not seen again: one rerun at 256 and five runs at 4096 cases passed. The shrunk
+   input was lost (my output filter dropped it, and these props save no seed: `failure_persistence: None`). SleepDc is
+   both a hold key and a short key, so the sleep route fixes are the likely area (inferred, not checked). For a core
+   worker: run it in a loop with full output to catch the case.
+2. **`docs/product.md` lines 128 and 164** are over 120 characters (the orchestrator's edits to the work end rule and
+   rule 7). Not mine this round.
+3. **`docs/tasks/p5-haik-check.md`** lists notice words for Haik's read (around lines 164 and 183); it does not have the
+   new `HibernateFailed` words or the shorter many-holds report yet.
+4. **Not checked in code:** the "Restore my power settings" menu line in `README.md` and the `RestoredByUser` notice
+   say "lid and sleep settings"; after a closed-lid work end the restore may also put back the screen timeouts.
+5. **`docs/research.md` heading "Windows defaults of the three keys"** now covers six keys. Left as it is, since
+   `product.md` rule 7 names the heading.
+
+### Result
+
+Done 2026-11-04 14:06. Each line was checked in the code or by a read first.
+
+| # | Outcome |
+|---|---|
+| 1 | `README.md`: notice table title now "Check your power settings"; Limits reset list adds the 1-minute screen and sleep timeouts ("battery sleep Never", "1 minute yourself") and the uninstall reset; crash gap paragraph adds the 1-minute timeouts (as `product.md` says the README does); Uninstall step 2 says "if Wakeshot had changed them" and the damaged-file reset, and "What stays" has `logs\` after that reset. Both `sleep-route:` comments checked and removed; fixed on the way: "unlock after a wake" is now any unlock (code: `take_unlocked`), "not when the laptop only wakes", "During a hold, sleep while plugged in is never touched", and the failed-lock bullet says the hold comes back once the lid opens or the PC locks (`end_lock_step_back`). Steps 3 and 5, the floor bullet and the rest of the notice table matched the code |
+| 2 | `site/index.html`: steps 3 and 5 already said "goes to sleep" and match `product.md` and the code; the mark removed, words kept |
+| 3 | `text.rs`: both notices fit four lines in the wrap model (table below); new test `hibernate_failed_and_the_closed_lid_report_fit_four_lines` |
+| 4 | `docs/research.md`: "Text fit" corrected to four body lines, with a dated note; a new "wrap model" point says how it was built; "Windows defaults of the three keys" has a dated "short keys" point, read again by me |
+| 5 | Not touched: `product.md`, work logs, other card Logs, dated results, `CLAUDE.md`, other code |
+
+Notice words (titles unchanged):
+
+| Notice | Old body | New body |
+|---|---|---|
+| `HibernateFailed` ("The PC did not go to sleep") | The lid is closed, but the PC did not sleep and could not hibernate. Windows should sleep it once nothing else keeps it awake. Opening the lid puts your screen and sleep settings back. (5 lines) | It could not hibernate either. Windows should sleep it once nothing else keeps it awake. Opening the lid puts your screen and sleep settings back. (4 lines) |
+| Closed-lid report, 3 days 5 h, nine holds | The PC kept running for 3 days 5 h with the lid closed. What held it: nightly backup 1, nightly backup 2, nightly backup 3, nightly backup 4, nightly backup 5, nightly backup 6 and 3 more. (5 lines) | The PC kept running for 3 days 5 h with the lid closed. What held it: nightly backup 1, nightly backup 2, nightly backup 3 and 6 more. (4 lines) |
+
+The report's list is now fitted to a 150-unit body (`BODY_SHOWN_UTF16`, which replaces the 200-unit
+`BODY_ENGLISH_UTF16`); a one- or two-hold report reads as before.
+
+Decided by the worker, for Haik's review:
+
+| # | Choice | Why | Change it when |
+|---|---|---|---|
+| 1 | `HibernateFailed` drops "The lid is closed" and says "could not hibernate either" | "Opening the lid" already says the lid is closed; every form with the lid sentence took five lines; "could not" fits the not allowed and failed cases | Haik's screen check shows room, or he prefers other words |
+| 2 | The report keeps its unit budget, now 150, not a cap on the number of names | Same stand-in as the fixes card; a 60-character reason is still named | The screen check shows a cut (a name in capitals can take a fifth line), or Haik wants at most N names |
+
+Files changed: `README.md`, `site/index.html` (one comment removed), `crates/wakeshot-core/src/text.rs`,
+`docs/research.md` ("Tray UX: notices" and "Windows defaults of the three keys"), this card's round 6 section.
+
+Checks (build folder `<scratchpad>\docs-r6\target`, debug, no `RUSTFLAGS`, `--locked`):
+
+| Check | Outcome |
+|---|---|
+| `rustfmt --check --edition 2024` on `text.rs` | exit 0 |
+| `cargo test --locked -p wakeshot-core` | first run: 660 passed, 1 failed (Found outside scope 1, not mine); second run exit 0: 661 passed, 1 ignored, then 11 and 25 |
+| `cargo clippy -p wakeshot-core --target x86_64-pc-windows-msvc -- -D warnings`, with and without `--all-targets` | both exit 0 |
+| The new test fails on the old words | by count only: both old bodies are over 150 units (not run on the old code) |
+| Wrap model reproduces the pictures | yes: 343 px fits every line shown whole, 344 px is the narrowest wrap (18 px font); 21 px agrees |
+| Changed files: em or en dash, emoji, CR byte, final newline | pass (scratch script, 5 files) |
+| Lines over 120 characters | none of mine; older README table and comment lines stay |
+| Haik's plan | only read; `powercfg /qh` and `/list` the same before and after |
+| Build folder and scratch scripts deleted | yes, checked gone |
+
+Open items: Found outside scope 1 (core worker), 2 to 5 (orchestrator). Haik reads the two new bodies at
+`p5-haik-check`; neither was shown on the real taskbar yet.

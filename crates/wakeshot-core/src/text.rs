@@ -21,8 +21,11 @@ pub const TOOLTIP_MAX_UTF16: usize = 127;
 /// `NOTIFYICONDATAW`: `szInfoTitle[64]` and `szInfo[256]`, each less the end mark, in UTF-16 units.
 const TITLE_MAX_UTF16: usize = 63;
 const BODY_MAX_UTF16: usize = 255;
-/// The same page asks for at most 200 characters of English in a body, so the closed-lid report fits its list to it.
-const BODY_ENGLISH_UTF16: usize = 200;
+/// The Windows 11 banner shows four body lines under a one-line title and cuts the rest (`p5-notices` pictures). A
+/// Segoe UI wrap model calibrated on those pictures wraps about 150 units of these words to four lines, so the
+/// closed-lid report fits its list to that, well within the page's 200 characters of English. Units only stand in for
+/// width: a long name in capitals can still take a fifth line.
+const BODY_SHOWN_UTF16: usize = 150;
 
 const NAME_LINE: &str = "Wakeshot\n";
 const MINUTE_MS: u64 = 60_000;
@@ -192,10 +195,11 @@ pub fn notice(notice: &Notice) -> NoticeText {
         },
         // The fallback after the 1-minute timeouts did not sleep the PC (`p2-6-sleep-route`), or the plain hibernate
         // where they cannot be written. The 1-minute timeouts, where written, stay until the lid opens or input.
+        // "Opening the lid" says the lid is closed; a longer body wraps past the four lines the banner shows.
         Notice::HibernateFailed => warning(
             "The PC did not go to sleep",
-            "The lid is closed, but the PC did not sleep and could not hibernate. Windows should sleep it once \
-             nothing else keeps it awake. Opening the lid puts your screen and sleep settings back.",
+            "It could not hibernate either. Windows should sleep it once nothing else keeps it awake. Opening the \
+             lid puts your screen and sleep settings back.",
         ),
         // Raised at the first failure of a closed-lid lock, before its retry and the step back (architecture section
         // 8, "Lock fails"), and for a failed Keep screen on lock with the lid open, so it fits both.
@@ -213,7 +217,7 @@ pub fn notice(notice: &Notice) -> NoticeText {
                 lead
             } else {
                 let room =
-                    BODY_ENGLISH_UTF16.saturating_sub(units(&lead) + units(" What held it: ."));
+                    BODY_SHOWN_UTF16.saturating_sub(units(&lead) + units(" What held it: ."));
                 format!("{lead} What held it: {}.", names(held_by, room))
             };
             info("The PC ran with the lid closed", body)
@@ -589,6 +593,32 @@ mod tests {
         for sample in &cut {
             let body = notice(sample).body;
             assert!(units(&body) <= BODY_SHOWN, "{} {body:?}", units(&body));
+        }
+    }
+
+    /// The same wrap model found two more five-line bodies (`p2-6-docs-pass` round 6): `HibernateFailed`, worded after
+    /// the screen run, and the report with many holds, whose list was fitted to 200 units.
+    #[test]
+    fn hibernate_failed_and_the_closed_lid_report_fit_four_lines() {
+        let reason = "Nightly backup of the photo library to the NAS in the garage";
+        assert_eq!(reason.chars().count(), crate::holds::file::REASON_CHARS);
+        let mut long = vec![Notice::HibernateFailed];
+        // "less than a minute" is the longest time the lead names in practice.
+        for ran_ms in [0, 135 * MINUTE, (13 * 24 + 23) * 60 * MINUTE] {
+            long.push(Notice::ClosedLidReport {
+                ran_ms,
+                held_by: (1..=9).map(|i| format!("nightly backup {i}")).collect(),
+            });
+            long.push(Notice::ClosedLidReport {
+                ran_ms,
+                held_by: vec![reason.to_owned(), "Claude Code".to_owned()],
+            });
+        }
+        for sample in &long {
+            let body = notice(sample).body;
+            assert!(units(&body) <= BODY_SHOWN, "{} {body:?}", units(&body));
+            // The smaller room still names a hold of the longest reason, not only a count.
+            assert!(!body.ends_with(" holds."), "{body:?}");
         }
     }
 
@@ -1205,8 +1235,8 @@ mod tests {
             (hibernate_failed.title, "The PC did not go to sleep"),
             (
                 hibernate_failed.body,
-                "The lid is closed, but the PC did not sleep and could not hibernate. Windows should sleep it once \
-                 nothing else keeps it awake. Opening the lid puts your screen and sleep settings back.",
+                "It could not hibernate either. Windows should sleep it once nothing else keeps it awake. Opening the \
+                 lid puts your screen and sleep settings back.",
             ),
             (lock_failed.title, "Wakeshot could not lock the PC"),
             (
@@ -1222,7 +1252,7 @@ mod tests {
             (
                 report_many.body,
                 "The PC kept running for 3 days 5 h with the lid closed. What held it: nightly backup 1, nightly \
-                 backup 2, nightly backup 3, nightly backup 4, nightly backup 5, nightly backup 6 and 3 more.",
+                 backup 2, nightly backup 3 and 6 more.",
             ),
             (update.title, "Update Wakeshot"),
             (
