@@ -6,6 +6,7 @@ How Wakeshot becomes a Velopack release, and how to cut one.
 |---|---|
 | `pack.ps1` | Packs one CPU: copies `wakeshot-tray.exe` and `wakeshot.exe` into a staging folder and runs `vpk pack`. Writes `Setup.exe`, the full package, a delta when an earlier release is given, the portable zip and the release index. |
 | `smoke-test.ps1` | Installs a `Setup.exe` silently, checks what it left, uninstalls silently and checks that it is all gone. |
+| `e2e.ps1` | Installs, updates and uninstalls for real on a PC, with a journaled hold on a throwaway plan copy at each step, and checks that the PC is left as it was. Run it unelevated; `Get-Help ./packaging/e2e.ps1` says how. |
 | `../.github/workflows/release.yml` | On a `v*` tag: build, test, pack and smoke-test both CPUs, then publish one GitHub release. By hand: the same as a dry run that uploads nothing. |
 | `winget/` | The winget manifest templates and the script that fills them from a release (`winget/README.md`). |
 

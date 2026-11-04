@@ -328,3 +328,12 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   (`p5-haik-check`), SmartScreen wording (first pre-release). 12 worker decisions for Haik's review and 6 found
   outside scope (stale doc lines in `architecture.md` section 5 and `product.md` Distribution; 30 s against 25 s in
   Phase 1 Question 11) in the card; the doc lines go to the next docs pass.
+- 2026-11-04 04:30: `p6-install-e2e` rerun started (a follow-up worker, alone on the laptop): `packaging/e2e.ps1` on a
+  release x64 build of 7b6d076, so the update wiring and the wiring fixes are covered; plus the `pack.ps1` help blank
+  line and `e2e.ps1` in `packaging/README.md`. Recorded in its card under "Rerun (2026-11-04)". Pushed 7b6d076 at 04:30.
+- 2026-11-04 04:37: `p6-install-e2e` rerun done: 81 of 81 checks on a release x64 build of 7b6d076, AFTER equals BEFORE
+  (each value, plus the worker's own elevated read), all 15 PIDs gone. The tray is now 3.95 MB (the HTTPS stack), so
+  `Setup.exe` is 12.4 MB; first install 7.7 s (was 3.8 s; the hook's own timer says 0.1 s; cause not verified). `pack.ps1`
+  help shows in `Get-Help`; `packaging/README.md` lists `e2e.ps1`. 3 worker decisions for Haik's review in the card.
+  The worker's note that `CLAUDE.md` still gives 3 h and 4 h: the file says 5 h (line 48, since 01:39), but the copy
+  injected into new sessions still shows the old line (seen by `wakeshot-12` at 04:00; cause not verified).

@@ -1,4 +1,5 @@
 #Requires -Version 7
+
 <#
 .SYNOPSIS
 Packs one Velopack release of Wakeshot for one CPU: Setup.exe, the full package, a delta when an earlier release is

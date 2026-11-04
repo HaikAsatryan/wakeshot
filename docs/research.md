@@ -3526,6 +3526,15 @@ release build of commit cd3d498 (velopack 1.2.161 with the four hook callbacks),
   only the syntax); a blank line between them fixes it, a comment line between them does not. **Verified** (test).
 - **This laptop's `powercfg /q` hides the lid action and the energy saver threshold**: `/q <plan> SUB_BUTTONS
   LIDACTION` prints only the plan header; `/qh` prints the setting and its values. **Verified** (test).
+- **Rerun 2026-11-04 04:33:55 to 04:34:37** (same card, "Rerun" section), the x64 release build of commit 7b6d076
+  (adds the update wiring and the wiring fixes), the same script and launcher, at Medium: exit 0, 81 of 81 checks
+  passed, the same check names, BEFORE and AFTER values and hashes as both earlier runs; an elevated read before and
+  after gave the same state. Differences: the tray exe is 3,952,640 bytes (was 2,026,496; the update wiring brings in
+  Velopack's update code), so `Setup.exe` is 12,364,401, the full nupkg 4,806,769 and the portable zip 4,799,293
+  (the delta is still 8,975); the first install took 7.7 s (Velopack: install hook 3,559 ms, while the hook's own
+  timer says 0.1 s; why the start of new exes is that slow is not verified), the updated hook 672 ms (was 197 ms).
+  Setup over the install 0.5 s, apply 1.0 s, uninstall 0.4 s and the install folder gone 3.1 s after, as before.
+  **Verified** (test).
 
 ## Wiring fixes checks
 

@@ -95,13 +95,13 @@ Problems seen but not fixed.
 
 1. `packaging/pack.ps1` (owner `p6-pack-and-release`, done): `Get-Help` shows only the syntax, because its help block
    sits right under `#Requires -Version 7`. Fix: one blank line between them (tested on a scratch copy). Fixed here
-   in `smoke-test.ps1` and `e2e.ps1`.
+   in `smoke-test.ps1` and `e2e.ps1`. Fixed in the rerun below.
 2. `packaging/README.md` (same owner): its table does not list `e2e.ps1`. Suggested row: "`e2e.ps1` | Installs,
    updates and uninstalls for real on a PC, with a journaled hold on a throwaway plan copy at each step, and checks
-   that the PC is left as it was. Run it unelevated."
+   that the PC is left as it was. Run it unelevated." Fixed in the rerun below.
 3. This run's packs come from commit cd3d498. `p6-int-update-wiring` saved `tray_mode.rs`, `velo.rs` and `main.rs`
    after the build (03:41 to 03:44), so its changes are not covered. After it lands, run `e2e.ps1` again (build,
-   then about 40 s; steps in its help).
+   then about 40 s; steps in its help). Done in the rerun below (commit 7b6d076, 81 of 81).
 4. `CLAUDE.md` "Test laptop" gives sleep after 3 h on AC and 4 h on battery (AC 10800, DC 14400). Read here at 03:38
    and 03:53: 18000 on both (5 h), and energy saver DC 30, as the orchestrator's 01:39 read says. The line is stale.
 5. Optional clean-up for Haik, outside the scratch folder (the worker rule kept me from deleting them): Velopack's own
@@ -252,3 +252,113 @@ uninstall key or temp folder left). No Rust file changed; no `--workspace` or `-
 Open items: Found outside scope 1 to 5 (the `pack.ps1` help line, the README row, a rerun after
 `p6-int-update-wiring`, the stale CLAUDE.md sleep values, Velopack's logs for Haik). Decisions for Haik's review:
 Questions 1 to 7 above.
+
+## Rerun (2026-11-04)
+
+A short follow-up by the orchestrator's brief: build release x64 from commit 7b6d076 (adds `p6-int-update-wiring` and
+`p6-int-wiring-fixes`), run `e2e.ps1` again at Medium as run 2 did, and fix Found outside scope 1 and 2 (the
+`pack.ps1` help line, the README row). Build folder `<scratchpad>\p6-install-e2e-rerun\target`; packs and logs in
+`<scratchpad>\p6-install-e2e-rerun\`.
+
+Status: done.
+
+### Log
+
+- 2026-11-04 04:30: worker started; read this card, CLAUDE.md, plan "How we work", `e2e.ps1`, the packaging README
+  and script heads. The hook log file is still `logs\wakeshot.log` and every hook line `e2e.ps1` checks is still in
+  `hooks.rs` (grep), so the script needs no change before the run.
+- 2026-11-04 04:31: state before anything (read-only script, elevated): no data, install, `HaikAsatryan.*` or
+  Velopack temp folder, no shortcut, no uninstall key; Run 7 values (the same 7 names), RunOnce empty; Path
+  REG_EXPAND_SZ, 165 characters, no HaikAsatryan entry; one plan, Balanced `381b4222-...` active; lid 1/1, sleep
+  18000/18000, saver DC 30, all of `/qh` hash `C64AFDB1CFDD13CF` (as run 1 and 2); no `wakeshot*` process; Velopack
+  logs 52,725 and 75,128 bytes. `.git\refs\heads\main` (7b6d076) written 04:29:38, after the newest file under
+  `crates\` (04:24:11), so the build below is that commit. `vpk` 1.2.161.
+- 2026-11-04 04:31: Found outside scope 1 and 2 fixed: `pack.ps1` has one blank line under `#Requires` (parse 0
+  errors, LF; `Get-Help` now shows its synopsis and example, before it showed only the syntax); `packaging/README.md`
+  table lists `e2e.ps1` after `smoke-test.ps1` (LF).
+- 2026-11-04 04:33: build: `cargo build --release --locked --target x86_64-pc-windows-msvc -p wakeshot-tray -p
+  wakeshot-cli` (RUSTFLAGS unset), exit 0 in 128 s (04:31:30 to 04:33:38). Tray 3,952,640 bytes (run 1 and 2:
+  2,026,496), SHA256 `0EBCCA9F...`; CLI 668,672 bytes (667,648), `4B0ABC89...`. No file under `crates\` written after
+  04:24:11, so it is commit 7b6d076. The tray nearly doubled: the update wiring brings in Velopack's update code (the
+  build compiled `url`, `idna` and the `icu_*` crates for it). Launcher `rerun.cmd` (like run 2's, exit code with
+  `(echo %ERRORLEVEL%)`), opened with `explorer.exe` by `launch.ps1`, which records the PIDs of the chain.
+- 2026-11-04 04:33:55 to 04:34:37: the rerun (`rerun.log`, work folder `rerun\`): exit code 0, 81 checks, 81 PASS,
+  0 FAIL, last line "e2e: all checks passed". The same 81 check names as run 2 (compared line by line, plan ids
+  masked). Token: `whoami /groups` in the `.cmd` "Mandatory Label\Medium Mandatory Level"; the script "integrity
+  Medium, elevated False"; Setup.exe still asks for `asInvoker`. Per step:
+  1. BEFORE (04:33:57): Run 7 values with the same 7 name hashes as run 2, RunOnce 0 values, Path type 2, 332 bytes,
+     hash `A8FDC61D7FFE5745`; one plan, Balanced `381b4222-...` active; lid AC 1 DC 1, sleep AC 18000 DC 18000, saver
+     DC 30, all of `/qh` hash `C64AFDB1CFDD13CF`. All equal to run 1 and 2. No install, no data folder.
+  2. Copy `a3f6c9ce-b45c-4088-84b3-73b21d17ec76`, DC lid 1, never active.
+  3. Packs: `Setup.exe` 12,364,401 bytes (run 2: 11,347,640); full nupkg 4,806,769 (3,790,008); delta 8,975 (same);
+     portable zip 4,799,293 (3,782,532). Each grew by about 1 MB, the tray exe's growth.
+  4. Install exit 0 in 7.7 s (run 1, also a new Setup.exe: 3.8 s; run 2: 0.6 s). Velopack logged Setup's start 3 s
+     after the launch and the hook at 3,559 ms, while the hook's own timer says 0.1 s, so the time is process start
+     of new, larger exes; Defender scanning them is a guess, not verified. All 22 install checks pass, hook lines as
+     before.
+  5. Hold (owner PING 24304, ended); Setup over the install exit 0 in 0.5 s (hook 277 ms): "power: wrote lidDc on
+     plan a3f6c9ce-...: 0 to 1", journal deleted, "restore: the journal's values are back". 12 checks pass.
+  6. Hold (owner 36380); `Update.exe apply --silent --norestart --package <0.1.1 full>`: exit 0 in 1.0 s; obsolete
+     hook 20 ms, updated hook 672 ms (run 1: 197 ms), the same restore lines; "Restart: false"; `current` same path,
+     new folder (00:34:19Z before, 00:34:23Z after). 16 checks pass.
+  7. Hold (owner 24540) plus the test RunOnce value; `Update.exe --uninstall --silent`: exit 0 in 0.4 s (hook
+     127 ms); install folder gone 3.1 s after. 17 checks pass.
+  8. AFTER (04:34:35): 9 checks pass: Run, RunOnce, Path type and bytes, active plan, the real plan's values and all
+     of its `/qh` text (same hash), plan list, no install trace, data folder as BEFORE (none), none of the 8 started
+     processes left. The tidy part found nothing to put back (no FAIL line).
+  The hook log (saved before the uninstall) has 2 `power: wrote` lines, both on the copy, no `set_active` line and no
+  WARN or ERROR line. Velopack's own log lines as before (`Skipping killing self` WARNs, harmless).
+- 2026-11-04 04:35:12: every PID of the run is gone, checked by PID from here: my `explorer.exe` 35776; the Explorer
+  factory instance 31772, its `cmd.exe` 37356 and the script's pwsh 35680; the Windows Terminal 34720 and
+  OpenConsole 22432 that DcomLaunch started for that window; the script's 8 (Setup 30504 and 5152, wakeshot.exe 24264,
+  PING 24304, 36380 and 24540, Update.exe 38292 and 23708); Velopack's delete timer `cmd.exe` 5480. None needed a
+  kill.
+- 2026-11-04 04:35:15: independent elevated AFTER read (the same read-only script as 04:31): identical to the 04:31
+  read on every line (traces none; Run 7 names; RunOnce empty; Path REG_EXPAND_SZ 165 characters, same hash, no
+  HaikAsatryan entry; one plan, Balanced active; lid 1/1, sleep 18000/18000, saver DC 30, `/qh` hash
+  `C64AFDB1CFDD13CF`; no `wakeshot*` process). Velopack's logs now 65,527 and 87,223 bytes (+12,802 and +12,095).
+- 2026-11-04 04:36: `docs/research.md` "Install end to end checks": one dated rerun bullet added at its end (re-read
+  first; LF; no line over 120). Build folder deleted (checked gone). Kept in `<scratchpad>\p6-install-e2e-rerun\`:
+  `rerun\` (packs, `before.json`, saved hook and Velopack logs), `rerun.log`, `rerun.exit`, `rerun-whoami.txt`,
+  `pids.txt`, `rerun.cmd`, `launch.ps1`, `state.ps1`. `e2e.ps1` and `smoke-test.ps1` unchanged; their `Get-Help`
+  synopses still show.
+
+### Decided by the worker, for Haik's review
+
+1. No change to `e2e.ps1` or `smoke-test.ps1`: the rerun found no failure, and every hook line they check is still in
+   `hooks.rs`.
+2. The README row is the one Found outside scope 2 suggested, plus "`Get-Help ./packaging/e2e.ps1` says how", since
+   the Medium launch is not obvious and the help explains it. Change it when the README gets a section for `e2e.ps1`.
+3. The 7.7 s first install is recorded, not chased: the script's limit is 120 s, and the hook's own timer (0.1 s)
+   shows the time is outside Wakeshot's code. Change it when a first install on a clean PC takes more than about
+   15 s.
+
+### Found outside scope (rerun)
+
+1. Still stale: `CLAUDE.md` "Test laptop" gives sleep AC 10800 and DC 14400; read here at 04:31 and 04:35: 18000 on
+   both (Found outside scope 4 above).
+2. For the record, not a bug: the release tray exe grew from 2,026,496 to 3,952,640 bytes with `p6-int-update-wiring`
+   (the build now compiles `url`, `idna` and the `icu_*` crates), so `Setup.exe` is 12.4 MB. If size matters, its
+   owner can check which Velopack feature pulls them.
+3. Velopack's own logs in `%LocalAppData%\velopack` are now 65,527 and 87,223 bytes; Haik's optional clean-up command
+   is in Found outside scope 5 above.
+
+### Result
+
+Status: done. Commit 7b6d076 built (x64 release, 128 s) and `e2e.ps1` ran once at Medium (04:33:55 to 04:34:37):
+exit 0, 81 of 81 checks passed, the same 81 checks as run 2. Steps 4, 5, 6 and 7 pass; the laptop is as it was.
+
+AFTER equals BEFORE, each value as the card recorded it: Run 7 values (same name hashes), RunOnce empty, Path type 2,
+332 bytes, hash `A8FDC61D7FFE5745`; active plan Balanced `381b4222-...`, the only plan; lid AC 1 DC 1, sleep AC 18000
+DC 18000, saver DC 30, all of `/qh` `C64AFDB1CFDD13CF`. A separate elevated read before and after matched. No plan
+copy, install folder, uninstall key, shortcut, data or temp folder left. All 15 PIDs of the run gone, none killed.
+
+Sizes: tray 3,952,640 (was 2,026,496), CLI 668,672; `Setup.exe` 12,364,401; full nupkg 4,806,769; delta 8,975;
+portable zip 4,799,293. Times: install 7.7 s (new exes; hook 3.6 s by Velopack, 0.1 s by its own timer), Setup over
+the install 0.5 s, update 1.0 s (updated hook 672 ms, was 197 ms), uninstall 0.4 s, install folder gone 3.1 s after.
+
+Files changed: `packaging/pack.ps1` (one blank line under `#Requires`; `Get-Help` now shows its synopsis),
+`packaging/README.md` (the `e2e.ps1` row), `docs/research.md` (one rerun bullet), this card. No Rust file; no
+`--workspace` run; build folder deleted.
+
+Open items: Found outside scope (rerun) 1 to 3; the three decisions above.
