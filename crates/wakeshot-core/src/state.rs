@@ -78,6 +78,9 @@ pub(crate) struct State {
     pub unknown_since: Option<u64>,
     /// A `ResetLost` went out and its `Done` has not come back: its `damaged`, so a reset sent again asks the same.
     pub resetting: Option<bool>,
+    /// A damaged file's reset found this tray's own apply and sent its entries back for a second reset
+    /// (`core::settings::done_reset`): a second find takes the entries as they are, so the two never loop.
+    pub reset_rerun: bool,
     /// `Notice::RequestsOnly` was shown since the last apply that worked.
     pub requests_only_warned: bool,
     /// The one restore for a journal the apply found corrupt went out; `JournalCorrupt` says the file is set aside.
@@ -189,6 +192,7 @@ impl State {
             retry_warned: false,
             unknown_since: None,
             resetting: None,
+            reset_rerun: false,
             requests_only_warned: false,
             corrupt_restore_sent: false,
             restore_request: false,
@@ -359,12 +363,13 @@ pub(crate) struct LockWatch {
     pub floor_waits: bool,
     /// The journal copy as the last settle pass ended, so the next one sees which entries a restore took away.
     pub journal_seen: Vec<JournalEntry>,
-    /// The lid closed while the journal was unknown, so the lid-close lock did not come (`p2-6-sleep-route`
-    /// deliverable 8). Ends when the lid opens or the window ends.
+    /// The lid closed while the journal was unknown and the session unlocked, so the lid-close lock did not come
+    /// (`p2-6-sleep-route` deliverable 8). It waits for the journal to be known and for a hold to hold or Wakeshot's
+    /// own Do nothing to be in force, then locks once a plan read shows the user's own lid action as not Do nothing
+    /// (`core::lid::settle_window_lock`); a failed reset locks at once. Ends when the lid opens or the session reports
+    /// `Locked`, not when the window ends, so a hold that starts or holds again later still gets the lock
+    /// (`p2-6-sleep-route-fixes`, review major 1).
     pub window_close: bool,
-    /// The window ended with the lid closed while a hold holds: lock once a plan read shows the user's own lid action
-    /// as not Do nothing (`core::lid::settle_window_lock`).
-    pub window_lock_waits: bool,
 }
 
 /// A closed-lid `Lock` waiting for `Session(Locked)`.

@@ -1,9 +1,14 @@
 //! The reset of a lost journal (product "User settings safety" 7; architecture section 3, "A journal that cannot be
-//! read"): on the plan in use, each key Wakeshot writes that holds exactly the value Wakeshot writes goes to the plan's
-//! Windows default, and the bad file is set aside.
+//! read"): on the plan in use, each key Wakeshot writes that holds exactly a value Wakeshot writes goes to the plan's
+//! Windows default, and the bad file is set aside. Those values are a hold's (lid Do nothing, battery sleep Never)
+//! and the sleep route's (sleep and screen off after 1 minute, AC and battery): a journal lost while the 1-minute
+//! timeouts were in force would leave them for good (`p2-6-sleep-route-fixes`, review major 2; the orchestrator's
+//! call under rule 7, for Haik's review). The same accepted cost: a user's own value equal to one of these goes to the
+//! default, with the notice.
 //!
-//! Owner: `p2-6-record-lost`. The signature is contract: the power track's executor calls it through
-//! `power::journal::reset_locked`, under the journal mutex, and `sim::World` calls it as that executor does.
+//! Owner: `p2-6-record-lost`, then `p2-6-sleep-route-fixes`. The signature is contract: the power track's executor
+//! and the uninstall hook call it through `power::journal::reset_locked`, under the journal mutex, and `sim::World`
+//! calls it as that executor does.
 //!
 //! Why the file is loaded once more: the core decides "lost" from its own copy, which cannot tell a load that failed
 //! from a failed clean-up, and the file may have come back between the core's last try and this run. Only this run,
@@ -14,13 +19,20 @@
 use crate::command::Failure;
 use crate::ownership::io::{JournalRead, PlanIo, SafetyNet};
 use crate::ownership::journal::JournalParts;
-use crate::settings::{Guid, JournalEntry, SettingKey};
+use crate::settings::{Guid, JournalEntry, SHORT_TIMEOUT_S, SettingKey};
 
 /// The keys Wakeshot writes, in the order the reset takes them.
-const KEYS: [SettingKey; 3] = [SettingKey::LidAc, SettingKey::LidDc, SettingKey::SleepDc];
+const KEYS: [SettingKey; 6] = SettingKey::ALL;
 
-/// Do nothing for the lid and Never for sleep are both 0: the value Wakeshot writes (architecture section 5).
+/// Do nothing for the lid and Never for sleep are both 0: a hold's value (architecture section 5).
 const TARGET: u32 = 0;
+
+/// A value Wakeshot writes to `key`: a hold's 0 for the hold keys, the sleep route's 1 minute for the short ones.
+/// Battery sleep is both.
+fn wakeshots(key: SettingKey, value: u32) -> bool {
+    (SettingKey::HOLD.contains(&key) && value == TARGET)
+        || (SettingKey::SHORT.contains(&key) && value == SHORT_TIMEOUT_S)
+}
 
 /// What the reset found in `journal.json`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -37,11 +49,11 @@ pub enum Found {
 /// One key on the plan in use, as the reset found and left it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum KeyReset {
-    /// It held the value Wakeshot writes; the plan's default is written over `old`.
+    /// It held a value Wakeshot writes; the plan's default is written over `old`.
     Reset { old: u32, default: u32 },
     /// Another value: the user's own, left as it is.
     Theirs(u32),
-    /// The value Wakeshot writes, which is also the plan's default (High performance sleeps Never): nothing to write.
+    /// A value Wakeshot writes, which is also the plan's default (High performance sleeps Never): nothing to write.
     AlreadyDefault(u32),
     /// A read or the write failed: left as it is.
     Failed(Failure),
@@ -135,7 +147,7 @@ fn reset_plan(plans: &mut impl PlanIo, plan: Guid, done: &mut Reset) {
     for key in KEYS {
         let outcome = match plans.read(plan, key) {
             Err(failure) => KeyReset::Failed(failure),
-            Ok(live) if live != TARGET => KeyReset::Theirs(live),
+            Ok(live) if !wakeshots(key, live) => KeyReset::Theirs(live),
             Ok(live) => match plans.read_default(plan, key) {
                 Err(failure) => KeyReset::Failed(failure),
                 Ok(default) if default == live => KeyReset::AlreadyDefault(live),
@@ -167,12 +179,13 @@ mod tests {
     use super::*;
     use crate::files::{JournalFile, JournalFileEntry, JournalKey};
     use crate::ownership::fake::{
-        Action, Call, FAKE_DEFAULT_LID, FAKE_DEFAULT_SLEEP_DC, FakeJournal, FakePlans, SetBy,
+        Action, Call, FAKE_DEFAULT_LID, FAKE_DEFAULT_OTHER, FAKE_DEFAULT_SLEEP_DC, FAKE_SCREEN_OFF,
+        FakeJournal, FakePlans, SetBy,
     };
     use crate::process::FileTime;
     use crate::settings::{JournalOwner, PlanValues};
 
-    use SettingKey::{LidAc, LidDc, SleepDc};
+    use SettingKey::{LidAc, LidDc, SleepAc, SleepDc, VideoIdleAc, VideoIdleDc};
 
     /// Balanced, the active plan.
     const P1: Guid = Guid(0x381b4222_f694_41f0_9685_ff5bb260df2e);
@@ -263,6 +276,9 @@ mod tests {
                         default: FAKE_DEFAULT_SLEEP_DC
                     }
                 ),
+                (SleepAc, KeyReset::Theirs(10_800)),
+                (VideoIdleAc, KeyReset::Theirs(FAKE_SCREEN_OFF[0])),
+                (VideoIdleDc, KeyReset::Theirs(FAKE_SCREEN_OFF[1])),
             ]
         );
         assert_eq!(done.reset_keys(), [LidAc, SleepDc]);
@@ -293,10 +309,75 @@ mod tests {
                 Call::Read(P1, SleepDc),
                 Call::ReadDefault(P1, SleepDc),
                 Call::Write(P1, SleepDc, FAKE_DEFAULT_SLEEP_DC),
+                Call::Read(P1, SleepAc),
+                Call::Read(P1, VideoIdleAc),
+                Call::Read(P1, VideoIdleDc),
                 Call::SetActive(P1),
                 Call::SetAsideJournal,
             ]
         );
+    }
+
+    #[test]
+    fn the_sleep_routes_one_minute_is_reset_on_each_short_key_and_no_other_value() {
+        // A crash while the 1-minute timeouts were in force: every short key at exactly 60 s goes to the default,
+        // battery sleep too, where a hold's Never would also go (review major 2, case A).
+        let fake = FakePlans::new(PlanValues {
+            lid_ac: 1,
+            sleep_ac: SHORT_TIMEOUT_S,
+            sleep_dc: SHORT_TIMEOUT_S,
+            ..crashed()
+        });
+        {
+            let mut state = fake.state();
+            for key in SettingKey::SHORT {
+                state.set_stored(P1, key, SHORT_TIMEOUT_S, SetBy::Override);
+                state.set_in_force(P1, key, SHORT_TIMEOUT_S, SetBy::Override);
+            }
+            state.journal = FakeJournal::Unreadable(READ_FAILED);
+        }
+        let done = run(&fake, false);
+        let reset = |old, default| KeyReset::Reset { old, default };
+        assert_eq!(
+            done.keys,
+            [
+                (LidAc, KeyReset::Theirs(1)),
+                (LidDc, KeyReset::Theirs(1)),
+                (SleepDc, reset(SHORT_TIMEOUT_S, FAKE_DEFAULT_SLEEP_DC)),
+                (SleepAc, reset(SHORT_TIMEOUT_S, FAKE_DEFAULT_OTHER)),
+                (VideoIdleAc, reset(SHORT_TIMEOUT_S, FAKE_DEFAULT_OTHER)),
+                (VideoIdleDc, reset(SHORT_TIMEOUT_S, FAKE_DEFAULT_OTHER)),
+            ]
+        );
+        assert_eq!(done.result, Ok(()));
+        for key in SettingKey::SHORT {
+            let want = match key {
+                SleepDc => FAKE_DEFAULT_SLEEP_DC,
+                _ => FAKE_DEFAULT_OTHER,
+            };
+            assert_eq!(in_force(&fake, key), (want, SetBy::Default), "{key:?}");
+        }
+
+        // Only exact values are Wakeshot's: a minute and a second, 59 s, and a user's own AC sleep or screen Never
+        // stay; the lid keys never take the short value as Wakeshot's.
+        let fake = FakePlans::new(PlanValues {
+            lid_ac: SHORT_TIMEOUT_S,
+            lid_dc: 1,
+            sleep_ac: 0,
+            sleep_dc: SHORT_TIMEOUT_S + 1,
+            ..crashed()
+        });
+        {
+            let mut state = fake.state();
+            for (key, value) in [(VideoIdleAc, SHORT_TIMEOUT_S - 1), (VideoIdleDc, 0)] {
+                state.set_stored(P1, key, value, SetBy::User);
+                state.set_in_force(P1, key, value, SetBy::User);
+            }
+            state.journal = FakeJournal::Corrupt;
+        }
+        let done = run(&fake, false);
+        assert_eq!(done.reset_keys(), Vec::<SettingKey>::new(), "{done:?}");
+        assert!(!fake.state().calls.contains(&Call::SetActive(P1)));
     }
 
     #[test]
@@ -422,7 +503,7 @@ mod tests {
 
         // `set_active` fails: written, but not in force.
         let fake = rig(FakeJournal::Unreadable(READ_FAILED));
-        fake.script(9, Action::Fail(5));
+        fake.script(12, Action::Fail(5));
         let done = run(&fake, false);
         assert_eq!(done.reset_keys(), [LidAc, SleepDc]);
         assert_eq!(done.result, Err(failure(5)));
@@ -432,7 +513,7 @@ mod tests {
     #[test]
     fn a_failed_set_aside_is_logged_and_the_reset_still_counts() {
         let fake = rig(FakeJournal::Unreadable(READ_FAILED));
-        fake.script(10, Action::Fail(5));
+        fake.script(13, Action::Fail(5));
         let done = run(&fake, false);
         let failed = Failure {
             call: "FakePlans::set_aside_journal",
@@ -445,8 +526,8 @@ mod tests {
 
     #[test]
     fn a_stop_at_any_call_leaves_nothing_a_second_run_cannot_finish() {
-        // Eleven calls in a full run (see the first test).
-        for at in 0..11 {
+        // Fourteen calls in a full run (see the first test).
+        for at in 0..14 {
             let fake = rig(FakeJournal::Unreadable(READ_FAILED));
             fake.script(at, Action::Stop);
             let stopped = catch_unwind(AssertUnwindSafe(|| run(&fake, false)));

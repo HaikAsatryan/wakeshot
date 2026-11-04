@@ -621,6 +621,23 @@ fn once_the_journal_reads_its_entries_decide_the_lock() {
     let out = close_on_battery(&mut sim);
     assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
     assert_eq!(plays(&out), 0, "{}", sim.trace());
+
+    // The lid closed in the window, before the read: once the entries name the crashed tray's Do nothing, it keeps
+    // the closed laptop running, and the lock that close did not get comes then (`p2-6-sleep-route-fixes`).
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(false, 80));
+    sim.send(read(do_nothing_dc()));
+    let out = close_on_battery(&mut sim);
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    let out = sim.send(restored(
+        None,
+        RestoreWhy::Leftover,
+        Err(alive),
+        entries(BALANCED, &[SettingKey::LidDc]),
+    ));
+    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+    assert_eq!(count(&out, &CHIME), 1, "{}", sim.trace());
 }
 
 // `p6-int-wiring-fixes` Found outside scope 3: with nothing holding, the lid closes on a Do nothing that may be a
@@ -925,29 +942,67 @@ fn a_damaged_file_with_the_lid_closed_counts_down_after_its_reset() {
 
 #[test]
 fn after_the_window_a_do_nothing_still_in_force_gives_no_countdown() {
-    // The reset failed, or the plan's own default is Do nothing: as without Wakeshot, the closed laptop runs on.
+    // The plan's own default is Do nothing, so the reset left it: as without Wakeshot, the closed laptop runs on.
     let mut sim = Sim::new();
     closed_on_an_unread_do_nothing(&mut sim);
     sim.run_failing_restores(2 * MINUTE, RESTORE_FAILED);
-    let failed = Failure {
-        call: "PowerWriteDCValueIndex",
-        code: 5,
-    };
-    let out = sim.send(reset_done(&[], Err(failed)));
-    assert_eq!(
-        notices(&out),
-        [&Notice::JournalLost {
-            reset: vec![],
-            failed: true
-        }],
-        "{}",
-        sim.trace()
+    let mut out = sim.send(reset_done(&[], Ok(())));
+    out.extend(sim.send(read(do_nothing_dc())));
+    out.extend(sim.run(20 * MINUTE));
+    let trace = sim.trace();
+    assert!(
+        notices(&out).is_empty(),
+        "nothing reset, no notice\n{trace}"
     );
+    assert!(sleep_checks(&out).is_empty(), "{trace}");
+    assert_eq!(count(&out, &LOCK), 0, "{trace}");
+}
+
+const RESET_WRITE_FAILED: Failure = Failure {
+    call: "PowerWriteDCValueIndex",
+    code: 5,
+};
+
+#[test]
+fn a_failed_reset_locks_a_laptop_whose_lid_closed_in_the_window_once() {
+    // Review minor 5 of `p2-6-sleep-route`: the Do nothing the reset could not put back is most likely Wakeshot's, yet
+    // the journal now counts as known and empty, so nothing else would ever lock or sleep the closed laptop.
+    let mut sim = Sim::new();
+    closed_on_an_unread_do_nothing(&mut sim);
+    sim.run_failing_restores(2 * MINUTE, RESTORE_FAILED);
+    let out = sim.send(reset_done(&[], Err(RESET_WRITE_FAILED)));
+    let trace = sim.trace();
+    let failed = Notice::JournalLost {
+        reset: vec![],
+        failed: true,
+    };
+    assert_eq!(notices(&out), [&failed], "{trace}");
+    assert_eq!(count(&out, &LOCK), 1, "{trace}");
+    assert_eq!(count(&out, &CHIME), 1, "{trace}");
+    assert!(position(&out, &LOCK) < position(&out, &CHIME), "{trace}");
+
+    // Once: no countdown on a Do nothing that may be the user's own, and no second lock, even unconfirmed.
     let mut out = sim.send(read(do_nothing_dc()));
     out.extend(sim.run(20 * MINUTE));
     let trace = sim.trace();
     assert!(sleep_checks(&out).is_empty(), "{trace}");
     assert_eq!(count(&out, &LOCK), 0, "{trace}");
+
+    // A lid that closed before the tray started, or one that opened again, saw no close in the window: no lock.
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(false, 80));
+    sim.send(read(do_nothing_dc()));
+    sim.send(lid(true));
+    sim.run_failing_restores(2 * MINUTE, RESTORE_FAILED);
+    let out = sim.send(reset_done(&[], Err(RESET_WRITE_FAILED)));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    let mut sim = Sim::new();
+    closed_on_an_unread_do_nothing(&mut sim);
+    sim.send(lid(false));
+    sim.run_failing_restores(2 * MINUTE, RESTORE_FAILED);
+    let out = sim.send(reset_done(&[], Err(RESET_WRITE_FAILED)));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
 }
 
 #[test]
@@ -1031,6 +1086,257 @@ fn a_hold_in_the_window_on_the_users_own_do_nothing_gets_no_lock_when_it_ends() 
     out.extend(sim.run(10 * MINUTE));
     assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
     assert_eq!(count(&out, &CHIME), 0, "{}", sim.trace());
+}
+
+// Review major 1 and minor 7 of `p2-6-sleep-route` (`p2-6-sleep-route-fixes`): the lock a lid close in the window did
+// not get waits until the lid opens or the session locks, so a hold that holds only after the window still gets it,
+// once its power source lasted, and a lock the session never confirms gets the retry and the step back.
+
+#[test]
+fn a_hold_that_starts_after_the_window_locks_a_laptop_closed_in_it() {
+    // The window ends with nothing holding: the countdown starts after the reset and the read.
+    let mut sim = Sim::new();
+    closed_on_an_unread_do_nothing(&mut sim);
+    sim.run_failing_restores(2 * MINUTE, RESTORE_FAILED);
+    let mut out = sim.send(reset_done(
+        &[SettingKey::LidDc, SettingKey::SleepDc],
+        Ok(()),
+    ));
+    out.extend(sim.send(read(plan(BALANCED))));
+    out.extend(sim.run(MINUTE));
+    assert_eq!(count(&out, &LOCK), 0, "nothing holds\n{}", sim.trace());
+
+    // An agent turn starts before the countdown is due: its apply writes Do nothing, and the closed laptop would run
+    // on it unlocked.
+    let out = sim.send(working(1));
+    let trace = sim.trace();
+    assert!(
+        out.iter().any(|c| matches!(c, Command::Apply { .. })),
+        "{trace}"
+    );
+    assert_eq!(count(&out, &LOCK), 1, "{trace}");
+    assert_eq!(count(&out, &CHIME), 1, "{trace}");
+    assert!(position(&out, &LOCK) < position(&out, &CHIME), "{trace}");
+    sim.send(applied(BALANCED, Ok(()), entries(BALANCED, &KEYS)));
+    sim.send(session(SessionChange::Locked));
+    let out = sim.run(10 * MINUTE);
+    assert_eq!(count(&out, &LOCK), 0, "once\n{}", sim.trace());
+    assert!(sim.requests().system, "{}", sim.trace());
+
+    // The hold starts right after the reset, while the copy still shows the crashed tray's Do nothing: the lock waits
+    // for the apply's journal, which names the user's own Sleep.
+    let mut sim = Sim::new();
+    closed_on_an_unread_do_nothing(&mut sim);
+    sim.run_failing_restores(2 * MINUTE, RESTORE_FAILED);
+    sim.send(reset_done(
+        &[SettingKey::LidDc, SettingKey::SleepDc],
+        Ok(()),
+    ));
+    let out = sim.send(working(1));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    let out = sim.send(applied(BALANCED, Ok(()), entries(BALANCED, &KEYS)));
+    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+
+    // The session locked after the close, or was locked at it: nothing is owed. Signed in again later (on an external
+    // screen), the user is there, as after a lid-close lock.
+    for locked_before in [false, true] {
+        let mut sim = Sim::new();
+        sim.send(unread_start());
+        sim.send(power(false, 80));
+        sim.send(read(do_nothing_dc()));
+        sim.send(lid(false));
+        if locked_before {
+            sim.send(session(SessionChange::Locked));
+        }
+        sim.send(lid(true));
+        if !locked_before {
+            sim.send(session(SessionChange::Locked));
+        }
+        sim.send(session(SessionChange::Unlocked));
+        sim.run_failing_restores(2 * MINUTE, RESTORE_FAILED);
+        sim.send(reset_done(
+            &[SettingKey::LidDc, SettingKey::SleepDc],
+            Ok(()),
+        ));
+        sim.send(read(plan(BALANCED)));
+        let mut out = sim.send(working(1));
+        out.extend(sim.send(applied(BALANCED, Ok(()), entries(BALANCED, &KEYS))));
+        out.extend(sim.run(10 * MINUTE));
+        assert_eq!(count(&out, &LOCK), 0, "{locked_before}\n{}", sim.trace());
+    }
+}
+
+#[test]
+fn a_hold_held_back_at_the_windows_end_locks_once_it_holds_again() {
+    // Under the floor on battery a hold steps back at once, and its restore cannot load the journal. The lid closes in
+    // the window, which ends while the step back holds the episode: the floor countdown, no lock.
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(false, 19));
+    sim.send(read(do_nothing_dc()));
+    sim.send(lid(false));
+    sim.send(working(1));
+    sim.send(restored(
+        None,
+        RestoreWhy::Floor,
+        Err(RESTORE_FAILED),
+        vec![],
+    ));
+    sim.input();
+    let out = sim.send(lid(true));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    sim.run_failing_restores(2 * MINUTE, RESTORE_FAILED);
+    let mut out = sim.send(reset_done(
+        &[SettingKey::LidDc, SettingKey::SleepDc],
+        Ok(()),
+    ));
+    out.extend(sim.send(read(plan(BALANCED))));
+    out.extend(sim.run(MINUTE));
+    assert_eq!(
+        count(&out, &LOCK),
+        0,
+        "the step back holds nothing\n{}",
+        sim.trace()
+    );
+
+    // AC comes back: the hold holds again on Wakeshot's Do nothing, and the closed laptop is locked once AC lasted.
+    let back = sim.now();
+    let mut out = sim.send(power(true, 19));
+    assert!(
+        out.iter().any(|c| matches!(c, Command::Apply { .. })),
+        "{}",
+        sim.trace()
+    );
+    out.extend(sim.send(applied(BALANCED, Ok(()), entries(BALANCED, &KEYS))));
+    out.extend(sim.run(SOURCE_SETTLE_MS + SECOND));
+    let trace = sim.trace();
+    assert_eq!(count(&out, &LOCK), 1, "{trace}");
+    assert_eq!(count(&out, &CHIME), 1, "{trace}");
+    assert_eq!(
+        lock_times(&sim, back),
+        [i128::from(SOURCE_SETTLE_MS)],
+        "{trace}"
+    );
+}
+
+/// A hold that runs on requests only through the window (its apply cannot load the journal either), on `values`, on
+/// AC or battery, with the lid closed in the window, a minute ago; the window still runs.
+fn closed_in_the_window_on_requests(values: PlanValues, ac: bool) -> Sim {
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(ac, 80));
+    sim.send(read(values));
+    sim.send(lid(false));
+    sim.send(working(1));
+    let load_failed = Failure {
+        call: "ReadFile (journal.json)",
+        code: 33,
+    };
+    sim.send(applied(
+        BALANCED,
+        Err(ApplyError::SafetyNet(load_failed)),
+        vec![],
+    ));
+    let out = sim.send(lid(true));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    sim.run(MINUTE);
+    sim
+}
+
+/// The window ends in a retry that reads the file, with nothing in it.
+fn read_after_all() -> Event {
+    restored(None, RestoreWhy::Leftover, Ok(()), vec![])
+}
+
+#[test]
+fn a_window_lock_waits_out_a_short_ac_drop_for_a_docked_user() {
+    // Docked: the user's own Do nothing on AC, Sleep on battery. On AC their Do nothing keeps a closed laptop running
+    // anyway: no lock.
+    let mut sim = closed_in_the_window_on_requests(docked(), true);
+    let mut out = sim.send(read_after_all());
+    out.extend(sim.send(read(docked())));
+    out.extend(sim.run(MINUTE));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+
+    // The dock drops AC for 5 s: no lock (product: Haik was locked by exactly this drop).
+    let mut out = sim.send(power(false, 80));
+    out.extend(sim.run(5 * SECOND));
+    out.extend(sim.send(power(true, 80)));
+    out.extend(sim.run(MINUTE));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+
+    // Unplugged for good: the lock once battery lasted.
+    let unplugged = sim.now();
+    let mut out = sim.send(power(false, 80));
+    out.extend(sim.run(SOURCE_SETTLE_MS + SECOND));
+    let trace = sim.trace();
+    assert_eq!(count(&out, &LOCK), 1, "{trace}");
+    assert_eq!(
+        lock_times(&sim, unplugged),
+        [i128::from(SOURCE_SETTLE_MS)],
+        "{trace}"
+    );
+}
+
+#[test]
+fn a_window_lock_the_session_never_confirms_is_sent_again_then_steps_back() {
+    // The hold runs on requests only, so no Do nothing of Wakeshot's is in force, yet its requests keep the closed
+    // laptop running: the lock is watched as at a lid close.
+    let mut sim = closed_in_the_window_on_requests(plan(BALANCED), false);
+    sim.input();
+    let input = sim.now();
+    let out = sim.send(read_after_all());
+    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+    let out = sim.run(LOCK_CHECK + SECOND);
+    let trace = sim.trace();
+    assert_eq!(count(&out, &LOCK), 1, "the retry\n{trace}");
+    assert_eq!(notices(&out), [&Notice::LockFailed], "{trace}");
+    let out = sim.run(LOCK_CHECK + SECOND);
+    let trace = sim.trace();
+    assert_eq!(count(&out, &OFF), 1, "the step back\n{trace}");
+    assert_eq!(count(&out, &LOCK), 0, "no third lock\n{trace}");
+
+    // Stepped back with the lid closed and the user's own Sleep: the countdown, as after work that ended.
+    sim.run(IDLE_MS);
+    let trace = sim.trace();
+    assert_eq!(
+        sleep_check_times(&sim, input),
+        [i128::from(IDLE_MS)],
+        "{trace}"
+    );
+    assert_eq!(
+        sleep_checks(&all(&sim)),
+        [&sleep_check(CountdownReason::WorkEnded, None)],
+        "{trace}"
+    );
+}
+
+#[test]
+fn a_window_lock_on_wakeshots_do_nothing_that_fails_twice_steps_back_with_no_third_lock() {
+    // A hold that starts after the window writes Do nothing over the user's Sleep, and the lock it gets fails twice.
+    // Until the step back's restore lands, that Do nothing is still in force: the step back is the answer, not a
+    // third lock.
+    let mut sim = Sim::new();
+    closed_on_an_unread_do_nothing(&mut sim);
+    sim.run_failing_restores(2 * MINUTE, RESTORE_FAILED);
+    sim.send(reset_done(
+        &[SettingKey::LidDc, SettingKey::SleepDc],
+        Ok(()),
+    ));
+    sim.send(read(plan(BALANCED)));
+    let out = sim.send(working(1));
+    assert_eq!(count(&out, &LOCK), 1, "{}", sim.trace());
+    sim.send(applied(BALANCED, Ok(()), entries(BALANCED, &KEYS)));
+    let mut out = failed_twice(&mut sim);
+    let trace = sim.trace();
+    let restore = Command::Restore {
+        plan: None,
+        why: RestoreWhy::Floor,
+    };
+    assert_eq!(count(&out, &OFF), 1, "{trace}");
+    assert_eq!(count(&out, &restore), 1, "{trace}");
+    out.extend(sim.run(MINUTE));
+    assert_eq!(count(&out, &LOCK), 0, "no third lock\n{}", sim.trace());
 }
 
 // Item 2: the power source changes with the lid closed.
@@ -1999,6 +2305,42 @@ fn the_floor_countdown_writes_them_too_and_ac_back_puts_them_back() {
     assert_eq!(count(&out, &SHORT_BACK), 1, "{}", sim.trace());
     let out = sim.run(20 * MINUTE);
     assert!(fallbacks(&out).is_empty(), "{}", sim.trace());
+}
+
+#[test]
+fn short_keys_the_user_changes_in_a_step_back_never_stop_the_hold() {
+    // Review minor 4 of `p2-6-sleep-route`: three short keys the user changes while the floor countdown's 1-minute
+    // timeouts are in force are released for the episode, but none of them is a hold key, so the hold applies again
+    // when AC comes back.
+    let mut sim = holding(false);
+    sim.send(lid(true));
+    sim.send(power(false, 19));
+    sim.send(restored(None, RestoreWhy::Floor, Ok(()), vec![]));
+    sim.run(IDLE_MS + MINUTE);
+    short_written(&mut sim);
+    let mut out = Vec::new();
+    for key in [
+        SettingKey::SleepAc,
+        SettingKey::VideoIdleAc,
+        SettingKey::VideoIdleDc,
+    ] {
+        out.extend(sim.send(Event::UserChanged(OwnedKey {
+            plan: BALANCED,
+            key,
+        })));
+    }
+    out.extend(sim.send(power(true, 19)));
+    let hold_apply = Command::Apply {
+        plan: BALANCED,
+        writes: KEYS.iter().map(|&k| (k, 0)).collect(),
+    };
+    let trace = sim.trace();
+    assert_eq!(count(&out, &hold_apply), 1, "{trace}");
+    assert!(
+        !out.iter()
+            .any(|c| matches!(c, Command::Log(l) if l.starts_with("Every key is the user's"))),
+        "{trace}"
+    );
 }
 
 #[test]

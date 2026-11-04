@@ -1173,6 +1173,58 @@ fn a_damaged_file_is_lost_at_once() {
 }
 
 #[test]
+fn a_damaged_files_reset_that_finds_this_trays_own_apply_redoes_it_once() {
+    // Review major 2 of `p2-6-sleep-route`, case B: the hold's apply ran between the set-aside and the reset, so its
+    // entries took the values in force as originals, Wakeshot's own among them. They go back, the reset runs again,
+    // and the hold applies again, in that order on the IO queue.
+    let mut sim = holding();
+    sim.send(Event::JournalCorrupt);
+    let found = Event::Done(Outcome::ResetLost {
+        reset: vec![],
+        result: Ok(()),
+        journal: entries(BALANCED, &KEYS),
+    });
+    let out = sim.send(found.clone());
+    let trace = sim.trace();
+    let back = restore(None, RestoreWhy::WorkEnded);
+    let apply = Command::Apply {
+        plan: BALANCED,
+        writes: KEYS.iter().map(|&k| (k, 0)).collect(),
+    };
+    assert_eq!(count(&out, &back), 1, "{trace}");
+    assert_eq!(count(&out, &RESET_DAMAGED), 1, "{trace}");
+    assert_eq!(count(&out, &apply), 1, "{trace}");
+    assert!(
+        position(&out, &back) < position(&out, &RESET_DAMAGED)
+            && position(&out, &RESET_DAMAGED) < position(&out, &apply),
+        "{trace}"
+    );
+    assert!(notices_of(&out).is_empty(), "{trace}");
+
+    // Once: entries found again are kept, as from a file that read, so the two never loop.
+    sim.send(restored(None, RestoreWhy::WorkEnded, Ok(()), vec![]));
+    let out = sim.send(found.clone());
+    let trace = sim.trace();
+    assert_eq!(count(&out, &back), 0, "{trace}");
+    assert_eq!(count(&out, &RESET_DAMAGED), 0, "{trace}");
+    assert_eq!(count(&out, &Command::ReadPlan), 1, "{trace}");
+
+    // A tray that does not own the settings never applied: such entries are another tray's, and stay.
+    let mut sim = Sim::new();
+    sim.send(
+        Start {
+            owner: false,
+            ..Start::default()
+        }
+        .event(),
+    );
+    sim.send(Event::JournalCorrupt);
+    let out = sim.send(found);
+    assert_eq!(count(&out, &back), 0, "{}", sim.trace());
+    assert_eq!(count(&out, &RESET_DAMAGED), 0, "{}", sim.trace());
+}
+
+#[test]
 fn a_reset_that_finds_the_journal_readable_keeps_the_retry() {
     let mut sim = unread_at_start();
     run_failing(&mut sim, LOST);

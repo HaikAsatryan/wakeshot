@@ -21,7 +21,7 @@ use crate::command::{ApplyError, Command, Failure, RestoreWhy};
 use crate::event::SessionChange;
 use crate::ownership::apply::JOURNAL_CORRUPT;
 use crate::settings::{Guid, JournalEntry, OwnedKey, PlanValues, SettingKey};
-use crate::state::{ApplyStep, Applying};
+use crate::state::{ApplyStep, Applying, Episode};
 use crate::time::{Deadline, Now};
 use crate::view::Notice;
 
@@ -63,7 +63,7 @@ impl Core {
         state
             .episode
             .as_ref()
-            .is_some_and(|e| !e.requests_only && e.released.len() < KEYS.len())
+            .is_some_and(|e| !e.requests_only && !every_hold_key_released(e))
             && state.owner
             && state.on_console
             && !self.holds_back()
@@ -106,7 +106,7 @@ impl Core {
             false => "journal.json did not read for 2 minutes",
         };
         out.push(Command::Log(format!(
-            "Journal lost ({why}): the lid and sleep values that look like Wakeshot's go to Windows defaults"
+            "Journal lost ({why}): the lid, sleep and screen values that look like Wakeshot's go to Windows defaults"
         )));
         out.push(Command::ResetLost { damaged });
         self.state.resetting = Some(damaged);
@@ -322,7 +322,7 @@ impl Core {
             .state
             .episode
             .as_ref()
-            .is_some_and(|e| e.released.len() == KEYS.len())
+            .is_some_and(every_hold_key_released)
         {
             out.push(Command::Log(
                 "Every key is the user's for this episode: restore what Wakeshot may still hold"
@@ -341,8 +341,17 @@ impl Core {
 
     /// `ResetLost` answered. Entries mean the file read after all: the copy takes them, and the retry goes on as
     /// before. Otherwise the journal is known and empty, whatever the result: a reset that failed leaves values only
-    /// the user can tell apart, and the notice says so. One notice when anything was reset or a call failed; nothing
-    /// reset is the log's only. A read follows, since the plan copy still shows the values from before.
+    /// the user can tell apart, and the notice says so; with the lid closed since the window it also locks
+    /// ([`Core::lost_reset_failed`]). One notice when anything was reset or a call failed; nothing reset is the log's
+    /// only. A read follows, since the plan copy still shows the values from before.
+    ///
+    /// Entries after a damaged file went aside are this tray's own apply, when this tray owns the settings: nothing
+    /// else writes entries, and only the owner applies. It ran between the set-aside and this reset (the IO queue had
+    /// it already), so it took the values in force as its originals, Wakeshot's own among them: a hold that starts
+    /// while the 1-minute timeouts are in force journals battery sleep with 60 s as the user's (review major 2, case
+    /// B). So its entries go back, the reset runs again on the file that is then gone, and the hold and the short
+    /// timeouts apply again over the defaults, all in this order on the IO queue. Once only: a second find keeps the
+    /// entries.
     pub(super) fn done_reset(
         &mut self,
         reset: Vec<SettingKey>,
@@ -351,7 +360,27 @@ impl Core {
         now: Now,
         out: &mut Vec<Command>,
     ) {
-        self.state.resetting = None;
+        let damaged = self.state.resetting.take() == Some(true);
+        let rerun = std::mem::take(&mut self.state.reset_rerun);
+        if !journal.is_empty() && damaged && self.state.owner && !rerun {
+            out.push(Command::Log(format!(
+                "Journal reset after a damaged file found {} entries of this tray's own apply, taken over values from \
+                 before: they go back, the reset runs again, then Wakeshot applies again",
+                journal.len()
+            )));
+            self.state.journal = journal;
+            self.state.reset_rerun = true;
+            self.restore_all(RestoreWhy::WorkEnded, out);
+            self.send_reset(true, now, out);
+            self.want_apply();
+            if self.state.short.is_some() && self.can_write_short() {
+                let plan = self.state.plan.map(|p| p.active);
+                if let Some(plan) = plan {
+                    self.send_short(plan, out);
+                }
+            }
+            return;
+        }
         if journal.is_empty() {
             self.state.journal = journal;
             self.state.retry = None;
@@ -373,6 +402,9 @@ impl Core {
                 };
                 self.keep_for_return(notice.clone());
                 self.notify(notice, out);
+            }
+            if result.is_err() {
+                self.lost_reset_failed(now, out);
             }
         } else {
             out.push(Command::Log(format!(
@@ -575,6 +607,12 @@ impl Core {
             self.state.finish_restore_request = true;
         }
     }
+}
+
+/// The user took back every key a hold writes. A short key the user changed in a stepped-back episode is released too
+/// (`core::lid`), but it is not one of these, so it never stops the hold's apply (review minor 4).
+fn every_hold_key_released(episode: &Episode) -> bool {
+    KEYS.iter().all(|key| episode.released.contains(key))
 }
 
 /// Log words, not tray words.

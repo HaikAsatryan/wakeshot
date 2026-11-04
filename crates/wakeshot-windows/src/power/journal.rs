@@ -1732,7 +1732,9 @@ mod tests {
 
     #[test]
     fn a_lost_journal_reset_logs_each_key_and_a_busy_lock_does_nothing() {
-        use wakeshot_core::ownership::fake::{FAKE_DEFAULT_LID, FAKE_DEFAULT_SLEEP_DC};
+        use wakeshot_core::ownership::fake::{
+            FAKE_DEFAULT_LID, FAKE_DEFAULT_SLEEP_DC, FAKE_SCREEN_OFF,
+        };
 
         let names = Names::test("journal::reset");
         let fake = FakePlans::new(PlanValues {
@@ -1776,6 +1778,26 @@ mod tests {
                 (
                     Level::Info,
                     format!(
+                        "lost journal: sleepAc on plan {BALANCED} is 10800, not Wakeshot's value: kept"
+                    )
+                ),
+                (
+                    Level::Info,
+                    format!(
+                        "lost journal: videoIdleAc on plan {BALANCED} is {}, not Wakeshot's value: kept",
+                        FAKE_SCREEN_OFF[0]
+                    )
+                ),
+                (
+                    Level::Info,
+                    format!(
+                        "lost journal: videoIdleDc on plan {BALANCED} is {}, not Wakeshot's value: kept",
+                        FAKE_SCREEN_OFF[1]
+                    )
+                ),
+                (
+                    Level::Info,
+                    format!(
                         "lost journal reset on plan {BALANCED} done; keys set to Windows defaults: lidAc, sleepDc"
                     )
                 ),
@@ -1788,8 +1810,8 @@ mod tests {
             ..VALUES
         });
         fake.state().journal = FakeJournal::Corrupt;
-        // Load, active plan, three reads, one default read, one write, `set_active`, then the set-aside.
-        let set_aside_at = 8;
+        // Load, active plan, six reads, one default read, one write, `set_active`, then the set-aside.
+        let set_aside_at = 11;
         fake.script(set_aside_at, Action::Fail(32));
         let log = MemoryLog::default();
         let done = reset_within(

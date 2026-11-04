@@ -1523,7 +1523,7 @@ mod tests {
         let kind = personality_of(active).unwrap();
         println!("active plan {active}: personality {kind:?}");
         assert_eq!(kind, GUID_TYPICAL_POWER_SAVINGS, "Balanced");
-        for key in KEYS {
+        for key in SettingKey::ALL {
             let default = power.read_default(active, key).unwrap();
             let registry = registry_default(kind, key.into());
             println!(
@@ -1531,13 +1531,15 @@ mod tests {
                 PlanSetting::from(key).name()
             );
             let want = match key {
-                SettingKey::LidAc | SettingKey::LidDc => registry,
-                SettingKey::SleepDc => MODERN_STANDBY_SLEEP_DC,
-                SettingKey::SleepAc | SettingKey::VideoIdleAc | SettingKey::VideoIdleDc => {
-                    unreachable!("a lost journal resets only the hold keys")
-                }
+                SettingKey::LidAc | SettingKey::LidDc => Some(registry),
+                SettingKey::SleepDc => Some(MODERN_STANDBY_SLEEP_DC),
+                // The reset takes the sleep route's 1-minute timeouts back too (`p2-6-sleep-route-fixes`): their
+                // defaults are read and shown, not pinned, since nothing measured them before.
+                SettingKey::SleepAc | SettingKey::VideoIdleAc | SettingKey::VideoIdleDc => None,
             };
-            assert_eq!(default, want, "{key:?}");
+            if let Some(want) = want {
+                assert_eq!(default, want, "{key:?}");
+            }
         }
         // A plan with no such kind fails, and never guesses one.
         let none = power.read_default(OTHER, SettingKey::LidAc);

@@ -18,6 +18,7 @@ use std::time::{Duration, Instant};
 
 use wakeshot_core::command::Failure;
 use wakeshot_core::ownership::io::{JournalRead, PlanIo, SafetyNet};
+use wakeshot_core::ownership::reset::{Found as ResetFound, Reset};
 use wakeshot_core::ownership::restore::Found;
 use wakeshot_core::process::{Alive, ProcessRef};
 use wakeshot_core::settings::JournalOwner;
@@ -26,7 +27,7 @@ use windows::Win32::Foundation::{ERROR_INVALID_PARAMETER, ERROR_NO_UNICODE_TRANS
 use crate::WinError;
 use crate::install::{PathChange, UserPath};
 use crate::log::{self, Level, Log, Proc};
-use crate::power::journal::{FileNet, NoGuard, RUN_ONCE_NAME, restore_locked};
+use crate::power::journal::{FileNet, NoGuard, RUN_ONCE_NAME, reset_locked, restore_locked};
 use crate::power::plan::Win32Power;
 use crate::process::{Liveness, SystemLiveness};
 use crate::recovery::open_log;
@@ -68,6 +69,8 @@ pub trait HookEnv {
     fn remove_run_once(&mut self) -> Result<bool, WinError>;
     /// One restore attempt, if a journal exists and its owner is Gone.
     fn try_restore(&mut self) -> Attempt;
+    /// The lost-journal reset of a journal that does not parse (`power::journal::reset_locked`, `damaged`).
+    fn reset_lost(&mut self) -> Reset;
     /// The uninstall's data folder step. Empty: done.
     fn clean_data_folder(&mut self, step: DataFolder) -> Vec<Undeleted>;
     /// Monotonic milliseconds from any fixed start.
@@ -199,10 +202,47 @@ pub fn on_uninstall(env: &mut impl HookEnv, version: &str) {
     remove_path(env);
     let step = match restore(env, Hook::Uninstall, started) {
         Attempt::Restored | Attempt::Nothing => DataFolder::DeleteAll,
+        Attempt::Unrestorable(Unrestorable::DoesNotParse) => {
+            reset_lost(env);
+            DataFolder::KeepJournalAndLogs
+        }
         _ => DataFolder::KeepJournalAndLogs,
     };
     clean(env, step);
     end(env, Hook::Uninstall, started);
+}
+
+/// No tray starts after an uninstall, so a journal that does not parse would leave Wakeshot's values with nothing that
+/// ever resets them (product "User settings safety" 5 and 7; `p2-6-sleep-route-fixes`, review major 3). So the
+/// uninstall runs the tray's lost-journal reset itself: each lid, sleep and screen value at exactly Wakeshot's goes to
+/// the plan's Windows default, and the file is set aside. `damaged`: the file was there and did not parse a moment
+/// ago, so one gone since is that file, set aside by the restore routine, and its values are still in force. A hook
+/// shows no notice; the log keeps each old value (the reset's own lines) and this summary, and the data folder step
+/// keeps the logs.
+fn reset_lost(env: &mut impl HookEnv) {
+    let done = env.reset_lost();
+    let keys = done.reset_keys();
+    let (level, text) = match done.result {
+        Ok(()) if keys.is_empty() => (
+            Level::Info,
+            "lost journal reset: no value looked like Wakeshot's, so nothing was set".to_owned(),
+        ),
+        Ok(()) => (
+            Level::Warn,
+            format!(
+                "lost journal reset: {keys:?} set to Windows defaults; the old values are above"
+            ),
+        ),
+        Err(f) => (
+            Level::Error,
+            format!(
+                "lost journal reset failed: {}; {keys:?} set to Windows defaults; the lid, sleep and screen \
+                 settings may need setting by hand",
+                error_text(f)
+            ),
+        ),
+    };
+    env.log(level, &text);
 }
 
 /// The start line, which also proves `VelopackApp` ran the hook (`p6-velopack-facts`: `vpk` does not check it).
@@ -403,11 +443,14 @@ fn outcome(hook: Hook, attempt: Attempt) -> (Level, String) {
             (Level::Warn, text)
         }
         Attempt::Unrestorable(Unrestorable::DoesNotParse) => {
-            let next = match hook {
-                Hook::Uninstall => "after a reinstall, the tray sets it aside and warns",
-                Hook::Install | Hook::Updated => "the tray sets it aside and warns at its next start",
+            let text = match hook {
+                Hook::Uninstall => {
+                    "no restore: journal.json does not parse; the lost-journal reset follows".to_owned()
+                }
+                Hook::Install | Hook::Updated => "no restore: journal.json does not parse and stays as it is; the \
+                                                  tray sets it aside and warns at its next start"
+                    .to_owned(),
             };
-            let text = format!("no restore: journal.json does not parse and stays as it is; {next}");
             (Level::Warn, text)
         }
         Attempt::Unrestorable(Unrestorable::NewerVersion) => (
@@ -614,6 +657,20 @@ impl<P: PlanIo> HookEnv for RealHookEnv<P> {
         }
     }
 
+    fn reset_lost(&mut self) -> Reset {
+        match &mut self.net {
+            Ok(net) => reset_locked(&mut self.plans, net, true, &self.names, &*self.log),
+            Err(e) => Reset {
+                found: ResetFound::Lost,
+                plan: None,
+                keys: Vec::new(),
+                set_aside: None,
+                result: Err((*e).into()),
+                journal: Vec::new(),
+            },
+        }
+    }
+
     fn clean_data_folder(&mut self, step: DataFolder) -> Vec<Undeleted> {
         match &self.dir {
             Ok(dir) => clean_on_disk(dir, step),
@@ -772,8 +829,12 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     use wakeshot_core::files::{JournalFile, JournalFileEntry, JournalKey};
-    use wakeshot_core::ownership::fake::{Call as PlanCall, FakePlans, SetBy};
+    use wakeshot_core::ownership::fake::{
+        Call as PlanCall, FAKE_DEFAULT_LID, FAKE_DEFAULT_OTHER, FAKE_DEFAULT_SLEEP_DC, FakePlans,
+        SetBy,
+    };
     use wakeshot_core::ownership::journal::JournalParts;
+    use wakeshot_core::ownership::reset::KeyReset;
     use wakeshot_core::process::FileTime;
     use wakeshot_core::settings::{Guid, Journal, JournalEntry, PlanValues, SettingKey};
 
@@ -813,6 +874,7 @@ mod tests {
         RemovePath,
         RemoveRunOnce,
         TryRestore(u64),
+        ResetLost,
         Clean(DataFolder),
         Wait(u64),
     }
@@ -938,6 +1000,28 @@ mod tests {
             let (takes, attempt) = self.attempts.pop_front().unwrap_or((0, self.then));
             self.now += takes;
             attempt
+        }
+
+        /// The battery keys reset, as for a crashed tray's hold.
+        fn reset_lost(&mut self) -> Reset {
+            self.calls.push(Call::ResetLost);
+            Reset {
+                found: ResetFound::Lost,
+                plan: Some(P1),
+                keys: vec![
+                    (LidDc, KeyReset::Reset { old: 0, default: 1 }),
+                    (
+                        SleepDc,
+                        KeyReset::Reset {
+                            old: 0,
+                            default: 180,
+                        },
+                    ),
+                ],
+                set_aside: Some(Ok(())),
+                result: Ok(()),
+                journal: Vec::new(),
+            }
         }
 
         fn clean_data_folder(&mut self, step: DataFolder) -> Vec<Undeleted> {
@@ -1190,16 +1274,39 @@ mod tests {
 
     #[test]
     fn unrestorable_journal_is_tried_once_and_kept() {
-        for why in [Unrestorable::DoesNotParse, Unrestorable::NewerVersion] {
-            let mut env = FakeEnv::new(&[Attempt::Unrestorable(why)]);
-            on_uninstall(&mut env, "0.1.1");
-            assert_eq!(
-                order(&env)[4..],
-                [TRY, Call::Clean(DataFolder::KeepJournalAndLogs)],
-                "{why:?}"
-            );
-            assert_eq!(env.count("no restore"), 1, "{why:?}");
-        }
+        let mut env = FakeEnv::new(&[Attempt::Unrestorable(Unrestorable::NewerVersion)]);
+        on_uninstall(&mut env, "0.1.1");
+        assert_eq!(
+            order(&env)[4..],
+            [TRY, Call::Clean(DataFolder::KeepJournalAndLogs)]
+        );
+        assert_eq!(env.count("no restore"), 1);
+
+        // One that does not parse gets the lost-journal reset: no tray starts after an uninstall to do it (review
+        // major 3). The logs stay, since they hold the old values.
+        let mut env = FakeEnv::new(&[Attempt::Unrestorable(Unrestorable::DoesNotParse)]);
+        on_uninstall(&mut env, "0.1.1");
+        assert_eq!(
+            order(&env)[4..],
+            [
+                TRY,
+                Call::ResetLost,
+                Call::Clean(DataFolder::KeepJournalAndLogs)
+            ]
+        );
+        assert_eq!(env.count("no restore"), 1);
+        assert_eq!(
+            env.count("lost journal reset: [LidDc, SleepDc] set to Windows defaults"),
+            1,
+            "{:?}",
+            env.lines()
+        );
+
+        // Install and update leave it to the tray's next start, which can warn.
+        let mut env = FakeEnv::new(&[Attempt::Unrestorable(Unrestorable::DoesNotParse); 2]);
+        on_install(&mut env, "0.1.0");
+        on_updated(&mut env, "0.1.1");
+        assert!(!env.calls.contains(&Call::ResetLost));
     }
 
     #[test]
@@ -1678,6 +1785,46 @@ mod tests {
         assert_eq!(env.try_restore(), Attempt::Restored);
         assert_originals(&fake);
         assert!(!rig.journal_file().exists());
+    }
+
+    #[test]
+    fn real_uninstall_resets_a_journal_that_does_not_parse() {
+        // A tray died while its hold's battery lid Do nothing and sleep Never were in force, and the 1-minute AC sleep
+        // of an earlier sleep route; its journal is damaged. No tray starts after an uninstall, so the hook puts each
+        // to the plan's Windows default and sets the file aside (review major 3).
+        let rig = Rig::new("hooks::tests::real_uninstall_resets_a_journal_that_does_not_parse");
+        fs::write(rig.journal_file(), b"{ not json").unwrap();
+        let fake = applied();
+        {
+            let mut s = fake.state();
+            let short = wakeshot_core::settings::SHORT_TIMEOUT_S;
+            s.set_stored(P1, SettingKey::SleepAc, short, SetBy::Override);
+            s.set_in_force(P1, SettingKey::SleepAc, short, SetBy::Override);
+        }
+        let mut env = rig.env(fake.clone(), Box::new(SystemLiveness));
+        on_uninstall(&mut env, "0.1.1");
+
+        let s = fake.state();
+        for (key, default) in [
+            (LidDc, FAKE_DEFAULT_LID),
+            (SleepDc, FAKE_DEFAULT_SLEEP_DC),
+            (SettingKey::SleepAc, FAKE_DEFAULT_OTHER),
+        ] {
+            assert_eq!(s.stored(P1, key), Some(default), "{key:?}");
+            assert_eq!(s.in_force(P1, key), Some(default), "{key:?}");
+        }
+        assert_eq!(s.in_force(P1, SettingKey::LidAc), Some(1), "the user's own");
+        drop(s);
+        assert!(!rig.journal_file().exists());
+        assert_eq!(rig.left(), ["logs"], "the logs keep the old values");
+        assert!(
+            rig.log
+                .has("no restore: journal.json does not parse; the lost-journal reset follows")
+        );
+        assert!(rig.log.has("lost journal: lidDc on plan"));
+        assert!(rig.log.has(
+            "lost journal reset: [LidDc, SleepDc, SleepAc] set to Windows defaults; the old values are above"
+        ));
     }
 
     /// Every kind of thing the data folder holds.

@@ -863,13 +863,17 @@ mod tests {
     use wakeshot_core::sources::{Activity, SessionKey};
     use wakeshot_core::testing::{FakeClock, FakeSource};
     use wakeshot_core::time::Clock;
-    use windows::Win32::Foundation::{HLOCAL, LocalFree};
+    use windows::Win32::Foundation::{CloseHandle, HANDLE, HLOCAL, LUID, LocalFree};
     use windows::Win32::Security::Authorization::{
         ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
     };
     use windows::Win32::Security::{
-        DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, SetFileSecurityW,
+        AdjustTokenPrivileges, DACL_SECURITY_INFORMATION, ImpersonateSelf, LUID_AND_ATTRIBUTES,
+        LookupPrivilegeValueW, PSECURITY_DESCRIPTOR, RevertToSelf, SE_BACKUP_NAME,
+        SecurityImpersonation, SetFileSecurityW, TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES,
+        TOKEN_PRIVILEGES_ATTRIBUTES,
     };
+    use windows::Win32::System::Threading::{GetCurrentThread, OpenThreadToken};
     use windows::core::{HSTRING, PCWSTR, w};
 
     use super::*;
@@ -1335,6 +1339,57 @@ mod tests {
         }
     }
 
+    /// This test thread runs without `SeBackupPrivilege` until dropped. An elevated Git Bash (the MSYS2 runtime) starts
+    /// every child with that privilege enabled, and a folder opened for listing with backup semantics, as `read_dir`
+    /// opens it, then lists past a deny ACE; the tray never runs so. So the thread takes a copy of the process token
+    /// with the privilege off, and the deny holds in any shell (research, "A deny ACE and the backup privilege").
+    struct NoBackup;
+
+    impl NoBackup {
+        fn on() -> Self {
+            // SAFETY: gives this thread its own copy of the process token; `RevertToSelf` in the drop ends it.
+            unsafe { ImpersonateSelf(SecurityImpersonation) }.unwrap();
+            let guard = Self;
+            let mut token = HANDLE::default();
+            // SAFETY: the current-thread pseudo handle needs no close, and `token` is a live out pointer.
+            unsafe {
+                OpenThreadToken(
+                    GetCurrentThread(),
+                    TOKEN_ADJUST_PRIVILEGES,
+                    true,
+                    &mut token,
+                )
+            }
+            .unwrap();
+            let mut luid = LUID::default();
+            // SAFETY: a null system name means this PC; the name is a static string and `luid` a live out pointer.
+            unsafe { LookupPrivilegeValueW(PCWSTR::null(), SE_BACKUP_NAME, &mut luid) }.unwrap();
+            let off = TOKEN_PRIVILEGES {
+                PrivilegeCount: 1,
+                Privileges: [LUID_AND_ATTRIBUTES {
+                    Luid: luid,
+                    Attributes: TOKEN_PRIVILEGES_ATTRIBUTES(0),
+                }],
+            };
+            // SAFETY: the token is open with TOKEN_ADJUST_PRIVILEGES and `off` outlives the call; no previous state is
+            // asked for. A token without the privilege (an unelevated shell) answers success too.
+            let adjusted =
+                unsafe { AdjustTokenPrivileges(token, false, Some(&off), 0, None, None) };
+            // SAFETY: a handle the call above opened, closed once.
+            unsafe { CloseHandle(token) }.unwrap();
+            adjusted.unwrap();
+            guard
+        }
+    }
+
+    impl Drop for NoBackup {
+        fn drop(&mut self) {
+            // No assert: a panic here, during a failed test's unwind, would abort the run.
+            // SAFETY: ends this thread's impersonation; nothing else on the thread relies on it.
+            let _ = unsafe { RevertToSelf() };
+        }
+    }
+
     /// `SetFileSecurityW` changes the folder only: the files in it keep the access they had.
     fn set_dacl(path: &Path, sddl: PCWSTR) -> windows::core::Result<()> {
         let mut sd = PSECURITY_DESCRIPTOR::default();
@@ -1371,6 +1426,7 @@ mod tests {
         agents.on_tick();
         assert_eq!(source.fed().len(), 2);
 
+        let _no_backup = NoBackup::on();
         let denied = NoListing::on(&dir);
         let listing = names(&dir, 0, |_| true).map_err(|e| e.raw_os_error());
         assert_eq!(listing, Err(Some(5)), "the listing is denied");

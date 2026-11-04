@@ -249,8 +249,9 @@ pub enum Command {
                                                 // its owner is Gone or this tray), ShortTimeouts (the sleep
                                                 // route's 1-minute timeouts go back)
     ResetLost { damaged: bool },                // a lost journal ("A journal that cannot be read" below): on the
-                                                // plan in use each key at Wakeshot's value goes to the plan's
-                                                // Windows default, the bad file goes aside (ownership::reset)
+                                                // plan in use each key at a value Wakeshot writes (a hold's 0,
+                                                // the sleep route's 1 minute) goes to the plan's Windows
+                                                // default, the bad file goes aside (ownership::reset)
     Lock,
     SleepCheck { reason: CountdownReason, floor_pct: u8, last_resume_mono_ms: Option<u64> },
                                                 // the countdown is due: the hibernate thread's last check and the
@@ -359,10 +360,16 @@ waited takes no Do nothing as final: it starts once a read shows the user's own 
 for Floor) as not Do nothing, and ends when the lid opens, a hold starts or, for Floor, AC comes back
 (`p2-6-unread-lid-countdown`, `p2-6-unread-floor-countdown`). When the unknown window ends, known or lost, with the lid
 closed and nothing holding, the work-end want starts waiting the same way; with a hold that holds nothing because of
-the battery floor, the Floor want does (`Core::unknown_journal_ended`, `p2-6-record-lost`). With a hold that holds and
-a lid close inside the window, which got no lock, the lock waits the same way for a read that shows the user's own
-lid action as not Do nothing, then comes as at a lid close, with the chime (`p2-6-sleep-route` deliverable 8; with
-the user's own Do nothing on every source, no lock, as at a lid close).
+the battery floor, the Floor want does (`Core::unknown_journal_ended`, `p2-6-record-lost`). A lid close inside the
+window, with the session unlocked, gets no lock then; that lock waits until the lid opens or the session locks,
+not only until the window ends (`Core::settle_window_lock`; `p2-6-sleep-route` deliverable 8,
+`p2-6-sleep-route-fixes` review major 1). It comes, with the chime, once the journal is known and Wakeshot keeps the
+closed laptop running (a hold holds: at the window's end, when one starts later, or when a step back ends; or its own
+Do nothing is in force), and a read shows the user's own lid action as not Do nothing on a power source that has
+lasted 30 s, so a dock's short AC drop does not lock a docked user (review minor 7). With the user's own Do nothing,
+no lock, as at a lid close. It is watched like a lid-close lock, also when the hold runs on requests only. A reset of
+the lost journal that fails locks such a laptop at once (review minor 5): the journal then counts as known and empty,
+so a Do nothing the reset could not put back would read as the user's own, and nothing else would ever lock it.
 
 ### Clocks
 
@@ -403,7 +410,8 @@ While holding:
 - Lid closes while the lid action in force is our Do nothing: `Lock` and `Play(LidClosedHolding)` at once, side by side;
   note `lid_closed_since`. Also with nothing holding, when a restore that failed or has not landed left our Do nothing
   in force (the countdown below starts too). While the journal is unknown ("A journal that cannot be read", below)
-  there is no lock at a lid close and no source lock: no entry names a key, and a Do nothing in force may be the user's
+  there is no lock at a lid close (the lock that close did not get waits: "Events, state, commands" above) and no
+  source lock: no entry names a key, and a Do nothing in force may be the user's
   own (Haik, 2026-11-04; this replaced the guess of `p6-int-wiring-fixes` decision 7). The lock is watched: a lock that fails, or that no `Session(Locked)` follows within 5 s (`LockWorkStation` only
   starts it), is sent once more at the next tick; if that one goes the same way, step back as at the floor (requests
   off, restore, the work-end countdown) until the session locks or the lid opens, then hold again as at a hold start
@@ -452,9 +460,10 @@ Holding ends (last hold gone):
 
 A failed `Restore` is retried at a tick, at most once per 10 s, right before that tick's `ReadPlan`, so the read's
 ownership check sees the journal the retry left. While the core applies (holding, on the console, not stepped back,
-not at session end, some key not released, and no `Apply` failed in this episode), the retry takes only the entries
-on plans other than the active one, one `Restore { plan: Some(p) }` per plan, and the hold's `Apply` takes over the
-entries on the active plan and restores those whose key the user released. Otherwise the retry is
+not at session end, some hold key not released, and no `Apply` failed in this episode; a short key the user changed
+in a step back is released too, but never stops the hold: review minor 4 of `p2-6-sleep-route`), the retry takes only
+the entries on plans other than the active one, one `Restore { plan: Some(p) }` per plan, and the hold's `Apply` takes
+over the entries on the active plan and restores those whose key the user released. Otherwise the retry is
 `Restore { plan: None }`, so after a failed apply (`SafetyNet` or `Write`: requests only for the episode) it does not
 wait for an apply that never comes. So a retry never undoes a running hold, and a hold that starts while a restore
 fails rests on entries the journal still holds. The 10 s read deadline is set only while the mirror holds an entry or
@@ -471,16 +480,24 @@ after it became unknown (a sleep in between pauses the clock, so the tries still
 `ResetLost { damaged: false }` in place of the retry; `JournalCorrupt` sends `ResetLost { damaged: true }` at once. The
 reset (`ownership::reset`, under the journal mutex) loads the file once more: known entries mean it read after all,
 nothing is reset, and the mirror takes them; a missing file, or one with no known entry, means someone else restored
-it, unless `damaged`. Otherwise, on the plan in use, each of the three keys that holds exactly Wakeshot's value (lid
-Do nothing, sleep Never) gets the plan's Windows default (`PowerRead*DefaultIndex` of the plan's personality, research
-"Windows defaults of the three keys"), then `PowerSetActiveScheme`; any other value is the user's and stays. The bad
-file goes aside afterwards (a failed move is logged, nothing more), and the executor marks it seen, so the next start
-does not reset again. The log has a line per key with its old and new value, or why it stayed. The answer makes the
-journal known and empty, also when a call failed; then a read goes out, since the plan copy shows the old values. One
-`JournalLost` notice when a key was reset or a call failed, kept for the user's return like `HibernateFailed`; nothing
-reset is the log's only. A reset whose answer never comes goes out again two minutes later. Only the plan in use is
-reset: a lost journal's values on another plan stay (rare: a crash after a plan switch whose restore failed, then a
-journal that never reads).
+it, unless `damaged`. Otherwise, on the plan in use, each key that holds exactly a value Wakeshot writes gets the
+plan's Windows default (`PowerRead*DefaultIndex` of the plan's personality, research "Windows defaults of the three
+keys"), then `PowerSetActiveScheme`; any other value is the user's and stays. Those values are a hold's (lid Do
+nothing, battery sleep Never) and the sleep route's (sleep and screen off after 1 minute, AC and battery), so a crash
+while the 1-minute timeouts are in force does not leave them for good (`p2-6-sleep-route-fixes`, review major 2: the
+orchestrator's call under rule 7, for Haik's review; the cost is the same, a user's own 1 minute goes to the
+default). With `damaged`, known entries are this tray's own apply when it owns the settings (only the owner applies):
+it ran between the set-aside and the reset, since the IO queue held it already, and took the values in force as its
+originals, Wakeshot's own among them (a hold that starts over the 1-minute timeouts journals battery sleep at 60 s).
+So the core sends `Restore { plan: None }`, the reset again and the apply again (and the short timeouts, if they are
+in force), in that order on the IO queue; once only, so a second find keeps the entries (review major 2, case B).
+The bad file goes aside afterwards (a failed move is logged, nothing more), and the executor marks it seen, so the next
+start does not reset again. The log has a line per key with its old and new value, or why it stayed. The answer makes
+the journal known and empty, also when a call failed; then a read goes out, since the plan copy shows the old values.
+One `JournalLost` notice when a key was reset or a call failed, kept for the user's return like `HibernateFailed`;
+nothing reset is the log's only. A reset whose answer never comes goes out again two minutes later. Only the plan in
+use is reset: a lost journal's values on another plan stay (rare: a crash after a plan switch whose restore failed,
+then a journal that never reads).
 
 Countdown: due when input idle (clamped at resume and unlock as above) reaches 5 minutes (Haik, 2026-11-03). Cancelled by a new
 hold (not while stepped back, at the floor or after a failed lock, since no hold holds then), lid open, or AC back
@@ -805,12 +822,13 @@ guard, restore mode, Velopack hooks and the CLI, always under `Local\Wakeshot.Jo
 1. Load `journal.json`. Missing: nothing to do. Any other read error: this run fails. No entries (a stop before the
    clean-up): the clean-up of step 6. Corrupt (read in full, but it does not parse): move it to
    `journal.json.corrupt`; the routine changes no value. In the tray the journal is then lost (`JournalCorrupt`): the
-   reset puts each hold key that holds Wakeshot's value back to Windows' default, with one notice ("A journal that
-   cannot be read", section 3). The guard, restore mode, the hooks and `wakeshot restore` only set the file aside; the
-   tray's next start resets (not after an uninstall: no tray starts then). The log holds the old values (every
-   settings write is logged with old and new values). An apply that finds the file corrupt writes nothing and fails with
-   `SafetyNet(JOURNAL_CORRUPT)`; the core then sends one `Restore { plan: None }`, once per corrupt file and not per
-   apply, so this step sets the file aside and `JournalCorrupt` reaches the user (orchestrator, 2026-11-03).
+   reset puts each key that holds a value Wakeshot writes back to Windows' default, with one notice ("A journal that
+   cannot be read", section 3). The guard, restore mode, the install and updated hooks and `wakeshot restore` only set
+   the file aside, and the tray's next start resets; the uninstall hook runs the reset itself, since no tray starts
+   after it (section 6). The log holds the old values (every settings write is logged with old and new values). An
+   apply that finds the file corrupt writes nothing and fails with `SafetyNet(JOURNAL_CORRUPT)`; the core then sends
+   one `Restore { plan: None }`, once per corrupt file and not per apply, so this step sets the file aside and
+   `JournalCorrupt` reaches the user (orchestrator, 2026-11-03).
 2. Read the active plan id and the whole plan list: `PowerEnumerate` until it returns 259 (`ERROR_NO_MORE_ITEMS`, the
    end code on the test laptop). If the id read fails, or the list stops on any other code, this run fails before any
    entry is dropped or written: "plan deleted" is judged only from a complete list. A `Restore { plan: Some(p) }`
@@ -902,10 +920,13 @@ is gone, hooks show no UI, and the uninstall removes the RunOnce value; the jour
 hook restores.
 
 Until the next tray start resets them to Windows' defaults (`p2-6-record-lost`): a journal file that reads but does not
-parse, met by the guard, restore mode, a hook or `wakeshot restore` (restore step 1). It is moved aside; the log holds
-the old values. After an uninstall no tray starts, so its values stay until the user sets them. The reset covers only
-the hold keys: a lost journal while the sleep route's 1-minute timeouts were in force leaves them (rare: a crash in
-those minutes and a journal that does not read).
+parse, met by the guard, restore mode, the install or updated hook or `wakeshot restore` (restore step 1). It is moved
+aside; the log holds the old values. The uninstall hook resets at once, since no tray starts after it
+(`p2-6-sleep-route-fixes`, review major 3). The reset covers the sleep route's 1-minute timeouts too, so a lost journal
+while they were in force ends at the defaults (review major 2). A `journal.json.corrupt` whose rename to `.seen` fails
+is logged and not reported, so it is reset at most once: reported at each start, it would reset each time, by then
+maybe over values the user set (review minor 6). One left by `wakeshot restore` while a tray ran is reported only at
+that tray's next start; the late reset is kept, since nothing else would ever take back the values that file named.
 
 ### Lock and hibernate
 
@@ -1064,7 +1085,11 @@ outlasts `winget upgrade`, and uninstall removes it, so a later install starts a
 no journal, `%LocalAppData%\Wakeshot` goes whole; otherwise `journal.json` and `logs\` stay (section 5, "Gap left"). A
 failed restore is tried again every 2 s until the hook's inner limit, counted from its start: 25 s for install and
 uninstall, 10 s for updated (section 5, restore step 7). An owner that is alive or Unknown, or a journal that does not
-parse or holds only a newer version's entries, ends the tries at once with one log line; the journal stays as it is. The
+parse or holds only a newer version's entries, ends the tries at once with one log line; the journal stays as it is,
+but for one that does not parse at uninstall: no tray starts after it, so the hook runs the tray's lost-journal reset
+(`power::journal::reset_locked`, `damaged`), each lid, sleep and screen value at exactly Wakeshot's goes to the plan's
+Windows default and the file goes aside, with log lines only, and `logs\` stays for the old values
+(`p2-6-sleep-route-fixes`, review major 3). The
 obsolete hook only logs. Updates apply only when nothing holds and nothing is overridden. Tested on a real install with
 a local feed: a downloaded update did not apply for 120 s while Keep awake held; after Keep awake off the plan copy came
 back, then the update applied and Velopack started the new tray. Setup.exe over the install and an uninstall, each
@@ -1148,7 +1173,7 @@ fallback. The one exception is `watch::read` (the watch thread's file reads, std
 | Active plan read fails at the start of an apply | nothing written; requests only for the episode, notice |
 | Plan read fails | nothing released; log; retried at the next read |
 | Restore fails | journal kept; the tray retries at a tick, at most once per 10 s, while the restore is still wanted and warns once; restore mode and the guard retry for 2 minutes while the journal's owner is still the dead process, then start the tray; the Velopack hooks retry every 2 s for up to 25 s (updated: 10 s) |
-| Journal corrupt | moved aside; the tray resets each hold key at Wakeshot's value to Windows' default, with one `JournalLost` notice (section 3, "A journal that cannot be read"); the guard, restore mode, the hooks and the CLI only move it aside, and the tray's next start resets (section 5, "Gap left") |
+| Journal corrupt | moved aside; the tray resets each key at a value Wakeshot writes to Windows' default, with one `JournalLost` notice (section 3, "A journal that cannot be read"); the guard, restore mode, the install and updated hooks and the CLI only move it aside, and the tray's next start resets; the uninstall hook resets itself, with log lines only (section 5, "Gap left") |
 | Liveness Unknown | last state kept, retried on the next tick; no file deleted, no restore started |
 | Settings mutex held by another session | requests only; retried on each tick |
 | Hibernate not allowed, fails, or lid state unknown | notice, once per countdown; the hold's settings were already restored and the sleep route's 1-minute timeouts stay, so Windows sleeps the laptop once nothing holds it; while the lid stays closed, `Lock` with the chime at each input reading 5 minutes idle with the session unlocked and on the PC's screen, at most every 5 minutes, until the lid opens, unless the user's own lid action for the power source is Do nothing (power safety verify minor 1); a notice raised with the lid closed and the session unlocked is shown again with the closed-lid report (verify minor 2) |

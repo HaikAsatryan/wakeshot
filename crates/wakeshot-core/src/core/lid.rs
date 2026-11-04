@@ -169,11 +169,9 @@ impl Core {
     /// Wakeshot's that the reset or a restore just took back, and putting the lid action back does not sleep a laptop
     /// whose lid is already closed. So the work-end want waits for the next plan read, which tells the user's own lid
     /// action (`work_end_waited`): the copy still shows the values from before the reset or restore. A step back with a
-    /// hold that holds nothing waits the same way for the `Floor` countdown. A hold that holds, through a lid close in
-    /// the window, kept the closed laptop running with no lock: the lock waits for the same read
-    /// ([`Core::settle_window_lock`], `p2-6-sleep-route` deliverable 8).
+    /// hold that holds nothing waits the same way for the `Floor` countdown. The lock a lid close in the window did not
+    /// get is not this hook's: it waits on its own until a hold holds ([`Core::settle_window_lock`]).
     pub(super) fn unknown_journal_ended(&mut self) {
-        let window_close = std::mem::take(&mut self.state.lock.window_close);
         if self.state.lid_closed != Some(true) {
             return;
         }
@@ -184,38 +182,71 @@ impl Core {
             }
         } else if self.state.stepped_back && !self.state.floor_countdown {
             self.state.lock.floor_waits = true;
-        } else if window_close && !self.holds_back() {
-            self.state.lock.window_lock_waits = true;
         }
     }
 
-    /// The lock a lid close in the unknown window did not get, once a plan read tells the user's own lid action: the
+    /// The lock a lid close in the unknown window did not get (`p2-6-sleep-route` deliverable 8). Wakeshot is the
+    /// reason the closed laptop runs only while a hold holds, or while its own Do nothing is in force (the lid-close
+    /// rule), so the lock waits, while the lid stays closed, for the journal to be known and one of these: at the
+    /// window's end, or later when a hold starts or a step back ends (`p2-6-sleep-route-fixes`, review major 1). Then
+    /// it locks, with the chime, once a plan read shows the user's own lid action as not Do nothing, on a power source
+    /// that has lasted the 30 s settle, so a dock's short AC drop does not lock a docked user (review minor 7). The
     /// copy may still show the values from before the reset or restore, so a Do nothing waits for the next read, as
-    /// the countdown wants do. With the user's own Do nothing on every source the laptop would run without Wakeshot
-    /// too, and gets no lock (decision 18), as at a lid close. Ends when the hold ends, it steps back or the lid opens.
-    fn settle_window_lock(&mut self, now: Now, out: &mut Vec<Command>) {
-        if !self.state.lock.window_lock_waits {
+    /// the countdown wants do; with the user's own Do nothing the laptop would run without Wakeshot too, and gets no
+    /// lock (decision 18). A lock out already is watched first ([`Core::check_lock`]). Gives when the settle ends.
+    fn settle_window_lock(&mut self, now: Now, out: &mut Vec<Command>) -> Option<Deadline> {
+        let state = &self.state;
+        // After a lock and its retry failed, the step back is the answer until the session locks or the lid opens. A
+        // session locked already needs no lock, and a `Lock` into one is not watched, so it would be sent again at
+        // every pass.
+        let waits = state.lock.window_close
+            && state.lid_closed == Some(true)
+            && !state.session_locked
+            && state.lock.pending.is_none()
+            && !state.lock.stepped_back
+            && !self.journal_unknown()
+            && ((state.episode.is_some() && !self.holds_back()) || self.lid_ours());
+        let own_sleeps = waits
+            && self.in_force().is_some_and(|(plan, journal)| {
+                self.sources()
+                    .iter()
+                    .any(|&ac| lid::user_action(&plan, ac, &journal) != DO_NOTHING)
+            });
+        if !own_sleeps {
+            return None;
+        }
+        let settled = state
+            .source_since_mono
+            .map(|at| at.saturating_add(SOURCE_SETTLE_MS))
+            .filter(|&at| now.mono_ms < at);
+        if let Some(at) = settled {
+            return Some(Deadline::Mono(at));
+        }
+        out.push(Command::Log(
+            "Wakeshot keeps the closed laptop running since a lid close in the unknown journal window, which it could \
+             not lock: lock"
+                .to_owned(),
+        ));
+        // One lock for the one closed laptop: the source lock would only send a second.
+        self.state.source_lock = None;
+        self.lock_and_chime(now, out);
+        None
+    }
+
+    /// The reset of a lost journal failed (`p2-6-sleep-route-fixes`, review minor 5). The journal now counts as known
+    /// and empty, so a Do nothing the reset could not put back, most likely Wakeshot's, reads as the user's own, and no
+    /// rule would ever lock or sleep a laptop whose lid closed in the window. So it is locked once, with the chime, as
+    /// at a lid close. Whether that Do nothing is the user's own cannot be told now, so this errs toward the lock.
+    pub(super) fn lost_reset_failed(&mut self, now: Now, out: &mut Vec<Command>) {
+        let lock = &self.state.lock;
+        if !lock.window_close || lock.pending.is_some() || self.state.lid_closed != Some(true) {
             return;
         }
-        if self.state.lid_closed != Some(true) || self.state.episode.is_none() || self.holds_back()
-        {
-            self.state.lock.window_lock_waits = false;
-            return;
-        }
-        let own_sleeps = self.in_force().is_some_and(|(plan, journal)| {
-            self.sources()
-                .iter()
-                .any(|&ac| lid::user_action(&plan, ac, &journal) != DO_NOTHING)
-        });
-        if own_sleeps {
-            self.state.lock.window_lock_waits = false;
-            out.push(Command::Log(
-                "The journal is known again, and a hold keeps the closed laptop running since a lid close Wakeshot \
-                 could not lock: lock"
-                    .to_owned(),
-            ));
-            self.lock_and_chime(now, out);
-        }
+        out.push(Command::Log(
+            "The lost journal's reset failed with the lid closed since the window: lock".to_owned(),
+        ));
+        self.state.source_lock = None;
+        self.lock_and_chime(now, out);
     }
 
     /// Our Do nothing keeps a closed laptop running on the current source (either one before the first `Power`).
@@ -275,8 +306,9 @@ impl Core {
     pub(super) fn take_lid(&mut self, closed: bool, now: Now, out: &mut Vec<Command>) {
         match (self.state.lid_closed.replace(closed), closed) {
             (Some(false), true) => {
-                // No lock now (`lock_view`): when the window ends, a hold that still holds gets it.
-                if self.journal_unknown() {
+                // No lock now (`lock_view`): once the window ended, a hold that holds gets it. A session already
+                // locked needs none.
+                if self.journal_unknown() && !self.state.session_locked {
                     self.state.lock.window_close = true;
                 }
                 // A user whose own lid action is Do nothing gets neither (decision 18); with the user's own Sleep
@@ -329,7 +361,6 @@ impl Core {
         self.state.lock.pending = None;
         self.state.lock.relock = None;
         self.state.lock.window_close = false;
-        self.state.lock.window_lock_waits = false;
         self.end_lock_step_back("the lid opened", out);
         if let Some(run) = self.state.closed_lid.as_mut()
             && let Some(since) = run.since_mono.take()
@@ -575,10 +606,12 @@ impl Core {
         }
     }
 
-    /// `Locked`: a watched lock is confirmed, and a closed laptop that is locked after all may hold again.
+    /// `Locked`: a watched lock is confirmed, a lock a lid close in the unknown window waited for is not needed any
+    /// more, and a closed laptop that is locked after all may hold again.
     pub(super) fn take_locked(&mut self, out: &mut Vec<Command>) {
         self.state.session_locked = true;
         self.state.lock.pending = None;
+        self.state.lock.window_close = false;
         self.end_lock_step_back("the session is locked now", out);
     }
 
@@ -672,6 +705,7 @@ impl Core {
     ) -> Option<Deadline> {
         // A plan read tells the user's own lid actions: the countdown wants that wait for one decide at each pass once
         // one worked, before the cancels below.
+        let mut window_due = None;
         if self.state.plan.is_some() {
             if let Some(sources) = self.state.lock.work_end_waits.take() {
                 self.work_end_waited(sources);
@@ -679,7 +713,7 @@ impl Core {
             if std::mem::take(&mut self.state.lock.floor_waits) && self.state.stepped_back {
                 self.floor_countdown_waited();
             }
-            self.settle_window_lock(now, out);
+            window_due = self.settle_window_lock(now, out);
         }
         // Once per step back, at the first moment a hold counts in it: a step back with nothing held changes nothing.
         if self.state.stepped_back && self.state.episode.is_some() && !self.state.step_back_shown {
@@ -728,12 +762,13 @@ impl Core {
             .map(|p| Deadline::Mono(p.check_mono));
         self.keep_plan_copy();
         let due = nearest(nearest(source_due, countdown_due, now), idle_due, now);
-        nearest(due, lock_due, now)
+        nearest(nearest(due, lock_due, now), window_due, now)
     }
 
     /// At a tick, before the settle pass: a watched lock that failed, or that the session did not confirm in time,
     /// gets the one retry; when the retry goes the same way, the step back, whose requests go off in this pass. Both
-    /// only while the lid is closed on our Do nothing; else the lock no longer guards anything Wakeshot keeps running.
+    /// only while the lid is closed on our Do nothing, or a hold holds through a lid close in the unknown window, which
+    /// may run on requests only (review minor 7); else the lock no longer guards anything Wakeshot keeps running.
     pub(super) fn check_lock(&mut self, now: Now, out: &mut Vec<Command>) {
         let Some(pending) = self
             .state
@@ -744,7 +779,9 @@ impl Core {
             return;
         };
         self.state.lock.pending = None;
-        if self.state.lid_closed != Some(true) || !self.lid_ours() {
+        let window_hold =
+            self.state.lock.window_close && self.state.episode.is_some() && !self.holds_back();
+        if self.state.lid_closed != Some(true) || !(self.lid_ours() || window_hold) {
             out.push(Command::Log(
                 "The lock is not confirmed, but Wakeshot no longer keeps a closed laptop running: nothing to do"
                     .to_owned(),

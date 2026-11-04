@@ -4112,3 +4112,25 @@ test on a throwaway plan copy that was never active.
   the last input, or 60 s from the write. Either way the sleep should come about a minute after the write (inferred
   from `p3-idle-sleep-check`, one run); the fallback hibernate covers the rest. Haik's lid test
   (`p6-int-haik-checks`) is where it gets measured.
+
+## A deny ACE and the backup privilege
+
+`p2-6-sleep-route-fixes`, 2026-11-04 12:50 to 13:10, on the test laptop, for the test
+`watch::agents::tests::a_folder_that_cannot_be_listed_reads_its_known_files` that failed in agent shells since about
+12:00 (the listing it denies by ACL was not denied).
+
+- **The Bash tool's shell runs with `SeBackupPrivilege` and `SeRestorePrivilege` enabled; PowerShell's does not.**
+  `whoami /priv` from the Bash tool (Git Bash, MSYS2 runtime) listed both Enabled; from the PowerShell tool, same
+  session, both Disabled; both High integrity with `SeDebugPrivilege` Enabled. The MSYS2 runtime turns them on in an
+  elevated process, and every child (cargo, the test exe) inherits them (not verified in the MSYS2 source; seen).
+  **Verified** (both commands run).
+- **With the backup privilege enabled, the deny ACE does not stop a listing.** The same test binary failed from the
+  Bash tool (`left: Ok([...1.json, ...2.json])`) and passed from PowerShell. `read_dir` opens a folder with backup
+  semantics, which a process with the backup privilege enabled passes for read access whatever the DACL says
+  (Microsoft, `CreateFileW`: `FILE_FLAG_BACKUP_SEMANTICS`; not read again here). A `Set-Acl` deny of List folder from
+  PowerShell denied `Get-ChildItem` there. **Verified** (runs); the "whatever the DACL" part from Microsoft's docs.
+- **The fix, for the test only.** The test thread takes a copy of the process token (`ImpersonateSelf`) and turns
+  `SeBackupPrivilege` off in it until the test ends (`RevertToSelf`). The test then passed from both tools. A tray
+  never runs so: its privileges are a normal token's. **Verified** (both tools, 13:05). Not run at Medium integrity
+  here, where the token has no backup privilege to turn off; that `AdjustTokenPrivileges` then still answers success
+  is Microsoft's doc, not seen.

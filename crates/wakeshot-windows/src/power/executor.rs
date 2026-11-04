@@ -373,18 +373,20 @@ impl<P: PlanIo, N: SafetyNet> PowerExecutor<P, N> {
     }
 
     /// The notice shows once per corrupt file, so the file is renamed once it is reported (track note 7). `true`: a
-    /// `journal.json.corrupt` was there. A rename that fails counts as there and is logged: the next start reports the
-    /// same file again, a repeated notice rather than none.
+    /// `journal.json.corrupt` was there to report. A rename that fails is logged and reports nothing: it would most
+    /// likely fail at every start, and each report now resets the values that look like Wakeshot's, by then maybe the
+    /// user's own, with a notice each time; a missed report costs less (`p2-6-sleep-route-fixes`, review minor 6).
     fn mark_seen(&self) -> bool {
         match mark_corrupt_seen(&self.dir) {
             Ok(found) => found,
             Err(e) => {
                 let text = format!(
-                    "journal.json.corrupt not renamed to .seen: {} failed with {}; the next start reports it again",
+                    "journal.json.corrupt not renamed to .seen: {} failed with {}; not reported, so no start resets \
+                     for it again",
                     e.call, e.code
                 );
                 self.note(Level::Warn, &text);
-                true
+                false
             }
         }
     }
@@ -1290,6 +1292,37 @@ mod tests {
         assert_eq!(executor.startup(), found);
         assert_eq!(names_in(&rig.dir.0), ["journal.json.corrupt.seen"]);
         assert_eq!(executor.startup(), none_found);
+    }
+
+    #[test]
+    fn startup_does_not_report_a_corrupt_file_it_cannot_mark_seen() {
+        // Review minor 6 of `p2-6-sleep-route`: the rename would fail at every start, and each report resets again.
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows::Win32::Storage::FileSystem::FILE_SHARE_READ;
+
+        let rig = Rig::new("start-corrupt-stuck");
+        let data = rig.dir.data();
+        fs::write(
+            data.file(DataFile::JournalCorrupt),
+            b"{ set aside by restore mode",
+        )
+        .unwrap();
+        fs::write(data.file(DataFile::JournalCorruptSeen), b"an older one").unwrap();
+        // Held open without delete sharing, so the rename over it fails.
+        let held = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ.0)
+            .open(data.file(DataFile::JournalCorruptSeen))
+            .unwrap();
+        for _ in 0..2 {
+            assert!(!rig.executor().startup().corrupt);
+        }
+        assert!(rig.warned("not reported, so no start resets for it again"));
+        drop(held);
+
+        // Once the rename works, the file is reported once.
+        assert!(rig.executor().startup().corrupt);
+        assert!(!rig.executor().startup().corrupt);
     }
 
     #[test]

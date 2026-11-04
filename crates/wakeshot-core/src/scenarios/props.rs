@@ -126,6 +126,12 @@ struct Model {
     retry: bool,
     /// A `ResetLost` went out and its answer has not come (section 3, "A journal that cannot be read").
     resetting: bool,
+    /// A lid reading came, so the next one that says closed is a close.
+    lid_known: bool,
+    /// The lid closed while the journal was unknown and the session unlocked, and no lid opening or lock came since:
+    /// the lock that close did not get is still owed once Wakeshot keeps the laptop running
+    /// (`p2-6-sleep-route-fixes`, review major 1).
+    window_close: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -171,11 +177,12 @@ impl Model {
                 .any(|f| hold_files::decide(f, Alive::Unknown, self.automatic, now).counts)
     }
 
-    /// The core writes settings now (section 3, "Holding starts" and "A failed `Restore`").
+    /// The core writes settings now (section 3, "Holding starts" and "A failed `Restore`"). Only the hold keys count:
+    /// a short key the user changed in a stepped-back episode never stops the hold (`p2-6-sleep-route-fixes` minor 4).
     fn applies(&self) -> bool {
         self.episode
             .as_ref()
-            .is_some_and(|e| !e.requests_only && e.released.len() < KEYS.len())
+            .is_some_and(|e| !e.requests_only && !KEYS.iter().all(|key| e.released.contains(key)))
             && self.owner
             && self.on_console
             && !self.stepped_back
@@ -367,7 +374,10 @@ impl Model {
                 }
             }
             Event::Session(change) => match change {
-                SessionChange::Locked => self.locked = true,
+                SessionChange::Locked => {
+                    self.locked = true;
+                    self.window_close = false;
+                }
                 SessionChange::Unlocked => self.locked = false,
                 SessionChange::Ending | SessionChange::Ended => self.session_ending = true,
                 SessionChange::EndCancelled => self.session_ending = false,
@@ -379,7 +389,15 @@ impl Model {
                 self.ac = Some(*ac);
                 self.battery_pct = *battery_pct;
             }
-            Event::Lid { closed } => self.lid_closed = *closed,
+            Event::Lid { closed } => {
+                let close = *closed && self.lid_known && !self.lid_closed;
+                self.window_close = match *closed {
+                    true => self.window_close || (close && self.journal_unknown() && !self.locked),
+                    false => false,
+                };
+                self.lid_closed = *closed;
+                self.lid_known = true;
+            }
             _ => {}
         }
         self.take_journal(&step.event);
@@ -975,7 +993,9 @@ fn runs_closed_unlocked_on_ours(truth: &Truth) -> bool {
 /// step that ends the retry's wait, one tick after its failure (section 8, "Lock fails"; verify minor 4). `strict`
 /// also judges a change before the core's first plan read (finding 2: a crashed tray's values in the first moments
 /// after the start). A change while the journal is unknown starts no stretch: Wakeshot does not lock then, by design
-/// (product "User settings safety" 7, whose cost names a closed laptop running unlocked until it sleeps).
+/// (product "User settings safety" 7, whose cost names a closed laptop running unlocked until it sleeps). The lock
+/// that close did not get is owed once the journal is known: any later step that finds the laptop so starts a stretch,
+/// such as a hold whose apply lands after the window (`p2-6-sleep-route-fixes`, review major 1).
 fn closed_laptop_is_locked_in_time(world: &World, strict: bool) -> Result<(), String> {
     let seen = replay(world);
     let mut stretch: Option<u64> = None;
@@ -1015,7 +1035,8 @@ fn closed_laptop_is_locked_in_time(world: &World, strict: bool) -> Result<(), St
             };
             let knows = core_can_know(s) || (strict && truth.in_sync && s.before.plan.is_none());
             let window = s.before.journal_unknown() || s.after.journal_unknown();
-            if stretch.is_none() && runs && change && knows && !window {
+            let owed = change || s.after.window_close;
+            if stretch.is_none() && runs && owed && knows && !window {
                 stretch = Some(truth.at.mono_ms);
             }
         }
@@ -1717,6 +1738,138 @@ fn a_damaged_leftover_journal_ends_at_the_defaults() {
         world.trace()
     );
     assert_eq!(world.plans().state().set_aside, 1);
+    check(&world, restored_at_the_end);
+    check(&world, every_action_is_explained);
+}
+
+// Review major 2 of `p2-6-sleep-route` (`p2-6-sleep-route-fixes`): a journal lost while the sleep route's 1-minute
+// timeouts are in force. The orchestrator's call under rule 7, for Haik's review: the reset puts each short key that
+// holds exactly 1 minute back to the default too.
+
+/// Every short key, in the order the reset takes them.
+const SHORT_IN_RESET_ORDER: [SettingKey; 4] = [
+    SettingKey::SleepDc,
+    SettingKey::SleepAc,
+    SettingKey::VideoIdleAc,
+    SettingKey::VideoIdleDc,
+];
+
+/// Each short key of Balanced is in force at the plan's Windows default.
+fn short_keys_at_the_defaults(world: &World) {
+    let state = world.plans().state();
+    for key in SettingKey::SHORT {
+        let default = state.default_of(sim::BALANCED, key);
+        assert_eq!(
+            state.in_force(sim::BALANCED, key),
+            Some(default),
+            "{key:?}\n{}",
+            world.trace()
+        );
+    }
+}
+
+#[test]
+fn one_minute_timeouts_a_crash_left_end_at_the_defaults() {
+    // Case A: the PC lost power while the 1-minute timeouts were in force, and their journal does not read at the next
+    // start.
+    let start = WorldStart {
+        startup_unread: true,
+        ..WorldStart::default()
+    };
+    let mut world = World::new(&start);
+    {
+        let mut state = world.plans().state();
+        for key in SettingKey::SHORT {
+            let short = crate::settings::SHORT_TIMEOUT_S;
+            state.set_stored(sim::BALANCED, key, short, SetBy::Override);
+            state.set_in_force(sim::BALANCED, key, short, SetBy::Override);
+        }
+        state.journal = FakeJournal::Unreadable(32);
+    }
+    world.play(&WorldStep::Run(3 * MINUTE));
+    world.end(End::LastHold);
+    assert_eq!(
+        lost_notices(&world),
+        [Notice::JournalLost {
+            reset: SHORT_IN_RESET_ORDER.to_vec(),
+            failed: false
+        }],
+        "{}",
+        world.trace()
+    );
+    short_keys_at_the_defaults(&world);
+    check(&world, restored_at_the_end);
+    check(&world, every_action_is_explained);
+}
+
+#[test]
+fn a_damaged_journal_met_as_a_hold_starts_over_the_one_minute_timeouts_ends_at_the_defaults() {
+    // Case B: work ended with the lid closed and the sleep route wrote its 1-minute timeouts; then `journal.json` is
+    // damaged, and an agent turn starts. The hold's start puts the short timeouts back, which meets the damaged file
+    // and sets it aside; the hold's apply, queued already, journals battery sleep with 1 minute as the user's own. The
+    // reset finds that fresh journal: its entries go back, the reset runs again, then the hold applies again.
+    let start = WorldStart {
+        ac: false,
+        ..WorldStart::default()
+    };
+    let mut world = World::new(&start);
+    let agent = |now| WorldStep::Agent { pid: 1, now };
+    world.play(&agent(AgentNow::Working));
+    world.play(&WorldStep::Lid { closed: true });
+    world.play(&agent(AgentNow::Idle));
+    world.play(&WorldStep::Run(IDLE_MS + MINUTE));
+    let short = crate::settings::SHORT_TIMEOUT_S;
+    assert_eq!(
+        world
+            .plans()
+            .state()
+            .in_force(sim::BALANCED, SettingKey::SleepAc),
+        Some(short),
+        "the short timeouts are in force\n{}",
+        world.trace()
+    );
+    world.plans().state().journal = FakeJournal::Corrupt;
+    world.play(&agent(AgentNow::Working));
+    {
+        let state = world.plans().state();
+        let sleep_dc = state
+            .known_entries()
+            .into_iter()
+            .find(|e| e.key == SettingKey::SleepDc);
+        let default = state.default_of(sim::BALANCED, SettingKey::SleepDc);
+        assert_eq!(
+            sleep_dc.map(|e| (e.original, e.written)),
+            Some((default, 0)),
+            "the hold's battery Never journals the default, not 1 minute\n{}",
+            world.trace()
+        );
+        for key in [
+            SettingKey::SleepAc,
+            SettingKey::VideoIdleAc,
+            SettingKey::VideoIdleDc,
+        ] {
+            let default = state.default_of(sim::BALANCED, key);
+            assert_eq!(
+                state.in_force(sim::BALANCED, key),
+                Some(default),
+                "{key:?}\n{}",
+                world.trace()
+            );
+        }
+    }
+    world.end(End::LastHold);
+    // The lid-close lock held the notice for the user's return.
+    world.play(&WorldStep::Unlock);
+    assert_eq!(
+        lost_notices(&world),
+        [Notice::JournalLost {
+            reset: SHORT_IN_RESET_ORDER.to_vec(),
+            failed: false
+        }],
+        "{}",
+        world.trace()
+    );
+    short_keys_at_the_defaults(&world);
     check(&world, restored_at_the_end);
     check(&world, every_action_is_explained);
 }

@@ -75,8 +75,9 @@ pub enum FileKind {
 ///   target other than Never is a ceiling: a live value at or under it, and not Never, is the user's own and is kept.
 ///   The apply restores this plan's journal entries for other keys in the same run (architecture section 5, Apply).
 /// - `Restore`: `plan: None` takes every entry, `Some` only that plan's.
-/// - `ResetLost`: the journal is lost (product "User settings safety" 7): on the plan in use, each key at the value
-///   Wakeshot writes goes to the plan's Windows default, and the bad file is set aside (`ownership::reset`). It first
+/// - `ResetLost`: the journal is lost (product "User settings safety" 7): on the plan in use, each key at a value
+///   Wakeshot writes (a hold's 0, the sleep route's 1 minute) goes to the plan's Windows default, and the bad file is
+///   set aside (`ownership::reset`). It first
 ///   loads the journal once more: a file with known entries read after all, and nothing is reset. A missing file, or
 ///   one with no known entry, means someone else restored it, unless `damaged`: then a corrupt file was set aside just
 ///   before, and the values it named are still in force. Answers as `Outcome::ResetLost`.
