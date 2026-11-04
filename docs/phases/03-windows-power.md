@@ -138,7 +138,7 @@ laptop" cards run one at a time across all tracks.
 | `p3-harness` | no | yes for the `cleanup` smoke run only (global lane, review M7); other smoke runs touch no setting | `p3-power-io`, `p3-recovery`, `p3-requests`, `p3-session`, `p3-system-events` | done (22:56): 22 tests, smoke runs done; Haik's values same |
 | `p3-real-checks` | no | yes: an active plan copy, 50 cycles | `p3-harness`, `p3-stop-points` | done (00:54): every step passed; 16 real tests in `wakeshot-windows`, 2 in the tray; 50 cycles, `PowerSetActiveScheme` median 51.5 ms, max 121.8 ms |
 | `p3-haik-checks` | yes: about 60 min elapsed, about 15 min of hands | yes, whole laptop: battery, lid, sign-out, sleep, lock; no other agent or cargo command runs (review B2) | `p3-real-checks` | done (18:31): A (values back; End task closed the console, so the guard path did not run), C, D, E, B1 pass; B2 not shown (RunOnce pass timing; a real gap, fix card `p2-6-runonce-keep`); Haik's values same |
-| `p2-6-runonce-keep` | Part B only: about 5 min, one sign-out | Part A no; Part B yes, whole laptop | `p3-haik-checks` | running (18:54): Part A done (76a44cc); review 0/0/6 (cac66d4); fix round and B2 prep running; then the B2 redo with Haik |
+| `p2-6-runonce-keep` | Part B only: about 5 min, one sign-out | Part A no; Part B yes, whole laptop | `p3-haik-checks` | blocked: waiting for Haik (19:08): Part A, review 0/0/6 and the fix round done (113a9a0); B2 redo steps in the card |
 | `p3-idle-sleep-check` | yes: about 10 min (dock out, lid closed 4 min) | yes: an active plan copy, lid, battery; Haik's plan never written | nothing | done (10:42): it sleeps (Modern Standby, not hibernate) 55 s after the release, when the screen timeout turns the screen off; locked at wake |
 
 Size estimates (one worker's context): store 90K, log 80K, process 110K, power-plan 110K, requests 60K,
@@ -263,3 +263,7 @@ Critical path: store, journal, (core ownership cards), power-io, harness, real-c
   older than this change) fixed: the value for any readable journal with a known entry, the guard for this tray's own
   journal only; minor 3 (README gap list) waits, since `README.md` has someone else's uncommitted edits. Running: the
   fix round, then the B2 redo prep (no verify: no blocker or major).
+- 2026-11-04 19:12 (orchestrator): `p2-6-runonce-keep` fix round done (113a9a0): minors 1, 2 (lean), 4, 5 and 6 fixed,
+  minor 3 waits for the README; 570 tests pass, each code fix undone makes a test fail. B2 redo prep done (both
+  2-minute waits enforced by the scripts; a red banner and a dialog for STOP and NOT READY). Given to Haik; his
+  sign-out ends this session.

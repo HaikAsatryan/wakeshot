@@ -248,7 +248,12 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   and Windows deleted the value. The same gap is real in the product (a hold that starts in the first minute after
   sign-in loses its RunOnce value). Orchestrator decision, for Haik's review: fix card `p2-6-runonce-keep`. Running:
   its Part A (the fix).
-- Next (orchestrator): when Part A ends, a narrow power safety check of the change (`wakeshot-reviewer`), fixes, then
-  Part B (B2 redo with Haik, about 5 minutes, one sign-out, the laptop alone). Then: `p6-int-haik-checks` (about 45
-  min, with its 2026-11-04 changes), `p6-media` Part B, the README and Pages finish. Haik's call on banners
-  (2026-11-04): keep `Shell_NotifyIcon` banners (`product.md`).
+- 2026-11-04 19:12: `p2-6-runonce-keep` Part A (76a44cc), its narrow power safety check (0/0/6, cac66d4) and the fix
+  round (113a9a0) done: the RunOnce value comes back within one plan read, also for another owner's leftover
+  (orchestrator decision, for Haik's review); 570 tests pass. Review minor 3 (README gap list) waits: `README.md` has
+  uncommitted edits not made by this session or its agents (asked Haik whose). New card `p6-real-install-guard`
+  (later, before Haik installs the first release). Haik's call: notices stay `Shell_NotifyIcon` banners.
+- Next (orchestrator): Haik does the B2 redo (card `p2-6-runonce-keep` "Part B", about 6 minutes; its sign-out ends
+  this session). When he says "B2 done" with what steps 3 and 5 showed, a new worker runs the card's "After Haik's
+  steps". Then the README gap line (review minor 3), `p6-int-haik-checks` (about 45 min, with its 2026-11-04
+  changes), `p6-media` Part B, the README and Pages finish.
