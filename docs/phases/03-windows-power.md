@@ -137,7 +137,7 @@ laptop" cards run one at a time across all tracks.
 | `p3-stop-points` | no | yes: a plan copy, never active | `p3-power-plan`, `p3-journal`, core `p2-ownership-apply` | done (21:48): 3142 real cases passed, Haik's values same; no routine bug |
 | `p3-harness` | no | yes for the `cleanup` smoke run only (global lane, review M7); other smoke runs touch no setting | `p3-power-io`, `p3-recovery`, `p3-requests`, `p3-session`, `p3-system-events` | done (22:56): 22 tests, smoke runs done; Haik's values same |
 | `p3-real-checks` | no | yes: an active plan copy, 50 cycles | `p3-harness`, `p3-stop-points` | done (00:54): every step passed; 16 real tests in `wakeshot-windows`, 2 in the tray; 50 cycles, `PowerSetActiveScheme` median 51.5 ms, max 121.8 ms |
-| `p3-haik-checks` | yes: about 60 min elapsed, about 15 min of hands | yes, whole laptop: battery, lid, sign-out, sleep, lock; no other agent or cargo command runs (review B2) | `p3-real-checks` | blocked: waiting for Haik (01:08); step files ready in its card |
+| `p3-haik-checks` | yes: about 60 min elapsed, about 15 min of hands | yes, whole laptop: battery, lid, sign-out, sleep, lock; no other agent or cargo command runs (review B2) | `p3-real-checks` | running (18:19): Haik's steps done, the worker reads the logs; B2 left the journal and the plan copy |
 | `p3-idle-sleep-check` | yes: about 10 min (dock out, lid closed 4 min) | yes: an active plan copy, lid, battery; Haik's plan never written | nothing | done (10:42): it sleeps (Modern Standby, not hibernate) 55 s after the release, when the screen timeout turns the screen off; locked at wake |
 
 Size estimates (one worker's context): store 90K, log 80K, process 110K, power-plan 110K, requests 60K,
@@ -243,3 +243,8 @@ Critical path: store, journal, (core ownership cards), power-io, harness, real-c
   60 s sleep timeout. An app sees the suspend and the resumes only through the suspend-resume callback, not as window
   messages. AFTER equals BEFORE. Open: whether a long screen timeout delays the sleep (the worker proposes a
   15-minute rerun); `p2-6-sleep-route` must cover it either way.
+- 2026-11-04 18:19 (orchestrator, after Haik's sign-outs): Haik did A, C, D, E, B1 and B2 ("in B everything was ok").
+  The last `0-check.cmd` (18:16:28) was NOT OK: Haik's values and the active plan are back and the RunOnce value is
+  gone, but the journal and the plan copy `40fece43-...` ("Wakeshot test 41604", not active) stayed. Checklist 5 may
+  have a real bug. Haik was asked not to run `0-cleanup.cmd`. A new worker runs the card's "After Haik's steps", saves
+  the evidence first, then finds the cause, then cleans up. It runs alone.

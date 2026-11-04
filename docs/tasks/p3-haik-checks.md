@@ -1,7 +1,7 @@
 # Haik's checks for the power track
 
-Phase: 3. Status: blocked: waiting for Haik (2026-11-04 16:46; worker prep done, ready for step A; steps under "Steps
-for Haik"). Needs Haik: **yes**:
+Phase: 3. Status: done (2026-11-04 18:31; A, C, D, E and B1 pass; B2, checklist 5, not shown: see Result and Found
+outside scope 2). Needs Haik: **yes**:
 about 60 minutes elapsed, about 15 minutes of his hands (lid, charger, sign-out, Task Manager, lock); the two battery
 runs need the laptop unplugged for about 20 minutes each (now D about 12 and E about 25 minutes). Real laptop:
 **yes**: battery, lid, sign-out, lock, a plan copy made active. **Runs alone on the whole laptop** (cross-track
@@ -244,6 +244,26 @@ Problems seen but not fixed.
    guard are one exe (`wakeshot-tray.exe`). Whether Task Manager puts the real tray and its guard in one group (so
    "End task on its group" would end both and leave only RunOnce) shows only with the real tray: integration
    (architecture section 9, checklist 4; section 4 "Processes").
+2. **A hold that starts before Explorer's RunOnce pass of that sign-in loses its RunOnce value for the rest of the
+   session.** Affects architecture section 5, "Logon restore" and "Gap left". Explorer runs HKCU RunOnce once per
+   sign-in, after every Run entry: 64.6 s and 39.0 s after sign-in here (research, "Power track manual checks").
+   A value the tray sets before that pass is run at once: Windows deletes it, restore mode finds the owner alive and
+   exits (`recovery.rs:756`), and nothing sets it again until the next apply that writes a value, since
+   `set_run_once` has one caller, apply step 3 (`wakeshot-core/src/ownership/apply.rs:144`). Then, for the rest of
+   that hold, an OS crash, a power cut, or End task on tray and guard together leaves nothing to restore at the next
+   sign-in when start at login is off: lid Do nothing and battery Never stay until Wakeshot next starts. With start at
+   login on, the tray's own start restores (section 4 "Tray startup" step 6), so nothing is lost. The window is real
+   with start at login on (the tray starts in the Run pass, right before the RunOnce pass) and with a manual start in
+   the first minute. Cause **verified** (B2's logs: Shell-Core 9707 at 18:15:18.653, restore mode's `OwnerAlive` line
+   at 18:15:18.683, `B2-kill.txt` `RunOnce: none`); that the real tray hits it: inferred from the code, not tested.
+   Proposed fix, my pick: in `PowerExecutor::keep_guard` (`wakeshot-windows/src/power/executor.rs:255`), when the
+   journal holds a known entry this tray owns, call `set_run_once` next to `ensure_guard` (it reads first and writes
+   only a missing value, `power/journal.rs:556`), and log a failure like a guard start failure. The value then comes
+   back within one ReadPlan (10 s in a hold), whoever removed it, the same rule as a guard that ended. Cost: one
+   registry read per ReadPlan while something is owned. Other option: restore mode sets the value again when it finds
+   the owner alive; no periodic read, but it breaks "only the tray sets RunOnce" (`journal.rs:353`) and races the
+   owner's own clean-up (a stale value, harmless: the next sign-in's restore mode finds no journal). Not built or
+   tested here (out of scope: no code fixes).
 
 ## Log
 
@@ -313,26 +333,87 @@ Problems seen but not fixed.
   everything seems ok". Not said: "Apps" or "Background processes" in A2; GAP lines in D and E (read the logs).
   Haik swapped the DELL dock for the charger at 16:44 (the prep worker's battery note). B comes next; the
   sign-outs end the orchestrator, so the "After Haik's steps" worker reads this line.
+- 2026-11-04 18:19, worker ("After Haik's steps"): started. Haik's report on B, his words: "in B everything was ok only
+  the last check gave not ok". The last `0-check.cmd` (B2 step 4) at 18:16:28: plan, lid, sleep, energy saver OK,
+  RunOnce `WakeshotRestore` none, but journal LEFT and the copy `40fece43-...` (Wakeshot test 41604) left, not active.
+  The orchestrator told Haik not to run `0-cleanup.cmd`. Order: preserve the evidence first, then find why the
+  sign-in restore left the journal and the copy, then steps 1 to 5.
+- 2026-11-04 18:19, worker: evidence copied before any change to `<scratchpad>\p3-haik-checks\evidence` (this
+  session's scratchpad): both data folders, `powercfg /list` and `/qh` of Balanced and of the copy, RunOnce and Run,
+  the System, Application, Shell-Core and Winlogon logs from 16:40. At 18:19:33 the journal (owner pid 41604, session
+  2, three entries on the copy, none restored) and the copy were still there, Balanced active, no RunOnce value: the
+  restore was not slow, it never ran at the second sign-in. Haik did not run `0-cleanup.cmd`: `check.log` shows five
+  `0-check` runs (18:16:28 to 18:17:16), all NOT OK the same way. `requests-log.ps1` (pwsh 33660) is gone; its log ends
+  18:13:51, before B1's sign-out (7002 at 18:14:08).
+- 2026-11-04 18:25, worker, B2 cause (verified from logs): Explorer's per-sign-in HKCU RunOnce pass ran after B2 had
+  started, not at B2's sign-in. Shell-Core Operational, Explorer pid 34656 (the shell of B1's sign-in, 7001 at
+  18:14:14): Run keys 18:14:22 to 18:15:12, then `9705 Started enumeration ... RunOnce` 18:15:18.653, `9707 Started
+  execution of command 'wakeshot-tray.exe" --restore'`, `9708 Finished ... (PID 35732)` 18:15:18.670. B2's fake-tray
+  had set the value at 18:15:02.337. Windows deleted the value and ran restore mode, which logged at 18:15:18.683
+  `restore mode: the journal's owner (pid 41604 start 134382753022985918) runs and restores it itself` and exited
+  (`recovery.rs:756`, `Alive::Yes` gives `OwnerAlive`). `B2-kill.txt` 18:15:21.964: `RunOnce: none`, then `NOT READY`;
+  Haik signed out anyway (7002 18:15:53). The second sign-in's RunOnce pass (Explorer 19640, 18:16:37.290) found
+  nothing. Harness timing, plus a real product gap: see Found outside scope 2.
+- 2026-11-04 18:24, worker: logs read (A, C, D, E, B1, B2: outcomes in the Result). `power_check cleanup` (elevated)
+  at 18:24:50: restored the journal in `%LocalAppData%\Wakeshot` (owner 41604; copy lidAc 0 to 1, lidDc 0 to 1,
+  sleepDc 0 to 18000), journal deleted, run record removed, the copy `40fece43-...` deleted; exit 0. `check.ps1` at
+  18:24:58: `check: ALL OK`. Logs after the cleanup copied to `<scratchpad>\p3-haik-checks\evidence\after-cleanup`.
+- 2026-11-04 18:26, worker: deleted `%LocalAppData%\Wakeshot`, `<S2>\target` and every part of
+  `%LocalAppData%\Wakeshot-harness` but the empty `haik` folder: it is the working folder of Haik's open
+  `0-check.cmd` window (cmd pid 20600, started 18:16:27, waiting at `pause`), so Windows refuses the delete; not my
+  process, left running. `<S2>\scripts` and `make-cmd.py` kept for a B2 redo. `powercfg` at 18:26:07: Balanced
+  active and the only plan; lid AC 1, DC 1; sleep AC and DC 0x4650 (18000); energy saver DC 0x1e (30); no RunOnce
+  value, no journal; `HKCU\...\Run` the same 7 values, no Wakeshot; `powercfg /requests` None for every type.
+- 2026-11-04 18:31, worker: `docs/research.md` "Power track manual checks" added; Found outside scope 2 and the Result
+  written; Status `done`. The empty `haik` folder was still in use at 18:28 (second try). No product code changed, no
+  git.
 
 ## Result
 
-Status: blocked: waiting for Haik (2026-11-04 16:46). Deliverable 1 is done: "Steps for Haik" (A, C, D, E, B1, B2;
-about 60 minutes, about 15 hands-on), the orchestrator's and the worker's prep before them, and the reading after them.
-No check has run yet; deliverable 2 and the acceptance checks wait for Haik's steps.
+Status: done (2026-11-04 18:31). Deliverable 1 (steps for Haik, prep) done 16:46; Haik ran A, C, D, E, B1, B2
+(16:55 to 18:17); deliverable 2 (reading, cleanup, values) done 18:19 to 18:31 by a new worker. F skipped (decision
+1). Facts in `docs/research.md`, "Power track manual checks".
 
-Worker prep done 2026-11-04 16:42 to 16:46 (Log): builds on today's code pass; baseline saved (Balanced only and
-active, lid 1 and 1, sleep 18000 and 18000, energy saver DC 30, no journal, no RunOnce value, no Wakeshot Run value);
-step files written; `requests-log.ps1` runs as pwsh PID 33660; `fake-tray --plan-only` exit 0 with nothing changed;
-the step folder is open in a Medium Explorer window. Step texts still match today's harness output; one change to the
-reading after the steps (a resume's short driver request in `requests.log` does not spoil D). The laptop is on
-battery since 16:44:25.
+Outcomes, with the log lines in the Log and in research:
 
-Files changed: this card. Scratch: `<S2>\make-cmd.py` and `<S2>\scripts\` (`check.ps1`, `kill.ps1`, `C2-lock.ps1`,
-`requests-log.ps1`). Nothing on the laptop changed: Haik's values read at 01:09:12 are the same as at 00:52:26
-(Balanced only and active; lid 1 and 1; sleep 18000 and 18000; energy saver DC 30; no journal, no RunOnce value, no
-`%LocalAppData%\Wakeshot` or `Wakeshot-harness`).
+| Check | Outcome |
+|---|---|
+| A, checklist 4 | Values back both runs (pass for "End task leaves Haik's values right"). The guard path did **not** run: A1 and A2 both logged `stopping: the console window closed` and `restore (Quit): ok` (15.6, 12.0 ms), the guard `stopped`; Task Manager's End task closed the console. Guard path not verified here (shown before by pid kill, `p6-int-real-e2e`). Haik: `power_check` has an arrow with one unnamed row; the guard `wakeshot-tray.exe` is one row of its own with an icon. Apps or Background: not noted. Real tray's grouping: integration (Found outside scope 1) |
+| C, session notices | Pass: lock 17:30:51 and 17:31:18, unlock 17:31:03 and 17:31:34, each `locked yes` or `no`; `real_lock_locks` exit 0 |
+| D, checklist 3 | Pass: one `GAP slept` for Start > Sleep (17:33:29 to 17:33:58), `requests retaken after the resume`, then no GAP through the screen off (Kernel-Power 506 17:37:15) and 4 min 49 s past it, up to Haik's touch at 17:42:04; no other request |
+| E, checklist 1 | Pass: `lid closed` 17:43:50 to `lid open` 18:08:25, 307 ticks, 0 GAP, input idle up to 1477.6 s; the copy deleted at exit; no other request |
+| B1, checklist 6 | Pass: `WM_QUERYENDSESSION` 18:14:02.769, restore done in 19.3 ms (journal deleted, RunOnce removed), `WM_ENDSESSION` 18:14:02.817, copy deleted 18:14:02.820; Winlogon 7002 at 18:14:08.509 |
+| B2, checklist 5 | **Not shown.** Harness timing: B2 started 48 s after B1's sign-in, before Explorer's RunOnce pass of that sign-in (18:15:18.653, after all Run entries), which ran restore mode at once; it found the owner alive and exited, and Windows had deleted the value. `B2-kill.txt` said `RunOnce: none`, `NOT READY` at 18:15:21; Haik signed out anyway. The pass also shows a real product gap: Found outside scope 2 |
 
-Decided by the worker, for Haik's review: the five rows under "Questions for Haik" (F skipped; B as two sign-outs;
-Haik starts each run himself; logs in `%LocalAppData%\Wakeshot-harness`; A in a classic console window).
+Cleanup: Haik did not run `0-cleanup.cmd`. `power_check cleanup` (18:24:50) restored the B2 journal on the copy and
+deleted the copy; `check.ps1` `ALL OK` (18:24:58). Haik's values at 18:26:07 by `powercfg` equal the 16:44 baseline:
+Balanced active and the only plan, lid AC 1 and DC 1, sleep AC and DC 18000, energy saver DC 30; no journal, no
+`WakeshotRestore` value, Run unchanged (7 values, no Wakeshot), `powercfg /requests` None. No difference to put back.
+`requests-log.ps1` (pwsh 33660) ended at B1's sign-out by itself.
 
-Open items: the whole run; Found outside scope 1 (the real tray's Task Manager group shows only at integration).
+Acceptance checks: values before and after equal: **pass**. No test plan, no journal, no RunOnce value: **pass**. A to
+E with pass or fail and log lines, in the Result and research: **pass**, with B2 "not shown" and A's guard path "not
+verified". A design-changing finding under Found outside scope with its section: **pass** (item 2, section 5).
+
+Files changed: this card; `docs/research.md` (new section "Power track manual checks", additions only). Deleted:
+`%LocalAppData%\Wakeshot`, `<S2>\target`, all of `%LocalAppData%\Wakeshot-harness` but its empty `haik` folder.
+Evidence (logs, event exports, journal, `powercfg` reads, before and after the cleanup) in this session's scratchpad:
+`C:\Users\haika\AppData\Local\Temp\claude\f7c2c08a8f04f07b\af61f686-7f48-4802-a60d-f1a8fa567c5f\scratchpad\p3-haik-checks\evidence`.
+
+Other findings (research, no design change): at sign-out Windows ends the guard first (exit code 0x40010004,
+`DBG_TERMINATE_PROCESS`; cause not verified), and the tray starts a new one during its end-session restore, stopped
+11 ms later. The first guard start of a new exe took 3.4 s (later 8 to 10 ms; cause not verified).
+
+Open items:
+
+1. Found outside scope 2: the RunOnce value lost to Explorer's per-sign-in pass. A fix card (power track, executor) or
+   an entry in "Gap left": orchestrator's and Haik's call. My pick: the fix, one `set_run_once` call in `keep_guard`.
+2. Checklist 5 still needs a B2 redo, best after that fix so it tests the final code: about 5 minutes of Haik, one
+   sign-out, a worker prep first (build into `<S2>\target`, baseline, `make-cmd.py`). Two changes to the B2 steps:
+   start `B2-fake-tray.cmd` at least 2 minutes after the sign-in, and wait 2 minutes after the next sign-in before
+   `0-check.cmd` (Haik's first check came 30 s after sign-in, the pass 39 s). Also make `kill.ps1`'s `NOT READY`
+   impossible to miss (Haik read B as all OK).
+3. The empty folder `%LocalAppData%\Wakeshot-harness\haik` stays until Haik closes the open "Wakeshot check: values"
+   window (cmd pid 20600); then `rd /s /q "%LocalAppData%\Wakeshot-harness"`. `<S2>\scripts` and `<S2>\make-cmd.py`
+   kept for the redo.
+4. Found outside scope 1 (the real tray's Task Manager group) at integration.

@@ -4275,3 +4275,60 @@ and 6 too.
   `SystemParametersInfoW` page names none. Run 3, two notices 1.7 s apart, grabs every 0.4 s: the first banner stayed
   about 6 s, the second did not replace it and showed after it for about 6 s. A four-line body is hard to read in
   that time, and the banner is not kept in the notification centre (above). **Verified** (grabs, reads).
+
+## Power track manual checks
+
+Card `docs/tasks/p3-haik-checks.md`, 2026-11-04 16:42 to 18:26. Haik ran steps A, C, D, E, B1 and B2 from step files
+(16:55 to 18:17), each run at Medium from Explorer, with `power_check` and the real `wakeshot-tray.exe` (debug x64,
+built 16:44 on commit e819f4b's tree). Logs read afterwards by a new worker; the System log (Kernel-Power, Winlogon),
+the Shell-Core Operational log, `requests.log` (`powercfg /requests` every 30 s, elevated) and Haik's notes back them.
+Haik's values (Balanced active and the only plan, lid 1 and 1, sleep 18000 and 18000, energy saver DC 30) were equal
+to the 16:44 baseline after every check and at the end (18:26, `powercfg`).
+
+- **Checklist 3 holds: requests retaken after Start > Sleep keep the PC awake through the next screen off.** `hold`
+  on battery: `suspending (PBT_APMSUSPEND)` 17:33:29, one `GAP slept` (29.6 s wall, 1.1 s unbiased), `resumed` and
+  `requests retaken after the resume` 17:33:58; then ticks 4984 to 5018 ms apart, no GAP, through the screen off
+  (Kernel-Power 506 "Idle Timeout" 17:37:15, input idle 179 s) and 4 min 49 s past it, up to Haik's touch (507 "Input
+  Keyboard" 17:42:04, input idle 469 s).
+  No other DISPLAY, SYSTEM or EXECUTION request in the 20 samples. **Verified** (logs).
+- **Checklist 1 holds: on battery with the lid closed, the active copy (lid DC Do nothing, sleep DC Never) and
+  SYSTEM plus EXECUTION requests run past 916 s of no input.** `hold --active-copy`: `lid closed` 17:43:50, ticks
+  4981 to 5019 ms apart, 0 GAP in 307 ticks, input idle up to 1477.6 s, `lid open` 18:08:25; the copy deleted and
+  Balanced active again at exit. Kernel-Power logged 506 "Idle Timeout" at 17:46:49 (Modern Standby entered at the
+  screen off) and 507 "Lid" at 18:08:25: the process never stopped in between. No other request in the 51 samples.
+  **Verified** (logs).
+- **Session notices: lock and unlock arrive twice each with the right state.** `session-watch`:
+  `WTS_SESSION_LOCK` 17:30:51 (Win+L) and 17:31:18 (`real_lock_locks`, exit 0), `WTS_SESSION_UNLOCK` 17:31:03 and
+  17:31:34, each with `locked yes` or `locked no` from the live read. **Verified** (logs).
+- **Checklist 6 holds: the end-session restore runs at sign-out.** `end-session`: `WM_QUERYENDSESSION (lparam
+  0x80000000: sign-out)` 18:14:02.769, the three writes back, `journal deleted`, `RunOnce value WakeshotRestore
+  removed`, restore done in 19.3 ms; `WM_ENDSESSION` 18:14:02.817; the copy deleted 18:14:02.820. Winlogon 7002
+  came at 18:14:08.509. **Verified** (logs).
+- **At sign-out Windows ends the guard before the tray hears of it.** Same run: at 18:14:02.777 the tray logged
+  `guard pid 27720 ended without being told to stop (exit code 1073807364)` and started a new guard, told to stop 11 ms
+  later by the restore's clean-up. 1073807364 is 0x40010004 (`DBG_TERMINATE_PROCESS`); that Windows' session end
+  sent it: likely, not verified. **Verified** (log), cause not verified.
+- **Task Manager's End task on `power_check` closed its console, so the tray restored itself, not the guard.** A1
+  (End task on the row inside the group) and A2 (on the group row): both logged `stopping: the console window
+  closed`, `restore (Quit): ok` (15.6 and 12.0 ms), the guard `stopped`. So checklist 4's guard path did not run in
+  either; it was shown before with the tray ended by pid (`Integration real e2e`). Haik: `power_check` had an arrow
+  with one row inside, with no icon, no name and no usage; `wakeshot-tray.exe` (the guard, parent Explorer) was one row
+  of its own with an icon. Apps or Background processes: not noted. How Task Manager groups the real tray and its
+  guard: not verified (integration). **Verified** (logs, Haik's eyes).
+- **The first guard start took 3.4 s.** A1's `step guard ensure: ok, 3391.7 ms`, the first start of the freshly built
+  exe; every later start took 7.7 to 9.7 ms. Cause (a scan of a new exe, for example): not verified.
+- **Explorer runs HKCU RunOnce once per sign-in, after every Run entry, about 40 to 65 s after sign-in on this
+  laptop.** Shell-Core Operational (Explorer's `9705`, `9707`, `9708` and `9706` events): sign-in at 18:14:14 (Winlogon
+  7001): two Run enumerations 18:14:22 to 18:15:12 (each command waits for the one before; GoogleDriveFS 18 s, Edge
+  12 s), then RunOnce at 18:15:18.653 (64.6 s after sign-in). Sign-in at 18:15:58: Run 18:16:04 to 18:16:21, RunOnce
+  at 18:16:37.290 (39.0 s). A value written after the sign-in but before that pass is run in the same session.
+  `Logon task 'RunOnce'` (62170 and 62171) also came about 1 s after each sign-in; which key it covers: not verified.
+  **Verified** (event log, two sign-ins).
+- **Checklist 5 was not shown: Explorer's RunOnce pass of B1's sign-in took B2's value while B2's tray still ran.** B2
+  started 48 s after B1's sign-in and set the value at 18:15:02.337, before that sign-in's RunOnce pass. At 18:15:18.653
+  Explorer ran `wakeshot-tray.exe" --restore` (pid 35732), which logged `restore mode: the journal's owner (pid 41604
+  ...) runs and restores it itself` and exited, as the design says (`recovery.rs:756`). Windows had deleted the value
+  first, so `B2-kill.txt` read `RunOnce: none` and `NOT READY` at 18:15:21; Haik signed out anyway. At the next
+  sign-in nothing restored; journal and copy (never active) were left, and `power_check cleanup` restored them at
+  18:24:50. The restore mode start from RunOnce, its journal read and its owner check: **verified**; the
+  restore of a gone owner's journal by restore mode at sign-in: **not verified**.
