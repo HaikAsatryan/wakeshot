@@ -259,8 +259,15 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   step 3 not shown. Haik: a 30 s grace on battery before the floor step back (`product.md`). Haik's Nightcrew
   cleanup committed (a47d03f). Running: `p2-6-floor-grace`, `p6-real-install-guard` (promoted from later). Haik is
   asleep (dock in, lid open): orchestrator decisions go to the `06-integration.md` work log for his review.
-- Next (orchestrator): after `p2-6-floor-grace`, a narrow power safety check of it (one `wakeshot-reviewer`); after
-  `p6-real-install-guard`, `p6-notice-app-icon` Part A (Part B needs Haik's eyes, about 5 min). Then the whole-
-  workspace checks, push, CI. With Haik: findings 4, 9 and 10 of `p6-int-haik-checks`, `p6-notice-app-icon` Part B,
-  his design review of the final software, then `p6-media` Part B, the README and Pages finish. Haik's review of the
-  RunOnce fix decisions (`p2-6-runonce-keep` Decisions, finding 6) is open.
+- 2026-11-05 ~05:00: done and pushed (5f1b1db): `p6-real-install-guard`, `p2-6-floor-grace` (30 s grace; its narrow
+  power safety check 0/0/4, all four fixed), `p6-notice-app-icon` Part A (the hooks register the notice app id's
+  name and icon), docs pass round 7. Whole-workspace checks on x64 green before the push. Orchestrator and worker
+  decisions for Haik's review: the `06-integration.md` work log, 2026-11-05 lines, and each card's decisions. CI
+  green on 5f1b1db (all three jobs); release dry run 41931334598 built, packed and smoke-tested both CPUs.
+- Next (orchestrator), all with Haik: his read of the 2026-11-05 decisions; `p6-notice-app-icon` Part B (about 5 min
+  at the screen); `p6-int-haik-checks` findings 4 (delete the stale Settings icon key), 9 (rerun block 6 step 3,
+  about 10 min) and 10 (`%TEMP%` test leftovers); the optional floor re-check (`p2-6-floor-grace` Found outside
+  scope 3, about 5 min); his design review of the final software, then `p6-media` Part B, the README and Pages
+  finish. Haik's review of the RunOnce fix decisions (`p2-6-runonce-keep` Decisions, finding 6) is open. Known
+  minors: two sounds overlap in a rare lid and floor case (`p2-6-floor-grace` Found outside scope 4); CI's smoke test
+  does not check the notice key (docs pass round 7 Result).

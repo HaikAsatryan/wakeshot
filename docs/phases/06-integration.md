@@ -446,3 +446,6 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   battery) for Haik's review. Left as a known minor, for Haik's call (default: next core round): two sounds overlap
   when a lid close in the unknown journal window meets an unplug under the floor (`p2-6-floor-grace` Found outside
   scope 4). Running: the whole-workspace checks, docs pass round 7.
+- 2026-11-05 ~05:10 (orchestrator): docs pass round 7 done (5f1b1db). Pushed 5f1b1db: CI green on all three jobs;
+  release dry run 41931334598 built, packed (with the notice PNG) and smoke-tested both CPUs. Nothing runs now; every
+  card left needs Haik.
