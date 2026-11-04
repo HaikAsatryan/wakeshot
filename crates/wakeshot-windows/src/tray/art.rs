@@ -7,7 +7,7 @@
 //!
 //! The tray icon draws `tray_mask` at the size the taskbar wants and colours it with `colorize` (`GLYPH_ON_DARK`,
 //! `GLYPH_ON_LIGHT` or the high contrast text colour). Design notes and measured colours: `docs/research.md`, "Tray
-//! UX: icon art".
+//! UX: icon art"; the brand (the Sunrise, the colours, why): `docs/brand.md`.
 
 use wakeshot_core::view::IconState;
 
@@ -26,10 +26,13 @@ pub struct Rgba {
     pub pixels: Vec<u8>,
 }
 
-/// The tray glyph designs Haik chooses from (`p5-haik-check` then removes the others). Off is always the idle glyph
-/// struck through, as Windows marks its own off states.
+/// The tray glyph designs. Haik picked the Sunrise (2026-11-04, `docs/brand.md`); the others stay drawable until
+/// `p5-haik-check`, which removes them. Off is always the idle glyph struck through, as Windows marks its own off
+/// states.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Concept {
+    /// Holding: a risen half sun with rays over the horizon. Idle: an empty half sun on the horizon.
+    Sunrise,
     /// Holding: a full cup with steam. Idle: an empty cup.
     Cup,
     /// Holding: an open eye. Idle: a closed eye with lashes.
@@ -39,11 +42,11 @@ pub enum Concept {
 }
 
 impl Concept {
-    pub const ALL: [Concept; 3] = [Concept::Cup, Concept::Eye, Concept::Sky];
+    pub const ALL: [Concept; 4] = [Concept::Sunrise, Concept::Cup, Concept::Eye, Concept::Sky];
 }
 
 /// The concept the product draws.
-pub const PICK: Concept = Concept::Cup;
+pub const PICK: Concept = Concept::Sunrise;
 
 /// The sizes Windows asks for in the tray, 100% to 400% scale.
 pub const TRAY_SIZES: [u32; 10] = [16, 20, 24, 28, 32, 36, 40, 48, 56, 64];
@@ -68,10 +71,12 @@ pub const HOVER_DARK: [u8; 3] = [0x2d, 0x2d, 0x2e];
 /// The plate under a tray icon the mouse rests on, light taskbar.
 pub const HOVER_LIGHT: [u8; 3] = [0xec, 0xed, 0xee];
 
-/// The app icon's disc runs from this colour at the top left to `APP_DARK` at the bottom right. Both keep 3:1 with the
-/// white mark and with light and dark backgrounds.
-const APP_LIGHT: [u8; 3] = [0xe0, 0x6a, 0x22];
-const APP_DARK: [u8; 3] = [0xc2, 0x50, 0x1a];
+/// The app icon's plate (the brand's night violet) runs from this colour at the top left to `APP_DARK` at the bottom
+/// right. Both keep 3:1 with light and dark backgrounds and with the gold sun on them (`docs/brand.md`).
+const APP_LIGHT: [u8; 3] = [0x79, 0x57, 0xf4];
+const APP_DARK: [u8; 3] = [0x6b, 0x49, 0xf3];
+/// The sun in the app icon (the brand's sun gold); the horizon under it is white.
+const SUN_GOLD: [u8; 3] = [0xff, 0xcc, 0x4d];
 
 /// The empty border a tray glyph keeps on each side, in pixels: 1 px at 100% scale, 4 px at 400%.
 pub fn padding(size: u32) -> u32 {
@@ -111,47 +116,62 @@ pub fn app_icon(size: u32) -> Rgba {
     concept_app_icon(PICK, size)
 }
 
-/// Any concept's app icon, for the review sheet: the holding glyph in white on a coloured disc, so it reads on light
-/// and dark backgrounds alike.
+/// Any concept's app icon, for the review sheet: the holding glyph on a violet rounded square, so it reads on light
+/// and dark backgrounds alike. The Sunrise's sun is gold over a white horizon; the other concepts are white.
 pub fn concept_app_icon(concept: Concept, size: u32) -> Rgba {
     let centre = size as f32 / 2.0;
-    // A margin of size / 24 (2 px at 48), so a full disc does not look larger than other apps' icons. A design call:
+    // A margin of size / 24 (2 px at 48), so the plate does not look larger than other apps' icons. A design call:
     // Microsoft's pages give no margin number.
-    let radius = centre - ((size + 12) / 24) as f32;
-    let disc = raster(
+    let margin = ((size + 12) / 24) as f32;
+    let half = centre - margin;
+    let corner = (size as f32 * 0.1875).max(1.0);
+    let plate = raster(
         size,
         size,
-        &Shape::Disc {
-            cx: centre,
-            cy: centre,
-            r: radius,
+        &Shape::Rect {
+            x0: margin,
+            y0: margin,
+            x1: size as f32 - margin,
+            y1: size as f32 - margin,
+            r: [corner; 4],
         },
     );
-    // About 5/8 of the icon, with an even border so the mark sits on whole pixels.
-    let mut mark_size = (size as f32 * 0.625).round() as u32;
+    // About 5/7 of the icon, with an even border so the mark sits on whole pixels.
+    let mut mark_size = (size as f32 * 0.72).round() as u32;
     if (size - mark_size) % 2 == 1 {
         mark_size -= 1;
     }
     let at = (size - mark_size) / 2;
-    let mark = raster(
-        size,
-        size,
-        &glyph(concept, IconState::Holding, Grid::new(at, at, mark_size)),
-    );
+    let g = Grid::new(at, at, mark_size);
+    let layers: Vec<(Vec<u8>, [u8; 3])> = match concept {
+        Concept::Sunrise => {
+            let (horizon, sun) = risen_sun(g);
+            vec![
+                (raster(size, size, &sun), SUN_GOLD),
+                (raster(size, size, &horizon), [0xff; 3]),
+            ]
+        }
+        _ => vec![(
+            raster(size, size, &glyph(concept, IconState::Holding, g)),
+            [0xff; 3],
+        )],
+    };
     // The light falls from the top left (Microsoft's default gradient angle, 120 degrees).
     let (dx, dy) = (3f32.sqrt() / 2.0, 0.5);
     let mut pixels = Vec::with_capacity((size * size * 4) as usize);
     for y in 0..size {
         for x in 0..size {
             let i = (y * size + x) as usize;
-            if disc[i] == 0 {
+            if plate[i] == 0 {
                 pixels.extend([0, 0, 0, 0]);
                 continue;
             }
-            let along = ((x as f32 + 0.5 - centre) * dx + (y as f32 + 0.5 - centre) * dy) / radius;
-            let base = mix(APP_LIGHT, APP_DARK, ((along + 1.0) / 2.0).clamp(0.0, 1.0));
-            let rgb = mix(base, [0xff; 3], f32::from(mark[i]) / 255.0);
-            pixels.extend([rgb[0], rgb[1], rgb[2], disc[i]]);
+            let along = ((x as f32 + 0.5 - centre) * dx + (y as f32 + 0.5 - centre) * dy) / half;
+            let mut rgb = mix(APP_LIGHT, APP_DARK, ((along + 1.0) / 2.0).clamp(0.0, 1.0));
+            for (mark, colour) in &layers {
+                rgb = mix(rgb, *colour, f32::from(mark[i]) / 255.0);
+            }
+            pixels.extend([rgb[0], rgb[1], rgb[2], plate[i]]);
         }
     }
     Rgba {
@@ -324,6 +344,7 @@ impl Grid {
 
 fn glyph(concept: Concept, state: IconState, g: Grid) -> Shape {
     match concept {
+        Concept::Sunrise => sunrise(state, g),
         Concept::Cup => cup(state, g),
         Concept::Eye => eye(state, g),
         Concept::Sky => sky(state, g),
@@ -355,6 +376,141 @@ fn slashed(g: Grid, base: Shape) -> Shape {
         w,
     };
     Shape::Any(vec![minus(base, bar(3.0 * t)), bar(t)])
+}
+
+/// A sun over the horizon: risen with rays while holding, an empty half sun when idle, struck through when off.
+fn sunrise(state: IconState, g: Grid) -> Shape {
+    match state {
+        IconState::Holding => {
+            let (horizon, sun) = risen_sun(g);
+            Shape::Any(vec![horizon, sun])
+        }
+        IconState::Idle => empty_sun(g, false),
+        IconState::Off => slashed(g, empty_sun(g, true)),
+    }
+}
+
+/// The horizon bar with its top at `horizon` units, and a sun centre and radius above it: the centre sits on a pixel
+/// centre for 1 px strokes (so the upright ray is one sharp column), and both sides of the sun on pixel edges.
+/// Returns the bar, the centre's x, the radius and the sun's flat base, one stroke above the bar.
+fn horizon_and_sun(g: Grid, radius: f32, horizon: f32) -> (Shape, f32, f32, f32) {
+    let t = g.t;
+    let top = g.ey(horizon);
+    let bar = Shape::Rect {
+        x0: g.ex(1.0),
+        y0: top,
+        x1: g.ex(15.0),
+        y1: top + t,
+        r: [(t / 2.0).floor(); 4],
+    };
+    let cx = g.centre(g.x + g.len(8.0));
+    let r = (cx + g.len(radius)).round() - cx;
+    (bar, cx, r, top - t)
+}
+
+/// The holding glyph's two layers, so the app icon can colour them apart: the horizon, and the half sun with three
+/// rays (upright and at 45 degrees), each a gap away from the sun.
+fn risen_sun(g: Grid) -> (Shape, Shape) {
+    let t = g.t;
+    let (horizon, cx, r, base) = horizon_and_sun(g, 4.0, 13.0);
+    let gap = g.len(1.25).round().max(t);
+    let len = g.len(3.0).round().max(t);
+    let half_disc = Shape::All(vec![
+        Shape::Disc { cx, cy: base, r },
+        Shape::Half {
+            nx: 0.0,
+            ny: 1.0,
+            c: base,
+        },
+    ]);
+    // Both ends of the upright ray on pixel edges, so it stays sharp.
+    let inner = (base - r - gap).floor();
+    let mut parts = vec![
+        half_disc,
+        Shape::Line {
+            ax: cx,
+            ay: inner - t / 2.0,
+            bx: cx,
+            by: inner - len + t / 2.0,
+            w: t,
+        },
+    ];
+    if t < 1.5 {
+        // A 1 px line at 45 degrees turns into grey pairs; whole pixels stepping along the diagonal stay sharp. The
+        // first pixel is the one whose centre clears the sun by the gap.
+        let (col, row) = ((cx - 0.5) as u32, base as u32);
+        let reach = r + gap + 0.5;
+        let first = (0..row)
+            .find(|&j| {
+                let (dx, dy) = (1.0 + j as f32, 0.5 + j as f32);
+                dx * dx + dy * dy >= reach * reach
+            })
+            .unwrap_or(0);
+        let steps = (len / std::f32::consts::SQRT_2).round().max(1.0) as u32;
+        let dot = |x: u32, y: u32| Shape::Rect {
+            x0: x as f32,
+            y0: y as f32,
+            x1: x as f32 + 1.0,
+            y1: y as f32 + 1.0,
+            r: [0.0; 4],
+        };
+        for j in first..first + steps {
+            if j + 1 > col || j + 1 > row {
+                break;
+            }
+            parts.push(dot(col - 1 - j, row - 1 - j));
+            parts.push(dot(col + 1 + j, row - 1 - j));
+        }
+    } else {
+        let d = std::f32::consts::FRAC_1_SQRT_2;
+        let (a, b) = (r + gap + t / 2.0, r + gap + len - t / 2.0);
+        for side in [-1.0, 1.0] {
+            parts.push(Shape::Line {
+                ax: cx + side * d * a,
+                ay: base - d * a,
+                bx: cx + side * d * b,
+                by: base - d * b,
+                w: t,
+            });
+        }
+    }
+    (horizon, Shape::Any(parts))
+}
+
+/// The idle glyph: a larger, empty half sun on a horizon one unit higher than holding's, so the glyph sits in the
+/// middle of its slot. `off` cuts the horizon at the off bar, so no stub is left past the bar's gap.
+fn empty_sun(g: Grid, off: bool) -> Shape {
+    let t = g.t;
+    let (horizon, cx, r, base) = horizon_and_sun(g, 5.0, 12.0);
+    let ring = Shape::All(vec![
+        minus(
+            Shape::Disc { cx, cy: base, r },
+            Shape::Disc {
+                cx,
+                cy: base,
+                r: r - t,
+            },
+        ),
+        Shape::Half {
+            nx: 0.0,
+            ny: 1.0,
+            c: base,
+        },
+    ]);
+    let horizon = if off {
+        // The off bar runs along x - g.x = y - g.y (`slashed`); keep the horizon on its lower left side.
+        Shape::All(vec![
+            horizon,
+            Shape::Half {
+                nx: 1.0,
+                ny: -1.0,
+                c: g.x - g.y,
+            },
+        ])
+    } else {
+        horizon
+    };
+    Shape::Any(vec![horizon, ring])
 }
 
 /// A cup with a handle: filled with steam while holding, empty when idle, struck through when off.
@@ -954,7 +1110,7 @@ fn sheet(back: [u8; 3], ink: [u8; 3]) -> Rgba {
     let real: u32 = SIZES.iter().map(|s| s + GAP).sum();
     let zoomed: u32 = SIZES.iter().map(|s| s * ZOOM + GAP).sum();
     let width = MARGIN + real + MARGIN + zoomed - GAP + MARGIN;
-    let height = 2 * MARGIN + 9 * row + 6 * GAP + 2 * (MARGIN + GAP);
+    let height = Concept::ALL.len() as u32 * (3 * (row + GAP) + MARGIN) + MARGIN;
     let mut out = blank(width, height, back);
     let mut top = MARGIN;
     for concept in Concept::ALL {
@@ -993,7 +1149,7 @@ fn app_sheet() -> Rgba {
     let real: u32 = APP_ICON_SIZES.iter().map(|s| s + GAP).sum();
     let zoomed: u32 = APP_ICON_SIZES.iter().map(|s| s * ZOOM + GAP).sum();
     let width = MARGIN + real + zoomed + MARGIN;
-    let mut out = blank(width, 6 * row, [0; 3]);
+    let mut out = blank(width, 2 * Concept::ALL.len() as u32 * row, [0; 3]);
     let mut top = 0;
     for concept in Concept::ALL {
         for back in [[0xf3; 3], [0x20; 3]] {
@@ -1114,13 +1270,21 @@ mod tests {
         half as f32 / any as f32
     }
 
+    /// The most grey the sunrise may leave at 16 to 32 px (measured: see the test).
+    const SUNRISE_GREY: f32 = 0.35;
+
     #[test]
     fn strokes_are_crisp_at_small_sizes() {
         for concept in Concept::ALL {
             // Straight strokes sit on whole pixels, so only curves and diagonals leave grey pixels: the cup has 13% at
-            // most (its round bottom and the off bar). One stroke off the grid would leave 50% or more. The other
-            // concepts are mostly curves (up to 42%) and stay only until Haik has picked.
-            let bound = if concept == PICK { 0.15 } else { 0.45 };
+            // most (its round bottom and the off bar). One stroke off the grid would leave 50% or more. The sunrise's
+            // empty sun is a 1 px curve at 16 and 20 px (up to SUNRISE_GREY there); its rays are whole pixels. Eye and
+            // Sky are mostly curves (up to 42%) and stay only until `p5-haik-check`.
+            let bound = match concept {
+                Concept::Sunrise => SUNRISE_GREY,
+                Concept::Cup => 0.15,
+                Concept::Eye | Concept::Sky => 0.45,
+            };
             for state in STATES {
                 for size in [16, 20, 24, 32] {
                     let share = half_covered(&concept_mask(concept, state, size));
@@ -1159,9 +1323,11 @@ mod tests {
             let ratio = contrast(glyph, back);
             assert!(ratio >= 3.0, "{glyph:?} on {back:?}: {ratio:.2}");
         }
-        // The app icon's white mark on both ends of its disc, and the disc on light and dark backgrounds.
+        // The app icon's gold sun and white horizon on both ends of its plate, and the plate on light and dark
+        // backgrounds.
         for c in [APP_LIGHT, APP_DARK] {
             assert!(contrast([0xff; 3], c) >= 3.0, "white on {c:?}");
+            assert!(contrast(SUN_GOLD, c) >= 3.0, "gold on {c:?}");
             assert!(contrast([0xf3; 3], c) >= 3.0, "{c:?} on light");
             assert!(contrast([0x20; 3], c) >= 3.0, "{c:?} on dark");
         }
@@ -1220,7 +1386,7 @@ mod tests {
                 assert_eq!((icon.width, icon.height), (size, size));
                 assert_eq!(icon.pixels.len(), (size * size * 4) as usize);
                 let opaque = icon.pixels.chunks(4).filter(|p| p[3] == 255).count();
-                // The disc's green stays at 0x6a or below; the white mark lifts it.
+                // The plate's green stays at 0x57 or below; the gold and white mark lifts it.
                 let mark = icon
                     .pixels
                     .chunks(4)
@@ -1228,7 +1394,7 @@ mod tests {
                     .count();
                 assert!(
                     opaque * 5 > (size * size * 2) as usize,
-                    "{concept:?} {size}: disc"
+                    "{concept:?} {size}: plate"
                 );
                 assert!(mark * 12 > opaque, "{concept:?} {size}: mark");
             }
@@ -1602,7 +1768,8 @@ mod tests {
             (pattern(1, 1), 3),
             (flat, 3),
             (glyph, 3),
-            (app_icon(64), 6),
+            // The violet plate's gradient is narrow, so the app icon fits a palette.
+            (app_icon(64), 3),
         ];
         for (img, colour_type) in cases {
             let file = png(&img);

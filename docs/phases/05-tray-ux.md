@@ -307,3 +307,10 @@ Bundle (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p5-th
   Haik's review: the -6 dBFS peaks stay, though loopback shows the two -6 dBFS chimes at -0.2 and -0.1 dBFS (why is not
   verified; Haik's ear check in `p5-haik-check` says if they are too loud); no warm-up for the slow first stream; the
   screen-audio branch of the device rule was not run live (no DELL audio endpoint was active).
+- 2026-11-04 11:15 (orchestrator `wakeshot-12`): Haik's branding session (relayed by session `wakeshot-46`, his yes to
+  every default): three tray states stay (so a forgotten Automatic off shows); the Sunrise replaces the Cup; brand
+  colours night violet #7250F4 and sun gold #FFCC4D, used only in the app icon, the page and the media (the tray icon
+  stays one colour like Windows' own); app icon a violet rounded square with a gold sun and a white horizon. New
+  `docs/brand.md`; `art.rs` picks Sunrise (Cup, Eye and Sky stay drawable for `p5-haik-check`); new `.ico` and
+  sheets. Art tests 12 of 12, clippy clean x64 and ARM64. Stale for the next docs pass: `research.md` "Tray UX: icon
+  art", the `p5-icon-art` Result, the 01:30 line above. `CLAUDE.md` "Start here" lists `docs/brand.md` (Haik's yes).

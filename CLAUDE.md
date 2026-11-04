@@ -23,6 +23,7 @@ Start here: `docs/plan.md` (how we work, phases, status, next step). Then:
 
 - Decisions: `docs/product.md`
 - Design: `docs/architecture.md`
+- Brand (colours, icons): `docs/brand.md`
 - Facts and how they were checked: `docs/research.md`; longer reports in `docs/research/`
 
 ## Facts to keep in mind

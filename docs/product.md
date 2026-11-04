@@ -126,10 +126,12 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   closed (tested), and after a release its apps most likely run until the user's own sleep timeout (inferred; not
   tested with the lid closed). On Modern Standby, Windows gives apps no call that starts sleep (Microsoft Q&A; on this
   laptop `SetSuspendState(FALSE)` hibernates, tested), so Wakeshot uses Windows' own idle sleep: after the sound it
-  sets the sleep timeout of the plan in use, on AC and DC, to 1 minute where the user's own is longer, marked in the
-  journal as Wakeshot's. It goes back at lid open, at the first unlock after a wake, when a hold starts, and at
-  every other restore point; not at a wake alone, so a laptop that wakes with the lid closed sleeps again.
-  Not verified yet: that idle sleep starts while the lid is closed (`p3-idle-sleep-check`). If the laptop has not
+  sets the screen and sleep timeouts of the plan in use, on AC and DC, to 1 minute where the user's own is longer,
+  marked in the journal as Wakeshot's. The screen one is needed: on this laptop the sleep came when the screen
+  timeout turned the screen off, not at the sleep timeout (`p3-idle-sleep-check`: with the lid closed on battery,
+  Windows slept by itself, Modern Standby, locked at wake). They go back at lid open, at the first unlock after a
+  wake, when a hold starts, at input (then the 5 minutes start again), and at every other restore point; not at a
+  wake alone, so a laptop that wakes with the lid closed sleeps again. If the laptop has not
   slept 5 minutes later, with the lid still closed and no input since, Wakeshot hibernates it, so a lid close's sleep
   is matched even when another app holds the PC awake: `SetSuspendState(TRUE)` after `IsPwrHibernateAllowed` and
   enabling SeShutdownPrivilege, with the lid checked right before the call. If hibernate is not allowed or the call
@@ -192,10 +194,12 @@ lid action stays Do nothing and battery sleep Never. The README says so.
   Quit
   ```
 
-- Tray icon states: holding, idle, off. It must look good, be crisp at every display scale, and be correct on light and
-  dark taskbars and in high contrast. The menu follows the Windows mode (`SystemUsesLightTheme`, the taskbar's), like
-  the icon: it opens from the taskbar, next to Windows' own tray flyouts, so an app-mode menu would clash with a dark
-  taskbar. The menu looks like Windows 11's own new menus (owner-drawn items, round corners; Haik liked the
+- Tray icon states: holding (a risen sun with rays), idle (an empty sun), off (the empty sun struck through). Three, not
+  two, so a forgotten Automatic off shows in the tray (Haik, 2026-11-04; `brand.md`). The icon is one colour like
+  Windows' own; the brand colours (night violet, sun gold) are only in the app icon, the page and the media. It must
+  look good, be crisp at every display scale, and be correct on light and dark taskbars and in high contrast. The menu
+  follows the Windows mode (`SystemUsesLightTheme`, the taskbar's), like the icon: it opens from the taskbar, next to
+  Windows' own tray flyouts, so an app-mode menu would clash with a dark taskbar. The menu looks like Windows 11's own new menus (owner-drawn items, round corners; Haik liked the
   `p1-tray-menu-look` pictures, 2026-11-03), and each item has a small icon, as in those menus (Haik's ask).
 - The tooltip and the menu name what holds the PC awake.
 - First run: a notification that offers to pin the icon (a new tray icon lands in the `^` overflow: seen in the tray
