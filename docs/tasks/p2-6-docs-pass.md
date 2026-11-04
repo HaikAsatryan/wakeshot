@@ -1,6 +1,6 @@
 # Docs pass for Phases 2 to 6: make the docs match the built code
 
-Phase: 6. Status: rounds 1 to 4 done. Needs Haik: no.
+Phase: 6. Status: rounds 1 to 6 done; round 7 ready. Needs Haik: no.
 Runs after: the Phase 2 to 6 track cards named below. Parallel with: `p6-int-window`, `p6-int-startup`, `p5-text`,
 the power fix round (core), the Claude parsing review.
 
@@ -739,3 +739,32 @@ Checks (build folder `<scratchpad>\docs-r6\target`, debug, no `RUSTFLAGS`, `--lo
 
 Open items: Found outside scope 1 (core worker), 2 to 5 (orchestrator). Haik reads the two new bodies at
 `p5-haik-check`; neither was shown on the real taskbar yet.
+
+## Round 7 (2026-11-05)
+
+Status: ready. Written by the orchestrator, 2026-11-05. Runs after `p6-notice-app-icon` Part A (17c8eb4) and the
+`p2-6-floor-grace` fix round (c0cea9a). Docs only, no build. Owns: `README.md`, `packaging/README.md`, `site/index.html`
+(only the battery floor wording, if any), `docs/phases/06-ship.md` "Hooks" table, `docs/architecture.md` section 5
+"Notices", and this section.
+
+Items (sources: `p6-notice-app-icon` Found outside scope 1 to 4; Haik's 30 s floor grace, `docs/product.md` "Battery
+floor"):
+
+1. `README.md` lines about 208 to 209 ("Registry, under ..."): add the notice app id key
+   `HKCU\Software\Classes\AppUserModelId\velopack.HaikAsatryan.Wakeshot` (the name and icon in the header of its
+   notices). Uninstall step 1 (about line 466): name the notice name and icon removal. Check both against `hooks.rs`.
+2. `packaging/README.md` line 7: `pack.ps1` also copies `assets/wakeshot-notice.png`. Check against `pack.ps1`.
+3. `docs/phases/06-ship.md` "Hooks" table (about lines 56 to 59): the install, updated and uninstall rows name the
+   notice app id step. Check against `hooks.rs`.
+4. `docs/architecture.md` section 5 "Notices" (about lines 1028 to 1031): an installed tray's balloons go under
+   `velopack.HaikAsatryan.Wakeshot` (section 6 says so); a tray run from `target\` uses
+   `NotifyIconGeneratedAumid_<id>`. Fix the "uninstall has no stored balloon to clear" line to match. Re-read the file
+   right before the edit.
+5. `README.md` and `site/index.html`: any line that says the battery floor steps back at once or names a chime and
+   notice on every AC loss: match `docs/product.md` "Battery floor" (30 s on battery first; a short dock drop gives
+   nothing).
+6. Not to change: `docs/product.md`, work logs, card Logs, dated results, `CLAUDE.md`, code.
+
+### Log
+
+- 2026-11-05: round 7 written by the orchestrator.
