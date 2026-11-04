@@ -207,7 +207,15 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   `p6-velopack-dependency` (run alone, without clang: ARM64 tray CI only), `p6-int-update-wiring`, `p6-install-e2e`
   (81 of 81 checks twice; the laptop as before). Pushed d3b8c6e at 03:58. CI green on cd3d498, and its release dry
   run passed on both CPUs, hooks included. Running: `p6-int-wiring-fixes`.
-- Next (orchestrator): the continuation prompt of session `wakeshot-46` (its scratchpad, `continuation.md`; sent to
-  session `wakeshot-12` at the handover): after `p6-int-wiring-fixes`, rerun `packaging/e2e.ps1` with two small
-  packaging fixes; then `p6-int-dry-run-e2e` as far as a locked session allows. Screen cards and Haik's checks wait
-  for him. Power: start a new SYSTEM request at takeover.
+- 2026-11-04 05:51: since 04:00 (session `wakeshot-12`): done and committed: `p6-int-wiring-fixes`, the
+  `p6-install-e2e` rerun (81 of 81 on the wired tray), `p6-int-dry-run-e2e` (12 of 12 with no fix, a Claude Code
+  session held and let go; pictures left), `p6-int-real-e2e` (10 of 10 on an active plan copy, AFTER equals BEFORE),
+  `p6-int-update-e2e` (125 checks, the notice skipped while locked), new small cards `p6-int-log-wording` and
+  `p2-6-unread-lid-countdown`, and a README draft (waits for `p5-haik-check` and `p6-media`). CI green on abd3061.
+  A cargo-mutants mutant took 32 GB at about 05:20; Claude Code ended two other keep-awake holders for low memory.
+  Running: `p2-6-unread-floor-countdown`.
+- Next (orchestrator): the continuation prompt of session `wakeshot-12` (its scratchpad, `continuation.md`). A docs
+  pass (round 4) after `p2-6-unread-floor-countdown`. Every other card left needs Haik: the screen Part B runs
+  (`p5-tray-icon`, `p5-menu-view`, `p5-notices`, the `p6-int-tray-mode` and `p6-int-dry-run-e2e` pictures), his
+  checks (`p3-haik-checks`, `p5-haik-check`, `p6-int-haik-checks`), `p6-media`, then the README finish and
+  `p6-pages`.
