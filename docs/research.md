@@ -3039,6 +3039,61 @@ Log). The DELL 3840x2160 at 150% was the primary and held the taskbar.
   `WTSSessionInfoEx` gave `SessionFlags` 0 (locked). So "Haik away 15 minutes" and "screen usable" cannot both hold
   unless a display request keeps the display on from before the 5 minutes run out.
 
+Screen run, 2026-11-04 11:39 to 11:46 (session unlocked, the orchestrator's DISPLAY request held; debug build of the
+f47391d export; log in `p5-tray-icon`). Pictures in `docs/research/img/ux/taskbar-*.png`.
+
+- **`SessionFlags` 0 is not a lock test.** The same read gave 0 with the session unlocked (a screen grab showed the
+  live desktop, `LogonUI` not running, input desktop `Default`). Use a screen grab or `LogonUI` instead.
+- **`IsPromoted` works on an entry with only `IconSnapshot`.** At first Windows wrote just `IconSnapshot` under the
+  new id; writing `IsPromoted` = 1 there put the icon on the taskbar within 2 s. The id (`12880751163260563509`) was
+  the same for `ux_icon.exe`, `ux_menu.exe` and `ux_notices.exe`, so it follows the GUID, not the exe path.
+- **Size: drawn 1:1 at 150%.** `--pattern` in the 48x72 slot: a 24x24 box with a pure white one-pixel border and a
+  white/dark checker, no soft or doubled lines (pixel read of the grab, `taskbar-pattern-150.png`). So
+  `SM_CXSMICON` at `GetDpiForWindow(Shell_TrayWnd)` is the size the shell shows. 125% was not checked: the taskbar is
+  on the 150% screen.
+- **Theme switch reaches the icon in under 1 s.** Light through Settings: `ThemeChanged(light)` 0.0 s, the redraw in
+  near black (26,26,26) 0.17 s after it; Dark back: white redraw 0.37 s after `ThemeChanged`. No restart.
+- **The taskbar background did not follow the first Light switch.** At 11:41:51 both `SystemUsesLightTheme` and
+  `AppsUseLightTheme` read 1, Explorer's own chevron and search glyphs turned dark, but the DELL taskbar stayed dark
+  for at least 67 s, so the near-black icon sat on a dark taskbar like Explorer's glyphs (`taskbar-light-*.png`). In
+  the next Light switch (11:49:52) the taskbar did turn light. Cause not checked (Windows build 26300).
+- **Clicks with version 4.** Left click and right click each reached the printing `MenuView` with the cursor point
+  (3346,2124); Win+B, Right, Enter and then Shift+F10 each reached it with the icon centre (3347,2124). Win+B put the
+  keyboard focus ring on the demo icon (`taskbar-keyboard-focus.png`).
+- **Tooltip.** `SetCursorPos` onto the icon showed no tooltip in 2.5 s; injected `mouse_event` moves did:
+  "Wakeshot demo" and the state line (`taskbar-tooltip-dark.png`).
+- **A posted `TaskbarCreated` with the session unlocked:** `Added { attempt: 1 }` 11 ms later, the icon back in the
+  same slot (picture).
+
+## Tray UX: menu on screen
+
+Card `p5-menu-view` Part B, 2026-11-04 11:47 to 11:51 (`ux_menu`, debug build of the f47391d export, at Medium; the
+DELL at 150%, taskbar DPI 144). Pictures `docs/research/img/ux/menu-screen-{dark,light}-{main,sub}.png`, on a plain
+grey window.
+
+- **Screen reader names.** `AccessibleObjectFromWindow(OBJID_CLIENT)` on each `#32768` window: every name without
+  an `&` access mark; the status line keeps its one literal `&` and is unavailable; Automatic checked; Keep awake has
+  popup; in the submenu Off checked and Keep screen on unavailable; separators unavailable.
+- **Open and close.** Left click, right click and Win+B, Right, Enter each opened the menu; an outside click closed
+  it 4 of 4; Esc closes the submenu, then the menu. 31 `Opened`, 31 `Closed` in the log.
+- **Keys.** Access keys `a`, `r`, `k` then `1` posted `Menu(Automatic(false))`, `Menu(Restore)` and
+  `Menu(KeepAwake(Minutes(60)))`; `s` (disabled Keep screen on) did nothing and the submenu stayed open. Arrow keys
+  also stop on the greyed status line (Win32 menus let a disabled item be selected), so Down x3 is Keep awake; Right
+  opened the submenu, Left closed it; Enter on Restore posted `Menu(Restore)`.
+- **Theme at the next open.** After the Light switch the next open logged `theme: light: true` and drew light, with
+  no restart; light pictures show the check mark in the accent colour (reddish here), dark in grey.
+- **Look against Explorer's new menu** (`tray-look-dark-explorer-new.png`, 125%): row pitch 50 px at 150% (33 DIP)
+  against about 40 px at 125% (32 DIP); a small rounded corner (first menu pixel at +4, +2, +1, +0 on the top four
+  rows, read from the grab); Segoe UI text; the Armenian status line draws with real glyphs and ends in an ellipsis.
+  Font and glyph sizes were not measured in pixels this run.
+- **Where it opens.** Anchored at the click point with its bottom there, so the menu overlaps the taskbar by 36 px
+  (menu 2984,1808 to 3840,2124; taskbar top 2088), as Windows' own tray menus do from the cursor (seen, not measured).
+- **`Styled` timing.** Most main-menu opens logged `Styled { at: Idle }`, the first open and the submenus `at:
+  FirstPaint`; `corners` and `border` were `Ok(())` every time and every picture has the rounded frame.
+- **Cost.** Debug build working set 17,227,776 and private 2,433,024 bytes before 20 opens; 17,272,832 and 2,408,448
+  after (no growth). Release sizes: Part A's numbers (`ux_menu` 361,472, `ux_icon` 264,192 bytes); no release build in
+  this slot (orchestrator rule: debug only).
+
 ## Core lid round A checks
 
 Card `p2-core-lid`, section "Core round A, lid fixes (2026-11-04)": power safety review finding 5 and verify minors 1 to
@@ -3202,6 +3257,34 @@ with Part B.
   `art::ico` (a BITMAPINFOHEADER of twice the height, bottom-up BGRA, then the AND mask) at 48 px, format version
   0x00030000 and `LR_DEFAULTCOLOR`, gives a 48 by 48, 32 bpp colour bitmap; `GetDIBits` returns the disc's centre
   pixel as B, G, R with its alpha, and alpha 0 at the clear corner.
+
+Part B screen run, 2026-11-04 11:51 to 12:04 (`ux_notices`, debug build of the f47391d export, at Medium; the DELL
+at 150%). Pictures `docs/research/img/ux/notice-*.png`, on a plain grey window.
+
+- **Text fit.** Windows shows at most five body lines and cuts the rest mid-word. Cut in the `--all` run:
+  `restored-by-user` ("...but only while the lid is"), `lock-failed` ("...and hibernat"), `update-wakeshot` ("...awake
+  f"), `journal-lost` ("Click to see the c"). The other ten fit. The header shows the exe name (`ux_notices.exe`)
+  and the small tray glyph.
+- **Warnings read as warnings.** Every `warning true` notice shows Windows' yellow warning triangle; the rest show
+  the chosen large icon. Silent ones (`step-back`, `idle-locked`, `updated`) were sent with `NIIF_NOSOUND` (the
+  demo's flag line); no sound check was run.
+- **App icon against info icon.** Both read clearly in dark and light (`notice-dark-closed-lid-report*.png`,
+  `notice-light-first-run*.png`). The app icon (violet square, gold sun) names the sender; the info "i" adds nothing
+  the text does not say.
+- **Click.** A synthetic left click on the banner body gave `balloon click: OpenLog` (restore-failed) and `balloon
+  click: OpenTaskbarSettings` (first-run), each about 20 ms after the click.
+- **Pair.** The second notice, 1 s after the first, did not replace it: the first stayed on screen (no input came, so
+  it did not time out) and the second showed after the first was clicked away. The click on the first banner gave no
+  `NIN_BALLOONUSERCLICK` at all; the click on the second gave its own action (`OpenLog`). So a click on an older banner
+  did not run the newer action here; its own action was lost.
+- **Banners wait for input.** With no real input, a banner stayed up for more than 10 s, and a banner of a demo that
+  had already quit and removed its icon still showed later, ahead of the next run's banner. Closing it with its X
+  button let the next one show.
+- **Do not disturb loses the balloon.** DND turned on through Settings (toggle
+  `SystemSettings_Notifications_QuietHours_MuteNotification_Enabled_ToggleSwitch`), one warning notice sent
+  (`Ok(())`): no banner; the notification centre (Win+N) said "Do not disturb is on" and had no entry for it
+  (`notice-dnd-centre.png`); after DND off, 8 grabs over 8 s with the demo still running showed no banner. DND read
+  Off before and after.
 
 ## Release workflow checks
 
@@ -3371,6 +3454,20 @@ dry-run tray's own log printed by the test.
 - **The quit is quick and the 1400 line comes once.** From the quit's restore to "Wakeshot ends with code 0" took
   3 ms; the IO thread's one `PostMessageW` 1400 line ("as after a quit ... dropped") is Info, once, as the
   orchestrator asked.
+- **The taskbar picture (2026-11-04 12:10 to 12:13, unlocked session).** Debug tray from the clean export of
+  f47391d, `--dry-run` at Medium through Explorer (`whoami /groups`: `S-1-16-8192`), a script hold written by the
+  picture script. Checked by reading `HKCU\Control Panel\NotifyIconSettings` before and after each run:
+  - The dry-run GUID's entry `15983757285637097514` was already there (only `IconSnapshot`, no `IconGuid`, no path,
+    no `IsPromoted`), with its two `NotifyIconGeneratedAumid_` keys, from a run between 04:48 and 12:10 that is not
+    this card's. The new run, from another exe path, made no new entry: so the entry id goes with the icon GUID, and
+    the earlier entry's settings apply to every dry-run exe.
+  - With no `IsPromoted` the icon stays in the overflow, and `Shell_NotifyIconGetRect` still answers S_OK, with the
+    overflow chevron's rect (run 1's grab at that rect is centred on the chevron). `IsPromoted` = 1 written on the
+    entry while the tray ran put the icon on the taskbar; it was there at the grab 4.4 s later (run 2), as in
+    `p5-tray-icon`. The value was removed again after the quit.
+  - A PowerShell tool note: `FindWindowW(cls, $null)` through `Add-Type` finds no window with a title, since PowerShell
+    passes `$null` as an empty string; `[NullString]::Value` gives a real null. The tray's loop window was found that
+    way (and listed by `EnumWindows` as `Wakeshot.Loop.DryRun`), and `WM_CLOSE` to it gave exit code 0 within 20 ms.
 
 ## Velopack dependency checks
 
@@ -3646,6 +3743,24 @@ card's scratchpad folder (`run1.txt`, `run2.txt`, `claude-timeline.txt`).
   The `NotifyIconSettings` entry with that id held only `IconSnapshot`. Both keys were exported and deleted, and were
   still gone 2 minutes later. The PNG is left. The balloon header on screen was not seen: the session was locked.
   **Verified** (`reg export`, `Get-ItemProperty`, ids listed before and after).
+- **Pictures, 2026-11-04 12:15 to 12:17 (unlocked session).** Debug tray and CLI from the clean export of f47391d
+  (final Sunrise icon), `--dry-run` at Medium through Explorer on an empty data folder, with `CLAUDE_CONFIG_DIR` on an
+  empty folder so the agent sessions on this PC do not hold it.
+  - The first-run balloon came at the start (`notice shown: FirstRun`). Its header says "Wakeshot"; the body
+    shows the Sunrise icon. **Verified** (screen grab, `int-first-run-balloon.png`).
+  - The header's small glyph is not the Sunrise: it is a plain outline glyph. The dry-run AUMID key (there before the
+    run, from a run that is not this card's) points `IconUri` at `%TEMP%\NotifyIconGeneratedAumid_15983757285637097514.png`,
+    last written 04:38:17, before the Sunrise art was in. So the header likely shows that stale cached PNG, and the
+    shell did not rewrite it. **Not verified** (the header was not compared with that PNG pixel by pixel; the
+    product GUID gets its own key, so a fresh install should not see it).
+  - Icon idle and holding: the outline Sunrise when idle, the filled Sunrise with rays while Keep awake holds
+    (`int-icon-idle.png`, `int-icon-holding.png`, 150 by 72 like the `taskbar-*` pictures). `keep-awake on` and
+    `off` exit 0, "Keep awake is on until you turn it off." and "Keep awake is off."; `state.json` followed in 0.14 s
+    and 0.36 s. **Verified**.
+  - Explorer shows the Sunrise as the file icon of `wakeshot.exe` and `wakeshot-tray.exe` (copies in a temp folder,
+    large icons 96; `int-exe-icon.png`). **Verified**.
+  - The run made no new `NotifyIconSettings` entry or AUMID key (18 ids and 6 keys before and after, read again
+    97 s after the quit). **Verified**.
 
 ## Log wording checks
 
@@ -3982,3 +4097,18 @@ test on a throwaway plan copy that was never active.
 - **What it means for a user.** A lost journal's reset of battery sleep gives 3 minutes on this laptop, not the 15 an
   older table names; a user whose own value was Never (rule 7's accepted cost) gets 3 minutes and the notice. Whether
   Settings' "Restore default settings for this plan" gives the same values: not tested (it would write Haik's plan).
+
+## The screen timeout setting
+
+`p2-6-sleep-route`, 2026-11-04, on the test laptop, read only.
+
+- **Its GUIDs.** "Turn off my screen after" is `VIDEOIDLE` `3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e` in subgroup
+  `SUB_VIDEO` `7516b95f-f776-4464-8c53-06167f40cc99`; sleep after is `STANDBYIDLE` `29f6c1db-...` in `SUB_SLEEP`.
+  **Verified** (`powercfg /aliases`). The `windows` crate 0.62.2 names them `GUID_VIDEO_POWERDOWN_TIMEOUT` and
+  `GUID_VIDEO_SUBGROUP` with the same values (read in the crate source); `power::plan` uses those, and its test
+  `setting_guids_match_the_spike` pins the literals.
+- **Not tested here.** A real write of the screen timeout (only `DryRunPower` and the fake ran in this card), and
+  when Windows starts the screen and sleep timers after a write while input has been idle 5 minutes: at once against
+  the last input, or 60 s from the write. Either way the sleep should come about a minute after the write (inferred
+  from `p3-idle-sleep-check`, one run); the fallback hibernate covers the rest. Haik's lid test
+  (`p6-int-haik-checks`) is where it gets measured.

@@ -1,6 +1,6 @@
 # Integration: tray mode, the composition root
 
-Phase: 6. Status: blocked: waiting for the screen slot (smoke passed; picture left). Needs Haik: no. Agent: `wakeshot-worker`. Size: about 140K tokens.
+Phase: 6. Status: done. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 140K tokens.
 Real laptop: Part A no. Part B: **screen**, about 10 minutes, one dry-run tray icon on the taskbar (one screen or sound
 card at a time, across all tracks); no power setting, no sound on purpose, no Haik.
 Build folder: `CARGO_TARGET_DIR=<scratchpad>\p6-int-tray-mode\target`.
@@ -145,11 +145,36 @@ Problems seen but not fixed.
   `%LocalAppData%\Wakeshot`, no Wakeshot value in `Run` or `RunOnce`. `docs/research.md` "Tray mode checks" extended.
 - 2026-11-04 03:02: build folder deleted and checked gone. Status `blocked: waiting for the screen slot (smoke passed;
   picture left)`.
+- 2026-11-04 12:08, worker (orchestrator session wakeshot-12): screen slot for the picture. Session unlocked, no
+  `LogonUI` and no `wakeshot-tray` or `wakeshot` process before the run. The repo tree does not compile now
+  (`p2-6-sleep-route` mid-change), so the debug tray is built from the clean export of commit f47391d (the orchestrator's
+  `<scratchpad>\head-f47391d`, final Sunrise icon) into this card's build folder.
+- 2026-11-04 12:10: run 1 of the picture script (`<scratchpad>\p6-int-tray-mode\c1.ps1`): tray pid 18692, Medium
+  (`S-1-16-8192`), idle at start, hold "Taskbar picture" seen in `state.json` 0.14 s after the write. No new
+  `NotifyIconSettings` id: the dry-run entry `15983757285637097514` (only `IconSnapshot`) and its two
+  `NotifyIconGeneratedAumid_` keys were already there from a run that is not this card's, so the icon sat in the
+  overflow and the grab shows only the chevron. My quit found no window (PowerShell passed `$null` as an empty title);
+  fixed with `[NullString]::Value`, the tray then quit with code 0 at about 12:11:30.
+- 2026-11-04 12:12: run 2: the earlier entry exported (`entry-15983757285637097514-before-run2.reg`), `IsPromoted` = 1
+  written on it while the tray (pid 576, Medium) ran, the hold written, the taskbar grabbed while holding, the hold
+  deleted (idle), `WM_CLOSE` to the loop window after a pid check: exit code 0, journal gone. `IsPromoted` removed
+  again. Picture `docs/research/img/ux/int-smoke-holding.png` (150 by 72, the `taskbar-*` crop): chevron, the Sunrise
+  icon, the next app's icon.
+- 2026-11-04 12:13: checks after, and again at 12:13:41 (a minute after the 12:12:39 quit): 18 ids as before, no new
+  one; AUMID keys as before; the earlier entry back to `IconSnapshot` only; pids 18692 and 576 gone; no `wakeshot-tray`
+  or `wakeshot` process; temp data folder deleted; no `%LocalAppData%\Wakeshot`; no Wakeshot value in `Run` or
+  `RunOnce`. Build folder deleted and checked gone. `docs/research.md` "Tray mode checks" extended.
 
 ## Result
 
-**Part A done (2026-11-04 02:55). Part B done except the picture (2026-11-04 03:02)**: the session was locked
-(since 02:00), so the picture `docs/research/img/ux/int-smoke-*.png` waits for a screen slot with Haik.
+**Done (2026-11-04 12:13).** Part A 02:55; Part B smoke 03:02; the picture 12:12 in a screen slot (session
+unlocked): `docs/research/img/ux/int-smoke-holding.png`, the dry-run Sunrise icon on the taskbar while a script hold
+runs (tray built from the clean export of f47391d, since the repo tree did not compile then; Log 12:08 to 12:13).
+No new `NotifyIconSettings` entry or AUMID key came from it: the dry-run GUID's entry `15983757285637097514` and its
+two `NotifyIconGeneratedAumid_` keys were there before the run, from a run that is not this card's. They are left in
+place for the orchestrator (`IsPromoted`, written for the picture, removed again; export in
+`<scratchpad>\p6-int-tray-mode\entry-15983757285637097514-before-run2.reg`). Nothing of this card is left: no
+process, no temp folder, no build folder.
 
 Files: `crates/wakeshot-windows/src/app/tray_mode.rs` (filled), `crates/wakeshot-tray/tests/smoke.rs` (new; Part B:
 its `TempDir` drop prints the tray's log), `docs/research.md` (section "Tray mode checks", Part A and Part B), this
@@ -241,9 +266,11 @@ None of these makes the laptop behave differently when no work is going on.
 | `cargo test -p wakeshot-tray --target x86_64-pc-windows-msvc --test smoke` (not `--ignored`) | 1 ignored, so it builds and is skipped |
 | Part B, after the `smoke.rs` change: rustfmt, the 8 clippy runs above, `app::tray_mode::` tests (x64) | exit 0, all clean, 11 passed |
 | Part B: `cargo test --locked -p wakeshot-tray --target x86_64-pc-windows-msvc --test smoke -- --ignored --test-threads=1` | passed, run 1 of 1 (with `--nocapture`) |
-| Part B: the picture | not taken (session locked) |
+| Part B: the picture | not taken at 03:02 (session locked); taken 12:12 (run 2), `int-smoke-holding.png` |
 | Part B: dry-run `NotifyIconSettings` entry and AUMID key gone a minute later | gone at 03:01:26 (deleted 03:00:17; the AUMID key never existed) |
 | Part B: no process of this card left; build folder deleted | none left (by pid 30172 and by a list); folder gone |
+| Picture runs: no new icon entry or AUMID key, a minute later | none new at 12:13:05 and 12:13:41; the earlier entry left as it was |
+| Picture runs: tray pids 18692 and 576, temp folder, build folder | pids gone (exit code 0 each), folders deleted and checked gone |
 
 Unit tests: `dry_run_hibernate_thread_posts_one_done_and_never_hibernates` (every check passes on `FakeHibernate`,
 the end is `Resumed`, the chime played, `SetSuspendState` only logged),

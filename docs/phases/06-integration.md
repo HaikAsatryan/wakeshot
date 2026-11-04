@@ -203,11 +203,11 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | `p6-int-window` | no | no (hidden windows only) | `p6-int-skeleton`, `p3-session` | done (00:05): 16 window tests, 314 in the crate |
 | `p6-int-dispatch` | no | no | `p6-int-skeleton`, `p2-core-lid`, `p3-power-io` | done (22:18): 21 tests, 22 of 22 mutants caught |
 | `p6-int-startup` | no | no | `p6-int-skeleton`, `p3-store`, `p3-log`, `p3-process`, `p3-session`, `p3-journal`, `p3-power-io` | done (00:05): 22 tests; journal read retried once after 500 ms |
-| `p6-int-tray-mode` | no | Part B: screen, about 10 min (a dry-run icon) | `p6-int-io-thread`, `p6-int-window`, `p6-int-dispatch`, `p6-int-startup`, `p3-requests`, `p3-system-events`, `p3-hibernate`, `p3-recovery`, `p4-watch-thread`, `p4-claude-transcript`, `p4-cron`, `p5-tray-icon`, `p5-menu-view`, `p5-notices`, `p5-sounds` | blocked: waiting for the screen slot (Part A done, 11 tests; smoke test passed 02:58 in the locked session; the picture waits for Haik) |
+| `p6-int-tray-mode` | no | Part B: screen, about 10 min (a dry-run icon) | `p6-int-io-thread`, `p6-int-window`, `p6-int-dispatch`, `p6-int-startup`, `p3-requests`, `p3-system-events`, `p3-hibernate`, `p3-recovery`, `p4-watch-thread`, `p4-claude-transcript`, `p4-cron`, `p5-tray-icon`, `p5-menu-view`, `p5-notices`, `p5-sounds` | done (12:12: the taskbar picture with the Sunrise while a script hold runs) |
 | `p6-int-update-wiring` | no | no | `p6-int-tray-mode`, `p6-velopack-dependency`, `p6-update-schedule` | done (committed 03:54): 15 `tray_mode` tests; smoke passed; ARM64 tray CI only |
 | `p6-int-wiring-fixes` | no | no | `p6-int-tray-mode` Part A, `p6-velopack-dependency`, `p6-int-update-wiring` | done (04:29; 1276 tests; smoke test passed) |
 | `p6-int-log-wording` | no | no | `p6-int-wiring-fixes` | done (05:16) |
-| `p6-int-dry-run-e2e` | no | screen (dry-run icon, balloons, pictures); agent-session lane (one Claude Code test session) | `p6-int-update-wiring`, `p4-cli-args`, `p4-cli-run`, `p4-cli-commands`, `p4-cli-restore`, `p4-live-claude` | blocked: waiting for the screen slot (12 of 12 suite tests passed twice, no fix needed; Claude session check and clean-up done 04:51; pictures left) |
+| `p6-int-dry-run-e2e` | no | screen (dry-run icon, balloons, pictures); agent-session lane (one Claude Code test session) | `p6-int-update-wiring`, `p4-cli-args`, `p4-cli-run`, `p4-cli-commands`, `p4-cli-restore`, `p4-live-claude` | done (12:18: four pictures; the old dry-run icon entry is left for Haik's call) |
 | `p6-int-real-e2e` | no | global: power settings on active plan copies, RunOnce, a guard | `p6-int-dry-run-e2e`, `p3-real-checks` | done (05:25: 10 of 10 on an active copy; AFTER equals BEFORE; no product fix) |
 | `p6-int-update-e2e` | no | global: installs, Run, RunOnce, Path, a user environment value, an active plan copy | `p6-int-real-e2e`, `p6-install-e2e`, `p6-pack-and-release`, `p6-hooks` | done (05:51: 125 checks passed, 1 skipped: the update notice, held while the session was locked) |
 | `p6-int-haik-checks` | yes: about 42 min (27, 18 of hands, plus 15 with the dock) | whole laptop: lid, lock, hibernate, switch user, battery; no other agent or cargo command | `p6-int-update-e2e`, `p3-haik-checks`, `p5-haik-check` | ready |
@@ -398,3 +398,9 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   wrapper died (exit 1), its `ping` went on (ended by pid), as the README says. Uninstall during a hold: all gone,
   the data folder too. AFTER equals BEFORE (script and an elevated read). No Rust fix. The product icon entry now
   points at the removed exe (harmless, note 7); Velopack's own logs grew about 29 KB.
+- 2026-11-04 12:18 (orchestrator `wakeshot-12`): the screen slot, part 2 (12:07 to 12:18, built from an export of
+  f47391d): `p6-int-tray-mode` done (the Sunrise on the taskbar while a script hold runs; run 1 had the icon in the
+  overflow) and `p6-int-dry-run-e2e` done (four pictures; tray quit by `WM_CLOSE`, no mouse). The balloon header's
+  small glyph is not the Sunrise, likely a cached PNG from 04:38 (not verified). The dry-run icon entry
+  `15983757285637097514` and its two AUMID keys, recreated by an earlier test run, are still in Haik's registry:
+  his call whether to delete them (orchestrator default: delete, with a `.reg` export first).

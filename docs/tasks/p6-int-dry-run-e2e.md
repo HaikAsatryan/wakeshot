@@ -1,7 +1,6 @@
 # Integration: end-to-end tests of the real exes in dry run
 
-Phase: 6. Status: blocked (waiting for a screen slot with the session unlocked: suite, Claude session and clean-up
-done; pictures left). Needs Haik: no. Agent: `wakeshot-worker`. Size: about 130K tokens.
+Phase: 6. Status: done. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 130K tokens.
 Real laptop: Part A no (code). Part B: **screen** (a dry-run tray icon, its balloons, pictures; one screen or sound card
 at a time, across all tracks) and the **agent-session lane** (one Claude Code test session, as `p4-live-claude` ran
 them). No power setting is written: the dry-run tray uses `DryRunPower`, dry-run requests, lock and hibernate.
@@ -98,6 +97,12 @@ Problems seen but not fixed.
    tray could stop the watch thread at Quit, before the window is destroyed, as it already does for the session
    registration (`app/tray_mode.rs`; that changes the order in phase note 6). Not fixed here: the run does not need
    it, and the clean fix is in the watch thread's file. Minor.
+3. Test hygiene, not product (12:17): the dry-run GUID's `NotifyIconSettings` entry `15983757285637097514` and its
+   AUMID keys in both places were back on this laptop before the picture run, from a run after 04:48 that is not
+   this card's, and `%TEMP%\NotifyIconGeneratedAumid_15983757285637097514.png` (04:38, older icon art) is still the
+   key's `IconUri`, which likely gives the balloon header its plain glyph. The orchestrator decides whether to delete
+   all three (exports of the entry are in `<scratchpad>\p6-int-tray-mode`). A real install uses the product GUID, so
+   users should not see this (not verified).
 
 ## Log
 
@@ -163,8 +168,33 @@ Problems seen but not fixed.
   "Integration dry-run e2e".
 - 2026-11-04 04:50: build folder deleted and checked gone. Status `blocked`: the pictures wait for a screen slot with
   the session unlocked (steps below).
+- 2026-11-04 12:14, worker (orchestrator session wakeshot-12): screen slot for the pictures, after `p6-int-tray-mode`'s
+  picture. Session unlocked; no `wakeshot-tray` or `wakeshot` process. Tray and CLI built (debug x64, 12:09 to 12:10)
+  from the clean export of f47391d (`<scratchpad>\head-f47391d`; the repo tree does not compile now) into this card's
+  build folder. The dry-run entry `15983757285637097514` and its two AUMID keys exist from an earlier run that is not
+  this card's (see `p6-int-tray-mode` Log 12:10).
+- 2026-11-04 12:15: picture run (`<scratchpad>\p6-int-dry-run-e2e\c2.ps1`): empty data folder `%TEMP%\wakeshot-pictures`
+  and an empty `CLAUDE_CONFIG_DIR` (else the agent sessions hold the tray and no idle picture is possible), tray pid
+  20376 at Medium (`S-1-16-8192`, not High). "notice shown: FirstRun" at 12:15:00.771, balloon grabbed 2.3 s later.
+  No new icon entry, so `IsPromoted` = 1 written on the earlier entry while the tray ran (removed after the quit).
+  Idle grabbed; `wakeshot --dry-run keep-awake on` (exit 0, "Keep awake is on until you turn it off."), holding in
+  `state.json` 0.14 s later, grabbed; `keep-awake off` (exit 0, "Keep awake is off."), idle 0.36 s later. Quit by
+  `WM_CLOSE` to the loop window after a pid check, as `ask_quit` does, not by a menu click (no mouse while Haik is
+  away): exit code 0, journal gone, "Wakeshot ends with code 0", no WARN or ERROR line.
+- 2026-11-04 12:16: Explorer picture (`exe.ps1`): copies of `wakeshot.exe` and `wakeshot-tray.exe` in
+  `%TEMP%\wakeshot-pictures-exe` (so only the two files show), opened with `explorer.exe` in a new window (Haik's 3
+  Explorer windows listed before and after, untouched), large icons through `Shell.Application`, grabbed, that window
+  closed with `Quit()`. Crops: `int-first-run-balloon.png`, `int-icon-idle.png`, `int-icon-holding.png`,
+  `int-exe-icon.png` (only the banner, the taskbar strip and the two files; raw grabs stay in the scratchpad).
+- 2026-11-04 12:17: clean-up checks at 12:16:48 and 12:17:24 (97 s and 133 s after the quit): 18 ids and 6 AUMID keys
+  as before, no new one; the earlier entry back to `IconSnapshot` only; pid 20376 gone; no `wakeshot-tray` or
+  `wakeshot` process; both temp folders deleted; no `%LocalAppData%\Wakeshot`; no Wakeshot value in `Run` or
+  `RunOnce`. Build folder deleted and checked gone. `docs/research.md` "Integration dry-run e2e" extended.
 
 ## Steps left: the pictures (deliverable 3)
+
+Done 2026-11-04 12:15 to 12:17 (Log), with the changes named there: an empty `CLAUDE_CONFIG_DIR`, `IsPromoted` on
+the earlier entry, quit by `WM_CLOSE` instead of the menu, exe copies in a temp folder. Kept for a rerun.
 
 For Haik, or an agent in a screen slot once the session is unlocked. No other dry-run tray may run, and no power
 setting is written.
@@ -190,8 +220,16 @@ setting is written.
 
 ## Result
 
-**Done except the pictures (2026-11-04 04:50); Status `blocked` for them.** No fix was needed: the suite passed on
-its first run.
+**Done (2026-11-04 12:17).** Suite, Claude session and clean-up 04:50; the pictures 12:15 to 12:17 in a screen slot
+(Log). No fix was needed: the suite passed on its first run.
+
+Pictures (`docs/research/img/ux/`): `int-first-run-balloon.png` (header "Wakeshot", Sunrise in the body),
+`int-icon-idle.png`, `int-icon-holding.png` (Keep awake from the CLI), `int-exe-icon.png` (both exes show the
+Sunrise). Tray and CLI built from the clean export of f47391d, since the repo tree did not compile then. One open
+point: the balloon header's small glyph is a plain outline, not the Sunrise; likely the stale cached PNG of the
+dry-run AUMID key from 04:38 (not verified; `docs/research.md`, "Integration dry-run e2e"). The dry-run GUID's
+`NotifyIconSettings` entry `15983757285637097514` and its two AUMID keys were there before the run, from a run that
+is not this card's; left in place for the orchestrator (no new entry or key came from this run).
 
 What was done:
 
@@ -203,7 +241,7 @@ What was done:
 - Deliverable 3: two full runs, **12 of 12 passed both times** (44.2 s and 36.2 s; output in
   `<scratchpad>\p6-int-dry-run-e2e\run1.txt` and `run2.txt`). The Claude Code session is recorded: the tray went from
   3 to 4 sessions and back with the test session (Log 04:41). The clean-up checks pass. **Left: the pictures**, since
-  the session was locked (steps above).
+  the session was locked (steps above); taken 12:15 to 12:17, and the clean-up checks after them pass.
 - Deliverable 4: no fix, so no app, `velo.rs`, `smoke.rs` or CLI file changed. Two minor log findings are under
   "Found outside scope".
 - Deliverable 5: `docs/research.md`, section "Integration dry-run e2e".
@@ -216,5 +254,7 @@ build folder is deleted.
 
 Decided by the worker, for Haik's review: Log 04:19 items 1 to 5, and Log 04:44 (the WARN left).
 
-Open items: the pictures (steps above) and Found outside scope 1 and 2. `p6-int-real-e2e` takes over
+Files changed at 12:17: the four pictures above, this card, `docs/research.md` (additions only).
+
+Open items: Found outside scope 1 to 3. `p6-int-real-e2e` takes over
 `tests/e2e/mod.rs`; it is dry run only now, so that card adds the real mode.
