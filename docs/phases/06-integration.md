@@ -214,6 +214,8 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | `p2-6-floor-grace` | no | no | `p6-int-haik-checks` | done (2026-11-05 ~03:20): `policy::floor::decide`, 30 s from the last AC loss; 695 core tests, props 10000 cases; narrow power safety check running |
 | `p6-real-install-guard` | no | no (read-only checks) | `p2-6-runonce-keep` | done (2026-11-05 ~03:00): shared check in `store.rs` (test-support), `power_check` and `e2e.ps1` refuse; switch bytes fixed; 579 windows tests pass |
 | `p6-notice-app-icon` | Part B: about 5 min, a look at the screen | Part A: test installs (HKCU keys); Part B: screen | `p6-real-install-guard` (both own `packaging/e2e.ps1`) | blocked: Part A done (2026-11-05 ~04:00: hooks register the app id with `DisplayName` and a 48 px `IconUri`; `e2e.ps1` 102 of 102); Part B waits for Haik at the screen |
+| `p6-screen-reruns` | yes: about 20 min at the screen, same session as `p6-notice-app-icon` Part B | the plan copy and test install of that Part B; deletes the stale Settings icon key and the 2026-11-04 `%TEMP%` leftovers (Haik's yes) | bundle with `p6-notice-app-icon` Part B | ready |
+| `p2-6-sound-overlap-smoke-key` | no | no | `p6-screen-reruns`; Part C after Haik's clang install | ready |
 
 Sizes, one worker's context: skeleton 50K, io-thread 120K, window 100K, dispatch 140K, startup 100K, tray-mode 140K,
 update-wiring 90K, dry-run-e2e 130K, real-e2e 130K, update-e2e 120K, haik-checks 70K. About 1.19M tokens in all.
@@ -457,3 +459,7 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   and the floor re-check (`p2-6-floor-grace` Found outside scope 3); after it, one small card for the two known
   minors (two sounds overlap; the smoke test skips the notice key) and the ARM64 rerun of `p6-velopack-dependency`
   once clang is in.
+- 2026-11-05 (orchestrator): Haik's answers: the 09:52 line is his (committed, 04223b0); yes to both deletions; yes
+  to both reruns; the two minors fixed now; his design review is a separate session of his own, on brand and UI
+  only, so `p6-media` Part B, the README and Pages finish wait for it. He is installing clang now. New cards
+  `p6-screen-reruns` (bundle with `p6-notice-app-icon` Part B) and `p2-6-sound-overlap-smoke-key` (after it).
