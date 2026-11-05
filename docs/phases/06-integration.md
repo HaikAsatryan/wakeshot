@@ -464,3 +464,11 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
   to both reruns; the two minors fixed now; his design review is a separate session of his own, on brand and UI
   only, so `p6-media` Part B, the README and Pages finish wait for it. He is installing clang now. New cards
   `p6-screen-reruns` (bundle with `p6-notice-app-icon` Part B) and `p2-6-sound-overlap-smoke-key` (after it).
+- 2026-11-05 ~13:00 (orchestrator): `p6-notice-app-icon` Part B and `p6-screen-reruns` done (148e0b2);
+  `p2-6-sound-overlap-smoke-key` done (f139421); `p6-polite-quit-notice-retry` done (69248b3; one line outside its
+  list, `app/tray_mode.rs`, the notifier gets the log). Orchestrator decisions: the typing rerun is not repeated (the
+  rule is "no input", and the countdown waited while input came; `p6-screen-reruns` Found outside scope 6); a later
+  step text waits 40 s on AC before a long pull (same card, 4); the shortcut app id check goes in with the next
+  velopack version change. Haik's brand session commits in this repo too (b622900); its `p6-brand-cleanup` edits
+  `wakeshot-windows` after `p6-polite-quit-notice-retry`, so no code card from here while it runs. The push waits for
+  Haik (auto mode refused it).

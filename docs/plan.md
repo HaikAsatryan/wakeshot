@@ -264,12 +264,17 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   name and icon), docs pass round 7. Whole-workspace checks on x64 green before the push. Orchestrator and worker
   decisions for Haik's review: the `06-integration.md` work log, 2026-11-05 lines, and each card's decisions. CI
   green on 5f1b1db (all three jobs); release dry run 41931334598 built, packed and smoke-tested both CPUs.
-- 2026-11-05 (orchestrator, after a /clear): no agent runs; the list below went to Haik as numbered asks with
-  defaults (the 06-integration work log, last 2026-11-05 line). Waits for his answers and the screen session.
-- Next (orchestrator), all with Haik: his read of the 2026-11-05 decisions; `p6-notice-app-icon` Part B (about 5 min
-  at the screen); `p6-int-haik-checks` findings 4 (delete the stale Settings icon key), 9 (rerun block 6 step 3,
-  about 10 min) and 10 (`%TEMP%` test leftovers); the optional floor re-check (`p2-6-floor-grace` Found outside
-  scope 3, about 5 min); his design review of the final software, then `p6-media` Part B, the README and Pages
-  finish. Haik's review of the RunOnce fix decisions (`p2-6-runonce-keep` Decisions, finding 6) is open. Known
-  minors: two sounds overlap in a rare lid and floor case (`p2-6-floor-grace` Found outside scope 4); CI's smoke test
-  does not check the notice key (docs pass round 7 Result).
+- 2026-11-05 ~13:00: done and committed: clang installed by Haik (22.1.3), `p6-notice-app-icon` Part B with
+  `p6-screen-reruns` (the header shows the Wakeshot icon from both start paths; Win+N never keeps a balloon; floor
+  grace passes; the countdown waited while input came), `p2-6-sound-overlap-smoke-key` (one sound; the smoke test
+  checks the notice key; ARM64 checks pass here), `p6-polite-quit-notice-retry` (a plain taskkill quits the tray; a
+  refused notice is tried again). Not pushed: 6 commits since 5f1b1db (auto mode refused the orchestrator's push;
+  asked Haik). Haik's brand session (its own orchestrator and `p6-brand-*` cards) runs in the same repo;
+  `p6-brand-cleanup` edits `wakeshot-windows`, so this orchestrator starts no code card while it runs.
+- Next (orchestrator): the push and CI; an installer for Haik's UI review and the field test (default: the release
+  dry run's x64 artifact); then `p6-media` Part B, the README and Pages finish after his brand session; Phase 7
+  field test; Phase 8 cleanup. On this laptop Wakeshot is missing from Settings' tray list (`p6-screen-reruns` Found
+  outside scope 3): a sign-out after the next install, if still missing. Haik's reads still open: the 2026-11-05
+  decisions (06-integration work log, the cards' worker decisions) and `p2-6-runonce-keep` Decisions and finding 6.
+  Known minors: a rare two-sound case at the grace's end (`p2-6-sound-overlap-smoke-key` Found outside scope 2); the
+  smoke test skips the shortcut's app id (same card, 4).
