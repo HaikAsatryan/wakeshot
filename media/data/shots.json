@@ -1,60 +1,305 @@
 {
-  "note": "The screen captures the video uses, in sets: each set is one screen rectangle at one Windows scale, so the video swaps its pictures in place and only the drawn layers move (docs/research/promo-video.md, 'Real captures and drawn parts'). w and h are the rectangle in capture pixels; boxes and rows are places inside it in the same pixels (the cursor, the ring and the pops land on them). No capture yet: file null and standIn true, and the draft draws a plain sketch of the set with a stand-in tag; boxes and rows are then the sketch's own. The capture session (p6-media Part B) puts each file under public/shots/, sets file, standIn false and from, sets w, h and scale to the capture, and measures boxes and rows from the pictures. The final render refuses a shot with no file or standIn true.",
+  "note": "The screen captures the video uses, in sets: each set is one screen rectangle at one Windows scale, so the video swaps its pictures in place and only the drawn layers move (docs/research/promo-video.md, 'Real captures and drawn parts'). Real captures of p6-media-captures (2026-11-05, the installed local 0.1.0 build of commit c9da3dd, the DELL U2723QE at 200%, dark taskbar, cursor never in the picture, TrafficMonitor and the clock covered with plain taskbar), from its captures.json. w and h are the rectangle in capture pixels; boxes and rows are places inside it in the same pixels (the cursor, the ring and the pops land on them); a box ending in Pop is a part grown by its shadow, for the part that rises in. 'battery' is the menu set's battery figure: 96% in S1 and 97% in S5a to S5d (it was charging), so the video always shows S5a's. stills are the README's pictures, not used in the video.",
   "sets": {
     "tray": {
-      "what": "the tray icon and the space above it, where its tooltip shows (one fixed rectangle at 200% on the DELL screen)",
+      "what": "the tray icon and the space above it, where its tooltip shows (manifest set 'work')",
       "theme": "dark",
       "scale": 200,
-      "w": 600,
-      "h": 300,
-      "taskbar": 204,
+      "w": 564,
+      "h": 240,
+      "taskbar": 144,
       "boxes": {
-        "glyph": {"x": 420, "y": 236, "w": 32, "h": 32},
-        "tip": {"x": 150, "y": 112, "w": 420, "h": 64},
-        "tipName": {"x": 336, "y": 128, "w": 224, "h": 32},
-        "tipIdle": {"x": 300, "y": 112, "w": 270, "h": 64}
+        "button": {
+          "x": 229,
+          "y": 144,
+          "w": 64,
+          "h": 96
+        },
+        "glyph": {
+          "x": 250,
+          "y": 180,
+          "w": 24,
+          "h": 22
+        },
+        "icon": {
+          "x": 246,
+          "y": 176,
+          "w": 32,
+          "h": 32
+        },
+        "tip": {
+          "x": 34,
+          "y": 24,
+          "w": 468,
+          "h": 105
+        },
+        "tipPop": {
+          "x": 22,
+          "y": 12,
+          "w": 492,
+          "h": 129
+        },
+        "tipIdle": {
+          "x": 56,
+          "y": 24,
+          "w": 420,
+          "h": 105
+        }
       },
       "rows": [],
       "shots": {
-        "S1": {"what": "idle icon, no tooltip", "file": null, "standIn": true, "from": "no capture yet"},
-        "S2": {"what": "holding icon, no tooltip", "file": null, "standIn": true, "from": "no capture yet"},
-        "S3": {"what": "holding tooltip of a real Claude Code session", "file": null, "standIn": true, "from": "no capture yet"},
-        "S4": {"what": "idle tooltip", "file": null, "standIn": true, "from": "no capture yet"}
+        "S1": {
+          "what": "idle icon, no tooltip",
+          "file": "shots/work-S1-dark.png",
+          "standIn": false,
+          "from": "p6-media-captures 2026-11-05 22:07:06.485, DELL 200%, screen rect 2986,1920 564x240, from grab S1-dark.png; tray: Not holding, the PC sleeps as usual"
+        },
+        "S2": {
+          "what": "holding icon (a real Claude Code session), no tooltip",
+          "file": "shots/work-S2-dark.png",
+          "standIn": false,
+          "from": "p6-media-captures 2026-11-05 22:09:23.556, DELL 200%, screen rect 2986,1920 564x240, from grab S2-dark.png; tray: Holding awake: Claude Code (1 session)"
+        },
+        "S3": {
+          "what": "holding tooltip of a real Claude Code session, the icon hovered",
+          "file": "shots/work-S3-dark.png",
+          "standIn": false,
+          "from": "p6-media-captures 2026-11-05 22:09:25.889, DELL 200%, screen rect 2986,1920 564x240, from grab S3-dark.png; tray: Holding awake: Claude Code (1 session)"
+        },
+        "S4": {
+          "what": "idle tooltip, the icon hovered",
+          "file": "shots/work-S4-dark.png",
+          "standIn": false,
+          "from": "p6-media-captures 2026-11-05 22:07:33.434, DELL 200%, screen rect 2986,1920 564x240, from grab S4-dark.png; tray: Not holding, the PC sleeps as usual"
+        }
       }
     },
     "menu": {
       "what": "the tray icon and the space its menu and submenu take",
       "theme": "dark",
-      "scale": 150,
-      "w": 1000,
-      "h": 700,
-      "taskbar": 628,
+      "scale": 200,
+      "w": 970,
+      "h": 814,
+      "taskbar": 718,
       "boxes": {
-        "glyph": {"x": 800, "y": 652, "w": 24, "h": 24},
-        "bar": {"x": 0, "y": 628, "w": 1000, "h": 72},
-        "menu": {"x": 560, "y": 150, "w": 360, "h": 466},
-        "sub": {"x": 330, "y": 236, "w": 236, "h": 236}
+        "button": {
+          "x": 345,
+          "y": 718,
+          "w": 64,
+          "h": 96
+        },
+        "glyph": {
+          "x": 366,
+          "y": 754,
+          "w": 24,
+          "h": 22
+        },
+        "bar": {
+          "x": 0,
+          "y": 718,
+          "w": 970,
+          "h": 96
+        },
+        "battery": {
+          "x": 681,
+          "y": 718,
+          "w": 109,
+          "h": 96
+        },
+        "menu": {
+          "x": 357,
+          "y": 304,
+          "w": 613,
+          "h": 414
+        },
+        "menuPop": {
+          "x": 341,
+          "y": 288,
+          "w": 645,
+          "h": 446
+        },
+        "sub": {
+          "x": 40,
+          "y": 40,
+          "w": 320,
+          "h": 474
+        },
+        "subPop": {
+          "x": 24,
+          "y": 24,
+          "w": 352,
+          "h": 506
+        }
       },
       "rows": [
-        {"name": "status", "x": 566, "y": 158, "w": 348, "h": 72},
-        {"name": "keepAwake", "x": 566, "y": 246, "w": 348, "h": 42},
-        {"name": "lidClosed", "x": 566, "y": 290, "w": 348, "h": 42},
-        {"name": "settings", "x": 566, "y": 346, "w": 348, "h": 42},
-        {"name": "about", "x": 566, "y": 390, "w": 348, "h": 42},
-        {"name": "quit", "x": 566, "y": 446, "w": 348, "h": 42},
-        {"name": "off", "x": 336, "y": 242, "w": 224, "h": 42},
-        {"name": "halfHour", "x": 336, "y": 286, "w": 224, "h": 42},
-        {"name": "oneHour", "x": 336, "y": 330, "w": 224, "h": 42},
-        {"name": "twoHours", "x": 336, "y": 374, "w": 224, "h": 42},
-        {"name": "untilOff", "x": 336, "y": 418, "w": 224, "h": 42}
+        {
+          "name": "status",
+          "x": 360.0,
+          "y": 307.0,
+          "w": 607,
+          "h": 66
+        },
+        {
+          "name": "automatic",
+          "x": 360.0,
+          "y": 379.0,
+          "w": 607,
+          "h": 66
+        },
+        {
+          "name": "keepAwake",
+          "x": 360.0,
+          "y": 445.0,
+          "w": 607,
+          "h": 66
+        },
+        {
+          "name": "restore",
+          "x": 360.0,
+          "y": 517.0,
+          "w": 607,
+          "h": 66
+        },
+        {
+          "name": "openLog",
+          "x": 360.0,
+          "y": 583.0,
+          "w": 607,
+          "h": 66
+        },
+        {
+          "name": "quit",
+          "x": 360.0,
+          "y": 649.0,
+          "w": 607,
+          "h": 66
+        },
+        {
+          "name": "off",
+          "x": 43.0,
+          "y": 43.0,
+          "w": 314,
+          "h": 66
+        },
+        {
+          "name": "halfHour",
+          "x": 43.0,
+          "y": 109.0,
+          "w": 314,
+          "h": 66
+        },
+        {
+          "name": "oneHour",
+          "x": 43.0,
+          "y": 175.0,
+          "w": 314,
+          "h": 66
+        },
+        {
+          "name": "twoHours",
+          "x": 43.0,
+          "y": 241.0,
+          "w": 314,
+          "h": 66
+        },
+        {
+          "name": "fourHours",
+          "x": 43.0,
+          "y": 307.0,
+          "w": 314,
+          "h": 66
+        },
+        {
+          "name": "untilOff",
+          "x": 43.0,
+          "y": 373.0,
+          "w": 314,
+          "h": 66
+        },
+        {
+          "name": "keepScreenOn",
+          "x": 43.0,
+          "y": 445.0,
+          "w": 314,
+          "h": 66
+        }
       ],
       "shots": {
-        "S1": {"what": "idle icon, menu closed", "file": null, "standIn": true, "from": "no capture yet"},
-        "S5a": {"what": "menu open, no hover", "file": null, "standIn": true, "from": "no capture yet"},
-        "S5b": {"what": "Keep awake hovered, its submenu open", "file": null, "standIn": true, "from": "no capture yet"},
-        "S5c": {"what": "1 hour hovered", "file": null, "standIn": true, "from": "no capture yet"},
-        "S5d": {"what": "menu closed after the click, icon holding", "file": null, "standIn": true, "from": "no capture yet"}
+        "S1": {
+          "what": "idle icon, menu closed (battery 96%)",
+          "file": "shots/menu-S1-dark.png",
+          "standIn": false,
+          "from": "p6-media-captures 2026-11-05 22:07:06.485, DELL 200%, screen rect 2870,1346 970x814, from grab S1-dark.png; tray: Not holding, the PC sleeps as usual"
+        },
+        "S5a": {
+          "what": "menu open, no hover",
+          "file": "shots/menu-S5a-dark.png",
+          "standIn": false,
+          "from": "p6-media-captures 2026-11-05 22:08:28.607, DELL 200%, screen rect 2870,1346 970x814, from grab S5a-dark.png; tray: Not holding, the PC sleeps as usual"
+        },
+        "S5b": {
+          "what": "Keep awake hovered, its submenu open",
+          "file": "shots/menu-S5b-dark.png",
+          "standIn": false,
+          "from": "p6-media-captures 2026-11-05 22:08:30.722, DELL 200%, screen rect 2870,1346 970x814, from grab S5b-dark.png; tray: Not holding, the PC sleeps as usual"
+        },
+        "S5c": {
+          "what": "1 hour hovered",
+          "file": "shots/menu-S5c-dark.png",
+          "standIn": false,
+          "from": "p6-media-captures 2026-11-05 22:08:32.343, DELL 200%, screen rect 2870,1346 970x814, from grab S5c-dark.png; tray: Not holding, the PC sleeps as usual"
+        },
+        "S5d": {
+          "what": "menu closed after the click, icon holding (Keep awake, 1 h left)",
+          "file": "shots/menu-S5d-dark.png",
+          "standIn": false,
+          "from": "p6-media-captures 2026-11-05 22:08:35.342, DELL 200%, screen rect 2870,1346 970x814, from grab S5d-dark.png; tray: Holding awake: Keep awake (1 h left)"
+        }
       }
+    }
+  },
+  "stills": {
+    "readme-menu-dark": {
+      "what": "README: the menu open (dark)",
+      "file": "shots/readme-menu-dark.png",
+      "standIn": false,
+      "from": "p6-media-captures 2026-11-05 22:08:28.607, DELL 200%, screen rect 3140,1610 700x550, from grab S5a-dark.png; tray: Not holding, the PC sleeps as usual"
+    },
+    "readme-menu-light": {
+      "what": "README: the menu open (light)",
+      "file": "shots/readme-menu-light.png",
+      "standIn": false,
+      "from": "p6-media-captures 2026-11-05 22:11:59.431, DELL 200%, screen rect 3140,1610 700x550, from grab S5a-light.png; tray: Not holding, the PC sleeps as usual"
+    },
+    "readme-holding-tooltip-dark": {
+      "what": "README: the holding tooltip of a real Claude Code session (dark)",
+      "file": "shots/readme-holding-tooltip-dark.png",
+      "standIn": false,
+      "from": "p6-media-captures 2026-11-05 22:09:25.889, DELL 200%, screen rect 2986,1920 564x240, from grab S3-dark.png; tray: Holding awake: Claude Code (1 session)"
+    },
+    "readme-holding-tooltip-light": {
+      "what": "README: the holding tooltip of a real Claude Code session (light)",
+      "file": "shots/readme-holding-tooltip-light.png",
+      "standIn": false,
+      "from": "p6-media-captures 2026-11-05 22:12:09.093, DELL 200%, screen rect 2986,1920 564x240, from grab S3-light.png; tray: Holding awake: Claude Code (1 session)"
+    },
+    "readme-idle-tooltip-dark": {
+      "what": "README: the idle tooltip (dark)",
+      "file": "shots/readme-idle-tooltip-dark.png",
+      "standIn": false,
+      "from": "p6-media-captures 2026-11-05 22:07:33.434, DELL 200%, screen rect 2986,1920 564x240, from grab S4-dark.png; tray: Not holding, the PC sleeps as usual"
+    },
+    "readme-idle-tooltip-light": {
+      "what": "README: the idle tooltip (light)",
+      "file": "shots/readme-idle-tooltip-light.png",
+      "standIn": false,
+      "from": "p6-media-captures 2026-11-05 22:13:43.491, DELL 200%, screen rect 2986,1920 564x240, from grab S4-light.png; tray: Not holding, the PC sleeps as usual"
+    },
+    "work-S7-dark": {
+      "what": "README and a longer cut: the tooltip while wakeshot run -- npm run build holds (dark)",
+      "file": "shots/work-S7-dark.png",
+      "standIn": false,
+      "from": "p6-media-captures 2026-11-05 22:08:46.310, DELL 200%, screen rect 2986,1920 564x240, from grab S7-dark.png; tray: Holding awake: npm"
     }
   }
 }

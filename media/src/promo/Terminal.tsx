@@ -7,20 +7,34 @@ const LINE = 52;
 const FONT = 34;
 const BAR = 54;
 
-/** A small turning arc, drawn, so the spinner looks the same in any font. */
-const Spinner: React.FC<{f: number; size: number; colour: string; turning: boolean}> = ({f, size, colour, turning}) => (
-  <svg width={size} height={size} viewBox="-10 -10 20 20" style={{display: 'block'}}>
-    <circle r={7} fill="none" stroke={colour} strokeOpacity={0.25} strokeWidth={2.4} />
-    <path d="M 0 -7 A 7 7 0 0 1 7 0" fill="none" stroke={colour} strokeWidth={2.4} strokeLinecap="round" transform={`rotate(${turning ? (f * 24) % 360 : 0})`} />
-  </svg>
-);
+// The terminal draws no SVG: under the hook's 3D tilt and the laptop's lid, SVG shapes rendered a level apart from one
+// render to the next, so its marks are plain boxes and text, which render the same every time.
 
-/** A check mark, drawn, for the done line. */
+/** A bullet, built from its code point so the source stays plain ASCII. */
+const DOT = String.fromCodePoint(0x2022);
+
+/**
+ * Three dots, the bright one stepping along every four frames: text, so it renders the same on every run (drawn dots
+ * under the hook's 3D tilt came out a level apart from run to run).
+ */
+const Spinner: React.FC<{f: number; colour: string; turning: boolean}> = ({f, colour, turning}) => {
+  const lead = turning ? Math.floor(f / 4) % 3 : -1;
+  return (
+    <span style={{letterSpacing: '-0.15em'}}>
+      {[0, 1, 2].map((i) => (
+        <span key={i} style={{color: i === lead ? colour : DARK.dim}}>
+          {DOT}
+        </span>
+      ))}
+    </span>
+  );
+};
+
+/** A filled disc with a short bar in it, for the done line: a plain mark that needs no check glyph. */
 const Check: React.FC<{size: number; colour: string}> = ({size, colour}) => (
-  <svg width={size} height={size} viewBox="-10 -10 20 20" style={{display: 'block'}}>
-    <circle r={8.5} fill={colour} />
-    <path d="M -4 0.5 L -1 3.5 L 4.5 -3" fill="none" stroke={DARK.terminal} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
+  <div style={{width: size, height: size, borderRadius: size / 2, background: colour, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+    <div style={{width: size * 0.42, height: size * 0.22, borderLeft: `${Math.max(2, size * 0.09)}px solid ${DARK.terminal}`, borderBottom: `${Math.max(2, size * 0.09)}px solid ${DARK.terminal}`, transform: 'translateY(-15%) rotate(-45deg)'}} />
+  </div>
 );
 
 /** The window's title bar: a tab with a prompt sign and the title, and thin minimise, maximise and close marks. */
@@ -50,19 +64,14 @@ const TitleBar: React.FC<{title: string}> = ({title}) => (
         color: DARK.text,
       }}
     >
-      <svg width={22} height={22} viewBox="0 0 22 22">
-        <rect x={1} y={2} width={20} height={18} rx={4} fill="none" stroke={DARK.dim} strokeWidth={1.6} />
-        <path d="M6 8 L9 11 L6 14 M11 14.5 L16 14.5" fill="none" stroke={DARK.accent} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
+      <div style={{fontFamily: MONO, fontSize: 18, lineHeight: '20px', padding: '0 4px', borderRadius: 4, border: `1.5px solid ${DARK.dim}`, color: DARK.accent}}>{'>_'}</div>
       {title}
     </div>
-    <svg width={150} height={BAR} viewBox={`0 0 150 ${BAR}`} style={{position: 'absolute', right: 6, top: 0}}>
-      <g stroke={DARK.dim} strokeWidth={1.6} fill="none" strokeLinecap="round">
-        <path d={`M18 ${BAR / 2} H32`} />
-        <rect x={66} y={BAR / 2 - 7} width={14} height={14} rx={2} />
-        <path d={`M114 ${BAR / 2 - 7} L128 ${BAR / 2 + 7} M128 ${BAR / 2 - 7} L114 ${BAR / 2 + 7}`} />
-      </g>
-    </svg>
+    <div style={{position: 'absolute', right: 26, top: 0, height: BAR, display: 'flex', alignItems: 'center', gap: 36}}>
+      <div style={{width: 14, height: 2, background: DARK.dim}} />
+      <div style={{width: 13, height: 13, border: `2px solid ${DARK.dim}`, borderRadius: 2, boxSizing: 'border-box'}} />
+      <div style={{fontFamily: SANS, fontSize: 22, lineHeight: '22px', color: DARK.dim}}>x</div>
+    </div>
   </div>
 );
 
@@ -133,7 +142,7 @@ export const Terminal: React.FC<{
           ))}
         </div>
         <div style={{...line, gap: 16, marginTop: 6, color: done ? DARK.accent : turning ? DARK.accent : DARK.dim}}>
-          {waiting ? null : done ? <Check size={FONT * 0.9} colour={DARK.accent} /> : <Spinner f={f} size={FONT * 0.9} colour={turning ? DARK.accent : DARK.dim} turning={turning} />}
+          {waiting ? null : done ? <Check size={FONT * 0.9} colour={DARK.accent} /> : <Spinner f={f} colour={DARK.accent} turning={turning} />}
           {waiting ? '' : done ? t.done : t.working}
         </div>
       </div>

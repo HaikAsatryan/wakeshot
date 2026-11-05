@@ -5,10 +5,31 @@ under `public/` or `out/` has no line here. Wakeshot's own work is MIT (`../LICE
 
 ## Pictures
 
-None yet. The video's screen pictures come from the capture session of `p6-media` Part B, each with a line here
-(file, what it shows, where it was taken). Until then the draft draws a plain box naming each missing shot
-(`data/shots.json`). The captures will show parts of the Windows taskbar around Wakeshot's own icon and menu.
-Microsoft's terms for showing Windows screenshots: not checked.
+Real screen captures of Wakeshot's own tray icon, tooltip and menu, made by `p6-media-captures` on 2026-11-05 from the
+installed local 0.1.0 build (commit c9da3dd) on the DELL U2723QE at 200%, cut unchanged from its grabs (its
+`captures.json` is the manifest; `data/shots.json` carries the boxes and rows). The captures show parts of the Windows
+taskbar around Wakeshot's icon (the chevron, OneDrive, ENG, network, volume, battery); TrafficMonitor and the clock are
+covered with plain taskbar. Wakeshot's own icon, menu and words: MIT, ours. Microsoft's terms for showing Windows
+screenshots: not checked.
+
+| File | What | Source |
+|---|---|---|
+| `public/shots/work-S1-dark.png` | Set `tray`, S1: idle icon, no tooltip | p6-media-captures 2026-11-05 22:07:06.485, DELL 200%, screen rect 2986,1920 564x240, from grab S1-dark.png; tray: Not holding, the PC sleeps as usual |
+| `public/shots/work-S2-dark.png` | Set `tray`, S2: holding icon (a real Claude Code session), no tooltip | p6-media-captures 2026-11-05 22:09:23.556, DELL 200%, screen rect 2986,1920 564x240, from grab S2-dark.png; tray: Holding awake: Claude Code (1 session) |
+| `public/shots/work-S3-dark.png` | Set `tray`, S3: holding tooltip of a real Claude Code session, the icon hovered | p6-media-captures 2026-11-05 22:09:25.889, DELL 200%, screen rect 2986,1920 564x240, from grab S3-dark.png; tray: Holding awake: Claude Code (1 session) |
+| `public/shots/work-S4-dark.png` | Set `tray`, S4: idle tooltip, the icon hovered | p6-media-captures 2026-11-05 22:07:33.434, DELL 200%, screen rect 2986,1920 564x240, from grab S4-dark.png; tray: Not holding, the PC sleeps as usual |
+| `public/shots/menu-S1-dark.png` | Set `menu`, S1: idle icon, menu closed (battery 96%) | p6-media-captures 2026-11-05 22:07:06.485, DELL 200%, screen rect 2870,1346 970x814, from grab S1-dark.png; tray: Not holding, the PC sleeps as usual |
+| `public/shots/menu-S5a-dark.png` | Set `menu`, S5a: menu open, no hover | p6-media-captures 2026-11-05 22:08:28.607, DELL 200%, screen rect 2870,1346 970x814, from grab S5a-dark.png; tray: Not holding, the PC sleeps as usual |
+| `public/shots/menu-S5b-dark.png` | Set `menu`, S5b: Keep awake hovered, its submenu open | p6-media-captures 2026-11-05 22:08:30.722, DELL 200%, screen rect 2870,1346 970x814, from grab S5b-dark.png; tray: Not holding, the PC sleeps as usual |
+| `public/shots/menu-S5c-dark.png` | Set `menu`, S5c: 1 hour hovered | p6-media-captures 2026-11-05 22:08:32.343, DELL 200%, screen rect 2870,1346 970x814, from grab S5c-dark.png; tray: Not holding, the PC sleeps as usual |
+| `public/shots/menu-S5d-dark.png` | Set `menu`, S5d: menu closed after the click, icon holding (Keep awake, 1 h left) | p6-media-captures 2026-11-05 22:08:35.342, DELL 200%, screen rect 2870,1346 970x814, from grab S5d-dark.png; tray: Holding awake: Keep awake (1 h left) |
+| `public/shots/readme-menu-dark.png` | README: the menu open (dark) | p6-media-captures 2026-11-05 22:08:28.607, DELL 200%, screen rect 3140,1610 700x550, from grab S5a-dark.png; tray: Not holding, the PC sleeps as usual |
+| `public/shots/readme-menu-light.png` | README: the menu open (light) | p6-media-captures 2026-11-05 22:11:59.431, DELL 200%, screen rect 3140,1610 700x550, from grab S5a-light.png; tray: Not holding, the PC sleeps as usual |
+| `public/shots/readme-holding-tooltip-dark.png` | README: the holding tooltip of a real Claude Code session (dark) | p6-media-captures 2026-11-05 22:09:25.889, DELL 200%, screen rect 2986,1920 564x240, from grab S3-dark.png; tray: Holding awake: Claude Code (1 session) |
+| `public/shots/readme-holding-tooltip-light.png` | README: the holding tooltip of a real Claude Code session (light) | p6-media-captures 2026-11-05 22:12:09.093, DELL 200%, screen rect 2986,1920 564x240, from grab S3-light.png; tray: Holding awake: Claude Code (1 session) |
+| `public/shots/readme-idle-tooltip-dark.png` | README: the idle tooltip (dark) | p6-media-captures 2026-11-05 22:07:33.434, DELL 200%, screen rect 2986,1920 564x240, from grab S4-dark.png; tray: Not holding, the PC sleeps as usual |
+| `public/shots/readme-idle-tooltip-light.png` | README: the idle tooltip (light) | p6-media-captures 2026-11-05 22:13:43.491, DELL 200%, screen rect 2986,1920 564x240, from grab S4-light.png; tray: Not holding, the PC sleeps as usual |
+| `public/shots/work-S7-dark.png` | README and a longer cut: the tooltip while wakeshot run -- npm run build holds (dark) | p6-media-captures 2026-11-05 22:08:46.310, DELL 200%, screen rect 2986,1920 564x240, from grab S7-dark.png; tray: Holding awake: npm |
 
 ## Sound
 

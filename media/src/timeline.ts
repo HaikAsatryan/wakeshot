@@ -114,7 +114,7 @@ export const FOCUS: FocusKey[] = [
   {at: T.settings.row1, target: 'row1'},
   {at: T.settings.row2, target: 'row2'},
   {at: T.sleeps.move, target: null},
-  {at: T.menu.ring, target: 'menuIcon'},
+  {at: T.menu.ring, target: 'menuIcon', dim: false},
   {at: T.end.cut, target: null, cut: true},
 ];
 
@@ -260,7 +260,7 @@ export const EVENTS: PaceEvent[] = [
   {at: T.menu.keep, kind: 'pop', what: 'Keep awake hovered, submenu'},
   {at: T.menu.hour, kind: 'swap', what: '1 hour hovered'},
   {at: T.menu.click2, kind: 'click', what: 'click on 1 hour, the icon holds'},
-  {at: T.menu.ring, kind: 'ring', what: 'ring on the icon'},
+  {at: T.menu.ring, kind: 'ring', what: 'ring on the icon; a lens rises with the holding glyph'},
   {at: T.end.cut, kind: 'light', what: 'the app icon lights'},
   {at: T.end.line, kind: 'pop', what: 'end line'},
   {at: T.end.speed, kind: 'pop', what: 'speed line'},
@@ -322,6 +322,7 @@ export const SOUNDS: Cue[] = [
   {at: T.menu.keep, sound: 'pop', gain: 0.18, pan: 0.45},
   {at: T.menu.pan, sound: 'whoosh', gain: 0.18, pan: 0.4},
   {at: T.menu.click2, sound: 'click', gain: 0.5, pan: 0.45},
+  {at: T.menu.ring, sound: 'lightOn', gain: 0.22, pan: 0.55},
   // The end card is calm: one soft swell of air as its light comes on, no whoosh, no pops; the music lets go.
   {at: T.end.cut, sound: 'glow', gain: 0.3},
 ];

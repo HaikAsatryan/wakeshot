@@ -9,7 +9,7 @@ import {CARD, rowBox} from './SettingsCard.tsx';
 /** The hook's terminal: its centre, below the big words. */
 export const HOOK_TERMINAL = {x: PLACES.hook.x, y: PLACES.hook.y + 150, w: 1300};
 /** The tray shot's terminal, the cause: its top left and scale, left of the tray capture, the effect. */
-export const TRAY_TERMINAL = {x: PLACES.tray.x - 830, y: PLACES.tray.y - 430, scale: 0.62};
+export const TRAY_TERMINAL = {x: PLACES.tray.x - 840, y: PLACES.tray.y - 470, scale: 0.56};
 
 /** The hero glyph of the light shot: 320 px, its ink box centred across and its middle at `inkMid`. */
 export const HERO = (() => {
@@ -22,9 +22,12 @@ export const HERO = (() => {
 
 /** Captures sit at whole-number zoom; the top left of each set in the world. */
 export const SET_AT: Record<SetName, {x: number; y: number; zoom: number}> = {
-  // At 2x the 200% capture shows the icon at 64 px and the tooltip's words large; its right side holds the icon.
-  tray: {x: PLACES.tray.x + 900 - SETS.tray.w * 2, y: PLACES.tray.y - 320, zoom: 2},
-  menu: {x: PLACES.menu.x - 472, y: PLACES.menu.y - 464, zoom: 1},
+  // At 2x the 200% capture shows the icon at 64 px and the tooltip's words large; right of the terminal, its
+  // taskbar clear of the captions.
+  tray: {x: PLACES.tray.x - 228, y: PLACES.tray.y - 210, zoom: 2},
+  // The 200% menu set at 1x fills the frame's height: its empty top rows run off the top, its taskbar stays clear of
+  // the captions.
+  menu: {x: PLACES.menu.x - 485, y: PLACES.menu.y - 560, zoom: 1},
 };
 
 /** A box of a set, in world pixels; `grow` widens it on every side. */

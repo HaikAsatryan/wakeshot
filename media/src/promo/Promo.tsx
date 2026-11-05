@@ -47,6 +47,14 @@ const Moon: React.FC<{size: number; colour: string}> = ({size, colour}) => (
   </svg>
 );
 
+/**
+ * A capture set floats on the stage as a picture (`promo-video.md`, "Colour and stage"): a soft deep shadow and a
+ * 1 px rim, square corners, so no capture pixel is clipped or rounded.
+ */
+const Float: React.FC<{w: number; h: number}> = ({w, h}) => (
+  <div style={{position: 'absolute', left: 0, top: 0, width: w, height: h, boxShadow: '0 40px 120px rgba(0,0,0,0.55)', outline: `1px solid ${DARK.panelLine}`}} />
+);
+
 /** A padlock, drawn. */
 const Lock: React.FC<{size: number; colour: string}> = ({size, colour}) => (
   <svg width={size} height={size * 1.15} viewBox="-30 -36 60 70" style={{display: 'block'}}>
@@ -139,18 +147,21 @@ const trayShot = (f: number) => (f < T.tray.start ? 'S1' : f < T.tray.hover ? 'S
 const TrayShot: React.FC<{f: number}> = ({f}) => {
   const at = SET_AT.tray;
   const shot = trayShot(f);
-  const glyph = setBox('tray', 'glyph');
+  const glyph = setBox('tray', 'icon');
   // A ring of the holding colour spreads from the icon the moment it turns, so the eye goes from the Enter to the icon.
   const pulse = within(f, T.tray.start, T.tray.start + 14) ? (f - T.tray.start) / 14 : null;
   return (
     <>
       <div style={{position: 'absolute', left: at.x, top: at.y}}>
         <StandInTag set="tray" shots={Object.keys(SETS.tray.shots)} style={{top: SETS.tray.h * at.zoom + 12}} />
+        <Float w={SETS.tray.w * at.zoom} h={SETS.tray.h * at.zoom} />
         {shot === 'S3' ? (
           <>
+            {/* The hover look of the button comes at once, as under a hand; the tooltip rises in with its shadow. */}
             <Capture set="tray" shot="S2" zoom={at.zoom} />
+            <Capture set="tray" shot="S3" zoom={at.zoom} clip="button" />
             <Pop at={T.tray.hover} rise>
-              <Capture set="tray" shot="S3" zoom={at.zoom} clip="tip" />
+              <Capture set="tray" shot="S3" zoom={at.zoom} clip="tipPop" />
             </Pop>
           </>
         ) : (
@@ -190,7 +201,7 @@ const TrayShot: React.FC<{f: number}> = ({f}) => {
 /** The glyph flying from the light shot into the tray, going out as it flies, so it lands as the idle icon. */
 const FlyingGlyph: React.FC<{f: number}> = ({f}) => {
   if (!within(f, T.tray.whip, T.tray.whip + T.tray.whipLen)) return null;
-  const end = setBox('tray', 'glyph');
+  const end = setBox('tray', 'icon');
   // Both ends are where the camera rests in each shot, so the glyph leaves the hero's spot and lands on the capture's.
   const from = toScreen(PLACES.hook, SIZE, HERO.left, HERO.top);
   const to = toScreen(PLACES.tray, SIZE, end.x, end.y);
@@ -216,11 +227,11 @@ const FlyingGlyph: React.FC<{f: number}> = ({f}) => {
 
 /** The cursor in the tray shot: it comes to rest on the icon, so the tooltip shows as it does under a hand. */
 function trayCursor(): CursorMove[] {
-  const g = centre(setBox('tray', 'glyph'));
+  const g = centre(setBox('tray', 'icon'));
   const at = SET_AT.tray;
   return [
     {at: T.tray.whip, x: at.x + SETS.tray.w * at.zoom + 40, y: g.y + 60, len: 0},
-    {at: T.tray.hover - 2, x: g.x + 8, y: g.y + 6, len: 14},
+    {at: T.tray.hover - 2, x: g.x + 14, y: g.y + 14, len: 14},
   ];
 }
 
@@ -289,21 +300,22 @@ const MenuShot: React.FC<{f: number}> = ({f}) => {
   return (
     <div style={{position: 'absolute', left: at.x, top: at.y}}>
       <StandInTag set="menu" shots={Object.keys(SETS.menu.shots)} />
+      <Float w={SETS.menu.w} h={SETS.menu.h} />
       {base === 'S5a' ? (
         <>
           <Capture set="menu" shot="S1" zoom={1} />
           <Capture set="menu" shot="S5a" zoom={1} clip="bar" />
           <Pop at={m.click1} rise>
-            <Capture set="menu" shot="S5a" zoom={1} clip="menu" />
+            <Capture set="menu" shot="S5a" zoom={1} clip="menuPop" />
           </Pop>
         </>
       ) : base === 'S5b' ? (
         <>
           <Capture set="menu" shot="S5a" zoom={1} />
-          <Capture set="menu" shot="S5b" zoom={1} clip="menu" />
+          <Capture set="menu" shot="S5b" zoom={1} clip="menuPop" />
           <Capture set="menu" shot="S5b" zoom={1} clip="bar" />
           <Pop at={m.keep} rise>
-            <Capture set="menu" shot="S5b" zoom={1} clip="sub" />
+            <Capture set="menu" shot="S5b" zoom={1} clip="subPop" />
           </Pop>
         </>
       ) : base === 'S5d' ? (
@@ -314,14 +326,49 @@ const MenuShot: React.FC<{f: number}> = ({f}) => {
       ) : (
         <Capture set="menu" shot={base} zoom={1} />
       )}
+      {/* The battery figure moved from 96% to 97% while the set was taken: one value throughout, so nothing jumps. */}
+      <Capture set="menu" shot="S5a" zoom={1} clip="battery" />
     </div>
+  );
+};
+
+/**
+ * After the click the menu is gone and the tray is small: the subject is the icon that now holds, so a round lens
+ * rises above it with the tray glyph at 128 px, the port's own pixels, its light coming on as the real icon's did.
+ */
+const Lens: React.FC<{f: number}> = ({f}) => {
+  const b = setBox('menu', 'button');
+  const size = 196;
+  const art = 128;
+  const at = {x: b.x + b.w / 2, y: b.y - 190};
+  return (
+    <>
+      <Pop at={T.menu.ring} origin="50% 100%" style={{position: 'absolute', left: at.x - size / 2, top: at.y - size / 2, width: size, height: size}}>
+        <div style={{...PANEL, width: size, height: size, borderRadius: size / 2, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+          <TrayGlyph size={art} on={progress(f, T.menu.ring, LIGHT_ON_FRAMES, LAMP_ON)} colours={ON_DARK} page={null} />
+        </div>
+      </Pop>
+      <div
+        style={{
+          position: 'absolute',
+          left: at.x - 1,
+          top: at.y + size / 2 + 6,
+          width: 2,
+          height: b.y - (at.y + size / 2) - 18,
+          background: MOSS.lightEdge,
+          opacity: 0.7 * progress(f, T.menu.ring + 4, 8, (t) => t),
+          transformOrigin: '50% 100%',
+          transform: `scaleY(${progress(f, T.menu.ring + 4, 8, SETTLE)})`,
+        }}
+      />
+    </>
   );
 };
 
 /** The cursor's path in the menu shot, in world pixels. */
 function menuCursor(): CursorMove[] {
   const at = SET_AT.menu;
-  const icon = centre(setBox('menu', 'glyph'));
+  const icon = centre(setBox('menu', 'button'));
   const keep = centre(setBox('menu', 'keepAwake'));
   const hour = centre(setBox('menu', 'oneHour'));
   return [
@@ -450,7 +497,7 @@ export const Promo: React.FC<PromoProps> = ({draft}) => {
           : target === 'row2'
             ? cardRow(1)
             : target === 'menuIcon'
-              ? setBox('menu', 'glyph', 12)
+              ? setBox('menu', 'button')
               : null;
     if (!box) return null;
     const p = toScreen(view, SIZE, box.x, box.y);
@@ -474,6 +521,7 @@ export const Promo: React.FC<PromoProps> = ({draft}) => {
           {within(f, SCENES.lid.from, SCENES.menu.from) ? <LidPlace f={f} /> : null}
           {within(f, T.settings.card, SCENES.menu.from) ? <CardPlace f={f} /> : null}
           {inMenu ? <MenuShot f={f} /> : null}
+          {within(f, T.menu.ring, SCENES.end.from) ? <Lens f={f} /> : null}
           {f >= SCENES.end.from ? <EndPlace f={f} /> : null}
         </World>
         {dim > 0 ? <AbsoluteFill style={{background: '#000', opacity: dim}} /> : null}

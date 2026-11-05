@@ -151,11 +151,8 @@ const Sketch: React.FC<{set: SetName; shot: string; zoom: number}> = ({set, shot
   if (set === 'tray' && TIPS[shot]) {
     const tip = boxOf('tray', TIPS[shot]);
     parts.push(<Rect key="tip" b={tip} z={z} style={{background: SK.menu, border: `${z}px solid ${SK.menuLine}`, borderRadius: 8, boxSizing: 'border-box'}} />);
-    if (shot === 'S3') {
-      const name = boxOf('tray', 'tipName');
-      parts.push(<Bar key="t1" x={tip.x + 18} y={name.y + name.h / 2 - 6} w={name.x - tip.x - 34} h={12} z={z} />);
-      parts.push(<Bar key="t2" x={name.x + 4} y={name.y + name.h / 2 - 6} w={name.w - 8} h={12} z={z} />);
-    } else parts.push(<Bar key="t1" x={tip.x + 18} y={tip.y + tip.h / 2 - 6} w={tip.w - 36} h={12} z={z} />);
+    parts.push(<Bar key="t1" x={tip.x + 18} y={tip.y + tip.h * 0.3} w={tip.w * 0.3} h={12} z={z} />);
+    parts.push(<Bar key="t2" x={tip.x + 18} y={tip.y + tip.h * 0.62} w={tip.w - 36} h={12} z={z} />);
   }
   return (
     <div style={{position: 'absolute', inset: 0}}>

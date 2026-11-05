@@ -1,6 +1,6 @@
 # Speed numbers, pictures, the icon loop and the 30 second video
 
-Phase: 6. Status: Part A done (2026-11-04: the loop, the video pipeline with stand-ins, the media docs, the speed script); Part C round 2 done (2026-11-05 22:40: Haik's five notes on the dynamic cut; `draft-2.mp4` ready; the real tray captures S1 to S4 swap in when the capture worker delivers); Part B after Part C: the installed build, the screen slot with a real Claude Code session, 10 idle minutes and Haik's look. Needs Haik: yes: he watches the video and the loop and says yes or what to change; he stays
+Phase: 6. Status: Part A done (2026-11-04: the loop, the video pipeline with stand-ins, the media docs, the speed script); Part C round 3 done (2026-11-05 23:30: real captures in, `draft-3.mp4` ready for Haik's look; `check-rebuild` on the video still open); Part B after Part C: the installed build, the screen slot with a real Claude Code session, 10 idle minutes and Haik's look. Needs Haik: yes: he watches the video and the loop and says yes or what to change; he stays
 off the PC for about 10 minutes while the captures run. Agent: `wakeshot-worker`. Size: about 120K tokens.
 Real laptop: yes: screen captures of the real tray during one real Claude Code test session, light and dark; the real
 app holds and restores the power settings during it. One card at a time on the laptop.
@@ -189,8 +189,8 @@ questions were answered with their defaults as orchestrator decisions for Haik's
 ... even without question"). Part C builds the cut with stand-in captures and stand-in numbers; Part B then swaps in
 the real captures and the measured numbers and renders the final.
 
-Status: round 2 done 2026-11-05 22:40 (round 1 done 21:58). Needs Haik: a look at `draft-2.mp4`. Waits: the real
-S1 to S4 from the capture worker. Agent: `wakeshot-worker`. Size: about 200K tokens.
+Status: round 3 done 2026-11-05 23:30 (round 1 21:58, round 2 22:40). Needs Haik: a look at `draft-3.mp4`. Open:
+`check-rebuild` on the draft video (Log 23:25). Agent: `wakeshot-worker`. Size: about 200K tokens.
 Real laptop: no screen, no power settings, no Claude Code test session. Renders only, one at a time (concurrency 4).
 Owns: `media/` and `docs/research/launch.md` part 4 (the storyboard and shot list there become a pointer to
 `promo-video.md`). `docs/research/promo-video.md` only to keep it true to what was built (say so in the Log).
@@ -311,6 +311,27 @@ Build folder: `<scratchpad>\p6-media-c\` (renders, contact sheets, music candida
   `check-rebuild`: the soundtrack is the same bytes with the found track, the draft video still differs slightly.
   `promo-video.md` (storyboard rows 3 to 8, counts, captures table, music) and `media/README.md` follow round 2.
   Scratch files in the build folder deleted.
+- 2026-11-05 22:55 (round 3): the real captures of `p6-media-captures` swapped in. 16 files copied into
+  `media/public/shots/` (the video's tray S1 to S4 and menu S1, S5a to S5d, dark; the README's menu, holding and idle
+  tooltip in light and dark, and the build tooltip S7); `data/shots.json` rebuilt from its `captures.json` (scale
+  200, its boxes, tooltip boxes, menu frames and the real rows; the placeholder rows gone; boxes grown by the shadow
+  for the parts that rise in; the icon's 32 px square from the glyph box and the port's ink offset 4, 4);
+  `data/settings.json` from S9 (no plugged-in timer: Wakeshot does not write it). Each file credited in
+  `CREDITS.md`. The battery (96% in S1, 97% in S5a to S5d) is held at S5a's value by drawing its box over every
+  menu frame; the covered TrafficMonitor and clock read as plain taskbar in the files. The sets float on the stage
+  (shadow, rim, square corners) so the capture's plain backdrop reads as a picture, not a box. After the menu click:
+  a ring on the icon without dimming and a lens with the holding glyph above it. CRF 18 (round 2 was 8.5 MB at 16).
+- 2026-11-05 23:25 (round 3, the rebuild): `check-rebuild` with the real captures: the menu corner difference is gone
+  (no menu frame differs). New differences, found by decoding both videos frame by frame and by rendering ranges
+  twice and comparing decoded pixels (Chrome's PNG files of equal pixels differ in bytes, so a byte compare misleads):
+  1. the hook (frames 0 to 59): the terminal's SVG spinner under the 3D tilt, up to 4 levels; fixed: the terminal
+  draws no SVG (text dots for the spinner, boxes and text for its marks); two repeat renders of 0 to 59 then equal,
+  and the whole rebuild shows no hook frame different. 2. the tray shot from 5.5 s: in repeat renders one frame now
+  and then shows its neighbour's state at the icon and the terminal's caret (3791 pixels, up to 21 levels, at 164,
+  165, 166 or 167 in different runs), the frames where the capture swaps from S1 to S2; and a 1 to 2 level shimmer at
+  the terminal tab's 1.5 px border under the 0.56 scale. 3. 14.2 to 17.2 s: small differences at the entering words'
+  shadow blur. Not fixed: causes 2 and 3 need more runs to pin down (2 looks like a frame captured before the swapped
+  capture painted).
 
 ### Result
 
@@ -419,3 +440,25 @@ Log in Part C's Log above; result here when done.
    the round 2 rebuild result is in the line below.
 5. `check-rebuild` after round 2 (22:45): both loops, the soundtrack (now with the found track through ffmpeg) and
    the poster rebuild to the same bytes; the draft video still differs, as in round 1 item 1.
+
+#### Round 3: real captures (2026-11-05 23:30)
+
+1. **Captures in.** 16 files from `p6-media-captures` in `media/public/shots/` (video: tray S1 to S4, menu S1, S5a
+   to S5d; README: menu, holding and idle tooltip in light and dark, the build tooltip S7), each credited;
+   `data/shots.json` rebuilt from `captures.json` (scale 200, its boxes, menu frames and real rows; no placeholder
+   rows); `data/settings.json` from S9 (Lid close: Do nothing while holding, Sleep back; Battery sleep: Never while
+   holding, 5 hours back; no plugged-in timer, Wakeshot does not write it).
+2. **Stand-ins gone.** The tray shot shows S1, S2, S3, S4 in one rectangle at 2x (the hover look and the tooltip
+   arrive with the cursor; S4 at the frame the work ends); the menu shot S1, S5a to S5d at 1x, the menu and submenu
+   rising in with their shadows. Both sets float on the stage (shadow, rim, square corners).
+3. **Battery** held at S5a's 97% over every menu frame (S1 had 96%). TrafficMonitor and the clock read as plain
+   taskbar in the files (checked on full-size frames).
+4. **After the menu click:** a ring on the icon, no dimming, and a round lens above it with the tray glyph at 128 px,
+   its light coming on; a soft rise in the sound.
+5. **Size:** CRF 18 (round 2 was 8.5 MB at 16): `draft-3.mp4` is 7.17 MB; no blocking seen on the end card's light.
+6. **Checks:** `npm run check` ok (79 files, 23 assets credited; pace ok); `typecheck` ok; `check-art` ok;
+   `check-video --draft` ok (h264, 1920 x 1080, 30 fps, aac, 30.02 s, 7.17 MB); loudness -15.4 LUFS, -1.15 dBTP;
+   `check-rebuild`: loops, soundtrack and poster the same bytes; the video differs (Log, 23:25: menu corner gone, hook
+   fixed, two causes left in the tray shot and at 14 to 17 s).
+
+Output: `<scratchpad>\p6-media-c\draft-3.mp4` (7.17 MB), `draft-3-sheet.png`, `draft-3-poster.png`.

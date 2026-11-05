@@ -66,8 +66,8 @@ takes about 2 minutes on the test laptop. The motion parts each have a small com
 | Input | From |
 |---|---|
 | Icon art | `src/art/heldLight.ts`, a port of the held light in `art.rs` (tray glyph, app icon, the sheets' composition), equal to every file `art.rs` writes (`check-art.mjs`, 0 of 9,458,740 pixels differ, 2026-11-05). The states in between (the light coming on) are the media's own: `src/art/motion.ts` |
-| Screen pictures | `public/shots/`, listed in `data/shots.json` in two sets (tooltip, menu), each one screen rectangle at one scale, with its boxes and rows. None yet: the capture session of `p6-media` Part B makes them |
-| Settings values in the video | `data/settings.json` (stand-in: the test laptop's own values) |
+| Screen pictures | `public/shots/`, real captures of `p6-media-captures` (2026-11-05, the DELL at 200%), listed in `data/shots.json`: two sets for the video (`tray`: S1 to S4 in one rectangle; `menu`: S1, S5a to S5d), each one screen rectangle at one scale with its boxes and rows from the capture's manifest, and the README stills (menu, holding and idle tooltip, light and dark; the build tooltip) |
+| Settings values in the video | `data/settings.json`, from the capture session's log (S9): lid close Do nothing while holding, Sleep before and after; battery sleep Never while holding, 5 hours before and after. The plugged-in timer is not written by Wakeshot, so it is not shown |
 | Speed numbers | `data/speed.json` (empty until measured) |
 | Sound | `scripts/make-sounds.mjs`: the music Haik picked (`public/music/`, named with its fit in `data/music.json`, fitted on every build by `scripts/lib/fit-music.mjs`), the effects made in code, the chimes from `chime.rs`. The code bed (a 120 BPM sequencer) when `data/music.json` names no file |
 | Fonts | Instrument Sans in `public/fonts/` with its `OFL.txt` (from the designer's repo); JetBrains Mono from npm; loaded in `src/fonts.ts` |
@@ -138,9 +138,9 @@ PowerShell window with no Claude Code session working.
    at once and its edge warms after; the glow and bloom spread over the whole 0.44 s (ease out, the loop's curve).
    Why: with the outline leading, as in the loop, the frames in between showed a warm ring round a grey-green middle,
    and a hard edge between the two parts left a seam. Change it when Haik wants the title to open on the lit icon.
-9. **H.264 at CRF 16**, not 20: at 20 the plate's edge broke into blocks while the light came on (the whole plate
-   changes at once). The dynamic draft is 7.8 MB at CRF 16. Change it when the final video with its captures passes
-   about 8 MB: then CRF 18, then less dither (`promo-video.md`, "Formats").
+9. **H.264 at CRF 18.** CRF 16 kept the round 1 drafts clean but the round 2 draft was 8.5 MB, over the spec's
+   8 MB line, so the spec's next step, CRF 18. Not 20: at 20 the app icon's plate broke into blocks while its light
+   came on (Part A). Change it when the final passes about 9 MB: then less dither, then 720p as the last resort.
 10. **The title and the outro are one stacked lockup** (`docs/brand.md`), the icon over the name, sized by the
     plate's side (`STACKED` in `src/promo/scenes.tsx`): the name's cap height 0.36 of it (the name at half the side,
     117 px under the 256 px icon, 88 px under 192), 0.26 of it from the plate's bottom to the cap line, the name's ink
@@ -158,6 +158,12 @@ PowerShell window with no Claude Code session working.
     - **The camera's offset is rounded to whole pixels at zoom 1**, so captures and the art stay sharp at rest, and
       the move blur is an SVG Gaussian stretched along the move, off while the camera rests. Change it to Remotion's
       `@remotion/motion-blur` only after a spike shows it rebuilds the same bytes.
+    - **Round 3: the real captures are in** (2026-11-05). The menu set's battery figure read 96% in S1 and 97% in
+      S5a to S5d (it was charging): S5a's battery box is drawn over every menu frame, so the figure never jumps.
+      Each set floats on the stage as a picture (deep shadow, 1 px rim, square corners, nothing clipped). The tooltip,
+      menu and submenu rise in with their shadows (each box grown 12 to 16 px). After the menu click the frame had
+      no subject: now a ring sits on the icon (no dimming) and a round lens rises above it with the tray glyph at
+      128 px, its light coming on. Change it when Haik wants a different subject there.
     - **Stand-in captures are plain sketches of each set** (dark taskbar, menu and tooltip boxes, gray bars where words
       go, the port's real tray glyph), tagged in red, not empty boxes, so the cursor, the pops and the ring can be
       judged before the captures exist. The words never appear: UI words come only from the captures.
@@ -178,7 +184,10 @@ PowerShell window with no Claude Code session working.
       a plain offset copy of the arrow. With those filters, a few frames came out one to five levels apart from one
       render to the next (a filter gets its own GPU layer), and the clean rebuild differed. The camera's SVG blur and
       the focus dimming's backdrop filter matched in every repeat and stay. Software GL (`--gl=swangle`) was slower
-      (80 s for 116 frames, not 20) and differed more. Change it when Chrome renders filters the same on every run.
+      (80 s for 116 frames, not 20) and differed more. The terminal also draws no SVG (round 3): under the hook's 3D
+      tilt its SVG spinner, check and window marks came out up to 4 levels apart; its spinner is now three text
+      dots and its marks plain boxes and text. Compare renders by decoded pixels, not file bytes: Chrome's PNG files
+      of equal pixels differ. Change it when Chrome renders filters and SVG the same on every run.
 
 ## Where the video lives
 

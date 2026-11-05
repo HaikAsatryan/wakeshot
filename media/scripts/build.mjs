@@ -77,13 +77,13 @@ function assertFinal() {
   }
 }
 
-// CRF 16, not 20: at 20 the plate's edge broke into blocks while the title's light came on (the whole plate
-// changes colour at once); at 16 it stays clean. The draft is 2.5 MB, far under GitHub's 10 MB.
+// CRF 18, as `promo-video.md` "Formats" says once a draft passes 8 MB at 16: the round 2 draft was 8.5 MB at 16. Not
+// 20: at 20 the app icon's plate broke into blocks while its light came on (Part A).
 const VIDEO_FLAGS = [
   '--codec=h264',
   '--audio-codec=aac',
   '--audio-bitrate=192k',
-  '--crf=16',
+  '--crf=18',
   '--pixel-format=yuv420p',
   '--image-format=png',
   `--concurrency=${concurrency}`,

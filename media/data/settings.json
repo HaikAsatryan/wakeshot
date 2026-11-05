@@ -1,6 +1,6 @@
 {
-  "note": "The two power settings Wakeshot writes during a hold, and the user's own values it puts back. Stand-in: the test laptop's own values from CLAUDE.md (2026-11-04); the capture session's log replaces them (shot S9).",
-  "standIn": true,
+  "note": "The power settings Wakeshot writes during a hold and puts back after it, from the capture session's log (shot S9, p6-media-captures, 2026-11-05 22:08 to 22:14, wakeshot.log on a throwaway copy of Balanced; Haik's own Balanced had the same values). Lid close: Sleep before, Do nothing while holding, Sleep after (plugged in and on battery alike). Sleep after, on battery: 5 hours before, Never while holding, 5 hours after. Sleep after, plugged in: not written by Wakeshot, so the video does not show it. Each row: what the card says, Wakeshot's value while it holds, the user's own value it puts back.",
+  "standIn": false,
   "rows": [
     {"label": "Lid close", "held": "Do nothing", "own": "Sleep"},
     {"label": "Battery sleep", "held": "Never", "own": "5 hours"}
