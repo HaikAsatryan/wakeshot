@@ -287,8 +287,11 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   old-brand history listed in `docs/tasks/p8-cleanup.md`. Final review 0/2/6, both majors fixed and verified. The
   screen session ran with the worker alone (Haik away): 46 captures, his settings equal. Phase 6 work log has the
   orchestrator decisions for his review.
-- Next (orchestrator): Haik's steps: upload `site/social-card.png` as the repo's social preview; his 2 to 3 person
-  check at 16 px (also: does idle read as Windows' person glyph?); a Narrator check of the tray button's name (it
-  kept the old tooltip after a state change); retake the Task Manager captures after his next sign-out. Then
+- 2026-11-05 20:05 (Haik's brand session): social preview uploaded (Haik; API reads it as set). A local 0.1.0 build
+  of 2056c60 is installed for his checks and his last visual review (not the field test build: uninstall it before
+  the first release).
+- Next (orchestrator): Haik's steps: his 2 to 3 person check at 16 px (also: does idle read as Windows' person
+  glyph?) and a Narrator check of the tray button's name (it kept the old tooltip after a state change), on the
+  installed build; his last visual review of the real app; retake the Task Manager captures after his next sign-out. Then
   `p6-media` Part B (captures, speed numbers, the final video), the README and Pages finish, the website link on the
   repo once Pages is live; Phase 7 field test; Phase 8 cleanup.

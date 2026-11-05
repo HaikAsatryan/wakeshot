@@ -307,7 +307,7 @@ that is Windows returning focus to the notification area, as its guidance asks. 
 ## Result
 
 **Done 2026-11-05**, 15:55 to 16:5x, Part A then Part B, all by automation (Haik away; one real click on SmartScreen's
-Run anyway at 16:02:32 was not mine, so someone was at the laptop then). Laptop screen only, on battery 86% to 72%.
+Run anyway at 16:02:32 was not mine: Haik's, he confirmed at 19:50). Laptop screen only, on battery 86% to 72%.
 Build: local x64 release of the tree at 15:58 (rim `#F7DC7F`; the later rim and bloom changes are not in it).
 
 Captured (46 pictures, 4.8 MB, `docs/research/img/brand/screen-*.png`):
