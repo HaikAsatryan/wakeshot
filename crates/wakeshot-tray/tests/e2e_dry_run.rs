@@ -3,7 +3,8 @@
 //! (`docs/tasks/p6-int-dry-run-e2e.md`). No power setting is written: the dry-run tray uses `DryRunPower`, dry-run
 //! requests, lock and hibernate.
 //!
-//! Owner: `p6-int-dry-run-e2e`. Every test is ignored and named `real_e2e_*`: the dry-run icon shows on the taskbar,
+//! Owner: `p6-int-dry-run-e2e`; the plain taskkill test `p6-polite-quit-notice-retry`. Every test is ignored and named
+//! `real_e2e_*`: the dry-run icon shows on the taskbar,
 //! so they run only in a screen slot, alone, after the CLI is built into the same target folder:
 //!
 //! ```text
@@ -17,14 +18,19 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use e2e::{
-    Claude, FOLLOW_WITHIN, LogMark, SAFETY_TICK, SECOND_START_WITHIN, Started, TempData, Tray,
-    not_plain, parse_line, skip, trays_of_this_build, wait_until,
+    Claude, EXIT_WITHIN, FOLLOW_WITHIN, LogMark, SAFETY_TICK, SECOND_START_WITHIN, Started,
+    TempData, Tray, not_plain, parse_line, skip, trays_of_this_build, wait_until,
 };
 use wakeshot_core::files::StateFile;
 use wakeshot_core::holds::file::format_expires;
 use wakeshot_core::text;
 use wakeshot_core::view::KeepAwake;
 use wakeshot_windows::clock;
+use windows::Win32::Foundation::{HWND, LPARAM};
+use windows::Win32::UI::WindowsAndMessaging::{
+    EnumWindows, GetClassNameW, GetWindowThreadProcessId,
+};
+use windows::core::BOOL;
 
 const IDLE_STATUS: &str = "Wakeshot is running.\nAutomatic is on.\nNothing holds the PC awake.\nWakeshot has not \
                            changed your power settings.\n";
@@ -452,6 +458,82 @@ fn real_e2e_quit_during_keep_awake_cleans_up() {
         "the dry-run journal is left"
     );
     let lines = data.log_since(mark);
+    assert_eq!(count(&lines, "Wakeshot ends with code 0"), 1, "{lines:#?}");
+}
+
+/// The class names of `pid`'s top-level windows, in z-order: the first is the one a plain `taskkill` closes.
+fn top_windows_of(pid: u32) -> Vec<String> {
+    unsafe extern "system" fn each(hwnd: HWND, found: LPARAM) -> BOOL {
+        // SAFETY: `found` is the `Vec` below, alive for the whole `EnumWindows` call.
+        let found = unsafe { &mut *(found.0 as *mut (u32, Vec<String>)) };
+        let mut owner = 0u32;
+        let mut name = [0u16; 128];
+        // SAFETY: plain calls; `owner` and `name` are live locals of the sizes given.
+        let len = unsafe {
+            GetWindowThreadProcessId(hwnd, Some(&mut owner));
+            GetClassNameW(hwnd, &mut name)
+        };
+        if owner == found.0 {
+            let len = usize::try_from(len).unwrap_or(0);
+            found.1.push(String::from_utf16_lossy(&name[..len]));
+        }
+        true.into()
+    }
+    let mut found = (pid, Vec::new());
+    // SAFETY: the callback reads `found` only during the call.
+    unsafe { EnumWindows(Some(each), LPARAM(&raw mut found as isize)) }.expect("EnumWindows");
+    found.1
+}
+
+/// `taskkill /PID` without `/F` posts one `WM_CLOSE`, to the tray's first top-level window in z-order, which is seldom
+/// the loop window (`docs/tasks/p6-polite-quit-notice-retry.md`). It must end in the same Quit: restore, the Keep
+/// awake hold gone, exit 0.
+#[test]
+#[ignore = "starts the dry-run tray, whose icon shows on the taskbar: screen slot only"]
+fn real_e2e_plain_taskkill_quits_with_the_restore() {
+    if skip() {
+        return;
+    }
+    let data = TempData::with_config("taskkill");
+    let tray = Tray::start(&data, Claude::Empty);
+    keep_awake_on(&data);
+    let windows = top_windows_of(tray.pid());
+    println!("the tray's top-level windows in z-order: {windows:?}");
+    assert_ne!(
+        windows.first().map(String::as_str),
+        Some("Wakeshot.Loop.DryRun"),
+        "the loop window is first: this run would not test the pass"
+    );
+
+    let mark = data.log_mark();
+    let system = std::env::var("SystemRoot").expect("SystemRoot");
+    let said = std::process::Command::new(format!(r"{system}\System32\taskkill.exe"))
+        .args(["/PID", &tray.pid().to_string()])
+        .output()
+        .expect("run taskkill");
+    let out = String::from_utf8_lossy(&said.stdout);
+    println!("taskkill: {} {out}", said.status);
+    assert!(said.status.success(), "{said:?}");
+    let code = tray.exit_within(EXIT_WITHIN);
+    assert_eq!(code, Some(0), "the tray did not quit after taskkill");
+
+    assert!(
+        !data.keep_awake().exists(),
+        "the Keep awake hold file is left"
+    );
+    assert!(
+        !data.file("journal.json").exists(),
+        "the dry-run journal is left"
+    );
+    let lines = data.log_since(mark);
+    assert_eq!(
+        count(
+            &lines,
+            "restore of every plan: found journal entries; 0 entries left"
+        ),
+        1,
+        "{lines:#?}"
+    );
     assert_eq!(count(&lines, "Wakeshot ends with code 0"), 1, "{lines:#?}");
 }
 

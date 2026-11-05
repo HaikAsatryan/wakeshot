@@ -365,7 +365,8 @@ closed and nothing holding, the work-end want starts waiting the same way; with 
 the battery floor, the Floor want does (`Core::unknown_journal_ended`, `p2-6-record-lost`). A lid close inside the
 window, with the session unlocked, gets no lock then; that lock waits until the lid opens or the session locks,
 not only until the window ends (`Core::settle_window_lock`; `p2-6-sleep-route` deliverable 8,
-`p2-6-sleep-route-fixes` review major 1). It comes, with the chime, once the journal is known and Wakeshot keeps the
+`p2-6-sleep-route-fixes` review major 1). It comes, with the chime (with the battery floor sound instead when a floor
+step back starts in the same pass, as for the lock after an unplug), once the journal is known and Wakeshot keeps the
 closed laptop running (a hold holds: at the window's end, when one starts later, or when a step back ends; or its own
 Do nothing is in force), and a read shows the user's own lid action as not Do nothing on a power source that has
 lasted 30 s, so a dock's short AC drop does not lock a docked user (review minor 7). With the user's own Do nothing,
@@ -682,9 +683,11 @@ How they talk: files only. No pipes, no sockets.
   post (10,000 message limit, 1816) is logged as a warning; the next tick recovers. A post after the loop window is
   gone (1400, as after a quit) is logged once as Info by the IO and watch threads, since nothing is wrong
   (the `post` of `app/io_thread.rs` and of `watch/thread.rs`; `p6-int-log-wording`).
-- The loop window handles `WM_CLOSE` (also `taskkill` without `/F`) as Quit from the menu. A handler call that
-  re-enters (a runner that pumps messages, such as the modal menu) queues its event; the outer call feeds it to the
-  core after its own batch.
+- The loop window handles `WM_CLOSE` as Quit from the menu. The tray icon's and the menu's windows pass a `WM_CLOSE`
+  on to it: `taskkill` without `/F` posts one, to the tray's first top-level window in z-order, which was one of
+  those two in every run seen (research, "Plain taskkill and the tray's windows"). The menu's window ignores
+  `SC_CLOSE`, so an Alt+F4 that reaches it after a menu open does not quit. A handler call that re-enters (a runner that pumps messages, such as
+  the modal menu) queues its event; the outer call feeds it to the core after its own batch.
 - Power events come through `DEVICE_NOTIFY_CALLBACK` callbacks (tested in the spikes), not `WM_POWERBROADCAST`
   (window registration not tested).
 - At `WM_ENDSESSION` the loop puts the restore at the front of the IO queue; the IO thread runs it next and drops
@@ -1038,15 +1041,18 @@ that tray's next start; the late reset is kept, since nothing else would ever ta
   installed tray has `velopack.HaikAsatryan.Wakeshot`, which the hooks register for the header's name and picture
   (section 6, "The notice header"). A tray run from `target\` gets the shell's generated
   `NotifyIconGeneratedAumid_<NotifyIconSettings id>`, under which the shell stores no balloon, so its on/off switch
-  most likely follows the icon's settings entry (research, "Balloon"). Whether Windows stores the installed tray's
-  balloons now that their id is registered: not tested (`p6-notice-app-icon` Part B, step 7). The uninstall clears no
-  stored balloon: it removes the app id key, and Windows' own `Notifications\Settings` key of the id stays (section
-  6); if Part B shows stored balloons, they may need clearing as for toasts (below). Never count balloon events:
-  `NIN_BALLOONTIMEOUT` came twice in the same millisecond (research, "Balloon"). A successful call never proves
-  the user saw a notice. A balloon click (`NIN_BALLOONUSERCLICK`): not tested. A notice the shell refuses (the icon
-  is not added yet, as at a sign-in before the taskbar exists, or Explorer restarts) is kept, in order and once each,
-  and shown again through the IO thread when the icon is added (`BalloonNotifier::icon_added`); one shown again skips
-  the core's rule that holds notices while the session is locked (`p6-int-wiring-fixes` item 1).
+  most likely follows the icon's settings entry (research, "Balloon"). With the key registered, the installed tray's
+  header shows the Wakeshot icon and name from both start paths, the Start menu and the exe itself as the Run value
+  starts it, and Windows files each balloon as a banner-only toast (`bannerOnly="true"` in its notification
+  database) that Win+N never lists (research, "Screen session of 2026-11-05"). So the uninstall clears no stored
+  balloon: it removes the app id key, and Windows' own `Notifications\Settings` key of the id stays (section 6).
+  Never count balloon events: `NIN_BALLOONTIMEOUT` came twice in the same millisecond (research, "Balloon"). A
+  successful call never proves the user saw a notice. A balloon click (`NIN_BALLOONUSERCLICK`): not tested. A notice
+  the shell refuses is tried once more after 1 s, at once if the icon was added during the call (a refusal seen right
+  after a resume, research "Notice retry"); the notifier logs the retry and its outcome. Refused again (the icon is
+  not added yet, as at a sign-in before the taskbar exists, or Explorer restarts), it is kept, in order and once
+  each, and shown again through the IO thread when the icon is added (`BalloonNotifier::icon_added`); one shown again
+  skips the core's rule that holds notices while the session is locked (`p6-int-wiring-fixes` item 1).
 - Change to registered toasts when a notice needs buttons. Then uninstall must clear the stored toasts
   (`ToastNotificationManager.History.Clear`, not tested) before deleting the app id keys, and Phase 5 checks the toast
   icon's colours on screen (R and B showed swapped; the method is in research.md) and tries a different `DisplayName`

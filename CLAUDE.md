@@ -44,6 +44,8 @@ Start here: `docs/plan.md` (how we work, phases, status, next step). Then:
   shell (Git Bash) also has `SeBackupPrivilege` and `SeRestorePrivilege` enabled, PowerShell's has not (checked
   2026-11-04), so a deny ACL test can give different results by tool.
 - In agent shells `cargo` may not be on `PATH`; call `%USERPROFILE%\.cargo\bin\cargo.exe` (checked 2026-11-03).
+- ARM64 builds of the tray need the Build Tools `VC\Tools\Llvm\x64\bin` folder on that cargo command's PATH only
+  (`ring` calls `clang` by name; checked 2026-11-05).
 
 ## Test laptop
 

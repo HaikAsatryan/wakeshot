@@ -16,6 +16,7 @@ use std::ffi::{OsStr, c_void};
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::Duration;
 
 use wakeshot_core::text::{self, NoticeClick, NoticeText};
 use wakeshot_core::view::Notice;
@@ -38,6 +39,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::{GUID, Owned, PCWSTR};
 
 use crate::WinError;
+use crate::log::{Level, Log};
 use crate::tray::icon::taskbar_dpi;
 use crate::tray::{IconIdentity, art};
 
@@ -89,6 +91,16 @@ impl IconChoice {
 /// `Shell_NotifyIconW(NIM_MODIFY)`, behind a seam so no test shows a balloon.
 type Shell = dyn Fn(&NOTIFYICONDATAW) -> Result<(), WinError> + Send + Sync;
 
+/// The wait before a refused notice is tried again. Seen once (2026-11-05 11:24:39): right after a resume and a lid
+/// open, the shell refused the second of two notices sent 6 ms apart (1462, "Incorrect size argument"), while the same
+/// pair 21 ms apart at an earlier resume both showed, and every other notice of two screen sessions showed at once
+/// (research, "Notice retry"). So the refusal is short-lived; 1 s is well past both gaps, and is the settle time the
+/// icon gives display and theme broadcasts. It holds up the IO thread only after a refusal. Change it when a log shows
+/// a second refusal after the wait.
+const RETRY_AFTER: Duration = Duration::from_secs(1);
+
+const AREA: &str = "notify";
+
 /// The product's `Notifier`: each notice as a balloon on the tray icon, with the words, warning look, sound and
 /// click action of `text::notice`.
 ///
@@ -103,6 +115,8 @@ pub struct BalloonNotifier {
     large: Mutex<Option<LargeIcon>>,
     click: Mutex<NoticeClick>,
     kept: Mutex<Kept>,
+    retry_after: Duration,
+    log: Option<Arc<dyn Log>>,
 }
 
 /// The notices the shell refused since the icon was last added, and how many adds there were.
@@ -133,7 +147,16 @@ impl BalloonNotifier {
             large: Mutex::new(None),
             click: Mutex::new(NoticeClick::Nothing),
             kept: Mutex::new(Kept::default()),
+            retry_after: RETRY_AFTER,
+            log: None,
         }
+    }
+
+    /// Logs each retry of a refused notice and how it ended. The IO thread's own line for the notice, shown or not,
+    /// comes right after them and names it.
+    pub fn with_log(mut self, log: Arc<dyn Log>) -> Self {
+        self.log = Some(log);
+        self
     }
 
     /// The icon was just added (`tray::icon::Note::Added`): gives back, in order, each notice the shell refused since
@@ -155,9 +178,61 @@ impl BalloonNotifier {
 }
 
 impl Notifier for BalloonNotifier {
+    /// A refused notice is tried once more after `RETRY_AFTER`, and at once when the icon was added while the call
+    /// ran (that add found nothing to give back, and the icon is there now); each of the two at most once, so a shell
+    /// that keeps refusing costs at most three calls. Still refused, it is kept for the next add (`icon_added`).
     fn show(&self, notice: &Notice) -> Result<(), WinError> {
         let text = text::notice(notice);
-        let mut data = fill(&text, self.icon);
+        let (mut at_once, mut waited) = (false, false);
+        loop {
+            let adds = lock(&self.kept).adds;
+            let error = match self.call(&text) {
+                Ok(()) => {
+                    if at_once || waited {
+                        self.note("the notice showed at its retry");
+                    }
+                    *lock(&self.click) = text.click;
+                    return Ok(());
+                }
+                Err(e) => e,
+            };
+            let mut kept = lock(&self.kept);
+            let wait = if kept.adds != adds && !at_once {
+                at_once = true;
+                Duration::ZERO
+            } else if !waited {
+                waited = true;
+                self.retry_after
+            } else {
+                if !kept.notices.contains(notice) {
+                    kept.notices.push(notice.clone());
+                }
+                drop(kept);
+                self.note(&format!(
+                    "the notice was refused again ({} failed with {}); it is shown when the icon is added again",
+                    error.call, error.code
+                ));
+                return Err(error);
+            };
+            drop(kept);
+            let when = if wait.is_zero() {
+                "at once, as the icon was added meanwhile".to_owned()
+            } else {
+                format!("in {} ms", wait.as_millis())
+            };
+            self.note(&format!(
+                "a notice was refused ({} failed with {}); trying it again {when}",
+                error.call, error.code
+            ));
+            std::thread::sleep(wait);
+        }
+    }
+}
+
+impl BalloonNotifier {
+    /// One shell call, with the app icon at the size of this moment: a retry after a display change draws it anew.
+    fn call(&self, text: &NoticeText) -> Result<(), WinError> {
+        let mut data = fill(text, self.icon);
         let mut large = lock(&self.large);
         let mut choice = self.choice;
         let mut old = None;
@@ -175,35 +250,17 @@ impl Notifier for BalloonNotifier {
                 None => choice = IconChoice::Info,
             }
         }
-        data.dwInfoFlags = info_flags(&text, choice);
-        let shown = self.show_or_keep(notice, &data);
+        data.dwInfoFlags = info_flags(text, choice);
+        let shown = (self.shell)(&data);
         // An icon of an old size goes only once the shell has the new one.
         drop(old);
-        shown?;
-        *lock(&self.click) = text.click;
-        Ok(())
+        shown
     }
-}
 
-impl BalloonNotifier {
-    /// The shell call. A refused notice is kept for the next add (`icon_added`). An add that came while the call ran
-    /// found nothing to give back, and the icon is there now, so the call is made once more at once.
-    fn show_or_keep(&self, notice: &Notice, data: &NOTIFYICONDATAW) -> Result<(), WinError> {
-        let adds = lock(&self.kept).adds;
-        let mut retried = false;
-        loop {
-            let error = match (self.shell)(data) {
-                Ok(()) => return Ok(()),
-                Err(e) => e,
-            };
-            let mut kept = lock(&self.kept);
-            if kept.adds == adds || retried {
-                if !kept.notices.contains(notice) {
-                    kept.notices.push(notice.clone());
-                }
-                return Err(error);
-            }
-            retried = true;
+    /// Info: the IO thread's line after it says whether the notice showed, as a warning when it did not.
+    fn note(&self, text: &str) {
+        if let Some(log) = &self.log {
+            log.line(Level::Info, AREA, text);
         }
     }
 }
@@ -574,8 +631,10 @@ impl NoticeAppId {
 mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
     use std::sync::{OnceLock, Weak};
+    use std::time::Instant;
 
     use super::*;
+    use crate::log::MemoryLog;
     use crate::tray::icon::IconKind;
     use wakeshot_core::settings::SettingKey;
     use windows::Win32::Graphics::Gdi::{
@@ -622,12 +681,15 @@ mod tests {
     }
 
     impl FakeShell {
+        /// With no wait before a retry, so a refusal costs a test no time; `retries_*` tests set their own.
         fn notifier(&self, choice: IconChoice) -> BalloonNotifier {
             let me = self.clone();
-            BalloonNotifier::with_shell(
+            let mut n = BalloonNotifier::with_shell(
                 ID,
                 choice,
                 Box::new(move |data| {
+                    // A retry loop fails the test instead of hanging it.
+                    assert!(me.sent.lock().unwrap().len() < 100, "a retry loop");
                     me.sent.lock().unwrap().push(Sent {
                         flags: data.uFlags,
                         info: data.dwInfoFlags,
@@ -637,7 +699,9 @@ mod tests {
                     });
                     me.fail.lock().unwrap().map_or(Ok(()), Err)
                 }),
-            )
+            );
+            n.retry_after = Duration::ZERO;
+            n
         }
 
         fn sent(&self) -> Vec<Sent> {
@@ -740,7 +804,11 @@ mod tests {
         *shell.fail.lock().unwrap() = Some(refused);
         assert_eq!(n.show(&Notice::FirstRun), Err(refused));
         assert_eq!(n.take_click(), NoticeClick::OpenLog);
-        assert_eq!(shell.sent().len(), 6, "every notice went to the shell");
+        assert_eq!(
+            shell.sent().len(),
+            7,
+            "every notice went to the shell, the refused one twice"
+        );
     }
 
     /// What the shell gives for a balloon on an icon not added yet; the page names no code, so 0.
@@ -768,7 +836,11 @@ mod tests {
         assert_eq!(n.icon_added(), [], "given back once");
         n.show(&Notice::FirstRun).unwrap();
         assert_eq!(n.take_click(), NoticeClick::OpenTaskbarSettings);
-        assert_eq!(shell.sent().len(), 4, "no call of its own at the add");
+        assert_eq!(
+            shell.sent().len(),
+            3 * 2 + 1,
+            "each refused show tried twice, no call of its own at the add"
+        );
     }
 
     #[test]
@@ -791,10 +863,134 @@ mod tests {
         ));
         slot.set(Arc::downgrade(&n)).unwrap();
 
+        let started = Instant::now();
         n.show(&Notice::FirstRun).unwrap();
+        assert!(started.elapsed() < RETRY_AFTER, "no wait before this retry");
         assert_eq!(calls.load(Ordering::SeqCst), 2);
         assert_eq!(n.icon_added(), [], "it showed, so nothing waits");
         assert_eq!(n.take_click(), NoticeClick::OpenTaskbarSettings);
+    }
+
+    /// The code the shell gave at the lost closed-lid report (`p6-screen-reruns`, 2026-11-05 11:24:39).
+    const REFUSED: WinError = WinError {
+        call: "Shell_NotifyIconW",
+        code: 1462,
+    };
+
+    /// A notifier whose shell refuses the first `refusals` calls; it counts every call.
+    fn refusing(
+        refusals: u32,
+        wait: Duration,
+    ) -> (BalloonNotifier, Arc<AtomicU32>, Arc<MemoryLog>) {
+        let calls = Arc::new(AtomicU32::new(0));
+        let count = Arc::clone(&calls);
+        let log = Arc::new(MemoryLog::default());
+        let mut n = BalloonNotifier::with_shell(
+            ID,
+            IconChoice::Info,
+            Box::new(move |_| {
+                if count.fetch_add(1, Ordering::SeqCst) < refusals {
+                    Err(REFUSED)
+                } else {
+                    Ok(())
+                }
+            }),
+        )
+        .with_log(Arc::clone(&log) as Arc<dyn Log>);
+        n.retry_after = wait;
+        (n, calls, log)
+    }
+
+    fn lines(log: &MemoryLog) -> Vec<String> {
+        log.lines
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(level, area, text)| {
+                assert_eq!((*level, *area), (Level::Info, AREA), "{text}");
+                text.clone()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn retries_a_refused_notice_once_after_the_wait() {
+        let wait = Duration::from_millis(60);
+        let (n, calls, log) = refusing(1, wait);
+        let started = Instant::now();
+        n.show(&Notice::RestoreFailed).unwrap();
+        assert!(started.elapsed() >= wait, "{:?}", started.elapsed());
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert_eq!(
+            lines(&log),
+            [
+                "a notice was refused (Shell_NotifyIconW failed with 1462); trying it again in 60 ms",
+                "the notice showed at its retry",
+            ]
+        );
+        assert_eq!(n.icon_added(), [], "it showed, so nothing waits");
+        assert_eq!(n.take_click(), NoticeClick::OpenLog);
+    }
+
+    /// More refusals than two shows may ask for: a retry loop ends in a call that works and fails the test, not hangs.
+    const MANY: u32 = 10;
+
+    #[test]
+    fn retries_a_notice_refused_twice_no_more_and_keeps_it() {
+        let (n, calls, log) = refusing(MANY, Duration::from_millis(10));
+        assert_eq!(n.show(&Notice::FirstRun), Err(REFUSED));
+        assert_eq!(calls.load(Ordering::SeqCst), 2, "one retry, no loop");
+        assert_eq!(
+            lines(&log),
+            [
+                "a notice was refused (Shell_NotifyIconW failed with 1462); trying it again in 10 ms",
+                "the notice was refused again (Shell_NotifyIconW failed with 1462); it is shown when the icon is \
+                 added again",
+            ]
+        );
+        assert_eq!(n.take_click(), NoticeClick::Nothing, "none showed");
+        assert_eq!(n.icon_added(), [Notice::FirstRun]);
+
+        // The next notice gets its own retry: nothing is left from the one before.
+        assert_eq!(n.show(&Notice::FirstRun), Err(REFUSED));
+        assert_eq!(calls.load(Ordering::SeqCst), 4);
+    }
+
+    #[test]
+    fn retries_at_most_three_calls_when_the_icon_is_added_during_each() {
+        let slot: Arc<OnceLock<Weak<BalloonNotifier>>> = Arc::default();
+        let calls = Arc::new(AtomicU32::new(0));
+        let (me, count) = (Arc::clone(&slot), Arc::clone(&calls));
+        let mut n = BalloonNotifier::with_shell(
+            ID,
+            IconChoice::Info,
+            Box::new(move |_| {
+                if count.fetch_add(1, Ordering::SeqCst) >= MANY {
+                    return Ok(());
+                }
+                // Taskbar restarts, one during each call, and still every call is refused.
+                let n = me.get().and_then(Weak::upgrade).expect("the notifier");
+                let _ = n.icon_added();
+                Err(REFUSED)
+            }),
+        );
+        n.retry_after = Duration::from_millis(10);
+        let n = Arc::new(n);
+        slot.set(Arc::downgrade(&n)).unwrap();
+
+        assert_eq!(n.show(&Notice::IdleLocked), Err(REFUSED));
+        assert_eq!(calls.load(Ordering::SeqCst), 3);
+        assert_eq!(
+            n.icon_added(),
+            [Notice::IdleLocked],
+            "kept for the next add"
+        );
+    }
+
+    #[test]
+    fn retry_wait_is_one_second() {
+        let n = BalloonNotifier::with_shell(ID, IconChoice::Info, Box::new(|_| Ok(())));
+        assert_eq!(n.retry_after, Duration::from_secs(1));
     }
 
     #[test]

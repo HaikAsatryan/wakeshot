@@ -4479,7 +4479,8 @@ reads, Haik's words as the orchestrator relayed them. Evidence and times: the tw
   order of events: **verified** (logs).
 - **A notice lost at the lid open.** The StepBack notice showed at 11:24:39.004; 6 ms later the closed-lid report
   failed (`Shell_NotifyIconW` failed with 1462, "Incorrect size argument") and was not tried again. Why: **not
-  verified**. **Verified** (log).
+  verified**. **Verified** (log). A refused notice is tried again since `p6-polite-quit-notice-retry` ("Notice
+  retry").
 - **The dock did not charge at 96 to 97%.** On AC the battery went from 78,110 to 77,970 mWh (11:12:48 to 11:13:33),
   77,740 to 77,720 (11:15:19 to 11:16:24) and 77,120 to 77,110 (11:25:40 to 11:28:39; Kernel-Power 105 readings); at
   92% the night before it charged at about 25 W. A charge start threshold between 92 and 96%: inferred, **not
@@ -4487,7 +4488,8 @@ reads, Haik's words as the orchestrator relayed them. Evidence and times: the tw
 - **`taskkill /PID` without `/F` does not quit the installed tray.** It says "SUCCESS: Sent termination signal" and
   the tray runs on (10:29 elevated, 10:30 at Medium). Its top-level windows in `EnumWindows` order are
   `Wakeshot.TrayMenu`, `Wakeshot.TrayIcon`, `Wakeshot.Loop`; a `WM_CLOSE` posted to `Wakeshot.Loop` quit it in 138
-  and 159 ms with the full restore. **Verified** (runs). That taskkill posts to only one window: **not verified**.
+  and 159 ms with the full restore. **Verified** (runs). That taskkill posts to only one window: **verified** later
+  the same day ("Plain taskkill and the tray's windows").
 - **`vpk pack` writes `%TEMP%\velopack`.** Its write time became the pack's (10:14:54.2); Setup and the uninstall left
   it so; it stays empty. **Verified** (reads).
 - **Teardown.** Quit 11:29:58.6 (exit 0), `Update.exe --uninstall --silent` at Medium 11:30:17 (exit 0 in 4.3 s,
@@ -4562,7 +4564,9 @@ sim, scenarios and props only; no real laptop.
 
 Checked 2026-11-05 from 02:25 for card `docs/tasks/p6-notice-app-icon.md` (the white square in the notice header,
 `p6-int-haik-checks` finding 5). Sources read, not tested on screen: the Microsoft docs repo, the Windows App SDK and
-velopack 1.2.161 source. What the header shows after the change: Part B of the card, with Haik.
+velopack 1.2.161 source. What the header shows after the change (Part B of the card, with Haik, "Screen session of
+2026-11-05"): the Wakeshot icon and name from both start paths, the Start menu and the exe itself; and a balloon is a
+banner-only toast (`bannerOnly="true"`) that Win+N never keeps.
 
 - **Velopack already gives every start the same app id.** `VelopackApp::run()` (velopack 1.2.161 `src/app.rs`, lines
   147 to 159) calls `SetCurrentProcessExplicitAppUserModelID` for every start that is not a fast hook, with the
@@ -4653,3 +4657,57 @@ build folder, with no other card running.
   `a_window_lock_due_with_a_floor_step_back_plays_only_the_floor_sound` failed with two plays. The chain (journal
   unread at start, the lid closed in the window, a hold after it with Wakeshot's battery Do nothing over the user's
   own AC Do nothing, then an unplug under the floor) is too long for the mixes. **Verified** (runs).
+
+## Plain taskkill and the tray's windows
+
+Checked 2026-11-05 from 12:15 for card `docs/tasks/p6-polite-quit-notice-retry.md`, elevated, with a probe exe of our
+own and a dry-run tray on a temp data folder. Microsoft's taskkill page says only that `/f` ends a process by force;
+it names no window or message (not read again this time: from memory, **not verified**). Wine's and ReactOS's
+`taskkill.c` post `WM_CLOSE` to every top-level window of the process (web search result, source not read); the
+native tool does not, as below.
+
+- **taskkill without `/F` posts one `WM_CLOSE`, to the process's first top-level window in `EnumWindows` order.**
+  Probe (C#, `csc` of .NET Framework 4; three hidden `WS_OVERLAPPED` windows made in the tray's order and styles:
+  `Probe.Loop`, then `Probe.TrayMenu` and `Probe.TrayIcon` with `WS_EX_TOOLWINDOW`; each `WM_CLOSE` logged and
+  ignored). Order Icon, Menu, Loop: two `taskkill /PID` runs gave one posted `WM_CLOSE` each, both to the icon window
+  (the pump saw it, `InSendMessage` false), none to the others. After `SetForegroundWindow` on the menu window the
+  order was Menu, Icon, Loop, and the menu window got the one `WM_CLOSE`. taskkill said "SUCCESS: Sent termination
+  signal" each time. **Verified** (runs).
+- **The dry-run tray's order at a fresh start is `Wakeshot.TrayIcon`, `Wakeshot.TrayMenu`, `Wakeshot.Loop.DryRun`,
+  `IME`.** So before this card a plain taskkill hit the icon window, and after a menu open the menu window (the order
+  the screen session saw), and the tray ran on. With the icon and menu windows passing `WM_CLOSE` on, the test
+  `real_e2e_plain_taskkill_quits_with_the_restore` (Keep awake on, then `taskkill /PID`) quit with exit 0 within the
+  test's wait, logged "restore of every plan: found journal entries; 0 entries left" and "Wakeshot ends with code 0",
+  and left no Keep awake file and no journal; twice. With the icon's pass taken out by hand, the same test failed:
+  "the tray did not quit after taskkill". **Verified** (runs).
+- **A sent `WM_SYSCOMMAND` `SC_CLOSE` becomes a sent `WM_CLOSE` through `DefWindowProcW`** on such a hidden window
+  (probe). A posted `WM_SYSKEYDOWN` `VK_F4` with the Alt bit gave nothing. Whether a real Alt+F4 reaches the menu's
+  hidden window while it is the foreground window after a menu open: **not verified** (a real key test could close
+  another program's window). The menu's window ignores `SC_CLOSE` for that case.
+
+## Notice retry
+
+Checked 2026-11-05 from 12:20 for card `docs/tasks/p6-polite-quit-notice-retry.md`, from the saved tray logs of two
+screen sessions and a probe that adds no icon.
+
+- **The refusal came once, in the second of two notices right after a resume and a lid open.** `p6-notice-app-icon`
+  partB log: 11:24:38.231 the first line after the resume, 11:24:39.004 "notice shown: StepBack", 11:24:39.010
+  "notice ClosedLidReport not shown: Shell_NotifyIconW failed with 1462" (lid open 11:24:36.4). `p6-int-haik-checks`
+  partC log, the same pair after a resume and a lid open: StepBack 00:47:52.392 and ClosedLidReport 00:47:52.413, both
+  shown. Every other notice in the two logs (FirstRun four times, ClosedLidReport eight, StepBack three,
+  RestoredByUser once) showed at the first try. **Verified** (logs).
+- **The two differ in the balloon icon.** StepBack is a warning (`NIIF_WARNING`, no `hBalloonIcon`); ClosedLidReport is
+  not (`NIIF_USER | NIIF_LARGE_ICON` with the app icon drawn at `SM_CXICON` for the taskbar's DPI). 1462 is
+  `ERROR_INCORRECT_SIZE` ("Incorrect size argument"). Geoff Chappell's notes (Vista era) say a `NIIF_LARGE_ICON` icon
+  smaller than `SM_CXICON` fails the call, without an error code. That the 1462 came from an icon size check during
+  the display change of the lid open: a guess, **not verified**.
+- **The client side gives no 1462 for an icon that is not there.** Probe (C#, per-monitor v2, system and taskbar DPI
+  144, `SM_CXICON` 48): `NIM_MODIFY` with `NIF_INFO` on our own hidden window's uID 77, never added, for balloon icons
+  of 16 to 96 px with `NIIF_USER | NIIF_LARGE_ICON`, `NIIF_USER` and `NIIF_INFO | NIIF_LARGE_ICON`: every call FALSE
+  with last error `0x80004005` (`E_FAIL`). So the size check, if any, runs after the icon is found. A test on an added
+  icon was not made: it adds a tray icon and its settings entry, and may show a banner. **Verified** (run).
+- **The fix: one retry after 1 s, the app icon drawn again at the size of that moment.** The gaps seen were 6 ms
+  (refused) and 21 ms (shown); 1 s is far past both and is the settle time the tray icon gives display and theme
+  broadcasts. Spacing every pair of notices instead would delay each notice and would not help if Explorer's state
+  after the resume was the cause, so the retry is the lean fix. Change it when a log shows "the notice was refused
+  again" after the wait. A design call, not a fact.

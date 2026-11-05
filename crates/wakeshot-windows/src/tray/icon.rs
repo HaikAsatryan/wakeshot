@@ -570,9 +570,12 @@ impl Shared {
                 self.recheck_now_and_later();
                 LRESULT(0)
             }
-            // The loop window owns quitting (`taskkill` posts `WM_CLOSE` to every top-level window); the default would
-            // destroy this window under a live icon.
-            WM_CLOSE => LRESULT(0),
+            // Quit is the loop window's: a plain `taskkill` posts its one `WM_CLOSE` to whichever of the tray's windows
+            // is first in z-order, often this one. The default would destroy this window under a live icon.
+            WM_CLOSE => {
+                crate::app::window::pass_close_to_loop();
+                LRESULT(0)
+            }
             // SAFETY: the default handling, with the message as it came.
             _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
         }

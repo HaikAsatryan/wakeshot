@@ -40,11 +40,11 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GetSystemMetrics, GetWindowLongPtrW, HMENU, InsertMenuItemW, MENUINFO, MENUITEMINFOW,
     MFS_CHECKED, MFS_GRAYED, MFT_OWNERDRAW, MFT_RADIOCHECK, MFT_SEPARATOR, MIIM_DATA, MIIM_FTYPE,
     MIIM_ID, MIIM_STATE, MIIM_SUBMENU, MIM_APPLYTOSUBMENUS, MIM_BACKGROUND, MNC_EXECUTE,
-    MNC_IGNORE, MSGF_MENU, PostMessageW, RegisterClassExW, SM_MENUDROPALIGNMENT,
+    MNC_IGNORE, MSGF_MENU, PostMessageW, RegisterClassExW, SC_CLOSE, SM_MENUDROPALIGNMENT,
     SetForegroundWindow, SetMenuInfo, SetWindowLongPtrW, TPM_BOTTOMALIGN, TPM_LEFTALIGN,
     TPM_RETURNCMD, TPM_RIGHTALIGN, TPM_RIGHTBUTTON, TPM_TOPALIGN, TRACK_POPUP_MENU_FLAGS,
     TrackPopupMenuEx, WM_CLOSE, WM_DRAWITEM, WM_ENTERIDLE, WM_MEASUREITEM, WM_MENUCHAR, WM_NULL,
-    WNDCLASSEXW, WS_EX_TOOLWINDOW, WS_OVERLAPPED,
+    WM_SYSCOMMAND, WNDCLASSEXW, WS_EX_TOOLWINDOW, WS_OVERLAPPED,
 };
 use windows::core::{PCSTR, PCWSTR, PWSTR, w};
 
@@ -176,6 +176,11 @@ impl OwnerDrawnMenu {
     pub fn force_theme(&mut self, theme: Option<Theme>) {
         self.forced_theme = theme;
     }
+
+    #[cfg(test)]
+    pub(crate) fn hwnd(&self) -> HWND {
+        self.hwnd
+    }
 }
 
 impl MenuView for OwnerDrawnMenu {
@@ -282,8 +287,16 @@ impl Shared {
             WM_ENTERIDLE if wparam.0 as u32 == MSGF_MENU => {
                 self.style(HWND(lparam.0 as *mut c_void), StyledAt::Idle);
             }
-            // The loop window owns quitting; the default would destroy this window under a live menu view.
-            WM_CLOSE => return LRESULT(0),
+            // Quit is the loop window's: a plain `taskkill` posts its one `WM_CLOSE` to whichever of the tray's windows
+            // is first in z-order, and an open makes this one first. The default would destroy this window under a
+            // live menu view.
+            WM_CLOSE => {
+                crate::app::window::pass_close_to_loop();
+                return LRESULT(0);
+            }
+            // Each open makes this hidden window the foreground window, so an Alt+F4 may reach it; the default would
+            // turn that into `WM_CLOSE`, and a key meant for another window must not quit the tray.
+            WM_SYSCOMMAND if wparam.0 & 0xFFF0 == SC_CLOSE as usize => return LRESULT(0),
             _ => {}
         }
         // SAFETY: the default handling, with the message as it came.
@@ -1482,8 +1495,10 @@ mod tests {
             .count();
         assert_eq!(styled, 1);
 
-        // WM_CLOSE leaves the window to its owner.
+        // WM_CLOSE leaves the window to its owner; with no loop window on this thread it has no one to pass it to
+        // (`app::window` tests the pass). An Alt+F4's `SC_CLOSE` never becomes a WM_CLOSE.
         send(WM_CLOSE, 0, 0);
+        send(WM_SYSCOMMAND, SC_CLOSE as usize, 0);
         // SAFETY: plain call.
         assert!(unsafe { IsWindow(Some(hwnd)) }.as_bool());
         assert!(sink.events().is_empty(), "no pick without a menu loop");

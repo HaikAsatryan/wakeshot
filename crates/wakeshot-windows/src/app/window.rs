@@ -49,6 +49,11 @@ const TIMER_ID: usize = 1;
 /// `USER_TIMER_MINIMUM`.
 const TIMER_MIN_MS: u32 = 10;
 
+thread_local! {
+    /// This thread's loop window while it lives (0: none), for [`pass_close_to_loop`].
+    static LOOP_WINDOW: Cell<isize> = const { Cell::new(0) };
+}
+
 /// The loop window's class: `Wakeshot.Loop`, or `Wakeshot.Loop.DryRun`, so a dry run and a real tray never find each
 /// other.
 fn class(dry_run: bool) -> PCWSTR {
@@ -288,6 +293,7 @@ impl LoopWindow {
         });
         // SAFETY: the window made above; `Drop` clears the slot before the state can go.
         unsafe { SetWindowLongPtrW(hwnd, GWLP_USERDATA, Rc::as_ptr(&state) as isize) };
+        LOOP_WINDOW.with(|w| w.set(hwnd.0 as isize));
         Ok(LoopWindow { hwnd, state })
     }
 
@@ -308,7 +314,8 @@ impl LoopWindow {
     /// The window procedure hands the handler: `WM_APP + 1` to `event`; its one timer to `timer`, re-armed after
     /// every call with `next_timer_ms` (at least 10 ms); `WM_WTSSESSION_CHANGE`, `WM_QUERYENDSESSION` and
     /// `WM_ENDSESSION` through `session::decode` to `session`, and `WM_QUERYENDSESSION` answers TRUE; `WM_CLOSE` to
-    /// `event(Menu(Quit))`, never the default destroy. A `WM_QUIT` the window did not post goes the same way as
+    /// `event(Menu(Quit))`, never the default destroy, also when it came to the tray icon's or the menu's window
+    /// ([`pass_close_to_loop`]). A `WM_QUIT` the window did not post goes the same way as
     /// `WM_CLOSE`, so the loop never ends without the handler's quit. Calls that came before `run` are made first.
     ///
     /// A handler that panics inside a window message aborts the process: Rust does not unwind out of a window
@@ -346,6 +353,11 @@ impl Drop for LoopWindow {
     fn drop(&mut self) {
         self.state.quitting.set(true);
         self.state.sink.close();
+        LOOP_WINDOW.with(|w| {
+            if w.get() == self.hwnd.0 as isize {
+                w.set(0);
+            }
+        });
         let mut msg = MSG::default();
         // Their events are gone with `close`; take the messages out too, so none waits for a window that is gone.
         // SAFETY: `msg` is a valid out pointer; the filter names this thread's own window.
@@ -408,6 +420,19 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPA
         // SAFETY: the default handling, with the message as it came.
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
     }
+}
+
+/// For the tray's other top-level windows (the icon's and the menu's): posts `WM_CLOSE` to this thread's loop window,
+/// so a `WM_CLOSE` to any of them ends in the same Quit. `taskkill /PID` without `/F` posts one `WM_CLOSE`, to the
+/// process's first top-level window in z-order, and that is seldom the loop window (research, "Plain taskkill and the
+/// tray's windows"). `false` when this thread has no loop window (a demo, a test) or the post failed.
+pub(crate) fn pass_close_to_loop() -> bool {
+    let hwnd = LOOP_WINDOW.with(Cell::get);
+    if hwnd == 0 {
+        return false;
+    }
+    // SAFETY: plain call; Windows checks the handle.
+    unsafe { PostMessageW(Some(HWND(hwnd as *mut _)), WM_CLOSE, WPARAM(0), LPARAM(0)) }.is_ok()
 }
 
 /// Finds this session's loop window by class and posts `WM_CLOSE`, which the tray handles as Quit from the menu.
@@ -1053,6 +1078,60 @@ mod tests {
         assert_eq!(done.result, Ok(()));
         assert_eq!(events(&done.records), [quit_event(), quit_event()]);
         assert!(!is_window(hwnd));
+    }
+
+    /// A plain `taskkill` posts its `WM_CLOSE` to the icon's or the menu's window, whichever is first in z-order.
+    #[test]
+    fn close_on_the_icon_or_the_menu_window_reaches_the_handler_as_quit() {
+        use crate::sink::FakeEventSink;
+        use crate::tray::icon::{IconKind, TrayIcon};
+        use crate::tray::menu::OwnerDrawnMenu;
+        use windows::Win32::UI::WindowsAndMessaging::{SC_CLOSE, WM_SYSCOMMAND};
+
+        let running = start_with(
+            test_class,
+            |window| {
+                let menu = OwnerDrawnMenu::new(Arc::new(FakeEventSink::default()))
+                    .expect("the menu window");
+                let menu_hwnd = menu.hwnd();
+                let icon = TrayIcon::new(IconKind::Demo, Box::new(menu)).expect("the icon window");
+                let icon_hwnd = HWND(icon.identity().hwnd as *mut _);
+                // An Alt+F4 on the menu's window, then the two closes, posted as taskkill posts them.
+                let _ = send(menu_hwnd, WM_SYSCOMMAND, SC_CLOSE as usize, 0);
+                post_raw(menu_hwnd, WM_CLOSE, 0, 0);
+                post_raw(icon_hwnd, WM_CLOSE, 0, 0);
+                // Each window passes its close on while it lives; the loop window's closes wait for `run`.
+                while pump_one() {}
+                assert!(is_window(menu_hwnd) && is_window(icon_hwnd));
+                drop(icon);
+                window.sink().post(idle(7)).expect("the post goes");
+            },
+            |_, call| {
+                if *call == Seen::Event(idle(7)) {
+                    Flow::Quit
+                } else {
+                    Flow::Go
+                }
+            },
+            far_timer,
+        );
+        let done = running.finish();
+
+        assert_eq!(done.result, Ok(()));
+        assert_eq!(events(&done.records), [quit_event(), quit_event(), idle(7)]);
+    }
+
+    #[test]
+    fn no_close_is_passed_on_without_a_loop_window() {
+        let passed = thread::spawn(|| {
+            let before = pass_close_to_loop();
+            let window = LoopWindow::with_class(test_class()).expect("the loop window");
+            drop(window);
+            (before, pass_close_to_loop())
+        })
+        .join()
+        .expect("the thread ends");
+        assert_eq!(passed, (false, false));
     }
 
     #[test]

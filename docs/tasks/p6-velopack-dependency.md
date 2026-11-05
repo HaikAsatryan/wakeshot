@@ -79,8 +79,7 @@ Each with the worker's default.
 
 ### Steps for Haik: add clang to the Build Tools (step 0, needs your elevation)
 
-Not done yet (Haik away; orchestrator's call 03:07: the card goes on without it). Until then ARM64 builds of
-`wakeshot-tray` run in CI only. Do this when no cargo command runs on the laptop (the orchestrator says when).
+Done by Haik on 2026-11-05: clang 22.1.3 (`docs/research.md`, "Sound overlap, smoke test key and ARM64 checks").
 Component ids from Microsoft Learn, "Visual Studio Build Tools component directory", Visual Studio 2026 part, workload
 "Desktop development with C++" (`Microsoft.VisualStudio.Workload.VCTools`, installed here); `ring`'s `BUILDING.md`
 asks for the "C++ ARM64 build tools" (`Microsoft.VisualStudio.Component.VC.Tools.ARM64`, already installed) and the

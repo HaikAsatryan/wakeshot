@@ -37,9 +37,9 @@ cargo build --release --locked --target x86_64-pc-windows-msvc -p wakeshot-tray 
   `wakeshot-notice.png`.
 - Never set `RUSTFLAGS` for the build: it drops the static CRT.
 
-Do not run `smoke-test.ps1` on a PC where Wakeshot is or was installed. It refuses when it finds any trace (the
-install folder, the data folder, the uninstall key, the Run or RunOnce value, the Path entry, the notice app id key,
-the shortcut): the uninstall deletes the data folder, and a journal in it would make the hooks restore power settings.
+`smoke-test.ps1` runs only where it finds no trace of Wakeshot (the install folder, the data folder, the uninstall
+key, the Run or RunOnce value, the Path entry, the notice app id key, the shortcut), and refuses otherwise (exit 2):
+the uninstall deletes the data folder, and a journal in it would make the hooks restore power settings.
 CI runners are clean; `p6-install-e2e` covers this laptop.
 
 ## Cut a release

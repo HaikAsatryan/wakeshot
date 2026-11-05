@@ -84,11 +84,11 @@ Facts with how they were checked: `docs/research.md`. Longer research: `docs/res
 |---|---|---|---|
 | 0 | Facts | Spikes on the test laptop, rival and agent research, final decisions | Done (signed off 2026-11-03) |
 | 1 | Detailed design and skeleton | Detailed `architecture.md`, public GitHub repo, Cargo workspace, the contracts between the parts (`p1-contracts`), CI (fmt, clippy, tests, x64 and ARM64 builds), tray menu look that matches Windows 11 (`p1-tray-menu-look`), audible lid-close sound (`p1-lid-sound`) | Done (signed off 2026-11-03 19:13; `docs/phases/01-design-skeleton.md`) |
-| 2 | Core (track) | State machine, policies, settings ownership rules, file formats, full tests | Building (`docs/phases/02-core.md`) |
-| 3 | Windows power layer (track) | Power requests and settings, journal and restore, guard process, OS events | Building (`docs/phases/03-windows-power.md`) |
-| 4 | Sources (track) | Claude Code (with timers), `wakeshot run` and hold files, Keep awake; Codex and Copilot CLI after v1 (Haik, 2026-11-03) | Building (`docs/phases/04-sources.md`) |
-| 5 | Tray UX (track) | Icons (design, light and dark, high contrast, every scale), menu, notifications, sounds, first run, log | Planned (`docs/phases/05-tray-ux.md`) |
-| 6 | Ship (track, then integration) | Velopack installer and updates, start at login, uninstall restore, signing, winget manifest, README, GitHub Pages; then wiring all tracks into the two exes, end-to-end tests, Haik's manual checklist | Planned (`docs/phases/06-ship.md`, `docs/phases/06-integration.md`; `p6-int-skeleton` running) |
+| 2 | Core (track) | State machine, policies, settings ownership rules, file formats, full tests | Built (`docs/phases/02-core.md`) |
+| 3 | Windows power layer (track) | Power requests and settings, journal and restore, guard process, OS events | Built (`docs/phases/03-windows-power.md`) |
+| 4 | Sources (track) | Claude Code (with timers), `wakeshot run` and hold files, Keep awake; Codex and Copilot CLI after v1 (Haik, 2026-11-03) | Built for v1; Codex and Copilot later (`docs/phases/04-sources.md`) |
+| 5 | Tray UX (track) | Icons (design, light and dark, high contrast, every scale), menu, notifications, sounds, first run, log | Built (`docs/phases/05-tray-ux.md`) |
+| 6 | Ship (track, then integration) | Velopack installer and updates, start at login, uninstall restore, signing, winget manifest, README, GitHub Pages; then wiring all tracks into the two exes, end-to-end tests, Haik's manual checklist | Built and checked with Haik; README, Pages and media wait for his UI review (`docs/phases/06-ship.md`, `docs/phases/06-integration.md`) |
 | 7 | Field test | A week of real use on the test laptop, fixes, v1.0 | |
 | 8 | Launch cleanup | A clean public repo (Haik, 2026-11-03): short `CLAUDE.md`, the README for users (long but never boring, Haik 2026-11-04), maybe one Claude skill if it matters; internal planning, reviews and junk removed; history squashed into one commit (Haik's go right before the force push); then the winget submission, and the Microsoft Store if free and automated (`docs/tasks/p8-store.md`) | |
 

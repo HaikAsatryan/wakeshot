@@ -77,10 +77,10 @@ So `p6-int-window` and `p6-int-dispatch` build at the same time against `LoopHan
 - `WindowSink::post` boxes the event and posts `WM_APP + 1` with the pointer; the window procedure unboxes it. A failed
   post takes the box back and drops it (no leak) and returns the error. When the window closes, events still queued
   are taken out and dropped.
-- `WM_CLOSE` (also `taskkill /PID` without `/F`) is handled as `Event::Menu(MenuCommand::Quit)`: restore, delete the
-  Keep awake hold, exit. Why: the default handling destroys the window, and a tray whose loop window is gone gets no
-  events and restores nothing. It also gives tests a clean quit. Change it when a field report shows a tool closing
-  Wakeshot when it should not.
+- `WM_CLOSE` (also a plain `taskkill /PID`, which the icon's and the menu's windows pass on) is handled as
+  `Event::Menu(MenuCommand::Quit)`: restore, delete the Keep awake hold, exit. Why: the default handling destroys the
+  window, and a tray whose loop window is gone gets no events and restores nothing. It also gives tests a clean quit.
+  Change it when a field report shows a tool closing Wakeshot when it should not.
 - `ask_quit(dry_run)` finds this session's loop window by class and posts `WM_CLOSE` (tests and tools).
 - `WM_WTSSESSION_CHANGE`, `WM_QUERYENDSESSION` and `WM_ENDSESSION` go through `session::decode` (`p3-session`) to
   `LoopHandler::session`. `WM_QUERYENDSESSION` always answers TRUE.
@@ -216,7 +216,7 @@ builds of the tray need clang (Haik's answer 8: the Build Tools clang component)
 | `p6-notice-app-icon` | Part B: about 5 min, a look at the screen | Part A: test installs (HKCU keys); Part B: screen | `p6-real-install-guard` (both own `packaging/e2e.ps1`) | done (2026-11-05 ~11:40): Part A ~04:00 (hooks register the app id; `e2e.ps1` 102 of 102); Part B: the header shows the Wakeshot icon and name from both start paths; Win+N never keeps a balloon; found: `taskkill` without `/F` does not quit the tray |
 | `p6-screen-reruns` | yes: about 20 min at the screen, same session as `p6-notice-app-icon` Part B | the plan copy and test install of that Part B; deletes the stale Settings icon key and the 2026-11-04 `%TEMP%` leftovers (Haik's yes) | bundle with `p6-notice-app-icon` Part B | done (2026-11-05 ~11:40): leftovers and key gone (Wakeshot now missing from the Settings list, this laptop); input held the countdown off; floor grace passes, Windows slept by the 5-minute route; found: the closed-lid report lost at a lid open (error 1462) |
 | `p2-6-sound-overlap-smoke-key` | no | no | `p6-screen-reruns`; Part C after Haik's clang install | done (2026-11-05): one sound at a window lock plus a floor step back; the smoke test checks the notice key (28 of 28 on a local pack); ARM64 clippy and release build pass with clang 22.1.3; 1423 workspace tests |
-| `p6-polite-quit-notice-retry` | no | dry-run tray starts only (temp data folder) | `p2-6-sound-overlap-smoke-key` | ready |
+| `p6-polite-quit-notice-retry` | no | dry-run tray starts only (temp data folder) | `p2-6-sound-overlap-smoke-key` | done (2026-11-05): a plain taskkill quits the tray with the restore (the icon and menu windows pass `WM_CLOSE` to the loop); a refused notice is tried again after 1 s; x64 and ARM64 checks pass |
 
 Sizes, one worker's context: skeleton 50K, io-thread 120K, window 100K, dispatch 140K, startup 100K, tray-mode 140K,
 update-wiring 90K, dry-run-e2e 130K, real-e2e 130K, update-e2e 120K, haik-checks 70K. About 1.19M tokens in all.

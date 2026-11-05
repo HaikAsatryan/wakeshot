@@ -298,7 +298,7 @@ where
         Ok(icon) => icon,
         Err(e) => return fatal(&**log, "the tray icon window", e),
     };
-    let notifier = Arc::new(BalloonNotifier::new(icon.identity()));
+    let notifier = Arc::new(BalloonNotifier::new(icon.identity()).with_log(Arc::clone(log)));
     icon.on_note(icon_notes(
         Arc::clone(&loop_log),
         Arc::clone(&notifier),
