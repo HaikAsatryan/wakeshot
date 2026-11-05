@@ -1,6 +1,6 @@
-// A small PNG reader: 8-bit greyscale, RGB, palette and RGBA, not interlaced. Enough for the files the art code and
-// the screen captures write, with no package to install.
-import {inflateSync} from 'node:zlib';
+// A small PNG reader (8-bit greyscale, RGB, palette and RGBA, not interlaced) and an RGBA writer. Enough for the
+// files the art code and the screen captures write and for the review contact sheets, with no package to install.
+import {deflateSync, inflateSync} from 'node:zlib';
 import {readFileSync} from 'node:fs';
 
 export function readPng(path) {
@@ -123,4 +123,38 @@ export function readIco(path) {
     frames.push({size, png: false, rgba});
   }
   return frames;
+}
+
+const CRC = new Uint32Array(256).map((_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+function crc32(buf) {
+  let c = 0xffffffff;
+  for (const b of buf) c = CRC[(c ^ b) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+function chunk(type, data) {
+  const head = Buffer.alloc(8);
+  head.writeUInt32BE(data.length, 0);
+  head.write(type, 4, 'latin1');
+  const tail = Buffer.alloc(4);
+  tail.writeUInt32BE(crc32(Buffer.concat([head.subarray(4), data])), 0);
+  return Buffer.concat([head, data, tail]);
+}
+
+/** Encodes straight RGBA as an 8-bit RGBA PNG, for the review contact sheets. */
+export function encodePng(width, height, rgba) {
+  const raw = Buffer.alloc((width * 4 + 1) * height);
+  for (let y = 0; y < height; y++) {
+    raw[y * (width * 4 + 1)] = 0;
+    Buffer.from(rgba.buffer, rgba.byteOffset + y * width * 4, width * 4).copy(raw, y * (width * 4 + 1) + 1);
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr.set([8, 6, 0, 0, 0], 8);
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  return Buffer.concat([signature, chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw, {level: 6})), chunk('IEND', Buffer.alloc(0))]);
 }

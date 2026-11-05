@@ -1,9 +1,12 @@
 import React from 'react';
-import {Composition} from 'remotion';
+import {Composition, Folder} from 'remotion';
 import './fonts.ts';
 import {IconLoop} from './loop/IconLoop.tsx';
+import {PART_FRAMES, PartCamera, PartFocus, PartLaptop, PartPieces, PartWords} from './parts/Parts.tsx';
 import {Promo} from './promo/Promo.tsx';
 import {LOOP, VIDEO} from './timeline.ts';
+
+const part = {durationInFrames: PART_FRAMES, fps: VIDEO.fps, width: VIDEO.width, height: VIDEO.height};
 
 export const Root: React.FC = () => (
   <>
@@ -34,5 +37,12 @@ export const Root: React.FC = () => (
       height={LOOP.height}
       defaultProps={{theme: 'dark'}}
     />
+    <Folder name="Parts">
+      <Composition id="PartCamera" component={PartCamera} {...part} />
+      <Composition id="PartFocus" component={PartFocus} {...part} />
+      <Composition id="PartWords" component={PartWords} {...part} />
+      <Composition id="PartPieces" component={PartPieces} {...part} />
+      <Composition id="PartLaptop" component={PartLaptop} {...part} />
+    </Folder>
   </>
 );

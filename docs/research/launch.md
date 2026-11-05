@@ -655,40 +655,8 @@ Haik's review.
 - Every media file rebuilds from `media/` with one command each: Remotion for the video, the GIF loop and the
   composed stills; the real captures are the only inputs that need the laptop.
 
-### Storyboard for the 30 second video
+### Storyboard and shot list
 
-Built in code from the real icon art, the real screenshots and Wakeshot's own chimes. Every claim on screen is
-something Wakeshot does in v1. 1920 x 1080, 30 fps. Words on screen are drafts; `p5-text` and `p6-readme` own the final
-wording. Decided by the worker, for Haik's review.
-
-| Time | Scene | On screen | Sound |
-|---|---|---|---|
-| 0 to 3 s | Title | The idle icon, large, centered, wakes to the working state once; "Wakeshot"; "Your PC stays awake while your AI agent works." | music bed fades in |
-| 3 to 8 s | Work starts | A terminal card drawn in code: `claude` and a short prompt typing in. Cut to the real tray crop; the icon morphs from idle to working; the real holding tooltip slides up. Caption: "Claude Code starts work. Wakeshot holds the PC awake." | key clicks, a soft rise on the morph |
-| 8 to 12 s | Lid closed (optional beat) | A laptop outline closes; a lock badge. Caption: "Close the lid: it keeps working, and locks the PC." | Wakeshot's own lid chime (`LidClosedHolding`) |
-| 12 to 17 s | Work ends | The terminal card shows the turn done; the icon goes back to idle; the idle tooltip. Caption: "Work done. It lets go." | a soft fall |
-| 17 to 21 s | Settings back | A card drawn in code with two rows, "Lid close: Sleep" and "Battery sleep: 4 hours", each ticking from Wakeshot's value back to the user's. Caption: "Your own power settings are back." | two light ticks |
-| 21 to 25 s | Keep awake | The real menu screenshot (light, then dark in a split), the highlight moves to Keep awake, then "1 hour"; the icon goes to working. Caption: "Keep awake on demand. No second tool." | menu clicks |
-| 25 to 28 s | Speed | Three numbers count up from `p6-media`'s measurements: idle RAM, CPU per 10 minutes, delay from Claude starting to the hold. Small print: "measured on <build>, <date>". | soft ticks |
-| 28 to 30 s | End card | Icon, "Wakeshot", "Free and open source. Windows 11, x64 and ARM64.", the install line (winget once it is live, else the GitHub URL). | music resolves |
-
-Rules: no fake numbers (the speed scene waits for `p6-media`'s measurements); no agent shown that v1 does not detect;
-the terminal card is an illustration of Claude Code, not a copy of its screen; nothing private in any capture.
-
-### Shot list for `p6-media`
-
-| Id | Capture | Variants | Used in |
-|---|---|---|---|
-| S1 | Tray area crop with the idle icon (taskbar right side, about 400 x 48 px at 100 %, scaled) | light, dark; 150 % and 125 % | video 3 to 17 s, README, Store |
-| S2 | The same with the working icon | same | video, README loop source |
-| S3 | Tooltip while holding (Claude Code, 1 session) | light, dark; 150 % and 125 % | video 3 to 8 s, README |
-| S4 | Tooltip while idle | light, dark | video 12 to 17 s |
-| S5 | Menu open, Keep awake submenu open | light, dark; 150 % and 125 % | video 21 to 25 s, README, Store |
-| S6 | One notice: the closed-lid summary after a hold | light, dark | README, Store |
-| S7 | The icon art files of every state (from `p5-icon-art`) | as delivered | title, end card, loop |
-| S8 | Wakeshot's chimes rendered to WAV from the same code that plays them (`p5-sounds`) | 48 kHz | lid beat |
-| S9 | The before and after values of lid action and battery sleep from the capture session's log, as text | | settings scene |
-| S10 | Store screenshots: S1, S3, S5 and S6 placed on a plain background at the Store sizes (part 3) | light, dark | Store |
-
-The silent icon loop for the README top: the working and idle states of S7, idle to working to idle, 4 to 6 s, made
-from the art (not a screen capture), in the format the facts below pick.
+Moved on 2026-11-05 to `docs/research/promo-video.md` ("Storyboard: the 30 s main cut" and "Real captures and drawn
+parts"), which replaces the first storyboard and shot list that stood here. The specs, the GitHub facts and the sound
+sources above still hold. The README icon loop is unchanged: made from the art, not a screen capture (`media/README.md`).

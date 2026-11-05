@@ -17,7 +17,8 @@ import {readPng} from './lib/png.mjs';
 const media = join(dirname(fileURLToPath(import.meta.url)), '..');
 const cli = join(media, 'node_modules', '@remotion', 'cli', 'remotion-cli.js');
 const concurrency = process.env.MEDIA_CONCURRENCY ?? '4';
-const POSTER_FRAME = 75;
+/** The poster: the light on and the name with its line in, the frame the README player shows before play. */
+const POSTER_FRAME = 120;
 
 function run(args) {
   const r = spawnSync(process.execPath, args, {cwd: media, stdio: 'inherit'});
@@ -52,10 +53,12 @@ function loop(theme) {
 /** The final video shows only real captures and measured numbers; this lists what is not there yet. */
 function missingForFinal() {
   const out = [];
-  for (const [id, s] of Object.entries(json('data/shots.json').shots)) {
-    if (!s.file) out.push(`shot ${s.shot} ${id} has no capture yet`);
-    else if (s.standIn) out.push(`shot ${s.shot} ${id} is a stand-in`);
-    else if (!existsSync(join(media, 'public', s.file))) out.push(`shot ${s.shot} ${id}: public/${s.file} is missing`);
+  for (const [set, info] of Object.entries(json('data/shots.json').sets)) {
+    for (const [id, s] of Object.entries(info.shots)) {
+      if (!s.file) out.push(`set ${set}, shot ${id} has no capture yet`);
+      else if (s.standIn) out.push(`set ${set}, shot ${id} is a stand-in`);
+      else if (!existsSync(join(media, 'public', s.file))) out.push(`set ${set}, shot ${id}: public/${s.file} is missing`);
+    }
   }
   const speed = json('data/speed.json');
   if (!speed.measured) out.push('data/speed.json: not measured');

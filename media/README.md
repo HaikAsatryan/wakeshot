@@ -2,7 +2,8 @@
 
 The icon loop for the README top, the 30 second promo video and its poster, built in code with
 [Remotion](https://www.remotion.dev/) so they can be made again when the icon or the menu changes. Outside the Cargo
-workspace; no Rust here. Card: `docs/tasks/p6-media.md`. Specs and storyboard: `docs/research/launch.md` part 4.
+workspace; no Rust here. Card: `docs/tasks/p6-media.md`. Specs: `docs/research/launch.md` part 4. Style rules,
+storyboard and captures: `docs/research/promo-video.md`.
 
 ## Setup
 
@@ -22,21 +23,25 @@ sends no usage event (`@remotion/renderer` 4.0.540, `render-media.js`: the event
 |---|---|---|
 | `out/icon-loop-light.gif`, `out/icon-loop-dark.gif` | `npm run loop` | 480 x 240, 5 s, loops forever, on GitHub's page colours; the tray glyph drawn at 128 px. Remotion renders 125 PNG frames (25 fps); `scripts/lib/gif.mjs` writes the GIF with each frame's exact colours. Show at 240 px wide for sharp HiDPI |
 | `out/wakeshot-promo.mp4`, `out/wakeshot-promo-poster.png` | `npm run video` | Refuses while any picture is missing or a stand-in, or a speed number is missing |
-| `out/draft/wakeshot-promo-draft.mp4` and its poster | `npm run draft` | A missing capture shows as a plain box naming the shot; DRAFT on every frame; not kept in git |
-| `out/wakeshot-promo-poster.png` alone | `npm run poster` | Frame 75 of the video, for the Pages `<video poster>` |
-| `public/sound/soundtrack.wav` | `npm run sounds` | Also run by `draft` and `video`; not kept in git |
+| `out/draft/wakeshot-promo-draft.mp4` and its poster | `npm run draft` | A missing capture shows as a plain sketch of its set with a stand-in tag, missing speed numbers as tagged stand-ins (88.8, 888, 8.8); DRAFT, the second and the frame on every frame; not kept in git |
+| `out/wakeshot-promo-poster.png` alone | `npm run poster` | Frame 120 of the video (the light on, the name and its line in), for the Pages `<video poster>` |
+| `public/sound/soundtrack.wav` | `npm run sounds` | Also run by `draft` and `video`; not kept in git. `-- --music <file.wav>` puts a fitted found track in place of the code bed, `-- --out <file.wav>` writes elsewhere |
+| A found track fitted to the video | `node scripts/music-candidate.mjs <track> --out <file.wav> [--bpm N] [--lift s]` | Finds the tempo and the lift, conforms to 120 BPM with `atempo`, cuts 30 s on the storyboard; prints the numbers to rebuild it with |
+| A contact sheet for review | `npm run sheet -- <composition> <from> <to> <out.png>` | About 4 frames a second, rendered at full size and shrunk to a quarter, tiled |
 | Speed numbers | `pwsh scripts/measure-speed.ps1 -Mode <mode>` | See "Speed numbers" below |
 | The live preview | `npm run studio` | Opens Remotion Studio in the browser |
 
 `MEDIA_CONCURRENCY` sets how many frames render at once (default 4, so other work keeps its cores). The draft video
-takes about a minute on the test laptop.
+takes about 2 minutes on the test laptop. The motion parts each have a small composition in Studio's Parts folder
+(`src/parts/Parts.tsx`).
 
 ## Checks
 
 | Check | Command |
 |---|---|
 | The art port draws exactly what `art.rs` draws, no tolerance: every pixel of the three review sheets (tray glyphs at 16 to 48 px in four rows, dark, light and high contrast), the 14 frames of `assets/wakeshot.ico` and the notice picture | `node scripts/check-art.mjs`; CI runs it on every push (job `art-port`, Node 26, no `npm ci`: it needs only `node:` modules and the `.ts` port) |
-| No em dash, en dash or emoji in the text files; every asset credited; every text colour pair in `src/theme.ts` at 4.5:1 or more and every graphic pair at 3:1 | `npm run check` |
+| No em dash, en dash or emoji in the text files; every asset credited; every text colour pair in `src/theme.ts` at 4.5:1 or more and every graphic pair at 3:1; and the pace check | `npm run check` |
+| Pace (`scripts/check-pace.mjs`, from the timeline data): every cut, move, pop, click and caption start on the 120 BPM grid within 1 frame; something new at least every 2 s before the end card; framings 2 to 4 s; captions hold 1.4 s after their last word (big words of 1 to 3 words 0.5 s); 2 to 6 words a caption line; at most two lines on screen; the name by 3 s; the end card the last 4 s; frame 0 not empty | `npm run check-pace` |
 | Video: H.264 and AAC, 1920 x 1080, 30 fps, 30 s plus or minus 2, under 10 MB; loops, read frame by frame: GIF, 480 x 240, 4 to 6 s, forever, under 1 MB, last frame equal to the first, a 40 px border of every frame exactly GitHub's page colour, the first frame the port's idle glyph and a held stretch its holding glyph, every pixel | `npm run check-video` (add `-- --draft` for the draft) |
 | A clean checkout rebuilds the same bytes | `npm run check-rebuild` (add `-- --final` once the final video exists) |
 | Types | `npm run typecheck` |
@@ -49,9 +54,10 @@ takes about a minute on the test laptop.
   wrapped in `F` in Rust's order (the file's head says why). Then `npm run loop` and `npm run video`.
 - **The chimes** (`crates/wakeshot-windows/src/sound/chime.rs`): nothing to port; `make-sounds.mjs` reads the numbers
   from that file. If the file changes shape, the script stops with the name of what it could not find.
-- **The menu or tooltip words**: new captures into `public/shots/`, then update `data/shots.json` (file, size, and
-  `standIn: false`).
-- **The words on screen**: `src/copy.ts`. **The timing**: `src/timeline.ts`; the sounds follow it.
+- **The menu or tooltip words**: new captures into `public/shots/`, then update the set in `data/shots.json` (file,
+  `standIn: false`, the set's size and scale, and the boxes and rows measured from the pictures).
+- **The words on screen**: `src/copy.ts`. **The timing**: `src/timeline.ts` (on the grid of `src/beat.ts`); the
+  sounds and `check-pace` follow it.
 - **The speed numbers**: `data/speed.json`, from the measure script's output.
 - **The install line**: `COPY.install` in `src/copy.ts`; the winget command once the package is live.
 
@@ -60,10 +66,10 @@ takes about a minute on the test laptop.
 | Input | From |
 |---|---|
 | Icon art | `src/art/heldLight.ts`, a port of the held light in `art.rs` (tray glyph, app icon, the sheets' composition), equal to every file `art.rs` writes (`check-art.mjs`, 0 of 9,458,740 pixels differ, 2026-11-05). The states in between (the light coming on) are the media's own: `src/art/motion.ts` |
-| Screen pictures | `public/shots/`, listed in `data/shots.json` with their source. None yet: the capture session of `p6-media` Part B makes them |
+| Screen pictures | `public/shots/`, listed in `data/shots.json` in two sets (tooltip, menu), each one screen rectangle at one scale, with its boxes and rows. None yet: the capture session of `p6-media` Part B makes them |
 | Settings values in the video | `data/settings.json` (stand-in: the test laptop's own values) |
 | Speed numbers | `data/speed.json` (empty until measured) |
-| Sound | Made in code, `scripts/make-sounds.mjs` |
+| Sound | `scripts/make-sounds.mjs`: the music Haik picked (`public/music/`, named with its fit in `data/music.json`, fitted on every build by `scripts/lib/fit-music.mjs`), the effects made in code, the chimes from `chime.rs`. The code bed (a 120 BPM sequencer) when `data/music.json` names no file |
 | Fonts | Instrument Sans in `public/fonts/` with its `OFL.txt` (from the designer's repo); JetBrains Mono from npm; loaded in `src/fonts.ts` |
 | Colours | `src/theme.ts`: Moss (`docs/research/brand-directions-2.md`), GitHub's page colours for the loop |
 
@@ -87,10 +93,16 @@ PowerShell window with no Claude Code session working.
 
 ## Decisions (principal designer, for Haik's review)
 
-1. **Sound made in code, not Kenney and Freesound files.** The bed (C major, so Wakeshot's C6 and G6 chimes sit in
-   tune) and every effect are sine waves and seeded noise; the chimes come from `chime.rs`. Why: no third-party file,
-   no licence question, the same bytes on every build. Change it when Haik finds the bed or the effects thin: then a
-   CC0 loop from Freesound, committed with its link.
+1. **Effects made in code; the music is Haik's pick.** Every effect (whooshes, clicks, pops, ticks, the low hit, the
+   end card's swell of air) is sine waves and seeded noise, and the chimes come from `chime.rs`. The music is "A
+   Chill Fever (Loopable)" by Pro Sensory (CC0), Haik's pick of 2026-11-05 from three candidates: the loopable track
+   is played three times over, conformed from 130 to 120 BPM, cut so its lift lands on the light at 2 s, softer
+   under the hook with a short silence before the light, 5 dB down under the lid chime, and on the end card it plays
+   on for a beat and fades over 2.5 s into a soft echo, silent 0.1 s before the end. The music ducks 4 dB under each
+   chime; the mix is set to -15 LUFS with sample peaks under -2 dBFS (true peak about -1.5 dBTP). The 120 BPM
+   sequencer in code (C major, so the C6 and G6 chimes sit in tune) stays as the fallback when `data/music.json`
+   names no file. Why: a real track sounds full where the code bed sounded thin, and every build still makes the
+   same bytes. Change it when Haik wants another track: try it with `music-candidate.mjs`, then `data/music.json`.
 2. **Instrument Sans for every word of the video, self-hosted; JetBrains Mono only in the drawn terminal and the
    install command.** Instrument Sans SemiBold is the brand's wordmark face (`docs/research/brand-identity.md`
    section 7); the other lines use the same family so the name and the words read as one. The WOFF2 files and the
@@ -109,8 +121,9 @@ PowerShell window with no Claude Code session working.
    changes its page colours (the loop check then fails) or when Haik wants the app icon in the loop.
 4. **Screen pictures zoom by whole numbers with hard pixels**, other zooms smooth, so a capture is never blurred into
    something it was not, and uneven pixels never garble text.
-5. **The final render refuses stand-ins and missing numbers** (`build.mjs`), and every draft frame says DRAFT, so a
-   draft cannot be mistaken for the real video.
+5. **The final render refuses stand-ins and missing numbers** (`build.mjs`, and `Capture` and the speed shot throw),
+   and every draft frame says DRAFT with its second and frame, so a draft cannot be mistaken for the real video and
+   a note on it can name the moment.
 6. **After the lid beat, the video says the closed laptop sleeps** once nothing has happened for 5 minutes (the
    2026-11-04 behaviour in `docs/product.md`), with Wakeshot's own going-to-sleep chime.
 7. **The art is drawn from the port's pixels, never redrawn as vectors.** `src/art/Glyph.tsx` puts them on a canvas
@@ -126,13 +139,46 @@ PowerShell window with no Claude Code session working.
    Why: with the outline leading, as in the loop, the frames in between showed a warm ring round a grey-green middle,
    and a hard edge between the two parts left a seam. Change it when Haik wants the title to open on the lit icon.
 9. **H.264 at CRF 16**, not 20: at 20 the plate's edge broke into blocks while the light came on (the whole plate
-   changes at once). The draft is 2.5 MB. Change it when the final video with its captures passes about 8 MB.
+   changes at once). The dynamic draft is 7.8 MB at CRF 16. Change it when the final video with its captures passes
+   about 8 MB: then CRF 18, then less dither (`promo-video.md`, "Formats").
 10. **The title and the outro are one stacked lockup** (`docs/brand.md`), the icon over the name, sized by the
     plate's side (`STACKED` in `src/promo/scenes.tsx`): the name's cap height 0.36 of it (the name at half the side,
     117 px under the 256 px icon, 88 px under 192), 0.26 of it from the plate's bottom to the cap line, the name's ink
     centred under the plate, tracking -0.01em as the wordmark. Each line is placed by its cap line and baseline (CSS
     `text-box`), baselines on whole pixels. Why: a 16:9 title wants the stacked form, and with the sizes set by hand
     the title and the outro were two lockups. Change it when a scene needs the name larger than the icon allows.
+
+11. **The dynamic cut (Part C) follows `docs/research/promo-video.md`**, with these choices of the worker:
+    - **Ten framings, not nine.** The settings slide starts on the beat the work ends (12 s), so the lid framing is
+      4 s; the menu shot (5 s) is two framings with a short pan to the submenu at 20.5 s. Every framing is 2 to 4 s.
+      Change it when Haik wants fewer camera moves.
+    - **A capture pops by rising, not by scaling.** Tooltip, menu and submenu fade in over 4 frames and rise 16 px on
+      whole pixels, so a capture is never shown at a zoom between whole numbers. Drawn things (chips, badges, the
+      card) pop with the spec's scale and spring. Change it when a real capture looks wrong rising.
+    - **The camera's offset is rounded to whole pixels at zoom 1**, so captures and the art stay sharp at rest, and
+      the move blur is an SVG Gaussian stretched along the move, off while the camera rests. Change it to Remotion's
+      `@remotion/motion-blur` only after a spike shows it rebuilds the same bytes.
+    - **Stand-in captures are plain sketches of each set** (dark taskbar, menu and tooltip boxes, gray bars where words
+      go, the port's real tray glyph), tagged in red, not empty boxes, so the cursor, the pops and the ring can be
+      judged before the captures exist. The words never appear: UI words come only from the captures.
+    - **A "still working" chip in the lid shot (11 s)**: the pace check found 2.1 s with nothing new there; the chip
+      says what the shot says, with the terminal's spinner.
+    - **The end card's icon is 256 px** (the name 117 px), larger than Part A's 192, so the end card fills the frame.
+    - **Round 2, Haik's notes (2026-11-05).** The speed numbers fold into the end card as one line ("Light: ... MB of
+      memory idle, ... ms of CPU in 10 minutes.") with the build and date in small print; their 3 s go to a 6 s menu
+      shot and a 5 s tray shot. The tray shot shows the cause and the effect in one view: a terminal where Claude
+      Code starts and finishes, and the real 200% tray capture at 2x where the icon turns holding and back at those
+      same frames (set `tray` in `data/shots.json`, S1 to S4). The laptop is drawn again in graphite with keys,
+      touchpad, edges, a lid with thickness and the edge light on its front edge; the terminal, the card, the chips
+      and the badge share one finished panel look. Change it when Haik's next look asks.
+    - **Contact sheets render at full size and shrink in the script**: Chrome's backdrop filter (the focus dimming)
+      drew mirrored copies at Remotion's `--scale=0.25`.
+    - **No CSS `blur()` or `drop-shadow()` filters.** A word's blur is its own text shadow (fill hidden) faded
+      against the sharp word, the faint terminal behind the name is blurred the same way, and the cursor's shadow is
+      a plain offset copy of the arrow. With those filters, a few frames came out one to five levels apart from one
+      render to the next (a filter gets its own GPU layer), and the clean rebuild differed. The camera's SVG blur and
+      the focus dimming's backdrop filter matched in every repeat and stay. Software GL (`--gl=swangle`) was slower
+      (80 s for 116 frames, not 20) and differed more. Change it when Chrome renders filters the same on every run.
 
 ## Where the video lives
 

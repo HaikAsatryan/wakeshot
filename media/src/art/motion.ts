@@ -125,19 +125,23 @@ function onPage(img: Rgba, page: Rgb): Uint8Array {
 }
 
 /**
- * The tray glyph at `size` px going idle to holding, on the opaque `page`: the ends are `tray_mask` idle and holding
- * in `colours`, composed as the review sheets are. The outline leads: it turns from the glyph colour to the light's
+ * The tray glyph at `size` px going idle to holding, on the opaque `page` (or on nothing, `null`, for a glyph over the
+ * video's moving stage): the ends are `tray_mask` idle and holding in `colours`, composed as the review sheets are. The outline leads: it turns from the glyph colour to the light's
  * while the inside brightens over the whole fade, so the frames in between read as one dim light, not as a white
  * ring round a dark button. Sizes with a hand-drawn ring (16 and 20 px) would lead with the geometric ring's place;
  * the loop draws 128 px, which has none.
  */
-export function trayFade(size: number, colours: GlyphColours, page: Rgb): Fade {
+export function trayFade(size: number, colours: GlyphColours, page: Rgb | null): Fade {
   const h = held(size);
+  const end = (state: 'idle' | 'holding') => {
+    const img = colorize(trayMask(state, size), colours);
+    return page ? onPage(img, page) : img.pixels;
+  };
   return {
     width: size,
     height: size,
-    from: onPage(colorize(trayMask('idle', size), colours), page),
-    to: onPage(colorize(trayMask('holding', size), colours), page),
+    from: end('idle'),
+    to: end('holding'),
     lead: raster(size, size, minus(heldDisc(h, size, 0), heldDisc(h, size, h.t))),
   };
 }

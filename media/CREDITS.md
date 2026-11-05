@@ -14,10 +14,13 @@ Microsoft's terms for showing Windows screenshots: not checked.
 
 | File | Source | Licence |
 |---|---|---|
-| `public/sound/soundtrack.wav` | Made in code by `scripts/make-sounds.mjs`: the music bed and the effects from sine waves and seeded noise; Wakeshot's own two chimes rendered from the numbers in `crates/wakeshot-windows/src/sound/chime.rs`. Not kept in git; every build makes it again | MIT, ours |
+| `public/music/a-chill-fever.mp3` | "A Chill Fever (Loopable)" by Pro Sensory, from https://opengameart.org/content/a-chill-fever-loopable (file `a_chill_fever_0.mp3`, 59.1 s, MP3 192 kbit/s, SHA-256 `9ae1326374674c1de8719b4d952394992ad819f12cf7730705be2ad05a1dfe49`), unchanged. Haik's pick of 2026-11-05 from three CC0 candidates. `make-sounds.mjs` fits it to the video on every build with the numbers in `data/music.json` (130 BPM conformed to 120, its lift at 44.33 s on the light) | CC0: the page's License(s) block reads "CC0", and the author writes "all my music is public domain" (read 2026-11-05) |
+| `public/sound/soundtrack.wav` | Made by `scripts/make-sounds.mjs`: the music above fitted to the video, the effects from sine waves and seeded noise, Wakeshot's own two chimes rendered from the numbers in `crates/wakeshot-windows/src/sound/chime.rs`. Not kept in git; every build makes it again | MIT, ours, over the CC0 music |
 
-No outside sound or music is used. The launch research picked Kenney (CC0) effects and a Freesound (CC0) music loop;
-the worker made everything in code instead, so there is no third-party file at all (reason in `README.md`).
+The code bed (a 120 BPM sequencer in `make-sounds.mjs`) is the fallback when `data/music.json` names no file. The
+launch research picked Kenney (CC0) effects; the code effects are used instead, so there is no third-party effect
+file. The other two music candidates were not used and are not in the repo. The tempo was found by the script's
+autocorrelation, not checked by ear.
 
 ## Fonts
 

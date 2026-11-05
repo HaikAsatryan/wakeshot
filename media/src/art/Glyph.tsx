@@ -32,10 +32,11 @@ function once<T>(key: string, make: () => T): T {
 const litIcon = (size: number) => once(`icon ${size}`, () => appIcon(size));
 
 /**
- * The tray glyph, the held light, at `size` px on the opaque `page`, as the tray draws it: `on` 0 is idle (the light
- * as an outline), 1 holding (the light filled in `colours.light`), and in between the light fades on in place.
+ * The tray glyph, the held light, at `size` px on the opaque `page` (or on nothing, `null`), as the tray draws it:
+ * `on` 0 is idle (the light as an outline), 1 holding (the light filled in `colours.light`), and in between the light
+ * fades on in place.
  */
-export const TrayGlyph: React.FC<{size: number; on: number; colours: GlyphColours; page: Rgb; style?: React.CSSProperties}> = ({
+export const TrayGlyph: React.FC<{size: number; on: number; colours: GlyphColours; page: Rgb | null; style?: React.CSSProperties}> = ({
   size,
   on,
   colours,

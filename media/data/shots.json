@@ -1,13 +1,60 @@
 {
-  "note": "Each picture the video uses: its shot in docs/research/launch.md part 4, what it shows, its theme, and its size in pixels. No capture yet: file null and standIn true, and the draft draws a plain box naming the shot, light or dark as the shot. The capture session (p6-media Part B) puts the file under public/shots/, sets file, w and h to the capture, standIn to false and from to its source. The final render refuses a shot with no file or standIn true.",
-  "shots": {
-    "tray-dark-idle": {"shot": "S1", "what": "tray, idle icon (dark)", "theme": "dark", "file": null, "w": 150, "h": 72, "standIn": true, "from": "no capture yet"},
-    "tray-dark-holding": {"shot": "S2", "what": "tray, holding icon (dark)", "theme": "dark", "file": null, "w": 150, "h": 72, "standIn": true, "from": "no capture yet"},
-    "tooltip-dark-holding": {"shot": "S3", "what": "tooltip while holding (dark)", "theme": "dark", "file": null, "w": 300, "h": 170, "standIn": true, "from": "no capture yet"},
-    "tooltip-dark-idle": {"shot": "S4", "what": "tooltip while idle (dark)", "theme": "dark", "file": null, "w": 300, "h": 170, "standIn": true, "from": "no capture yet"},
-    "menu-light-sub": {"shot": "S5", "what": "menu with Keep awake open (light)", "theme": "light", "file": null, "w": 1144, "h": 564, "standIn": true, "from": "no capture yet"},
-    "menu-dark-sub": {"shot": "S5", "what": "menu with Keep awake open (dark)", "theme": "dark", "file": null, "w": 1144, "h": 564, "standIn": true, "from": "no capture yet"},
-    "menu-light-main": {"shot": "S5", "what": "menu (light)", "theme": "light", "file": null, "w": 904, "h": 364, "standIn": true, "from": "no capture yet"},
-    "menu-dark-main": {"shot": "S5", "what": "menu (dark)", "theme": "dark", "file": null, "w": 904, "h": 364, "standIn": true, "from": "no capture yet"}
+  "note": "The screen captures the video uses, in sets: each set is one screen rectangle at one Windows scale, so the video swaps its pictures in place and only the drawn layers move (docs/research/promo-video.md, 'Real captures and drawn parts'). w and h are the rectangle in capture pixels; boxes and rows are places inside it in the same pixels (the cursor, the ring and the pops land on them). No capture yet: file null and standIn true, and the draft draws a plain sketch of the set with a stand-in tag; boxes and rows are then the sketch's own. The capture session (p6-media Part B) puts each file under public/shots/, sets file, standIn false and from, sets w, h and scale to the capture, and measures boxes and rows from the pictures. The final render refuses a shot with no file or standIn true.",
+  "sets": {
+    "tray": {
+      "what": "the tray icon and the space above it, where its tooltip shows (one fixed rectangle at 200% on the DELL screen)",
+      "theme": "dark",
+      "scale": 200,
+      "w": 600,
+      "h": 300,
+      "taskbar": 204,
+      "boxes": {
+        "glyph": {"x": 420, "y": 236, "w": 32, "h": 32},
+        "tip": {"x": 150, "y": 112, "w": 420, "h": 64},
+        "tipName": {"x": 336, "y": 128, "w": 224, "h": 32},
+        "tipIdle": {"x": 300, "y": 112, "w": 270, "h": 64}
+      },
+      "rows": [],
+      "shots": {
+        "S1": {"what": "idle icon, no tooltip", "file": null, "standIn": true, "from": "no capture yet"},
+        "S2": {"what": "holding icon, no tooltip", "file": null, "standIn": true, "from": "no capture yet"},
+        "S3": {"what": "holding tooltip of a real Claude Code session", "file": null, "standIn": true, "from": "no capture yet"},
+        "S4": {"what": "idle tooltip", "file": null, "standIn": true, "from": "no capture yet"}
+      }
+    },
+    "menu": {
+      "what": "the tray icon and the space its menu and submenu take",
+      "theme": "dark",
+      "scale": 150,
+      "w": 1000,
+      "h": 700,
+      "taskbar": 628,
+      "boxes": {
+        "glyph": {"x": 800, "y": 652, "w": 24, "h": 24},
+        "bar": {"x": 0, "y": 628, "w": 1000, "h": 72},
+        "menu": {"x": 560, "y": 150, "w": 360, "h": 466},
+        "sub": {"x": 330, "y": 236, "w": 236, "h": 236}
+      },
+      "rows": [
+        {"name": "status", "x": 566, "y": 158, "w": 348, "h": 72},
+        {"name": "keepAwake", "x": 566, "y": 246, "w": 348, "h": 42},
+        {"name": "lidClosed", "x": 566, "y": 290, "w": 348, "h": 42},
+        {"name": "settings", "x": 566, "y": 346, "w": 348, "h": 42},
+        {"name": "about", "x": 566, "y": 390, "w": 348, "h": 42},
+        {"name": "quit", "x": 566, "y": 446, "w": 348, "h": 42},
+        {"name": "off", "x": 336, "y": 242, "w": 224, "h": 42},
+        {"name": "halfHour", "x": 336, "y": 286, "w": 224, "h": 42},
+        {"name": "oneHour", "x": 336, "y": 330, "w": 224, "h": 42},
+        {"name": "twoHours", "x": 336, "y": 374, "w": 224, "h": 42},
+        {"name": "untilOff", "x": 336, "y": 418, "w": 224, "h": 42}
+      ],
+      "shots": {
+        "S1": {"what": "idle icon, menu closed", "file": null, "standIn": true, "from": "no capture yet"},
+        "S5a": {"what": "menu open, no hover", "file": null, "standIn": true, "from": "no capture yet"},
+        "S5b": {"what": "Keep awake hovered, its submenu open", "file": null, "standIn": true, "from": "no capture yet"},
+        "S5c": {"what": "1 hour hovered", "file": null, "standIn": true, "from": "no capture yet"},
+        "S5d": {"what": "menu closed after the click, icon holding", "file": null, "standIn": true, "from": "no capture yet"}
+      }
+    }
   }
 }

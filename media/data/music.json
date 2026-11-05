@@ -1,0 +1,9 @@
+{
+  "note": "The music under the video: Haik's pick of 2026-11-05 from three CC0 candidates. make-sounds.mjs fits it to the video on every build (scripts/lib/fit-music.mjs) with these numbers; set file to null for the code bed. Licence and source: CREDITS.md.",
+  "file": "music/a-chill-fever.mp3",
+  "bpm": 130,
+  "lift": 44.33,
+  "title": "A Chill Fever (Loopable)",
+  "author": "Pro Sensory",
+  "page": "https://opengameart.org/content/a-chill-fever-loopable"
+}

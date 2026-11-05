@@ -1,6 +1,6 @@
 # Speed numbers, pictures, the icon loop and the 30 second video
 
-Phase: 6. Status: Part A done (2026-11-04: the loop, the video pipeline with stand-ins, the media docs, the speed script); Part C in progress (2026-11-05: the dynamic cut with stand-ins, `docs/research/promo-video.md`); Part B after Part C: the installed build, the screen slot with a real Claude Code session, 10 idle minutes and Haik's look. Needs Haik: yes: he watches the video and the loop and says yes or what to change; he stays
+Phase: 6. Status: Part A done (2026-11-04: the loop, the video pipeline with stand-ins, the media docs, the speed script); Part C round 2 done (2026-11-05 22:40: Haik's five notes on the dynamic cut; `draft-2.mp4` ready; the real tray captures S1 to S4 swap in when the capture worker delivers); Part B after Part C: the installed build, the screen slot with a real Claude Code session, 10 idle minutes and Haik's look. Needs Haik: yes: he watches the video and the loop and says yes or what to change; he stays
 off the PC for about 10 minutes while the captures run. Agent: `wakeshot-worker`. Size: about 120K tokens.
 Real laptop: yes: screen captures of the real tray during one real Claude Code test session, light and dark; the real
 app holds and restores the power settings during it. One card at a time on the laptop.
@@ -189,8 +189,8 @@ questions were answered with their defaults as orchestrator decisions for Haik's
 ... even without question"). Part C builds the cut with stand-in captures and stand-in numbers; Part B then swaps in
 the real captures and the measured numbers and renders the final.
 
-Status: in progress. Needs Haik: after it, he watches the draft (about 10 min) and picks the music by ear from three
-candidates (about 10 min). Agent: `wakeshot-worker`. Size: about 200K tokens.
+Status: round 2 done 2026-11-05 22:40 (round 1 done 21:58). Needs Haik: a look at `draft-2.mp4`. Waits: the real
+S1 to S4 from the capture worker. Agent: `wakeshot-worker`. Size: about 200K tokens.
 Real laptop: no screen, no power settings, no Claude Code test session. Renders only, one at a time (concurrency 4).
 Owns: `media/` and `docs/research/launch.md` part 4 (the storyboard and shot list there become a pointer to
 `promo-video.md`). `docs/research/promo-video.md` only to keep it true to what was built (say so in the Log).
@@ -225,5 +225,197 @@ Build folder: `<scratchpad>\p6-media-c\` (renders, contact sheets, music candida
 ### Log
 
 - 2026-11-05 ~21:00: Part C written by the orchestrator.
+- 2026-11-05 20:55: Part C started (worker). Read the card, `promo-video.md` and the current `media/` sources. Build
+  folder `<scratchpad>\p6-media-c\`.
+- 2026-11-05 21:00: Remotion's skills read from GitHub (`remotion-dev/skills`, router, timing, motion blur, audio,
+  sfx, 3d, video layout) into the build folder; no skill file in the repo. APIs checked against the installed 4.0.540
+  types: `Easing.bezier`, `Easing.spring` (mass, damping, stiffness), `interpolate` (`output: 'perceptual-scale'`
+  exists), `random`, `Folder`; the CLI's `--frames` takes a comma list (read in `@remotion/renderer` `options/frames.js`).
+- 2026-11-05 21:10: motion parts built (`src/beat.ts`, `src/motion/`: Camera, DirectionalBlur, Focus, Words, Cursor,
+  Pop, Counter, Stage), each on its own composition in the Parts folder. Contact sheets: camera slide and whip blur
+  ok; focus ok; CSS 3D laptop renders. Found: Chrome's backdrop filter (the focus dim) draws mirrored copies when
+  Remotion renders at `--scale=0.25`, fine at full size, so `scripts/contact-sheet.mjs` renders the picked frames at
+  full size and shrinks them itself.
+- 2026-11-05 21:18: the 9 shots built on the new timeline (`src/timeline.ts`, `src/promo/`), each checked on a contact
+  sheet in order; fixes after the sheets: the hook opens with lines already there, the faint terminal blurred behind
+  the name, the card leaves with the slide back, the laptop a quarter larger, the cursor fades after its last click,
+  a "still working" chip in the lid shot (the pace check found 2.1 s with nothing new there).
+- 2026-11-05 21:21: soundtrack rewritten: a 120 BPM sequencer in code (kick, hats, bass, pluck, pad) shaped by the
+  storyboard, whooshes peaking on each move's first frame, the chimes from `chime.rs`, the music ducked 4 dB under
+  each chime, BS.1770 loudness in the script. ffmpeg `loudnorm` reads -15.1 LUFS, true peak -1.4 dBTP.
+  `scripts/check-pace.mjs` passes and runs in `npm run check`.
+- 2026-11-05 21:24: first full draft rendered (1 min 51 s at concurrency 4): 7.83 MB at CRF 16, `check-video --draft`
+  ok. Then the laptop resized to fit the open lid above the captions (scale 1.12) and a second draft rendered at
+  21:35 (1 min 52 s): 7.84 MB.
+- 2026-11-05 21:33: music: OpenGameArt and the Free Music Archive searched for CC0 tracks (Freesound needs a login);
+  14 tracks downloaded into the build folder and their tempo and lift found by `scripts/music-candidate.mjs`; three
+  in 110 to 130 BPM kept, each licence read on its own page; each fitted to the storyboard and mixed with the effects
+  and chimes; each muxed onto the draft's picture with Remotion's ffmpeg. The other eleven files deleted.
+- 2026-11-05 21:36: `docs/research/launch.md` part 4: the old storyboard and shot list replaced by a pointer to
+  `promo-video.md`. `promo-video.md` changed to match the build (worker's choices): 10 framings (the settings slide
+  starts at 12 s, the menu shot pans once), a capture pops by rising not scaling, captions leave at once on a cut,
+  the ring narrows to the session's name at 7 s, the blur strength rule, digit boxes in the counter, contact sheets at
+  full size, the measured draft size, how a found track is fitted, the files built. `media/README.md` and
+  `media/CREDITS.md` follow.
+- 2026-11-05 21:45: `check-rebuild` failed on the draft video: two renders of the same source differed in a few
+  frames by one to five levels (frame by frame with Remotion's ffmpeg and a small diff script). Cause: CSS `filter`
+  layers (the word blur, the faint terminal's blur, the cursor's drop shadow) render a level apart from run to run on
+  the GPU. Software GL (`--gl=swangle`) was 4 times slower and differed more. Fix: the blurs are text shadows and the
+  cursor's shadow a plain offset path; the camera's SVG blur and the focus backdrop filter stayed (they matched in
+  every repeat). After the word fix, one frame (636) still differed: the cursor's shadow, now fixed too.
+- 2026-11-05 21:58: round 1 Result written. Haik's five notes arrived (~21:50); round 2 started.
+- 2026-11-05 22:03 (round 2, note 1, music): candidate 3 put into `media/public/music/a-chill-fever.mp3` (the
+  original file, unchanged, SHA-256 in `CREDITS.md`); `data/music.json` names it with its fit (130 BPM, lift
+  44.33 s); `make-sounds.mjs` fits it on every build (`scripts/lib/fit-music.mjs`, split out of
+  `music-candidate.mjs`); the code bed stays as the fallback. `CREDITS.md`: its line with the licence from its own
+  page (License(s): CC0; "all my music is public domain"). Candidates 1 and 2 and their drafts deleted from the build
+  folder. Mix: -15.2 LUFS, -1.6 dBTP (`loudnorm`).
+- 2026-11-05 22:10 (note 2, the ending): found the cause: the picked track is 59 s and its lift late (44.3 s), so in
+  the round 1 candidate draft the music ran out at 25.2 s and the end card started on silence, then a synthetic
+  rising sweep, a whoosh and two pops. Now: the loopable track is played three times over before it is cut, so it
+  never runs out; on the end card it plays on for a beat, fades over 2.5 s into a soft ping-pong echo (dotted
+  eighth, darker each repeat) and is silent 0.1 s before the end (levels every 0.5 s from 26 s: -15, -19, -15, -19,
+  -21, -30, -40, -56 dB); the light at the lockup has one soft swell of air (unpitched, so it cannot clash with the
+  track's key, which the script could not pin down: G minor in its first bars, unclear later); no whoosh, sweep or
+  pops there. The code bed's fallback resolve lost its drum. The hit under the first light is lower (the limiter
+  pulled 4.9 dB there). Mix: -15.3 LUFS, -1.6 dBTP (`loudnorm`).
+- 2026-11-05 22:20 (note 3, pace): measured the density from the timeline (events in each 2 s window, caption holds):
+  the peaks were 6 events in 2 s at 8 s (lid cut, close, shut, lock and two lines within 1.5 s), at 12 s (slide,
+  light off, card, line, two rolls) and at 19.5 s (menu hover, pan, hover, click, two lines); the shortest holds were
+  "No second tool." 1.5 s and the tagline 1.6 s. Changes, on the beat grid, 30 s kept: the speed numbers fold into
+  the end card as one line (the spec's own lever: their 3 s go to the other shots), the menu shot gets 6 s (hover,
+  pan and click 1.5 s apart, not 1), the lock comes a beat later and its line is shorter ("Work goes on, locked."),
+  the settings rows roll 1 s apart, the "still working" chip is gone, and the tray shot gets 5 s for note 5. The
+  pace check still passes (10 framings of 2 to 4 s, longest gap 1.8 s); the end card may show three lines (the check
+  now allows that there only).
+- 2026-11-05 22:35 (note 4, quality), judged on full-size frames, not only sheets. Laptop rebuilt
+  (`LaptopTilt.tsx`): neutral graphite lit from the top left instead of flat olive, a real keyboard (six rows of
+  keys, a space bar), a touchpad, base edge and side faces, a lid with thickness, a shell and a front edge face that
+  carries the green light when shut, a screen with bezel, camera dot and a soft glass sheen, the terminal filling the
+  display, a soft floor shadow; sized and placed so the open lid and the shut laptop both clear the captions.
+  Terminal (`Terminal.tsx`): a window title bar with a tab icon and thin window marks, a drawn turning spinner
+  (not ASCII), a drawn check for the done line, a waiting caret. Settings card: a "Power settings" title with a
+  drawn plug, values in pills (green while Wakeshot holds, neutral once back), softer rim and top light. Chips and
+  the lock badge share one panel look (soft top light, hairline rim, deep shadow); the padlock redrawn. The counter
+  is no longer in the cut (note 3 folded the numbers into the end card).
+- 2026-11-05 22:35 (note 5, the cause and effect): the tray shot (5 to 10 s) now shows it exactly: a terminal (the
+  cause) left of the real tray rectangle (the effect, the 200% capture set at 2x). The glyph flies down from the
+  title and goes out as it lands on the idle icon (S1); at 5.5 s Enter is pressed, Claude Code starts work, and at
+  that same frame the icon turns holding (S2) with a ring of green spreading from it; the cursor comes to rest on the
+  icon and the holding tooltip shows (S3, ringed, at 6.5 s); at 8 s the terminal says done and at that same frame the
+  icon goes back to idle with the idle tooltip (S4). Lines: "Claude Code starts: it turns green." and "Done: it lets
+  go." The ring does not dim the terminal here, so cause and effect stay in one view. Built with stand-in sketches in
+  a new `tray` set in `data/shots.json` (600 x 300 at 200%, boxes glyph, tip, tipName, tipIdle); the old 3x tooltip
+  set is gone. The real S1 to S4 from the capture worker are not in yet (no `captures.json` at 22:35).
+- 2026-11-05 22:45: `draft-2.mp4` rendered (8.50 MB), its sheet looked at; checks run (Result, round 2);
+  `check-rebuild`: the soundtrack is the same bytes with the found track, the draft video still differs slightly.
+  `promo-video.md` (storyboard rows 3 to 8, counts, captures table, music) and `media/README.md` follow round 2.
+  Scratch files in the build folder deleted.
 
 ### Result
+
+**Round 1 done (2026-11-05 21:35, checks to 21:58): one full-size draft and three music candidates for Haik.**
+Round 2 (Haik's five notes of ~21:50) follows below.
+
+#### Round 1: built
+
+`media/` (owned whole):
+
+- `src/beat.ts` (120 BPM grid), `src/timeline.ts` rewritten: the 9 shots, every shared moment (`T`), the camera keys,
+  the focus keys, the caption blocks, the pace events, the sound cues and the music's shape, all on the grid.
+  `src/copy.ts`: every word, drafts.
+- `src/motion/`: `ease.ts`, `Camera.tsx` (world, view, velocity, whole-pixel offset), `DirectionalBlur.tsx`,
+  `Focus.tsx`, `Words.tsx`, `Cursor.tsx`, `Pop.tsx`, `Counter.tsx`, `Stage.tsx` (lift and fixed dither).
+- `src/promo/`: `Promo.tsx` (the 9 shots in one world), `Capture.tsx` (a set's shot at whole zoom, or its tagged
+  stand-in sketch; the final render throws on a stand-in), `Terminal.tsx`, `LaptopTilt.tsx` (CSS 3D),
+  `SettingsCard.tsx`, `world.ts`, `draft.ts`. The old `scenes.tsx` and `parts.tsx` removed.
+- `src/parts/Parts.tsx` and the Parts folder in `src/Root.tsx`. `src/art/`: the tray fade can draw on a clear
+  background (`motion.ts`, `Glyph.tsx`).
+- `data/shots.json`: two sets (tooltip at 3x, menu at 1x) with boxes and rows; stand-ins until Part B.
+- `scripts/`: `check-pace.mjs` (in `npm run check`), `contact-sheet.mjs`, `music-candidate.mjs`, `lib/audio.mjs`,
+  `make-sounds.mjs` rewritten, `build.mjs` (the sets, poster frame 120), `lib/png.mjs` (a writer). `package.json`:
+  `check-pace`, `sheet`.
+- `README.md` (commands, checks, decision 1 rewritten, decision 11 with the Part C choices), `CREDITS.md`.
+
+Docs: `docs/research/launch.md` part 4 points to `promo-video.md`; `promo-video.md` changed to match the build (Log).
+
+#### Round 1: outputs (build folder `<scratchpad>\p6-media-c\`)
+
+- `draft.mp4`: full size, DRAFT mark with second and frame, stand-in captures and numbers, code bed. 7.84 MB at
+  CRF 16, H.264 and AAC, 1920 x 1080, 30 fps, 30.02 s, -15.1 LUFS, true peak -1.3 dBTP. `draft-poster.png`,
+  `draft-sheet.png` (121 tiles, every 7.5 frames).
+- Music: `draft-music-1-Hope_On_Repeat.mp4`, `draft-music-2-better_days_0.mp4`, `draft-music-3-a_chill_fever_0.mp4`
+  (the same picture with each candidate); fitted tracks and mixes in `music/`, the originals in `music-raw/`. Links,
+  licences and fit numbers in `media/CREDITS.md`.
+
+#### Round 1: checks
+
+| Check | Outcome |
+|---|---|
+| `npm run check` (dashes, emoji, credits, colour pairs, pace) | ok: 49 starts on the beat, 10 framings of 2.0 to 4.0 s, 109 new things before the end card, longest gap 1.80 s |
+| `npm run typecheck` | ok |
+| `check-art.mjs` | ok, all 9,458,740 pixels |
+| `check-video --draft` | ok: h264, 1920 x 1080, 30 fps, yuv420p, aac, 30.02 s, 7.84 MB; both loops ok |
+| Loudness (ffmpeg `loudnorm`) | draft -15.1 LUFS, -1.3 dBTP; candidates -15.3, -15.3, -15.2 LUFS; true peak -1.6, -0.7 (over -1), -1.5 dBTP |
+| `check-rebuild` | loops, soundtrack and poster the same bytes; the draft video differs (see open items) |
+
+#### Round 1: open items and findings
+
+1. `check-rebuild` on the draft video still fails, now by very little: after the filter fixes, two renders differ
+   only in 4 to 13 pixels by one level at the stand-in menu's rounded corner (frames 583 on, under a `clip-path`),
+   and the encoder carries that to the end of the menu shot. The loops, the soundtrack and the poster rebuild to the
+   same bytes. Part B's real captures replace the sketch; check again then, and if a clipped capture still differs,
+   draw the pops with whole-picture swaps instead of clips.
+2. Candidate 2's true peak is -0.7 dBTP after AAC (target -1 or lower); the pick's mix gets its own check.
+3. The tempos were found by the script, not by ear. Freesound needs a login to download, so no Freesound track.
+4. The draft is 7.84 MB at CRF 16, close to the spec's 8 MB line; real captures may push it over (then CRF 18).
+5. After the menu click (21 to 23 s) the whole frame dims to 35% around a small ring on the icon, which may read as
+   empty: for Haik's look.
+
+### Round 2 (Haik's notes, 2026-11-05 ~21:50)
+
+Notes, in order: 1. music: candidate 3; 2. the ending sounds are not good; 3. a little fast at some point; 4. the
+drawn parts look like a draft (the laptop first); 5. show exactly that Claude Code starts work and the icon turns
+green, then goes back when it finishes (real 200% captures coming from a capture worker; stand-ins meanwhile).
+Log in Part C's Log above; result here when done.
+
+#### Round 2: what changed per note (2026-11-05 22:40)
+
+1. **Music: candidate 3.** "A Chill Fever (Loopable)" by Pro Sensory, CC0 (licence read on its own page), is in
+   `media/public/music/a-chill-fever.mp3` with its line in `media/CREDITS.md`; `data/music.json` holds its fit and
+   `make-sounds.mjs` fits it on every build (`scripts/lib/fit-music.mjs`). Candidates 1 and 2 deleted from the build
+   folder. The code bed stays as the fallback.
+2. **The ending sounds.** Cause found: the track ran out at 25.2 s, so the end card opened on silence, then a sweep, a
+   whoosh and two pops. Now the loopable track never runs out, plays on a beat into the end card, fades over 2.5 s
+   into a soft echo and is silent 0.1 s before the end; the lockup has one soft swell of air; no sweep, whoosh or pops.
+3. **Pace.** The densest stretches (6 events in 2 s at 8, 12 and 19.5 s) and the shortest holds (1.5 and 1.6 s) were
+   measured from the timeline. The speed numbers fold into the end card (one line, build and date in small print), the
+   menu shot gets 6 s, the lid and settings beats are spread, the extra chip is gone. 30 s and the beat grid kept.
+4. **Quality.** The laptop drawn again (graphite, keys, touchpad, edges, a lid with thickness, the light on its front
+   edge, glass, floor shadow), the terminal as a finished window (title bar, drawn spinner and check), the settings
+   card with a title and pills, one panel look for chips and badge. Checked on full-size frames. Nothing needed a
+   different medium; the stand-in sketches of the captures stay plain on purpose (the real captures replace them).
+5. **Claude Code turns it green, then it lets go.** The tray shot (5 to 10 s): terminal left, the real 200% tray
+   rectangle at 2x right; at the frame Claude Code starts the icon turns holding (a green ring spreads from it), the
+   holding tooltip shows under the cursor, and at the frame the work ends the icon goes back to idle with the idle
+   tooltip. Built on stand-ins (set `tray`, S1 to S4); the real captures swap in when the orchestrator says they are
+   ready (file, w, h, scale and the boxes from the capture's `captures.json`).
+
+#### Round 2: outputs and checks
+
+- `<scratchpad>\p6-media-c\draft-2.mp4`: 8.50 MB at CRF 16, H.264 and AAC, 1920 x 1080, 30 fps, 30.02 s, DRAFT
+  mark; -15.4 LUFS, true peak -1.2 dBTP (`loudnorm`). `draft-2-sheet.png` (121 tiles), `draft-2-poster.png`.
+- `npm run check` ok (63 files, 7 assets credited, pace: 49 starts on the beat, 10 framings of 2 to 4 s, longest
+  gap 1.8 s); `npm run typecheck` ok; `check-art.mjs` ok; `check-video --draft` ok.
+
+#### Round 2: open items and findings
+
+1. The draft is now 8.5 MB, over the spec's 8 MB line for CRF 16 (still under GitHub's 10 MB); by the spec's rule
+   the final goes to CRF 18, to be checked on the real captures for blocking on the plate (Part A saw it at CRF 20).
+2. The real S1 to S4 are not in yet; the swap is a data change in `data/shots.json` plus a look at the boxes.
+3. The track's tempo (130) and lift (44.33 s) were found by script, not by ear; the key could not be pinned down, so
+   nothing pitched is added over it.
+4. Round 1's open items 1 (`check-rebuild` on the draft video) and 5 (the dim after the menu click) still stand;
+   the round 2 rebuild result is in the line below.
+5. `check-rebuild` after round 2 (22:45): both loops, the soundtrack (now with the found track through ffmpeg) and
+   the poster rebuild to the same bytes; the draft video still differs, as in round 1 item 1.
