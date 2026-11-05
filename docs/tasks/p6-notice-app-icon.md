@@ -1,6 +1,6 @@
 # Show the Wakeshot icon in the notice header
 
-Phase: 6 (tray fix). Status: blocked (Part A done 2026-11-05; Part B needs Haik at the screen). Needs Haik: Part B only, about 5 minutes at the screen (he looks at two notice
+Phase: 6 (tray fix). Status: done (Part A and Part B 2026-11-05; Part B bundled with `p6-screen-reruns`). Needs Haik: Part B only, about 5 minutes at the screen (he looks at two notice
 headers). Agent: `wakeshot-worker`. Size: about 100K tokens (Part A about 85K, Part B about 15K).
 Written by the orchestrator, 2026-11-05, from `docs/tasks/p6-int-haik-checks.md` "Found outside scope" 5 and 11.
 Runs after: `p6-real-install-guard` (both own `packaging/e2e.ps1`). Parallel with: `p2-6-floor-grace` (it owns
@@ -115,6 +115,21 @@ Agent:
     this laptop (14 balloons went under it before the key existed). A cheap check is a sign-out and sign-in by Haik,
     then steps 3 to 10 again (a card that signs out runs only when no other agent runs).
 
+#### Haik's steps as sent, part 1 (steps 6 and 7; 2026-11-05 10:2x)
+
+Before you start: the DELL dock is plugged in, the lid is open, you are signed in, and Do not disturb is off. Until
+the orchestrator says the session is over, change no power setting in Settings or Control Panel (a test copy of your
+plan is active, and such a change would write your own plan). Wakeshot is installed (a test install) and not started.
+Your other Claude Code session may work during this part.
+
+1. Open Start, type `Wakeshot`, open it. A banner comes up at the bottom right of the DELL screen within a few
+   seconds. Say what the small picture left of "Wakeshot" in its header looks like: the violet square with the gold
+   sun and a white line (as in the Start menu entry), a plain white square, or something else; and whether its
+   colours look like the app icon's (a blue sun or an orange square means Windows swapped red and blue). If no
+   banner comes, check that Do not disturb is off, and say so.
+2. Press Win+N and say whether a Wakeshot notice is listed there, then press Esc.
+3. Leave Wakeshot running. Send the orchestrator your answers to 1 and 2.
+
 ## Acceptance checks
 
 - `cargo fmt` on own files; `cargo clippy -p` for each changed package (with and without `--all-targets`);
@@ -169,6 +184,12 @@ Taken while Haik slept (2026-11-05), each with its reason and when to change it.
    `...\Notifications\Settings\NotifyIconGeneratedAumid_<id>`: an installed tray's balloons go under the Velopack id,
    and the generated key was not made for it (`p6-int-haik-checks` finding 5). The new app id key is not listed
    there: the uninstall removes it.
+9. **Part B: the worker quits the tray with `WM_CLOSE` posted to its `Wakeshot.Loop` window**, since `taskkill`
+   without `/F` did not quit it (Found outside scope 6). Same message, the tray's own Quit path. Change it when
+   taskkill works on the tray.
+10. **Part B: Haik starts the second tray himself** with `<S>\start-direct.cmd` (`explorer.exe "<exe>"`, the start
+    step 8 names), so he is at the screen when the banner shows; the relay takes minutes and a banner stays about
+    5 s. Change it when Haik and the worker work at the same time.
 
 ## Found outside scope
 
@@ -188,6 +209,20 @@ Problems seen but not fixed.
    Whether Windows keeps them in the notification centre now that the id is registered: Part B step 7.
 5. **Commit `assets/wakeshot-notice.png` with the code.** `pack.ps1` now refuses to pack without it, so the release
    workflow would fail.
+6. **Part B: `taskkill /PID <tray>` without `/F` does not quit the installed tray** (2026-11-05 10:29 elevated,
+   10:30 at Medium; release x64 of the tree at 10:14). taskkill says "SUCCESS: Sent termination signal", the tray
+   logs nothing and runs on. A `WM_CLOSE` posted to its `Wakeshot.Loop` window quits it in 138 ms with the full
+   restore. The tray's top-level windows in `EnumWindows` order are `Wakeshot.TrayMenu`, `Wakeshot.TrayIcon`, then
+   `Wakeshot.Loop`; `p5-menu-view` found the menu and icon windows ignore a sent `WM_CLOSE`. Likely cause: taskkill
+   posts to only one window of the thread, the first (**not verified**). Docs that say otherwise:
+   `docs/architecture.md` line 685, `docs/phases/06-integration.md` line 80, the comment in
+   `crates/wakeshot-windows/src/tray/icon.rs` line 573, and this card's step 8 ("it quits in about 0.2 s"). Who is
+   hit: scripts and users who end the tray with taskkill (it keeps holding). A fix to weigh: the menu and icon
+   windows pass `WM_CLOSE` on to the loop as Quit; a test with real taskkill. No product decision.
+7. **`docs/architecture.md` section 5 "Notices" and `docs/research.md` "Notice header icon checks"** can now say what
+   Part B found: the header shows the app icon from both start paths, and a balloon is a banner-only toast that
+   Win+N never keeps (`research.md` "Screen session of 2026-11-05"). The old line "Whether Windows keeps them in the
+   notification centre now that the id is registered: Part B step 7" (item 4 above) is answered: no.
 
 ## Log
 
@@ -209,10 +244,111 @@ Problems seen but not fixed.
   02:50:16: 102 passed, 0 failed. Nothing installed after it; Haik's plan as before.
 - 2026-11-05 02:58: Part B steps, decisions and Result written; build folder and packs deleted (logs kept in the
   scratch folder). Status blocked on Part B.
+- 2026-11-05 09:5x: Part B started (worker, bundle with `p6-screen-reruns`, in that card's order). Orchestrator: no
+  other keep-awake app, no Wakeshot installed or running, clang installed (no installer runs), Haik on the DELL dock
+  only. `<S>` = `C:\Users\haika\AppData\Local\Temp\claude\f7c2c08a8f04f07b\845942db-47c9-4611-8481-99965de4381d\scratchpad\p6-notice-app-icon\partB`.
+- 2026-11-05 10:11:06: step 1 guard passed (elevated, read only, `<S>\tools\state.ps1`): no lock
+  `Local\Wakeshot.Tray`, no install trace (install folder, uninstall key, Run, RunOnce and switch values, Path entry,
+  app id key, shortcut, Velopack temp folder, `HaikAsatryan.*` folders), no journal, no data folder. Step 2 BEFORE
+  (`<S>\before.json`): Balanced the only plan and active; lid 1 and 1, sleep 18000 and 18000, energy saver DC 30,
+  `/qh` hash `C64AFDB1CFDD13CF` (as at 02:50); Windows' `Notifications\Settings\velopack.HaikAsatryan.Wakeshot`:
+  `PeriodicNotificationCount` 14, `PeriodicInteractionCount` 1, `LastNotificationAddedTime` 134383015833080771;
+  `%LocalAppData%\Wakeshot` absent; no Wakeshot process.
+- 2026-11-05 10:12 to 10:15: (bundle: the stale icon key deleted and the `%TEMP%` leftovers gone first, see
+  `p6-screen-reruns`; no Visual Studio Installer runs.) Step 4 build: release x64 of the tree into `<S>\target`, exit 0
+  in 116 s; tray 2,743,808 bytes (SHA256 `90FBEE166F6DDEE1...`), CLI 558,080 (`078B68AD661B6A0C...`); newest source
+  `wakeshot-core` `scenarios/props.rs` 02:59:00. `pack.ps1` into `<S>\pack`: exit 0 in 6 s, Setup.exe 11,766,618
+  bytes.
+- 2026-11-05 10:15:29: steps 3 and 4 in one script at Medium (`<S>\tools\install.cmd` opened with `explorer.exe`;
+  `install-medium.log`): copy `78a8cd32-8e80-47ba-9dea-6fb189411195` "Wakeshot test notice" made and active, then
+  `Setup.exe --silent` exit 0 in 5.2 s; no process from the install folder 3 s later. The copy's `/qh` equals
+  Balanced's but its name lines. Checks (elevated, 10:16): the app id key holds `DisplayName` "Wakeshot" and `IconUri`
+  `C:\Users\haika\AppData\Local\HaikAsatryan.Wakeshot\current\wakeshot-notice.png`, both `ExpandString`; the PNG is
+  there and byte-equal to `assets/wakeshot-notice.png`; installed tray hash equals the build; no tray runs; no
+  `config.json` (data folder holds only the hook's log: install hook, Run value, Path, "notice app id ... registered
+  with its icon", no journal).
+- 2026-11-05 10:19:17: step 5 grab loop started, hidden, pid 23188 (`<S>\tools\grab.ps1`, primary screen = the DELL,
+  3840 by 2160, per-monitor DPI aware; 15 s of grabs from the tray's start, not 10, for margin; waits up to 3 h) into
+  `<S>\grabs-start-menu\`. A test grab at 10:10 gave a real picture (deleted).
+- 2026-11-05 10:2x: Status blocked on Haik's part 1 (steps 6 and 7, below).
+- 2026-11-05 10:3x: resumed with Haik's part 1 answers (relayed): step 6 "yes" (the violet square with the gold sun;
+  no colour swap named); step 7 "no but it might be due to the fact that I have clicked notificaiton". Also: during
+  the first start he opened Settings > Taskbar > Other system tray icons and Wakeshot was not in the list.
+- 2026-11-05 10:24:25: the Start menu start, from the tray log and the grabs: tray pid 17944 started 10:24:25.610;
+  "notice shown: FirstRun" 10:24:25.666; "notice click opened taskbar settings" 10:24:30.698 (Haik's click, 5 s
+  later). Grab loop 23188: first grab 10:24:25.999, 37 grabs to 10:24:40.6, then it ended. `grab-04-102427-385.png`
+  (crop `<S>\crop-start-menu-04.png`): the banner header shows the violet plate with the gold sun and the name
+  "Wakeshot"; colours right; the body shows the large app icon and the first-run text. Then Keep awake on 10:26:08
+  and off 10:26:16 (Haik), and Automatic held for Claude Code from 10:26:57 (the copy written, as designed).
+- 2026-11-05 10:28: step 7 facts from Windows' own data. `Notifications\Settings\velopack.HaikAsatryan.Wakeshot`:
+  `PeriodicNotificationCount` 14 to 15 and `LastNotificationAddedTime` 10:24:25.711 (the notice went under the
+  registered id), `PeriodicInteractionCount` 1 to 2 (the click). A read-only copy of
+  `%LocalAppData%\Microsoft\Windows\Notifications\wpndatabase.db` (with its WAL, into `<S>\wpn\`, read with
+  Python `sqlite3`): handler 356 `velopack.HaikAsatryan.Wakeshot` holds 0 notifications now; every Wakeshot balloon
+  payload in the file and the WAL, the first-run one too, is stored as `<toast bannerOnly="true">` with
+  `ToastImageAndText02`. So Windows turns a balloon into a banner-only toast; that such a toast is never kept in the
+  notification centre, with or without a click, is inferred from the attribute's name: **not verified** in Microsoft
+  docs. Whether this notice was listed before the click: cannot be told from the data (a click removes it either way).
+- 2026-11-05 10:29: step 8. `taskkill /PID 17944` (no `/F`), elevated at 10:29 and at Medium at 10:30:15: both said
+  "SUCCESS: Sent termination signal", the tray logged nothing and ran on (checked for 10 s and 12 s). Its top-level
+  windows, in `EnumWindows` order: `Wakeshot.TrayMenu`, `Wakeshot.TrayIcon`, `Wakeshot.Loop`, `MSCTFIME UI`, `IME`.
+  A `WM_CLOSE` posted to the `Wakeshot.Loop` window at 10:30:53.6 quit it in 138 ms: restore of the copy (lid 0 to 1
+  twice, sleep DC 0 to 18000), journal and RunOnce value gone, guard 20772 stopped, "Wakeshot ends with code 0"
+  (Found outside scope 6). The copy's `/qh` then equal to Balanced's but the name lines; Balanced `C64AFDB1CFDD13CF`.
+  `config.json` (`{"version": 1, "automatic": true}`, kept as `<S>\config-first-start.json`) deleted 10:31:08. Grab
+  loop for the direct start: pid 35404 from 10:31:25 into `<S>\grabs-direct\`. Haik starts the tray himself with
+  `<S>\start-direct.cmd` (`p6-screen-reruns` decision 2).
+- 2026-11-05 10:3x: Status blocked on Haik's part 2 (step 9 is its section A; the text is in `p6-screen-reruns`).
+- 2026-11-05 10:50: step 9 (part 2 section A), Haik's words: "1. Not sure what color are you speaking about as in
+  tray it's not colorful, just white. And not sure what is header. ... 2. Win+N case is again not working.
+  Notification comes but not persist in history of windows notifications." So he looked at the tray glyph, not the
+  banner header; the header is taken from the grabs (orchestrator's call). Direct start: tray pid 34172 started
+  10:45:33.428 by `start-direct.cmd`; "notice shown: FirstRun" 10:45:33.484; no click logged. Grab loop 35404: 38
+  grabs 10:45:33.7 to 10:45:48.9. `grab-05-104535-568.png` (crop `<S>\crop-direct-05.png`): the header shows the
+  violet plate with the gold sun and "Wakeshot", the same as from Start. Zoomed side by side (`<S>\header-icons-x8.png`,
+  40 px crops at 3288,1838 of both grabs): the two header pictures are the same, about 22 px, plate pixel
+  `#7250F3` (brand plate `#7957F4` to `#6B49F3`), gold sun, light line; no red and blue swap. Windows'
+  `Notifications\Settings` key: count 16, last added 10:45:33.522, interactions still 2 (no click). Not kept in Win+N
+  with no click either, so the click of part 1 was not the reason: a balloon is a banner-only toast (10:28 entry).
+- 2026-11-05 11:29:58 to 11:31: step 10 (after the reruns of `p6-screen-reruns`). Tray log and System log saved to
+  `<S>\partB-wakeshot.log` and `<S>\partB-system-power.txt` first. Quit: `WM_CLOSE` posted to the `Wakeshot.Loop`
+  window (decision 9; the same window order as at 10:29): restore of the copy, journal and RunOnce value gone, guard
+  stopped, exit 0, 159 ms. `Update.exe --uninstall --silent` at Medium (`<S>\tools\uninstall.cmd` via `explorer.exe`)
+  11:30:17: exit 0 in 4.3 s, install folder gone 4.4 s after the start. `powercfg /setactive` Balanced and `/delete`
+  the copy: exit 0 each. AFTER (`<S>\after.json`, 11:30:32) against BEFORE: the same active plan (Balanced, the only
+  plan), lid 1 and 1, sleep 18000 and 18000, energy saver DC 30, `/qh` `C64AFDB1CFDD13CF`, Run, RunOnce,
+  StartupApproved and Path; no install trace (the app id key, the install folder, the shortcut, the Run value, the
+  uninstall key, the Path entry all gone), no `%LocalAppData%\Wakeshot`, no journal, no Wakeshot process. Windows'
+  `Notifications\Settings\velopack.HaikAsatryan.Wakeshot` stays: `PeriodicNotificationCount` 19,
+  `PeriodicInteractionCount` 2, last added 11:24:39.069. `<S>\target` and `<S>\pack` deleted 11:30:48. Status done.
 
 ## Result
 
-Part A done 2026-11-05; Part B (Haik at the screen) is open.
+**Done 2026-11-05.** Part A done at 02:58; Part B done 10:11 to 11:31, bundled with `p6-screen-reruns`.
+
+Part B:
+
+| Step | Outcome |
+|---|---|
+| 1 guard, 2 BEFORE | Passed; Balanced lid 1 and 1, sleep 18000 and 18000, `/qh` `C64AFDB1CFDD13CF`; Windows' notification count 14 |
+| 3 to 5 | Copy "Wakeshot test notice" active; release x64 built, packed, installed at Medium; app id key and PNG right; no tray, no `config.json`; grab loop |
+| 6 Start menu start | **Pass.** Haik: "yes". Grab: violet plate, gold sun, "Wakeshot" in the header, colours right |
+| 7 Win+N | No Wakeshot notice. Windows stores each balloon as a banner-only toast (`bannerOnly="true"`), so it is not kept, with or without a click (inferred from the attribute; Haik clicked this one) |
+| 8 quit, second start | `taskkill` without `/F` did not quit the tray (Found outside scope 6); a `WM_CLOSE` to its loop window did. Haik started the exe himself (decision 10) |
+| 9 direct start | **Pass by the grabs** (Haik looked at the tray glyph): the same header picture and name as step 6. Not in Win+N either, with no click |
+| 10 teardown | Uninstall at Medium exit 0; Balanced active, copy deleted; AFTER equals BEFORE; build folder and packs deleted |
+| 11 | Not needed: no white square |
+
+Acceptance check, Part B: both headers show the Wakeshot icon and name: pass, step 6 by Haik's eye and the grabs,
+step 9 by the grabs (the orchestrator's call, 2026-11-05). Part A's checks: see below.
+
+Open items for the orchestrator: Found outside scope 1 to 5 (from Part A), 6 (taskkill does not quit the tray: a fix
+card; it also makes `docs/architecture.md` line 685, `docs/phases/06-integration.md` line 80 and the `icon.rs` line
+573 comment wrong as they stand) and 7 below. The Win+N result means notices stay banner only; whether Haik wants
+them kept in the notification centre would be a product question (it would take toasts, not balloons); my default:
+leave as is.
+
+Part A (2026-11-05 02:58), kept for the record:
 
 What changed:
 

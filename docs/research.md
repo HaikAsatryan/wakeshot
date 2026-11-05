@@ -4432,6 +4432,69 @@ The card's Result has the per-block table; these are the facts.
   `Notifications\Settings\velopack.HaikAsatryan.Wakeshot` key stays after the uninstall, like `NotifyIconSettings`.
   **Verified** (`state.ps1` reads compared field by field).
 
+### Screen session of 2026-11-05 (`p6-screen-reruns`, `p6-notice-app-icon` Part B)
+
+10:11 to 11:31: the installed release x64 0.1.0 of the tree at 10:14, the plan copy "Wakeshot test notice" active,
+Haik on the DELL dock. Sources: the tray log, the System log (Kernel-Power), screen grabs of the DELL screen, registry
+reads, Haik's words as the orchestrator relayed them. Evidence and times: the two cards' Logs.
+
+- **The notice header shows the Wakeshot icon from both start paths.** With the app id key registered, the
+  first-run banner from the Start menu (10:24:25) and from the exe itself (`explorer.exe "<exe>"`, as the Run value
+  starts it; 10:45:33) both show the violet plate with the gold sun, about 22 px, and the name "Wakeshot"; plate pixel
+  `#7250F3`, so no red and blue swap. Haik saw it from Start ("yes"); for the second he looked at the tray glyph, so
+  the grabs decide. **Verified** (grabs).
+- **A balloon is never kept in the notification centre.** Windows filed each balloon under
+  `velopack.HaikAsatryan.Wakeshot` (`PeriodicNotificationCount` 14 to 19 for the day's five) and stores its payload
+  as `<toast bannerOnly="true">` with `ToastImageAndText02` (a read-only copy of `wpndatabase.db` and its WAL). Win+N
+  listed none, after a click (10:24) and with no click (10:45). That `bannerOnly` is why: inferred from the name,
+  **not verified** in Microsoft docs.
+- **A `NotifyIconSettings` entry deleted while Explorer runs comes back incomplete.** After `reg delete` of
+  `2334163346184210159` (10:11:57), the tray's first add (10:24:25.6) made the entry again within 49 ms with only
+  `IconSnapshot` (a fresh 24 px picture of the idle tray glyph; the Cup is gone) and no `ExecutablePath`, `IconGuid`
+  or `IsPromoted`; a second start added nothing (read 10:29, 10:50, 11:30). It is the only one of the 18 entries
+  without `ExecutablePath`, and Settings > Taskbar > Other system tray icons did not list Wakeshot, also after
+  Settings was closed and opened again (Haik). **Verified** (reads, Haik). Why Explorer wrote only the snapshot, and
+  that Settings skips an entry with no `ExecutablePath`: **not verified**.
+- **Typing rerun: input held the work end countdown off; typing itself is not shown.** Lid close 10:52:50.3 (Haik
+  noted 10:41, likely a misread clock), work end 10:53:38.7, lid open 11:02:38.5: 9 min 48 s closed, no countdown
+  end, no sound, no Kernel-Power 506 or 507 between. The countdown reads only `GetLastInputInfo`, clamped to the last
+  resume or unlock (`core/lid.rs` `check_countdown`, `policy/ending.rs`), so Windows saw input at least every 5
+  minutes. Haik typed to search a video, then watched it. Whether a playing video moves the input tick: **not
+  verified** (an `ES_SYSTEM_REQUIRED` hold did not, "Power settings spike" above).
+- **Floor grace on the dock.** `floor-on` set the copy's threshold to 99 at 97% (11:11:56). Keep awake 11:13:00. A
+  pull and replug "at once" lost AC for 6.9 s (11:13:33.4 to 11:13:40.3): the 30 s wait started and ended, with no
+  step back, sound or notice. A pull 18.4 s later (11:13:58.7) stepped back 4.7 s after it, 30.0 s after the short
+  drop's loss: AC had lasted under 30 s, so the wait kept the first loss, as `product.md` "Battery floor" says. One
+  StepBack notice (11:14:03.9) and one chime (11:14:04.4). Dock in 11:15:18.8: holding again, no sound.
+  **Verified** (log, Haik).
+- **The lid closed under the floor with the 30 s wait: Windows did not sleep at the restore; Wakeshot's 5-minute
+  route ran.** Lid close 11:16:12.5 (lock, chime 1.8 s later); the lock screen's timeout turned the screen off at
+  11:16:44 (506 reason 12). Pull 11:16:24.75. At 11:16:54.80, 30.0 s later, the step back ("lock, with the step
+  back's sound and no chime") restored the lid actions and battery sleep; plan applied 11:16:55.22; floor chime
+  11:16:56.5 (Haik: "after 30 second"); no sleep then. Floor countdown due 11:20:58.9 ("300 s without input"), sleep
+  check passed, "going to sleep" sound 11:21:00.8 (Haik: "around 5 min"), 1-minute timeouts 11:21:00.8, Windows slept
+  11:21:13.9 (566). Lid open 11:24:36.4 (507 reason 15): the screen came on by itself at the sign-in page (Haik);
+  asleep 3 min 23 s; timeouts back 11:24:38.3. In block 4 the restore came 1 s after the unplug with the screen on,
+  here 30 s after it with the screen already off; which difference made Windows act then: **not verified**. The
+  order of events: **verified** (logs).
+- **A notice lost at the lid open.** The StepBack notice showed at 11:24:39.004; 6 ms later the closed-lid report
+  failed (`Shell_NotifyIconW` failed with 1462, "Incorrect size argument") and was not tried again. Why: **not
+  verified**. **Verified** (log).
+- **The dock did not charge at 96 to 97%.** On AC the battery went from 78,110 to 77,970 mWh (11:12:48 to 11:13:33),
+  77,740 to 77,720 (11:15:19 to 11:16:24) and 77,120 to 77,110 (11:25:40 to 11:28:39; Kernel-Power 105 readings); at
+  92% the night before it charged at about 25 W. A charge start threshold between 92 and 96%: inferred, **not
+  verified**. The percent is rounded: 97.3% read 97 and 99.9% read 100 (inferred from readings close in time).
+- **`taskkill /PID` without `/F` does not quit the installed tray.** It says "SUCCESS: Sent termination signal" and
+  the tray runs on (10:29 elevated, 10:30 at Medium). Its top-level windows in `EnumWindows` order are
+  `Wakeshot.TrayMenu`, `Wakeshot.TrayIcon`, `Wakeshot.Loop`; a `WM_CLOSE` posted to `Wakeshot.Loop` quit it in 138
+  and 159 ms with the full restore. **Verified** (runs). That taskkill posts to only one window: **not verified**.
+- **`vpk pack` writes `%TEMP%\velopack`.** Its write time became the pack's (10:14:54.2); Setup and the uninstall left
+  it so; it stays empty. **Verified** (reads).
+- **Teardown.** Quit 11:29:58.6 (exit 0), `Update.exe --uninstall --silent` at Medium 11:30:17 (exit 0 in 4.3 s,
+  install folder gone), Balanced active, copy deleted. AFTER (11:30:32) equals BEFORE on the active plan, Balanced's
+  lid 1 and 1, sleep 18000 and 18000, energy saver DC 30, `/qh` `C64AFDB1CFDD13CF`, Run, RunOnce, StartupApproved and
+  Path, with no install trace, data folder or process. **Verified** (reads compared field by field).
+
 ## Real install guard checks
 
 Checked 2026-11-05 02:00 to 02:25 for card `docs/tasks/p6-real-install-guard.md`, elevated, on scratch names, keys
