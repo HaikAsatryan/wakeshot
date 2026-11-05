@@ -1,6 +1,6 @@
 # Speed numbers, pictures, the icon loop and the 30 second video
 
-Phase: 6. Status: Part A done (2026-11-04: the loop, the video pipeline with stand-ins, the media docs, the speed script); Part B waits for an installed release build, the screen slot with a real Claude Code session, 10 idle minutes and Haik's look. Needs Haik: yes: he watches the video and the loop and says yes or what to change; he stays
+Phase: 6. Status: Part A done (2026-11-04: the loop, the video pipeline with stand-ins, the media docs, the speed script); Part C in progress (2026-11-05: the dynamic cut with stand-ins, `docs/research/promo-video.md`); Part B after Part C: the installed build, the screen slot with a real Claude Code session, 10 idle minutes and Haik's look. Needs Haik: yes: he watches the video and the loop and says yes or what to change; he stays
 off the PC for about 10 minutes while the captures run. Agent: `wakeshot-worker`. Size: about 120K tokens.
 Real laptop: yes: screen captures of the real tray during one real Claude Code test session, light and dark; the real
 app holds and restores the power settings during it. One card at a time on the laptop.
@@ -179,3 +179,51 @@ Code test session, 10 idle minutes and Haik's look.
 
 Open: the Windows screenshot terms of Microsoft and the bundled FFmpeg and Chrome licences are not checked
 (`CREDITS.md` says so).
+
+## Part C: the dynamic cut (2026-11-05)
+
+Written by the orchestrator of Haik's brand session. Haik wants the 30 s video dynamic: things change every 0.5 to
+1 s, the camera moves between ideas, one thing at a time, large. The spec is `docs/research/promo-video.md` (style
+rules with numbers, a 9 shot storyboard, the captures Part B needs, the parts to build, music and formats). Its seven
+questions were answered with their defaults as orchestrator decisions for Haik's review (Haik away: "can start media
+... even without question"). Part C builds the cut with stand-in captures and stand-in numbers; Part B then swaps in
+the real captures and the measured numbers and renders the final.
+
+Status: in progress. Needs Haik: after it, he watches the draft (about 10 min) and picks the music by ear from three
+candidates (about 10 min). Agent: `wakeshot-worker`. Size: about 200K tokens.
+Real laptop: no screen, no power settings, no Claude Code test session. Renders only, one at a time (concurrency 4).
+Owns: `media/` and `docs/research/launch.md` part 4 (the storyboard and shot list there become a pointer to
+`promo-video.md`). `docs/research/promo-video.md` only to keep it true to what was built (say so in the Log).
+Build folder: `<scratchpad>\p6-media-c\` (renders, contact sheets, music candidates).
+
+### Deliverables
+
+1. The motion parts and scenes of `promo-video.md` "The build", in its order: the parts first, each on its own
+   composition, then the 9 shots in storyboard order, each checked by its own contact sheet before the next.
+2. `scripts/check-pace.mjs` as the spec says, run by `npm run check` (or its own script), passing.
+3. Effects made in code; Kenney CC0 sounds only where a code sound is weak. Wakeshot's own chimes where the app plays
+   them.
+4. Music: three CC0 candidates (110 to 130 BPM, calm electronic, a lift after a sparse intro), each cut to 30 s on the
+   storyboard and conformed to 120 BPM, kept in the build folder until Haik picks one (the pick then goes into
+   `media/` with its line in `CREDITS.md`); the 120 BPM sequencer in code as the fallback and the draft's default
+   bed. Licence checked on each track's own page.
+5. One full-size draft with the DRAFT mark, at `<scratchpad>\p6-media-c\draft.mp4`, and its contact sheet; its file
+   size and the CRF used in the Result.
+6. `media/README.md` and `media/CREDITS.md` follow every change.
+
+### Rules
+
+- `promo-video.md` "How to brief the agent that builds it" applies. Remotion's agent skills: read them from GitHub
+  (`remotion-dev/skills`) or install them outside the repo; add no skill files to the repo. Check every API against
+  the installed 4.0.540 types. A new `@remotion/*` package only pinned to 4.0.540, and only after a spike shows it
+  renders the same bytes twice (`check-rebuild`).
+- Every claim on screen is something v1 does (`docs/product.md`); words on screen are drafts. UI words come only from
+  captures. No agent but Claude Code.
+- No scene, layout or line from another app's video. Describe the style only in our own words and numbers.
+- Keep `npm run check`, `check-video` (as it applies to a draft) and `check-rebuild` passing.
+
+### Log
+
+- 2026-11-05 ~21:00: Part C written by the orchestrator.
+
+### Result
