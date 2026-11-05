@@ -5,7 +5,8 @@ off the PC for about 10 minutes while the captures run. Agent: `wakeshot-worker`
 Real laptop: yes: screen captures of the real tray during one real Claude Code test session, light and dark; the real
 app holds and restores the power settings during it. One card at a time on the laptop.
 Runs after: `p6-launch-research` (video tool, storyboard, shot list, specs, sound sources); the tray track's
-`p5-haik-check` (final icon and menu words); integration's `p6-int-real-e2e` (the real app works end to end).
+`p5-haik-check` (menu words); `p6-brand-apply-art` and `p6-brand-apply-media` (the final icon and its port into
+`media/`, both done 2026-11-05); integration's `p6-int-real-e2e` (the real app works end to end).
 Parallel with: any card that does not use the screen, the sound, a Claude Code test session or the power settings.
 Build folder: `<scratchpad>\p6-media\` (exes, raw captures, renders).
 
@@ -19,7 +20,8 @@ with sound and effects, animated in code. Everything shows only what Wakeshot re
 
 - `docs/tasks/p6-launch-research.md`, Result; `docs/research/launch.md` parts 1 and 4.
 - `docs/product.md`: "The job", "Distribution" (the README and video lines).
-- The tray track's icon art and menu (`p5-icon-art`, `p5-haik-check` Results).
+- The brand: `docs/brand.md`; what `p6-brand-apply-media` changed in `media/` (its Result and decisions); the menu:
+  `p5-haik-check` Result.
 
 ## Deliverables
 
@@ -109,19 +111,22 @@ Code test session, 10 idle minutes and Haik's look.
 
 - `package.json`, `package-lock.json`, `tsconfig.json`, `.gitignore` (`node_modules/`, `.remotion/`,
   `public/sound/`, `out/draft/`).
-- `src/art/sunrise.ts`: the Sunrise geometry and raster, ported from `art.rs`. `src/art/Glyph.tsx`: the glyph and the
-  app icon as SVG, with a motion between idle and holding (the sun fills and rises, the rays grow).
+- `src/art/heldLight.ts`: an exact port of `art.rs` (tray glyph, app icon, the review sheets); `src/art/motion.ts`:
+  the states in between (the light coming on); `src/art/Glyph.tsx`: draws the port's pixels on a canvas. Since
+  `p6-brand-apply-media` (2026-11-05).
 - `src/loop/IconLoop.tsx`: the README loop, idle to holding and back, tray colours, light and dark.
 - `src/promo/Promo.tsx`, `scenes.tsx`, `parts.tsx`: the 30 s video, eight scenes on the storyboard of
   `research/launch.md` part 4; `src/timeline.ts` (frames for picture and sound), `src/copy.ts` (every word on
   screen, drafts), `src/fonts.ts`, `src/theme.ts`.
 - `data/shots.json` (each picture, its size, stand-in or not, its source), `data/speed.json` (empty),
   `data/settings.json` (stand-in: the laptop's own Sleep and 5 hours).
-- `public/shots/` (7 stand-ins copied from `docs/research/img/ux/`; the holding tooltip S3 has no picture yet and
-  shows as an outlined box).
+- No screen pictures yet: every shot in `data/shots.json` draws a named placeholder box in the draft, and the final
+  render refuses it (`p6-brand-apply-media` deleted the old stand-ins).
 - `scripts/`: `build.mjs` (loop, draft, video, poster), `make-sounds.mjs`, `measure-speed.ps1` (not run; parse
-  checked only), `check.mjs`, `check-art.mjs`, `check-video.mjs`, `check-rebuild.mjs`, `lib/png.mjs`.
-- `out/icon-loop-light.gif`, `out/icon-loop-dark.gif`: final unless Haik or `p5-haik-check` changes the icon.
+  checked only), `check.mjs`, `check-art.mjs`, `check-video.mjs`, `check-rebuild.mjs`, `lib/png.mjs`, `lib/gif.mjs`
+  (the loop's own GIF writer, exact colours).
+- `out/icon-loop-light.gif`, `out/icon-loop-dark.gif`: the held light fading on and off; final unless the icon
+  changes.
 - `README.md` (one command per file, sources, what to do when the icon, chimes or words change) and `CREDITS.md`.
 - Not kept: `out/draft/wakeshot-promo-draft.mp4` and its poster (git-ignored), for Haik's first look.
 
@@ -142,10 +147,14 @@ Code test session, 10 idle minutes and Haik's look.
 1. All sound made in code (bed in C major so the C6 and G6 chimes sit in tune, effects, chimes read from
    `chime.rs`), not the research's Kenney and Freesound files: no third-party file, same bytes every build. Change it
    when Haik finds it thin.
-2. Inter and JetBrains Mono from npm, not Segoe UI. Change it when the text must match Windows exactly.
-3. The loop keeps the tray glyph's own colours, with a soft gold light behind the risen sun; 480 x 240, 25 fps
-   (GIF delays are whole hundredths), 5 s. Change it when Haik wants the app icon's gold sun.
-4. The art as a checked vector port, not PNG exports: the video needs large sizes and the in-between motion.
+2. Instrument Sans for every word of the video, self-hosted in `public/fonts/`, and JetBrains Mono from npm for the
+   drawn terminal and the install line; not Segoe UI (`p6-brand-apply-media` decision 6). Change it when the install
+   line becomes plain words.
+3. The loop is the tray glyph as the tray draws it: the held light fades on and off in place, on GitHub's own page
+   colours, no glow; 480 x 240, 25 fps (GIF delays are whole hundredths), 5 s (`p6-brand-apply-media` decisions 2
+   to 4). Change it when Haik finds it slow or fast.
+4. The art as an exact port of `art.rs`, drawn from its pixels and never redrawn as vectors (`p6-brand-apply-media`
+   decisions 9 and 10). Change it when the video needs the icon at a size between whole pixels.
 5. Screen pictures zoom by whole numbers with hard pixels, else smooth.
 6. The final render refuses stand-ins and missing numbers; every draft frame says DRAFT.
 7. The story follows today's behaviour: after the lid beat, "Work done" says a closed laptop goes to sleep once
@@ -162,7 +171,7 @@ Code test session, 10 idle minutes and Haik's look.
    so Haik starts these two from a plain PowerShell window with no session working.
 2. Final captures S1 to S6 at 150 % and 125 %, light and dark (100 % only by Haik's hand), into `media/public/shots/`
    with `data/shots.json` updated; S9 values from the capture session's log into `data/settings.json`. Nothing private
-   in view (the stand-ins show "Wakeshot demo", an Armenian sample label and the date).
+   in view.
 3. Real Claude Code session captures (the holding tooltip, S3).
 4. `npm run video`, `npm run check-video`, `npm run check-rebuild -- --final`; the power settings check after.
 5. Haik's look at the loop and the video; his yes in the Log.

@@ -8,10 +8,10 @@ Real laptop: no.
 Runs after: `p6-pack-and-release` (install steps) and `p6-install-e2e` (what an uninstall really
 leaves); the sources track's `p4-hold-files` (`docs/hold-files.md`), `p4-cli-args` (the command help), `p4-live-claude`
 (what is tested live; v1 supports Claude Code only, Codex and Copilot come after v1, Haik 2026-11-03); the tray
-track's `p5-haik-check` (final menu words and icon)
-(review m2); `p6-launch-research` (rival pick and table facts, README shape; its Result may change this card, the
-orchestrator routes that first); `p6-media` (speed numbers, pictures, loop, video). Parallel with: any card that does
-not own `README.md`.
+track's `p5-haik-check` (final menu words; review m2); the brand cards `p6-brand-apply-*` (the icon, the header
+lockup and the social card, done 2026-11-05: `docs/brand.md`); `p6-launch-research` (rival pick and table facts,
+README shape; its Result may change this card, the orchestrator routes that first); `p6-media` (speed numbers,
+pictures, loop, video). Parallel with: any card that does not own `README.md`.
 The README also says that Windows keeps its own record of the tray icons it has seen (`NotifyIconSettings`), which an
 uninstall leaves (`p6-hooks`, review m17).
 Build folder: none (no Rust).
@@ -262,7 +262,10 @@ notice title); 313 to 333 (the CLI help, verbatim, checked by script); 340 to 34
 
 - `p6-media`: the ten spots (loop line 3, speed line 8, table cells 27 and 29, video 47, menu 49, tooltip 51, icons 57
   to 59); then the speed-number check and the user-attachments check.
-- `p5-haik-check`: compare the lines above with Haik's final words and icon; fix any that changed.
+- `p5-haik-check`: compare the lines above with Haik's final words; fix any that changed.
+- Brand (2026-11-05, `docs/brand.md`): the icon is the held light; the README's media comments already name it and
+  the loop files in `media/out/`. The header lockup is `p6-brand-apply-web`'s (304 x 80 px); if the loop right under
+  it competes with it, the lockup drops to 64 px tall (that card's decision 10).
 - First public pre-release: the SmartScreen words and steps (`todo:` line 110).
 - Phase 8: the winget lines (`winget:` lines 10 and 116); drop the "not released" line 14 at the first release; read
   the rival stars again if the final pass is on a later day.

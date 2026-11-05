@@ -2568,8 +2568,8 @@ screen. Code: `crates/wakeshot-windows/src/tray/menu_paint.rs`.
   counts with a stdlib script). The contrast render uses this PC's system colours, as Phase 1's did (`ffffff`,
   `0078d7`, `000000`).
 - **What changed from the spike, and why:**
-  - Icons on Automatic (eye `E890`), Keep awake (clock `E823` "Recent" since 2026-11-05, Haik's pick,
-    `p6-brand-cleanup`; a cup `EC32` before), Restore (`E777`), Open log (`E8A5`) and Quit (cross `E711`), Haik's ask
+  - Icons on Automatic (eye `E890`), Keep awake (clock `E823` "Recent", Haik's pick, 2026-11-05,
+    `p6-brand-cleanup`), Restore (`E777`), Open log (`E8A5`) and Quit (cross `E711`), Haik's ask
     (2026-11-03 17:32). Test `item_glyphs_are_in_both_icon_fonts` finds all eight menu glyphs in Segoe Fluent Icons and
     Segoe MDL2 Assets on this laptop, and `E917` "Clock" missing from MDL2. The renders were redone then (BMP made PNG
     by a Node script); against the old ones only the Keep awake icon cell changed. The Keep awake lengths and Keep
@@ -2820,14 +2820,11 @@ Checked 2026-11-04 between 01:00 and 01:11 for card `docs/tasks/p4-cli-run.md` (
 
 ## Tray UX: icon art
 
-Checked 2026-11-04 by `p5-icon-art` (code `crates/wakeshot-windows/src/tray/art.rs`, sheets
-`docs/research/img/ux/icon-*.png`). Colours were read from Phase 0's pictures of this laptop (build 26300) with a
-stdlib Python PNG reader in the card's scratchpad (`p5-icon-art\pngread.py`, `measure.py` to `measure3.py`).
-
-**Changed later on 2026-11-04 (brand, `docs/brand.md`):** Haik picked the Sunrise over the Cup, and the app icon moved
-from an orange disc to a violet rounded square with a gold sun. The points below are what `p5-icon-art` measured with
-the Cup; each "Now" line says what changed (written by `p2-6-docs-pass` round 5). The taskbar and glyph colours,
-Microsoft's guidance, the padding and stroke rules and the ICO and PNG writers are unchanged.
+Checked 2026-11-04 by `p5-icon-art` (code `crates/wakeshot-windows/src/tray/art.rs`). Colours were read from Phase
+0's pictures of this laptop (build 26300) with a stdlib Python PNG reader in the card's scratchpad
+(`p5-icon-art\pngread.py`, `measure.py` to `measure3.py`). The art drawn then was replaced on 2026-11-05: the tray
+glyph, the app icon and the files `art.rs` writes today, with their checks, are in "Brand apply: the held light in
+art.rs" (`docs/brand.md`). The points below still hold.
 
 - **Taskbar colours.** Dark: 202021, and 1f1f20 to 222223 along the bar (`tray-taskbar-after-promote.png`,
   `tray-icon-add2-dark-taskbar.png`); the bar is translucent, so it follows the wallpaper a little. The plate under an
@@ -2841,11 +2838,7 @@ Microsoft's guidance, the padding and stroke rules and the ICO and PNG writers a
   `GLYPH_ON_LIGHT`, `GLYPH_ON_DARK`.
 - **Contrast** (WCAG 2, test `glyph_contrast_on_taskbars` and a Python check): white on 202021 16.3:1, on 2d2d2e
   13.8:1; 1a1a1a on d8dadc 12.4:1, on d4d7d8 12.0:1, on ecedee 14.9:1. The sample high contrast pair, yellow on black:
-  19.6:1. App icon disc: white mark on e06a22 3.4:1 and on c2501a 4.7:1; the disc on f3f3f3 3.0:1 and 4.3:1, on
-  202020 4.9:1 and 3.5:1. All at or above Microsoft's 3:1. Now (the violet plate, 7957f4 to 6b49f3): white on it
-  4.7:1 and 5.4:1, the gold sun ffcc4d 3.1:1 and 3.6:1; the plate on f3f3f3 4.2:1 and 4.9:1, on 202020 3.5:1 and
-  3.0:1 (3.004, just over). Recomputed by round 5 with a Python WCAG 2 script; they match `brand.md`, and
-  `glyph_contrast_on_taskbars` asks 3:1 for each.
+  19.6:1. All at or above Microsoft's 3:1, and `glyph_contrast_on_taskbars` asks 3:1 for each.
 - **Windows' own glyph shapes at 150% (24 px slot).** Strokes about 1.5 px, antialiased, not snapped to pixels. Wifi
   24 px wide and 17 tall, volume 18 tall, battery 30 wide (coverage grids printed by `measure3.py`). So Windows' own
   glyphs fill the slot's width.
@@ -2853,7 +2846,8 @@ Microsoft's guidance, the padding and stroke rules and the ICO and PNG writers a
   - "Construct your Windows app's icon" (learn.microsoft.com/windows/apps/design/iconography/app-icon-construction,
     dated 2026-07-21): "Context menu, title bar, system tray: 16px, 20px, 24px, 32px, 40px, 48px, 64px" for 100% to
     400%; Windows looks for an exact size, else "the next size above and scale down"; the bare minimum is 16, 24, 32,
-    48 and 256. Wakeshot ships 16, 20, 24, 32, 40, 48 and 64, no 256 (track note 3.2).
+    48 and 256. `assets/wakeshot.ico` holds all 14 of the page's target sizes, 256 included ("Brand apply: the held
+    light in art.rs").
   - "Design guidelines for Windows app icons" (app-icon-design, updated 2026-07-14): do not rely on colour alone; make
     "at least half of your icon" pass 3:1 on light and dark; subtle gradients, default angle 120 degrees; literal
     metaphors ("an envelope for mail"); no letters in the icon. The construction page allows a plate behind the icon.
@@ -2861,44 +2855,16 @@ Microsoft's guidance, the padding and stroke rules and the ICO and PNG writers a
   - No Microsoft page on notification area glyph style or padding: `.../iconography/system-tray-icons` returns 404.
     Fluent's icon keyline: 2 px padding on a 20 px icon, doubled at 48 px, and a 2 px stroke at 32 px (Fluent icon
     designer Jason Custer, github.com/microsoft/fluentui-system-icons issue 44, 2020 and 2021).
-- **Padding rule taken:** size / 16, at least 1 px (1 px at 16 to 28, 2 at 32 to 40, 3 at 48 and 56, 4 at 64). Between
-  Fluent's keyline and Windows' tray glyphs, which use the whole slot width: the glyph reads as large as its
-  neighbours and never touches the hover plate's edge. Test `glyph_stays_inside_its_box`.
+- **Padding rule taken:** size / 16, at least 1 px (1 px at 16 to 28, 2 at 32 to 40, 3 at 48 and 56, 4 at 64), the
+  border no glyph may cross. Between Fluent's keyline and Windows' tray glyphs, which use the whole slot width, so a
+  glyph never touches the hover plate's edge. Test `glyph_stays_inside_its_box`.
 - **Stroke:** whole pixels, size / 16 rounded (1 px at 16 and 20, 2 at 24 to 36, 3 at 40 and 48, 4 at 56 and 64), with
-  straight edges snapped to pixel edges. At 16 to 32 px the cup has at most 13% half-covered pixels (its round bottom
-  and the off bar); a stroke off the grid would give 50% or more. At 24 px the cup's 2 px strokes are a little heavier
-  than Windows' 1.5 px. Now: the Sunrise follows the same rules; its empty sun is a 1 px curve at 16 and 20 px, so
-  `strokes_are_crisp_at_small_sizes` lets it have up to 35% half-covered pixels at 16 to 32 px (`SUNRISE_GREY`; the
-  Cup 15%). Its measured share: not recorded.
-- **Concepts and pick.** Cup (the pick then): a full cup with steam (holding), an empty cup (idle), the empty cup struck
-  through (off). Eye: open eye, closed eye with lashes, struck through. Sky: sun, moon, struck-through moon. States
-  differ in shape: test `states_differ_in_shape` asks that at least 25% of two states' ink sits in different pixels at
-  16 and 24 px; measured 34% to 90% (the cup: 38% idle to off, over 50% against holding; read before the last steam
-  change, which only adds ink to holding). App icon: the holding glyph in white on a disc from e06a22 to c2501a.
-  Now: `art.rs` draws four concepts (`Concept::ALL`: Sunrise, Cup, Eye, Sky) and `PICK` is the Sunrise (Haik,
-  2026-11-04): a risen half sun with three rays over the horizon (holding), an empty half sun on the horizon (idle),
-  the empty sun struck through (off). Why it replaced the Cup and why Eye and Sky were dropped: `brand.md` "Tray
-  icon". The states test covers all four concepts; the Sunrise's shares: not recorded. App icon now: the holding
-  sunrise on a violet rounded square from 7957f4 (top left) to 6b49f3 (bottom right) at 120 degrees, sun and rays in
-  gold ffcc4d, horizon in white, the mark 72% of the icon (`concept_app_icon`; `brand.md` "App icon").
+  straight edges snapped to pixel edges, so a straight stroke covers whole pixels; a stroke off the grid half-covers
+  50% or more of its pixels. At 24 px a 2 px stroke is a little heavier than Windows' 1.5 px. States differ in shape:
+  test `states_differ_in_shape` asks that at least 25% of two states' ink sits in different pixels.
 - **ICO and PNG.** `ico` writes 32-bit BGRA frames with an AND mask (bit set where alpha is 0; those pixels carry no
-  colour). .NET `System.Drawing.Icon` loaded each of the seven frames of `assets/wakeshot.ico` at its size, with a
-  transparent corner and the disc's orange inside (2026-11-04, between 01:20 and 01:26); both x64 release exes carry
-  it (`ExtractAssociatedIcon`). `png` deflates with fixed codes and runs only,
-  and writes a palette when an image has at most 256 colours: the sheets are 1892 by 3712 px and 107 KB each (a stored
-  PNG would be about 28 MB); the app sheet (1582 colours, RGBA) is 333 KB. Python's `zlib` inflated every IDAT stream
-  and every chunk CRC matched (`colours.py`). Now: that was the Cup's file. Read again by round 5 with a stdlib
-  Python ICO reader (2026-11-04, about 11:45): `assets/wakeshot.ico` is still 43,006 bytes with the seven 32-bit
-  frames; in each, the corner is transparent, the plate reads 7957f4 near the top left and 6b49f3 near the bottom
-  right, gold and white pixels are there and no orange. The .NET load and the exes' icon resource were not checked
-  again. The sheets now hold four concepts: 1892 by 4960 px, 139 KB each; the app sheet 1508 by 2304 px, 288 KB.
-- **Now (2026-11-05, `p6-brand-cleanup`): only the Sunrise is left in the code.** Cup, Eye and Sky are gone from
-  `art.rs`, with `Concept`, `PICK` and `concept_mask`; `concept_app_icon` is now `app_icon`. The points above that name
-  them are history. The tests check the Sunrise alone, and print its shares: states differ by 45% (idle to off, 16 px)
-  to 99%; half-covered pixels at 16 to 32 px reach 32% (idle, 16 px; the bound is 35%). The sheets show only the
-  Sunrise: 1892 by 1248 px, 31 KB each, its rows pixel-equal to the old sheets' (a Node compare); the app sheet 1508 by
-  576 px, 69 KB. `assets/wakeshot.ico` and `assets/wakeshot-notice.png` came out byte-equal (same sha256 before and
-  after), and `media/scripts/check-art.mjs` still passes with no change to its layout.
+  colour); `png` writes a palette when an image has at most 256 colours. The 256 frame, the compression and the
+  checks of today's files (Python's `zlib`, Windows' own loads): "Brand apply: the held light in art.rs".
 - **Same bytes on x64 and ARM64:** the shapes use `+`, `-`, `*`, `/`, `sqrt` and `round` only, all exact in IEEE 754,
   and Rust does not fuse a multiply and an add on its own. So the golden test compares exactly. Tests ran on x64 only;
   ARM64 got clippy and builds, not a test run.
@@ -3250,8 +3216,8 @@ at 150%). Pictures `docs/research/img/ux/notice-*.png`, on a plain grey window.
   the chosen large icon. Silent ones (`step-back`, `idle-locked`, `updated`) were sent with `NIIF_NOSOUND` (the
   demo's flag line); no sound check was run.
 - **App icon against info icon.** Both read clearly in dark and light (`notice-dark-closed-lid-report*.png`,
-  `notice-light-first-run*.png`). The app icon (violet square, gold sun) names the sender; the info "i" adds nothing
-  the text does not say.
+  `notice-light-first-run*.png`, the art of that day). The app icon names the sender; the info "i" adds nothing the
+  text does not say.
 - **Click.** A synthetic left click on the banner body gave `balloon click: OpenLog` (restore-failed) and `balloon
   click: OpenTaskbarSettings` (first-run), each about 20 ms after the click.
 - **Pair.** The second notice, 1 s after the first, did not replace it: the first stayed on screen (no input came, so
@@ -3524,7 +3490,7 @@ card's own build folder, with no other cargo command running. Rust 1.99.1, the r
   --test-threads=1`) passed after the change: 1 passed, test 4.5 s, 35 s with its debug build. `VelopackApp::run()`
   in the not-installed build returned and the tray ran on, held, went idle and quit with code 0.
 - **The shell's entry for that run had no GUID.** One new `HKCU\Control Panel\NotifyIconSettings\<id>` key came with
-  the run (ids listed before and after), holding only `IconSnapshot`, a 24 px PNG of the idle cup; no `IconGuid` and
+  the run (ids listed before and after), holding only `IconSnapshot`, a 24 px PNG of the idle glyph; no `IconGuid` and
   no `ExecutablePath`, still so 1.5 minutes after the run (session locked). The tray mode card's run had both. So a
   clean-up that looks only for the dry-run GUID can miss the entry; comparing the ids before and after finds it. Why
   the values were missing: not verified.
@@ -3726,20 +3692,20 @@ card's scratchpad folder (`run1.txt`, `run2.txt`, `claude-timeline.txt`).
   still gone 2 minutes later. The PNG is left. The balloon header on screen was not seen: the session was locked.
   **Verified** (`reg export`, `Get-ItemProperty`, ids listed before and after).
 - **Pictures, 2026-11-04 12:15 to 12:17 (unlocked session).** Debug tray and CLI from the clean export of f47391d
-  (final Sunrise icon), `--dry-run` at Medium through Explorer on an empty data folder, with `CLAUDE_CONFIG_DIR` on an
-  empty folder so the agent sessions on this PC do not hold it.
+  (the art of that day), `--dry-run` at Medium through Explorer on an empty data folder, with `CLAUDE_CONFIG_DIR` on
+  an empty folder so the agent sessions on this PC do not hold it.
   - The first-run balloon came at the start (`notice shown: FirstRun`). Its header says "Wakeshot"; the body
-    shows the Sunrise icon. **Verified** (screen grab, `int-first-run-balloon.png`).
-  - The header's small glyph is not the Sunrise: it is a plain outline glyph. The dry-run AUMID key (there before the
+    shows the app icon. **Verified** (screen grab, `int-first-run-balloon.png`).
+  - The header's small glyph is not the app icon: it is a plain outline glyph. The dry-run AUMID key (there before the
     run, from a run that is not this card's) points `IconUri` at `%TEMP%\NotifyIconGeneratedAumid_15983757285637097514.png`,
-    last written 04:38:17, before the Sunrise art was in. So the header likely shows that stale cached PNG, and the
+    last written 04:38:17, before that build's art was in. So the header likely shows that stale cached PNG, and the
     shell did not rewrite it. **Not verified** (the header was not compared with that PNG pixel by pixel; the
     product GUID gets its own key, so a fresh install should not see it).
-  - Icon idle and holding: the outline Sunrise when idle, the filled Sunrise with rays while Keep awake holds
+  - Icon idle and holding: the idle glyph when idle, the holding glyph while Keep awake holds
     (`int-icon-idle.png`, `int-icon-holding.png`, 150 by 72 like the `taskbar-*` pictures). `keep-awake on` and
     `off` exit 0, "Keep awake is on until you turn it off." and "Keep awake is off."; `state.json` followed in 0.14 s
     and 0.36 s. **Verified**.
-  - Explorer shows the Sunrise as the file icon of `wakeshot.exe` and `wakeshot-tray.exe` (copies in a temp folder,
+  - Explorer shows the app icon as the file icon of `wakeshot.exe` and `wakeshot-tray.exe` (copies in a temp folder,
     large icons 96; `int-exe-icon.png`). **Verified**.
   - The run made no new `NotifyIconSettings` entry or AUMID key (18 ids and 6 keys before and after, read again
     97 s after the quit). **Verified**.
@@ -4200,7 +4166,7 @@ Card `docs/tasks/p5-haik-check.md`, 2026-11-04 15:48 to 16:30. Haik ran the demo
 tree, at Medium, icon pinned on the DELL taskbar at 150%) his own way, not step by step, and answered: "I checked demo
 in my way and everything seems ok besides 2 comments below: 1. Notification header has weird name ux_all.exe 2. When
 you click tray icon the the panel opens on click place but it should open above taskbar for not hiding taskbar
-icons." Icon (Sunrise) and words: kept as they are. Not checked step by step (Haik saw no problem): the banner on the
+icons." Icon and words: kept as they are. Not checked step by step (Haik saw no problem): the banner on the
 lock screen, the chimes and their device after a dock replug, the first-run click, high contrast, the 100% scale and
 an Explorer restart. The demo's log shows what he did run: all 15 notices, the icon states, Light mode and back, Open
 log, the menu picks.
@@ -4376,21 +4342,21 @@ The card's Result has the per-block table; these are the facts.
   not directly Other system tray icons." Microsoft's `ms-settings:` list ("Launch Windows Settings", Learn, updated
   2026-11-02, read 2026-11-05) has only `ms-settings:taskbar` for the page and no way to open a section; a web search
   found none either. An OS limit. **Verified** (docs, log).
-- **Settings shows the old Cup for Wakeshot.** Settings draws each tray icon from
-  `HKCU\Control Panel\NotifyIconSettings\<id>\IconSnapshot`. The product GUID's entry `2334163346184210159` holds a 24 px PNG of the idle
-  Cup: a white outline in rows 9 to 23 of 24, low because the idle Cup leaves room for the steam it draws while
-  holding, so it looks "not centred". An earlier run of the product GUID made the entry before the Sunrise replaced
-  the Cup (2026-11-04), and Windows did not renew the picture while the Sunrise build ran from 00:20 to 01:33 (still
-  the Cup at 01:5x); it only points the entry at the newest exe path. A fresh install gets a new entry with the first
-  icon Windows sees, the Sunrise: inferred from "First add lands in the overflow" above (the snapshot is written at
-  the first `NIM_ADD`), not checked on another PC. **Verified** for this laptop (registry read, PNG saved and seen).
+- **Settings shows the tray icon Windows saw first, not the current one.** Settings draws each tray icon from
+  `HKCU\Control Panel\NotifyIconSettings\<id>\IconSnapshot`. The product GUID's entry `2334163346184210159` held a 24 px PNG of
+  an older art's idle glyph: a white outline in rows 9 to 23 of 24, low because that glyph left room for a part it
+  drew only while holding, so it looked "not centred". An earlier run of the product GUID made the entry before the
+  art changed (2026-11-04), and Windows did not renew the picture while the next build ran from 00:20 to 01:33 (still
+  the old picture at 01:5x); it only points the entry at the newest exe path. A fresh install gets a new entry with
+  the first icon Windows sees: inferred from "First add lands in the overflow" above (the snapshot is written at the
+  first `NIM_ADD`), not checked on another PC. **Verified** for this laptop (registry read, PNG saved and seen).
 - **The balloon header's white square.** Started from the Start menu, the tray carries the shortcut's
   AppUserModelID `velopack.HaikAsatryan.Wakeshot` (Velopack sets it on the `.lnk`; read as `System.AppUserModel.ID`).
   Windows filed the session's 14 balloons under it (`HKCU\...\Notifications\Settings\velopack.HaikAsatryan.Wakeshot`:
   `PeriodicNotificationCount` 14, last added 01:33:03, the Restore notice), not under the shell's own
   `NotifyIconGeneratedAumid_2334163346184210159` (no such key, no such PNG in `%TEMP%`). There is no
   `HKCU\Software\Classes\AppUserModelId\velopack.HaikAsatryan.Wakeshot` key, so no `IconUri`. The exe's icon is right:
-  violet plate and gold sun at 16 to 256 px (`PrivateExtractIconsW`). The header in Haik's photo is a plain white
+  the app icon at 16 to 256 px (`PrivateExtractIconsW`). The header in Haik's photo is a plain white
   rounded square, the plate's shape in one colour. Why Windows draws it so: **not verified**. With the generated id
   (dry-run runs, above) the header showed the tray glyph PNG. A start from the Run value at sign-in has no shortcut,
   so its balloons most likely use the generated id: inferred, not checked.
@@ -4460,8 +4426,8 @@ reads, Haik's words as the orchestrator relayed them. Evidence and times: the tw
 
 - **The notice header shows the Wakeshot icon from both start paths.** With the app id key registered, the
   first-run banner from the Start menu (10:24:25) and from the exe itself (`explorer.exe "<exe>"`, as the Run value
-  starts it; 10:45:33) both show the violet plate with the gold sun, about 22 px, and the name "Wakeshot"; plate pixel
-  `#7250F3`, so no red and blue swap. Haik saw it from Start ("yes"); for the second he looked at the tray glyph, so
+  starts it; 10:45:33) both show the app icon (the art of that day), about 22 px, and the name "Wakeshot"; a plate
+  pixel read as the plate's own colour, so no red and blue swap. Haik saw it from Start ("yes"); for the second he looked at the tray glyph, so
   the grabs decide. **Verified** (grabs).
 - **A balloon is never kept in the notification centre.** Windows filed each balloon under
   `velopack.HaikAsatryan.Wakeshot` (`PeriodicNotificationCount` 14 to 19 for the day's five) and stores its payload
@@ -4470,7 +4436,7 @@ reads, Haik's words as the orchestrator relayed them. Evidence and times: the tw
   **not verified** in Microsoft docs.
 - **A `NotifyIconSettings` entry deleted while Explorer runs comes back incomplete.** After `reg delete` of
   `2334163346184210159` (10:11:57), the tray's first add (10:24:25.6) made the entry again within 49 ms with only
-  `IconSnapshot` (a fresh 24 px picture of the idle tray glyph; the Cup is gone) and no `ExecutablePath`, `IconGuid`
+  `IconSnapshot` (a fresh 24 px picture of the current idle tray glyph) and no `ExecutablePath`, `IconGuid`
   or `IsPromoted`; a second start added nothing (read 10:29, 10:50, 11:30). It is the only one of the 18 entries
   without `ExecutablePath`, and Settings > Taskbar > Other system tray icons did not list Wakeshot, also after
   Settings was closed and opened again (Haik). **Verified** (reads, Haik). Why Explorer wrote only the snapshot, and
@@ -4821,8 +4787,8 @@ Checked 2026-11-05 for card `docs/tasks/p6-brand-apply-media.md`, Part A.
   WOFF2 in `media/public/fonts/` is byte-equal to the page's (same SHA-256 as above). **Verified.**
 - **A GIF from Remotion's `--codec=gif` moves colours.** Remotion 4.0.540 encodes GIFs with FFmpeg's
   `split[v],palettegen,[v]paletteuse` (`@remotion/renderer` `dist/stitch-frames-to-video.js` line 257): one palette
-  for the whole clip, with dithering. The old dark loop, drawn on `#14121F`, reads `#14111E` in every frame of the file
-  (decoded with `media/scripts/lib/gif.mjs`). So the loop is now rendered as PNG frames and written by our own GIF
+  for the whole clip, with dithering. A loop that Remotion encoded on one flat dark colour reads one level lower in
+  green and in blue in every frame of the file (red unchanged; decoded with `media/scripts/lib/gif.mjs`). So the loop is now rendered as PNG frames and written by our own GIF
   writer with each frame's exact colours. The writer, our reader and the bundled `ffmpeg.exe` decode agree to the bit
   on test frames (a 400-colour patch, random noise that fills the LZW table many times). **Verified.**
 - **Loop frames hold up to 252 colours** in their changed area (Chrome's anti-aliasing of a 128 px ring and line, and
@@ -4969,3 +4935,24 @@ Checked 2026-11-05 for `p6-brand-apply-media` Part B.
   colour at once); CRF 16 keeps it clean, at 1.5 times the bytes (title alone: 121 KB to 181 KB; whole draft 1.9 to
   2.5 MB). Seen by eye at 5 times, frame 22 of both encodes, yuv420p (`docs/research/img/brand/apply-media-title.png`
   shows the stills). **Verified** by looking; no metric.
+
+## Brand colours under colour-blind simulation
+
+Checked 2026-11-05 by `p6-brand-docs-sweep`, with scripts in its scratch folder (`colours.py`, `rim.py`, `de.py`).
+Method: WCAG 2 contrast after Machado, Oliveira and Fernandes (2009) simulation at full strength in linear sRGB, the
+method and matrices of round 1 and round 2 (`brand-identity.md` section 8, rule C4: 3.0 after protan, deutan and
+tritan). Each pair's plain ratio was computed again and equals the apply cards' numbers to 0.01 (25 pairs).
+
+- **Tray, page and lockup pairs keep their minimum under all three simulations.** Worst cases: the holding light
+  `#3B7A2A` on the light taskbar `#D8DADC` 3.60 (protan; plain 3.74), on its hover 4.31; `#B6E05A` on the dark
+  taskbar 10.53 (tritan); plate ends on light Start 3.47 and 4.34 (protan), on dark Start 4.05 and 3.09 (deutan); the
+  page's step number `#FFEA9C` on `#33701F` 4.61 (protan; text, needs 4.5); the light page's link on its panel 5.16.
+  **Verified** (script).
+- **The lit light's rim is just under 3:1 for protan.** A port of `art.rs`'s test `app_icon_contrast` (same
+  `Plated::at`, `plate_colour` without the glow and 64 directions a pixel outside the light; its plain numbers equal
+  the test's: 3.50 to 3.51 flat, 3.13 to 3.16 lit, bar 3.46 to 4.15) gives, under the worst simulation: the flat
+  frames' edge `#FFEA9C` 3.25 (protan), the lit frames' rim `#F7DC7F` 2.88 to 2.92 (protan), the bar 3.36 to 4.01.
+  Against the plate's light end `#628C2B` alone the rim is 2.92 plain and 2.72 protan; the light sits nearer the
+  middle of the ramp. **Verified** (script). The plate colour was rounded to whole levels before the simulation.
+- **Every brand colour is 34.8 or more from Claude's orange `#D97757`** (CIEDE2000, round 1's `de2000`): the rim
+  `#F7DC7F` is the nearest, the plate and holding greens 46 to 52. **Verified** (script).

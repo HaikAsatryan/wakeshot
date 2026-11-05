@@ -1140,10 +1140,11 @@ and RunOnce values (the hooks and the journal call it; review m12), and at unins
 The notice header (`p6-notice-app-icon`): `VelopackApp::run` gives every start of an installed tray (Start menu, Run
 value, restart after an update) the explicit app id `velopack.HaikAsatryan.Wakeshot`, the Start menu shortcut's id, and
 Windows files the balloons under it. With no key for that id the header showed a plain white square. So the package
-ships `wakeshot-notice.png` (48 px, the app icon from `tray::art`, kept equal to `assets/` by a test) beside the tray
-exe, and the hooks write the key that names it; Velopack puts the file in place and removes it with the app. A tray run
-from `target\` has no explicit id and keeps the shell's generated one; so does a dry run from `target\`, while a dry
-run started from an installed copy gets the real id (research "Notice header icon checks").
+ships `wakeshot-notice.png` (48 px, the app icon's flat drawing from `tray::art`, kept equal to `assets/` by a test,
+`docs/brand.md`) beside the tray exe, and the hooks write the key that names it; Velopack puts the file in place and
+removes it with the app. A tray run from `target\` has no explicit id and keeps the shell's generated one; so does a
+dry run from `target\`, while a dry run started from an installed copy gets the real id (research "Notice header icon
+checks").
 
 Velopack hooks (Phase 6, `hooks.rs`): the registry steps come first and the restore last, so a restore that hangs until
 Velopack's kill never leaves a Run value or a Path entry that names a deleted folder. Install (also Setup.exe over an

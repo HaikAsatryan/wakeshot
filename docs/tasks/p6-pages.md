@@ -4,8 +4,9 @@ Phase: 6. Status: blocked: draft done; waits for `p6-media`, `p5-haik-check`, `p
 and the first public pre-release. Needs Haik: yes, one look at the page before it goes live at v1 (the orchestrator relays
 it). Agent: `wakeshot-worker`. Size: about 60K tokens.
 Real laptop: no. No screen use: checks are scripts; Haik's look is the visual check.
-Runs after: `p6-readme`; the tray track's `p5-icon-art` and `p5-haik-check` (Haik's pick there rewrites
-`assets/wakeshot.ico`; review m3). Parallel with: any card that does not own `site/` or `.github/workflows/pages.yml`.
+Runs after: `p6-readme`; the tray track's `p5-haik-check` (menu words); `p6-brand-apply-art` and `p6-brand-apply-web`
+(the brand in `site/`, both done 2026-11-05). Parallel with: any card that does not own `site/` or
+`.github/workflows/pages.yml`.
 Build folder: none (no Rust).
 
 ## Goal
@@ -17,11 +18,11 @@ built from the README and deployed only when a release is published.
 
 - `README.md` (`p6-readme` Result); `docs/product.md`, "The job" and "Distribution".
 - `docs/architecture.md` section 10 (action pinning, read-only tokens).
-- The tray track's icon art and where it lives (its card's Result).
+- The brand: `docs/brand.md`; what `p6-brand-apply-web` changed in `site/` (its Result and decisions).
 
 ## Deliverables
 
-- `site/index.html`, `site/style.css`, the icon (copied from the tray track's art). One page: what it does, a picture
+- `site/index.html`, `site/style.css`, the icon (from `art.rs`: `docs/brand.md`). One page: what it does, a picture
   if the tray track has one, install, what it changes, privacy (no telemetry), links to Releases and the README.
   Light and dark through `prefers-color-scheme`. No scripts, no trackers, no fonts or files from other hosts.
 - `.github/workflows/pages.yml`: deploys `site/` with `actions/upload-pages-artifact` and `actions/deploy-pages` on
@@ -60,31 +61,31 @@ None. Every call below is a design call, made by the worker for Haik's review.
 3. **The page comes from the released commit** (`workflow_run.head_sha`), not the newest one on main, so it matches
    what users download. A run by hand uses the chosen branch.
 4. **The checks live in `site/check_page.py`** (Python standard library) and `pages.yml` runs it with `--final`
-   before every upload, then removes it from the upload. Why: a future worker reruns the same checks after the
-   waiting cards, and a page with a waiting spot can never go live. Python, not PowerShell like `packaging/`, because
+   before every upload, then removes it from the upload (with the social card's sources, `p6-brand-docs-sweep`).
+   Why: a future worker reruns the same checks after the waiting cards, and a page with a waiting spot can never go
+   live. Python, not PowerShell like `packaging/`, because
    it has an HTML parser built in. Change it when `ci.yml` (not owned here) should check the page on every push: add
    `python3 site/check_page.py site` there.
-5. **Header icon as SVG** (`site/wakeshot.svg`), drawn with the shapes and numbers of `art.rs` at 64 px. Why: the
-   largest ICO frame is 64 px, which turns soft at 96 CSS px on a high DPI screen; the SVG is 1 KB and sharp at any
-   size. The port was checked: rasterised the way `art.rs` does, it equals the ICO's 64 px frame in every pixel
-   (0 difference over 4096 pixels). The favicon is `assets/wakeshot.ico` copied as is (its 16 to 32 px frames are
-   pixel-snapped, sharper than an SVG there). Change it when the art changes (redo both), or when `art.rs` gains an
-   SVG writer (then `write_art_files` should write `site/wakeshot.svg`).
+5. **Header icon as SVG, favicon from the art** (`p6-brand-apply-web`, `p6-brand-apply-art`, 2026-11-05):
+   `site/wakeshot.svg` is the 256 px app icon ported layer by layer from `art.rs`, sharp at any size (against the
+   ICO's 256 frame: mean difference 0.64 of 255 over white, none a person sees at 100%); `site/favicon.ico` (16, 32
+   and 48 px) is written by `art.rs` itself, pixel-snapped, sharper than an SVG there. Change it when `art.rs` gains
+   an SVG writer (then `write_art_files` should write `site/wakeshot.svg`).
 6. **The main button downloads the x64 Setup directly** (`/releases/latest/download/<asset>`), with an ARM64 link and
    Releases beside it. Why: one click for most users. GitHub documents this link for uploaded assets; that `vpk`'s
    uploads count: not verified until the first stable release.
-7. **Colours beyond `docs/brand.md`**, picked so every text pair passes WCAG AA by a wide margin (script,
-   2026-11-04): light muted text `#55526A` (7.5 on paper), edge `#DDDAE8`; dark text `#ECEAF4` (15.5 on night),
-   muted `#B4AFCB` (8.8), panel `#1F1C2E`, edge `#34304A`; links and buttons as the brand says (6.7 and 7.5); focus
-   ring violet on light, sun gold on dark (12.3). Gold is only a highlight: the step number discs (ink on gold
-   11.6) and a short horizon line under the header. Change it when `brand.md` names dark page colours.
+7. **Colours**: the Moss set in `docs/brand.md`, light and dark, picked by `p6-brand-apply-web` (its decisions 1 to
+   4) so every pair passes WCAG AA, checked by `python site/check_page.py --colours site`. Change it when `brand.md`
+   changes.
 8. **The page is a summary that sends readers to the README** for detail (links to `#readme`, no deep anchors,
    since the README is being reworked). Menu names are in bold, as in the README.
 9. **The video gets controls, no autoplay** (in its marker). Why: it is 30 s with sound, and an autoplaying loop that
    long needs a pause control (WCAG 2.2.2). The icon loop gets a still for `prefers-reduced-motion`. Change it when
    Haik wants the video to autoplay muted, as `docs/research/launch.md` "Specs" suggests.
-10. **No Open Graph tags or social image.** Why: launch posts link the repo, and an `og:image` needs the page's own
-    absolute URL, known only once Pages is on. Change it when the page link is shared on its own.
+10. **Share tags and a social image** (`p6-brand-apply-web` decision 12, 2026-11-05): `og:*` and `twitter:*` tags
+    with `site/social-card.png`, under the Pages address `https://haikasatryan.github.io/wakeshot/` (GitHub's project
+    site pattern, not live until Pages is on); `check_page.py` checks them. Change it when a platform's card checker
+    asks for more.
 
 ## Facts checked (2026-11-04)
 
@@ -129,8 +130,7 @@ Problems seen but not fixed.
   battery floor (story steps 3 and 5; "Lid closed, lock and battery"), while `docs/product.md` says sleep since
   2026-11-04. The README rework or the docs pass owns it; the page already says sleep, marked for
   `p2-6-sleep-route`.
-- `docs/brand.md` names no dark page text, muted or panel colours; the page picked them (decision 7). The brand owner
-  may want to record them.
+- `docs/brand.md` now names the page's colours in both themes (decision 7).
 - `ci.yml` does not check `site/`; a broken page shows only at release time (decision 4).
 
 ## Log
@@ -160,15 +160,17 @@ first public pre-release (orchestrator decision, session `wakeshot-12`).
 **Done.** One static page from what is final: the brand, `docs/product.md` and the README draft. It says what
 Wakeshot does (holds, the tray states), a night with it (lid, lock, sleep, battery), what it changes on the PC,
 install, updates, uninstall and privacy, with links to Releases, the README, issues and the license, all on
-`github.com/HaikAsatryan/wakeshot`. Light and dark through `prefers-color-scheme`. No scripts, no trackers, system
-fonts only. No rival table (orchestrator note); one marked spot waits for the README rework. Ten design decisions
-are above, each with its reason and when to change it.
+`github.com/HaikAsatryan/wakeshot`. Light and dark through `prefers-color-scheme`. No scripts, no trackers; system
+fonts, except the name in the hero (Instrument Sans SemiBold, self-hosted, `docs/brand.md`). No rival table
+(orchestrator note); one marked spot waits for the README rework. Ten design decisions are above, each with its
+reason and when to change it.
 
 **Files** (all new):
 
 - `site/index.html`, `site/style.css`
-- `site/wakeshot.svg` (the app icon as shapes, ported from `art.rs`), `site/favicon.ico` (copy of
-  `assets/wakeshot.ico`)
+- `site/wakeshot.svg` (the app icon as shapes, ported from `art.rs`), `site/favicon.ico` (written by `art.rs`)
+- Since `p6-brand-apply-web` (2026-11-05): `site/wakeshot-lockup-light.svg` and `-dark.svg`, `site/social-card.png`
+  with its source `social-card.html` and script `social_card.py`, `site/fonts/` (its Result)
 - `site/check_page.py` (the acceptance checks; not uploaded to Pages)
 - `.github/workflows/pages.yml`
 
@@ -190,8 +192,9 @@ are above, each with its reason and when to change it.
    pictures of the three icon states and of the menu, and the 30 second video; files go into `site/media/`, never
    another host.
 2. `p5-haik-check`: the menu words (two spots: Keep awake, Keep screen on, Automatic, Restore my power settings) and
-   the tooltip line. If the icon art changes: redo `site/favicon.ico` (copy) and `site/wakeshot.svg` (the numbers
-   of `concept_app_icon` and `risen_sun` at size 64, checked against the new 64 px frame).
+   the tooltip line. If the icon art changes: `art.rs`'s writer test rewrites `site/favicon.ico`; port
+   `site/wakeshot.svg` and the two lockups again from `art.rs`'s numbers and check them against the ICO's 256 frame
+   (`p6-brand-apply-web` Result; its port scripts are not in the repo), then `python site/social_card.py`.
 3. `p2-6-sleep-route`: the story's steps 3 and 5 say "goes to sleep"; check them against the built behaviour.
 4. The README rework (`p6-readme`): the comparison spot, a short feature side by side from the reworked README.
 5. The first public pre-release (`v0.1.0-rc.1`): the exact SmartScreen words and steps.

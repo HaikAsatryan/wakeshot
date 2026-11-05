@@ -65,12 +65,12 @@ Design calls the design leaves to Phase 5 (worker as principal designer). Each h
    fixed at sign-in, research "`LoadIconMetric` follows the system DPI"), contrast colours from the live theme, and
    no resource weight (the spike's four icons were 180 KB of its 519 KB). Change it when `p5-tray-icon` Part B shows
    the shell blurs or drops run-time icons.
-2. **App icon** `assets/wakeshot.ico`, frames 16, 20, 24, 32, 40, 48 and 64, made by the same art code and checked by
-   a golden test; embedded by both exes and used by the installer. No 256 frame yet. `art::png` compresses since
-   `p5-icon-art`, so a 256 frame needs no crate; its size in the exe is not measured. Change it when the installer or
-   Explorer's large view looks blurry: add the frame in `art.rs` and the golden test.
-3. **Glyphs are monochrome** like Windows' own tray glyphs (white on a dark taskbar, near black on a light one, the
-   contrast text colour in high contrast), and the three states differ in shape, not only in colour.
+2. **App icon** `assets/wakeshot.ico`, all 14 of Microsoft's target sizes from 16 to 256 (the 256 frame as PNG), made
+   by the same art code and checked by a golden test; embedded by both exes and used by the installer
+   (`docs/brand.md`, "App icon"). Change it when exe size matters more than an exact frame at every scale.
+3. **Glyphs in Windows' own glyph colours** (white on a dark taskbar, near black on a light one, the contrast text
+   colour in high contrast); only while holding does the light take the brand colour (Haik, 2026-11-05;
+   `docs/brand.md`, "Tray icon"). The three states differ in shape, not only in colour.
 4. **Left click, right click and keyboard select all open the same menu.** There is no window to open, and a left
    click that does nothing looks broken.
 5. **Notices** are balloons (design). Title, body, warning, silent and click come from `text::notice`. A notice that
@@ -172,8 +172,8 @@ its own package and files:
 - Phase 3: the hibernate thread uses `SoundPlayer::play_and_wait` (fake until `p5-sounds`); checklist 16 (chime at a
   real lid close) needs `p5-sounds` done.
 - Phase 4: `shell.rs` (`p4-cli-commands`) opens the log and the Settings page; `p5-haik-check` runs after it.
-- Phase 6: the installer and the Pages site use `assets/wakeshot.ico` (placeholder until `p5-icon-art`); uninstall
-  may want the three icon GUIDs (`p5-tray-icon` Result).
+- Phase 6: the installer uses `assets/wakeshot.ico` and the Pages site `site/favicon.ico`, both written by `art.rs`;
+  uninstall may want the three icon GUIDs (`p5-tray-icon` Result).
 
 ## Task cards (`docs/tasks/`)
 

@@ -48,9 +48,10 @@ jobs:
       - name: Check the page
         run: python3 site/check_page.py --final site
 
-      # The check script belongs to the repo, not to the page.
-      - name: Leave the check script out of the page
-        run: rm site/check_page.py
+      # These belong to the repo, not to the page: the check script, and the social card's sources (its HTML, the
+      # script that draws it and the Regular font only that HTML loads). social-card.png itself stays: it is og:image.
+      - name: Leave the repo-only files out of the page
+        run: rm site/check_page.py site/social_card.py site/social-card.html site/fonts/InstrumentSans-Regular.woff2
 
       - uses: actions/upload-pages-artifact@v5
         with:

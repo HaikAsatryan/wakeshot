@@ -65,7 +65,7 @@
           <p>From the menu: 30 minutes, 1, 2 or 4 hours, or until you turn it off, with Keep screen on if you want it. It ends at sign-out or restart, so a forgotten one never survives a reboot.</p>
         </article>
       </div>
-      <p>The tray icon shows the state: the sun is up while something holds, an empty sun when nothing does, and the empty sun struck through when Automatic is off. Its tooltip names what holds the PC awake, such as "Holding awake: Claude Code (1 session)".</p>
+      <p>The tray icon shows the state: a filled light while something holds, the same light as an outline when nothing does, and the outline struck through when Automatic is off. Its tooltip names what holds the PC awake, such as "Holding awake: Claude Code (1 session)".</p>
       <!-- waits for p6-media: pictures of the three icon states and of the menu with Keep awake open, each a <picture> with a dark and a light PNG (<source media="(prefers-color-scheme: dark)">), copied into site/media/. Alt text as in the README. -->
       <p>Claude Code is the agent Wakeshot knows in v1. Codex CLI and Copilot CLI come next. Until then, <code>wakeshot run -- &lt;agent&gt;</code> holds for as long as the agent runs.</p>
     </section>
@@ -74,7 +74,7 @@
       <h2>A night with Wakeshot</h2>
       <!-- waits for p6-media: the 30 second video here. <video controls muted playsinline preload="none" poster="media/promo-poster.png"> with media/promo.mp4 (H.264 and AAC, 1920 x 1080, under 10 MB) copied into site/media/ (no other host), and a one-line caption. Research (docs/research/launch.md, "Specs") says autoplay and loop; with sound and 30 s length, prefer controls, no autoplay. -->
       <ol class="steps">
-        <li><strong>You give Claude Code a long task and walk away.</strong> The icon shows the sun up. Your screen still turns off on its usual timer; only sleep waits.</li>
+        <li><strong>You give Claude Code a long task and walk away.</strong> The icon's light comes on. Your screen still turns off on its usual timer; only sleep waits.</li>
         <li><strong>You close the lid.</strong> A short chime says the laptop keeps running, and Wakeshot locks it, so a closed laptop never runs unlocked.</li>
         <li><strong>Claude finishes in the night.</strong> Wakeshot puts your lid and sleep settings back at once. After 5 minutes with no input, a soft "going to sleep" sound plays and the laptop goes to sleep, where Windows would have put it when you closed the lid.</li>
         <li><strong>Morning.</strong> You open the lid and sign in. A notice says how long the PC ran with the lid closed, and what kept it running.</li>

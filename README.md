@@ -5,7 +5,7 @@
   </picture>
 </h1>
 
-<!-- media: icon loop. One centered <picture> block here: a dark and a light GIF (prefers-color-scheme), 4 to 6 s, under 1 MB, the tray icon going idle to holding to idle: the sun rises over the horizon when an agent starts and sets when it is done (docs/brand.md, "The idea"), alt text "Wakeshot's tray icon: the sun rises while an agent works and sets when it is done". Files under media/ from p6-media; the art is the Sunrise in crates/wakeshot-windows/src/tray/art.rs. Takes 1 line here. -->
+<!-- media: icon loop. One centered <picture> block here: the dark and the light GIF (prefers-color-scheme), media/out/icon-loop-dark.gif and icon-loop-light.gif (480 x 240, 5 s, about 21 KB each; show them 240 px wide), the tray icon going idle to holding to idle: the light comes on while an agent works and goes off when it is done (docs/brand.md, "The idea"), alt text "Wakeshot's tray icon: the light comes on while an agent works and goes off when it is done". Made in media/ (npm run loop) from the held light in crates/wakeshot-windows/src/tray/art.rs; placed by p6-media. Takes 1 line here. -->
 
 **Your PC stays awake while your AI agent works. Then it sleeps as usual, with your own power settings back.**
 Keep awake on demand comes in the same menu, so you never need a second tool.
@@ -61,9 +61,9 @@ The icon tells you what is going on, and the tooltip names what holds the PC awa
 
 | Icon | State | The tooltip says | What it means |
 |---|---|---|---|
-| <!-- media: holding icon, light and dark, the Sunrise art (crates/wakeshot-windows/src/tray/art.rs), alt text "A risen sun with rays" --> | Holding | `Holding awake: Claude Code (1 session)` | Something needs the PC. It stays awake, and closing the lid does not stop it. |
-| <!-- media: idle icon, light and dark, the Sunrise art (crates/wakeshot-windows/src/tray/art.rs), alt text "An empty sun on the horizon" --> | Idle | `Not holding, the PC sleeps as usual` | Automatic is on, and nothing needs the PC right now. |
-| <!-- media: off icon, light and dark, the Sunrise art (crates/wakeshot-windows/src/tray/art.rs), alt text "The empty sun, struck through" --> | Off | `Automatic is off, the PC sleeps as usual` | Wakeshot watches nothing. Keep awake still works. |
+| <!-- media: holding icon, light and dark, the held light (crates/wakeshot-windows/src/tray/art.rs), alt text "A filled light over a line" --> | Holding | `Holding awake: Claude Code (1 session)` | Something needs the PC. It stays awake, and closing the lid does not stop it. |
+| <!-- media: idle icon, light and dark, the held light (crates/wakeshot-windows/src/tray/art.rs), alt text "An outlined light over a line" --> | Idle | `Not holding, the PC sleeps as usual` | Automatic is on, and nothing needs the PC right now. |
+| <!-- media: off icon, light and dark, the held light (crates/wakeshot-windows/src/tray/art.rs), alt text "An outlined light over a line, struck through" --> | Off | `Automatic is off, the PC sleeps as usual` | Wakeshot watches nothing. Keep awake still works. |
 
 ### A night with Wakeshot
 

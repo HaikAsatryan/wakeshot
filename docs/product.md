@@ -229,9 +229,11 @@ The README says so.
   Quit
   ```
 
-- Tray icon states: holding (a risen sun with rays), idle (an empty sun), off (the empty sun struck through). Three, not
-  two, so a forgotten Automatic off shows in the tray (Haik, 2026-11-04; `brand.md`). The icon is one colour like
-  Windows' own; the brand colours (night violet, sun gold) are only in the app icon, the page and the media. It must
+- Tray icon states: holding (a filled light over a line), idle (the same light as an outline), off (the outline struck
+  through). Three, not two, so a forgotten Automatic off shows in the tray (Haik, 2026-11-04; `brand.md`). The icon is
+  in Windows' own glyph colours; only while holding does the light take the brand colour, Moss, and high contrast
+  draws every state in one colour (Haik, 2026-11-05). The brand colours are otherwise only in the app icon, the page,
+  the README header, the social card and the media. It must
   look good, be crisp at every display scale, and be correct on light and dark taskbars and in high contrast. The menu
   follows the Windows mode (`SystemUsesLightTheme`, the taskbar's), like the icon: it opens from the taskbar, next to
   Windows' own tray flyouts, so an app-mode menu would clash with a dark taskbar. The menu looks like Windows 11's own
