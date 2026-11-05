@@ -1,6 +1,6 @@
 //! `TrayIcon`: its own hidden window, the notify icon, clicks, re-add, theme and display changes.
 //!
-//! Owner: `p5-tray-icon`.
+//! Owner: `p5-tray-icon`, then `p6-brand-apply-art` (the glyph's two colours).
 //!
 //! Every piece of state sits in one `Shared` behind `Cell` and `RefCell`, reached from the window procedure through an
 //! `Rc`, and no borrow is held across a call that can run other code: `Shell_NotifyIconW` (sent messages such as a
@@ -38,7 +38,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{GUID, PCWSTR, w};
 
-use super::art::{self, Mask};
+use super::art::{self, GlyphColours, Mask};
 use super::theme::{self, Theme, ThemeWatch};
 use super::{Anchor, IconIdentity, MenuView};
 use crate::WinError;
@@ -117,7 +117,7 @@ pub enum Note {
     Redrawn {
         icon: IconState,
         size: u32,
-        colour: [u8; 3],
+        colours: GlyphColours,
     },
     ModifyFailed,
     TaskbarCreated,
@@ -359,7 +359,7 @@ impl State {
         let theme = self.forced_theme.unwrap_or(self.theme.current());
         Some(Drawn {
             icon: view.icon,
-            colour: glyph_colour(&theme),
+            colours: glyph_colours(&theme),
             size: self.size,
             pattern: self.pattern,
         })
@@ -369,7 +369,7 @@ impl State {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Drawn {
     icon: IconState,
-    colour: [u8; 3],
+    colours: GlyphColours,
     size: u32,
     pattern: bool,
 }
@@ -528,7 +528,7 @@ impl Shared {
             self.note(&Note::Redrawn {
                 icon: want.icon,
                 size: want.size,
-                colour: want.colour,
+                colours: want.colours,
             });
         }
     }
@@ -715,7 +715,7 @@ fn draw(want: Drawn) -> Result<Icon, WinError> {
     } else {
         art::tray_mask(want.icon, want.size)
     };
-    make_icon(&art::colorize(&mask, want.colour))
+    make_icon(&art::colorize(&mask, want.colours))
 }
 
 /// `art::Rgba` (straight alpha, RGBA, top-down) as an `HICON`: a 32-bit top-down DIB in BGRA, and an AND mask with a
@@ -796,7 +796,11 @@ fn pattern_mask(size: u32) -> Mask {
             }
         }
     }
-    Mask { size, alpha }
+    Mask {
+        size,
+        alpha,
+        light: vec![0; s * s],
+    }
 }
 
 fn put_tip(data: &mut NOTIFYICONDATAW, tip: &str) {
@@ -890,14 +894,15 @@ pub(crate) fn taskbar_dpi() -> u32 {
     }
 }
 
-/// White on a dark taskbar, near black on a light one, and in high contrast the window text colour: Microsoft's
-/// "Contrast themes" page has bars use `SystemColorWindowColor` as background, paired with
-/// `SystemColorWindowTextColor`. Which colour Windows' own taskbar uses in a contrast theme: not verified.
-fn glyph_colour(theme: &Theme) -> [u8; 3] {
+/// White on a dark taskbar and near black on a light one, with the light in Moss while holding (Haik's brand
+/// decision, 2026-11-05); in high contrast every part in the window text colour: Microsoft's "Contrast themes" page
+/// has bars use `SystemColorWindowColor` as background, paired with `SystemColorWindowTextColor`. Which colour Windows'
+/// own taskbar uses in a contrast theme: not verified.
+fn glyph_colours(theme: &Theme) -> GlyphColours {
     match theme.contrast {
-        Some(c) => c.window_text.into(),
-        None if theme.light => art::GLYPH_ON_LIGHT,
-        None => art::GLYPH_ON_DARK,
+        Some(c) => GlyphColours::one(c.window_text.into()),
+        None if theme.light => art::ON_LIGHT,
+        None => art::ON_DARK,
     }
 }
 
@@ -1027,7 +1032,7 @@ mod tests {
     }
 
     #[test]
-    fn glyph_colour_per_theme() {
+    fn glyph_colours_per_theme() {
         let dark = Theme {
             light: false,
             contrast: None,
@@ -1036,26 +1041,41 @@ mod tests {
             light: true,
             contrast: None,
         };
-        assert_eq!(glyph_colour(&dark), [0xff, 0xff, 0xff]);
-        assert_eq!(glyph_colour(&light), [0x1a, 0x1a, 0x1a]);
+        let moss = |ink, light| GlyphColours { ink, light };
+        assert_eq!(
+            glyph_colours(&dark),
+            moss([0xff, 0xff, 0xff], [0xb6, 0xe0, 0x5a])
+        );
+        assert_eq!(
+            glyph_colours(&light),
+            moss([0x1a, 0x1a, 0x1a], [0x3b, 0x7a, 0x2a])
+        );
+        // High contrast: one colour for every part, the light included.
         let yellow = Rgb::new(0xff, 0xff, 0x00);
         for light in [false, true] {
             let theme = Theme {
                 light,
                 contrast: Some(contrast(yellow)),
             };
-            assert_eq!(glyph_colour(&theme), [0xff, 0xff, 0x00]);
+            assert_eq!(
+                glyph_colours(&theme),
+                moss([0xff, 0xff, 0x00], [0xff, 0xff, 0x00])
+            );
         }
     }
 
     #[test]
     fn hicon_from_art_reads_back() {
+        // Through the redraw path: the holding glyph on a dark taskbar, the light in Moss and the line in white.
         let size = 24;
-        let img = art::colorize(
-            &art::tray_mask(IconState::Holding, size),
-            [0x12, 0x34, 0x56],
-        );
-        let icon = make_icon(&img).expect("icon");
+        let want = Drawn {
+            icon: IconState::Holding,
+            colours: art::ON_DARK,
+            size,
+            pattern: false,
+        };
+        let img = art::colorize(&art::tray_mask(IconState::Holding, size), art::ON_DARK);
+        let icon = draw(want).expect("icon");
         let mut info = ICONINFO::default();
         // SAFETY: a live icon and a valid out pointer; the bitmaps it returns are freed below.
         unsafe { GetIconInfo(icon.0, &mut info) }.expect("GetIconInfo");
@@ -1103,15 +1123,17 @@ mod tests {
             rows
         };
         assert_eq!(rows, size as i32);
-        let opaque = img
-            .pixels
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .position(|p| p[3] == 0xff)
-            .expect("an opaque pixel");
-        let got = &px[opaque * 4..opaque * 4 + 4];
-        assert_eq!(got, [0x56, 0x34, 0x12, 0xff], "BGRA, alpha kept");
+        for rgb in [art::HOLDING_ON_DARK, art::GLYPH_ON_DARK] {
+            let at = img
+                .pixels
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .position(|p| p[..3] == rgb && p[3] == 0xff)
+                .expect("an opaque pixel of each part");
+            let got = &px[at * 4..at * 4 + 4];
+            assert_eq!(got, [rgb[2], rgb[1], rgb[0], 0xff], "BGRA, alpha kept");
+        }
         let clear = img
             .pixels
             .as_chunks::<4>()
@@ -1261,7 +1283,7 @@ mod tests {
         assert!(shell.calls.borrow()[0].icon);
         let last = notes.borrow().last().cloned();
         assert!(
-            matches!(last, Some(Note::Redrawn { colour, .. }) if colour == art::GLYPH_ON_LIGHT),
+            matches!(last, Some(Note::Redrawn { colours, .. }) if colours == art::ON_LIGHT),
             "{last:?}"
         );
     }

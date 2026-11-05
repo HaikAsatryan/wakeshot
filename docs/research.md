@@ -4760,3 +4760,145 @@ quote and source: `docs/research/brand-macos.md`.
 - **Nine cross-platform apps** (Slack, Telegram, VS Code, Signal, Discord, Figma, Notion, Firefox, 1Password) keep
   one picture and palette on Mac and Windows with a per-platform shape and finish; none copies glass onto Windows.
   Icons downloaded and seen by a helper agent; Signal and Figma rechecked by me. **Verified.**
+
+## Installer splash and the wordmark font
+
+Checked 2026-11-05 for card `docs/tasks/p6-brand-apply-web.md`, Part A. Source read at Velopack tag `1.2.161` (commit
+`92d6a1c9`, the version `Cargo.lock` and `pack.ps1` use), files fetched with `gh api` and raw GitHub URLs. Nothing was
+installed or run, so how the window looks on screen is **not verified**.
+
+- **Without `--splashImage`, Velopack's `Setup.exe` shows its own progress window**, not nothing. The chain:
+  - `vpk pack` puts a splash into the bundle only when one is given: `if (Options.SplashImage != null)
+    dict["splashimage" + ...]` (`src/vpk/Velopack.Packaging.Windows/Commands/WindowsPackCommandRunner.cs` line 292).
+    No default image.
+  - `get_splash_bytes()` returns `None` when the bundle has no `splashimage` file (`src/lib-rust/src/bundle.rs` lines
+    94 to 99).
+  - Unless silent, `install` calls `show_splash_dialog` with those bytes (`src/bins/src/commands/install.rs` lines 129
+    to 145); silent installs show nothing.
+  - With `None`, `show_splash_dialog` logs "No splash image, using progress dialog..." and opens
+    `dialogs::progress::show_splash_progress` instead of the splash window (`src/bins/src/windows/splash.rs` lines 63
+    to 80).
+  - That is `xdialog::show_progress(title, header, body, XDialogIcon::Information)` (`src/l18n/src/progress.rs` lines
+    76 to 101; `xdialog` 3.1 with feature `win32-direct`, root `Cargo.toml` line 73).
+  - Its English words (`locales/en-US.ftl` lines 3, 56, 57): title "Wakeshot Setup", header "Installing Wakeshot",
+    body "Setting up Wakeshot 0.1.0, please wait...". Progress moves 5, 10, 10 to 90 while files unpack, 100 after the
+    install hook (`install.rs` lines 213 to 249); the window closes when the install ends.
+  **Verified** in the source. Not verified: the window's look, whether it shows the app icon in its title bar, and
+  how long it stays up on this laptop (a few seconds is a guess).
+- **A splash, when given, is a borderless picture** (`splash.rs` lines 384 to 526): a layered, topmost tool window
+  (`WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`, `WS_POPUP`), the PNG or GIF drawn with its
+  alpha at its pixel size times the monitor's DPI scale (shrunk to fit the monitor), and a 12 px (times DPI) flat bar
+  along its bottom edge in `--splashProgressColor` (default `#00FF00`; `None` hides it; lines 44 to 50, 101 to 121).
+  No title, no text, no taskbar button. **Verified** in the source. `vpk pack -H` 1.2.161 on this laptop lists
+  `--splashImage, -s` ("Path to image displayed during installation") and `--splashProgressColor`. **Verified.**
+- **Instrument Sans SemiBold for the page**: the designer's repo `https://github.com/Instrument/instrument-sans`
+  (OFL-1.1 per GitHub's licence field) ships a static `fonts/webfonts/InstrumentSans-SemiBold.woff2`, 35,812 bytes,
+  at commit `7fa22308a3d0c94ee2b3cd537a1196b65db34a3e` (2023-06-14, the newest). Google Fonts'
+  `ofl/instrumentsans/METADATA.pb` names that same commit as its upstream source, and has only the variable font. The
+  static TTF beside it reads (name table, our script): "Instrument Sans SemiBold", "Version 1.000; ttfautohint
+  (v1.8.4.7-5d5b);gftools[0.9.28]", OS/2 weight 600, fsType 0 (no embedding limits). The WOFF2 header's sfnt size
+  (87,004) equals that TTF's size, and its version is 1.0. `OFL.txt`: "Copyright 2022 The Instrument Sans Project
+  Authors", with no Reserved Font Name after it, so a subset or renamed copy would also be allowed. We ship the file
+  unchanged. SHA-256 of the WOFF2: `04235f235483213906d69cafb7a87ee197adaffacb081c8a7f809d00f9b353cd`. **Verified.**
+
+## Media: GitHub's page colours, the video font and exact GIF colours
+
+Checked 2026-11-05 for card `docs/tasks/p6-brand-apply-media.md`, Part A.
+
+- **GitHub's page colour per theme** is Primer's `--bgColor-default`, read from github.com's own theme CSS: the repo
+  page `https://github.com/HaikAsatryan/wakeshot` (fetched with `curl`) links `light-0011b1fed09cb294.css`,
+  `dark-37b5e41810563d82.css`, `dark_dimmed-c1d783f33c1db2a8.css` and `dark_high_contrast-d69295870cb5f203.css` on
+  `github.githubassets.com/assets/`; they set `--bgColor-default` to `#fff`, `#0d1117`, `#212830` and `#010409`.
+  Primer's `primer-*.css` draws the page with `body{... background-color:var(--bgColor-default, ...)}`. The page's
+  `<html>` carries `data-color-mode="auto" data-light-theme="light" data-dark-theme="dark"` for a visitor who is not
+  signed in, so the defaults are `light` (`#FFFFFF`) and `dark` (`#0D1117`). **Verified** in the CSS. Not verified:
+  how the README's box looks on a signed-in account with dark dimmed or high contrast (the loop's dark GIF is drawn on
+  `#0D1117`, so it shows as a box of a slightly different dark there).
+- **The video's Instrument Sans Regular** comes from the same commit and folder as the SemiBold above
+  (`fonts/webfonts/InstrumentSans-Regular.woff2`, 34,628 bytes, SHA-256
+  `f28af62faa9eec1e5482cf6e2a3e06bc865fa2fa6937bd56c14d2be23c9b4c46`); the TTF of the same commit reads
+  "Instrument Sans", "Version 1.000; ...", OS/2 weight 400 (name table, read with a small Node script). The SemiBold
+  WOFF2 in `media/public/fonts/` is byte-equal to the page's (same SHA-256 as above). **Verified.**
+- **A GIF from Remotion's `--codec=gif` moves colours.** Remotion 4.0.540 encodes GIFs with FFmpeg's
+  `split[v],palettegen,[v]paletteuse` (`@remotion/renderer` `dist/stitch-frames-to-video.js` line 257): one palette
+  for the whole clip, with dithering. The old dark loop, drawn on `#14121F`, reads `#14111E` in every frame of the file
+  (decoded with `media/scripts/lib/gif.mjs`). So the loop is now rendered as PNG frames and written by our own GIF
+  writer with each frame's exact colours. The writer, our reader and the bundled `ffmpeg.exe` decode agree to the bit
+  on test frames (a 400-colour patch, random noise that fills the LZW table many times). **Verified.**
+- **Loop frames hold up to 252 colours** in their changed area (Chrome's anti-aliasing of a 128 px ring and line, and
+  the fades), under the 255 a GIF frame with a see-through index holds, so no colour is merged today; the writer
+  merges the rarest edge colour into its nearest if a frame ever needs more and reports how far it moved. **Verified**
+  (build output, 2026-11-05).
+
+## Brand apply: the held light in art.rs
+
+Checked 2026-11-05 by `p6-brand-apply-art` (code `crates/wakeshot-windows/src/tray/art.rs`; pictures
+`docs/research/img/brand/apply-*.png`; scripts in the card's scratch folder `p6-brand-apply-art\tools\`). Renders are
+offline (headless Edge at device scale 1); no live taskbar, Start or notice was looked at.
+
+- **Microsoft's icon sizes, read again** ("Construct your Windows app's icon", learn.microsoft.com, ms.date
+  2026-07-21, updated 2026-08-05, **verified**): the scale table asks 16, 20, 24, 32, 40, 48, 64 (title bar, tray),
+  24, 30, 36, 48, 60, 72, 96 (taskbar, all apps) and 32, 40, 48, 64, 80, 96, 256 (Start pins); its AppList target
+  sizes are the same 14: 16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256. "Apps should have, at the bare
+  minimum: 16x16, 24x24, 32x32, 48x48, and 256x256." `assets/wakeshot.ico` now holds all 14, the 256 frame as PNG
+  (the Windows 7 guide's "only the 256x256 pixel image should be compressed"), the rest 32-bit bitmaps.
+- **Windows' own tray glyphs sit at 0.477 to 0.479 of the box** (ink centre, the mean of chevron E70E, Wi-Fi E701,
+  volume E767, battery E83F in Segoe Fluent Icons; each from 0.415, Wi-Fi, to 0.500), the same at every size from 16
+  to 64 px (`sysglyphs.py`, Edge render). **Verified** in the render; the real taskbar may place them a little higher
+  (the review measured the chevron at 0.471 at 150%).
+- **The held light's position** (target 0.455 of the box for the filled glyph, `brand-review.md` T4). Measured on the
+  rebuilt taskbar (`look.py measure`, round 2's method) and by the test `the_light_sits_level_with_the_next_icon`;
+  both agree to 0.01 px. Offset from 0.455, in px (minus is higher):
+
+  | Size | 16 | 20 | 24 | 28 | 32 | 36 | 40 | 48 | 56 | 64 |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | Holding | -0.03 | +0.34 | +0.46 | -0.11 | -0.09 | +0.30 | +0.41 | -0.14 | +0.37 | -0.18 |
+  | Idle | +1.01 | +2.06 | +1.69 | +1.63 | +1.97 | +2.94 | +2.65 | +2.96 | +3.64 | +3.97 |
+  | Off | +0.72 | +1.77 | +1.23 | +1.15 | +1.41 | +2.33 | +1.95 | +2.15 | +2.66 | +2.86 |
+  | Holding against Windows' glyphs | -0.39 | -0.13 | -0.11 | -0.73 | -0.82 | -0.53 | -0.50 | -1.22 | -0.92 | -1.64 |
+
+  Idle and off sit lower only by ink: their ring is hollow; the light keeps one place in all three states (round 2's
+  rule, approved). About a sixteenth of the box in all (1 logical px).
+- **States differ by shape** (share of the ink in different pixels, test `states_differ_in_shape`, minimum 25%):
+  16 px holding/idle 50%, holding/off 58%, idle/off 43%; 20 px 58%, 62%, 33%; 24 px 35%, 50%, 48%. With only the
+  four pixels beside each slash step cleared, idle/off at 20 px was 24% and the ring touched the slash; clearing all
+  eight raised it to 33%.
+- **Crisp at 16 to 32 px**: half-covered pixels at most 23% of the ink (idle, 20 px); the line is whole pixels at every
+  size, and the 1 px rings at 16 and 20 px are drawn by hand (whole pixels and quarter-covered corners), so no pixel
+  is half grey (tests `strokes_are_crisp_at_small_sizes`, `the_line_is_solid`,
+  `the_ring_is_as_solid_as_the_line_at_1_px`).
+- **Contrast, WCAG 2 (test output):**
+
+  | Pair | Ratio | Needs |
+  |---|---|---|
+  | Line and outline, white on dark taskbar 202021 / hover 2d2d2e | 16.28 / 13.76 | 3.0 |
+  | Holding light B6E05A on dark taskbar / hover | 10.70 / 9.04 | 3.0 |
+  | Line and outline, 1a1a1a on light taskbar d8dadc / hover ecedee | 12.42 / 14.85 | 3.0 |
+  | Holding light 3B7A2A on light taskbar / hover | 3.74 / 4.48 | 3.0 |
+  | Plate 628C2B on light / dark Start (f3f3f3, 202020) | 3.57 / 4.12 | 3.0 |
+  | Plate 3E7C3B on light / dark Start | 4.56 / 3.22 | 3.0 |
+  | Light's rim on the plate round it, flat frames 16 to 24 (FFEA9C) | 3.50 to 3.51 | 3.0 |
+  | Light's rim on the plate round it, lit frames 30 to 256 (F7DC7F) | 3.13 to 3.16 | 3.0 |
+  | Same, inside the light's glow (lit frames; the glow is the light's soft edge, as round 2 drew it) | 2.53 to 2.58 (30 to 60), 2.03 to 2.10 (64 up) | none |
+  | Bar (white to FFFBE8) on the plate round it, every frame | 3.46 to 4.15 | 3.0 |
+  | Half rule at 48 px, light / dark Start (share of the icon at 3:1) | 63% / 91% | 50% |
+- **Notice colours**: the notice header's background in this laptop's pictures is 252525 (dark) and e5e5e5 (light),
+  the most common colour of the header band in `img/ux/notice-dark-first-run.png` and `notice-light-first-run.png`
+  (Acrylic over a grey test background, so a real desktop shifts them a little). The 48 px full drawing scaled to 16,
+  20 and 24 px by area averaging blurred the light into its glow and left the shadow as a grey rim on the light notice;
+  the flat drawing at 48 px keeps a clear light, so `assets/wakeshot-notice.png` is the flat drawing (palette PNG,
+  48 px, 1,798 bytes, the same form as the old file the header showed on screen). Which filter the shell scales with:
+  not verified.
+- **Files and sizes**: `assets/wakeshot.ico` 185,835 bytes (was 43,006); its 256 PNG frame 32,229 bytes, 12% of the
+  262,144 bytes of pixels, by `art.rs`'s new deflate (LZ77 through hash chains with lazy matching, fixed or dynamic
+  Huffman codes per block; the old one wrote fixed codes and runs of one byte only). `site/favicon.ico` 15,086 bytes
+  (16, 32, 48; was a copy of the old ICO). Python's own `zlib` inflated every PNG the writer made, and Windows'
+  `LoadImageW` (LR_LOADFROMFILE) loaded all 14 frames of the ICO and the three of the favicon at their sizes with the
+  light's core colour fffbe8 and a clear corner (`loadico.ps1`). A second writer run left every file byte-equal.
+- **Exe sizes** (release, `--locked`): x64 `wakeshot-tray.exe` 2,745,856 to 2,907,648 bytes (+161,792), `wakeshot.exe`
+  558,080 to 701,440 (+143,360); ARM64 after: 2,565,120 and 675,840 (no ARM64 build before). The ICO is about 143 KB
+  of that; the rest in the tray is the lit drawing and the deflate, which the notice's large icon reaches at run time.
+  All 14 frames sit byte for byte in all four exes, and Windows' `PrivateExtractIconsW` gave 16, 24, 36, 48 and 256 px
+  icons from both x64 exes with a clear corner and the light's fffbe8 (`exeicon.ps1`). **Verified.**
+- **Same bytes on x64 and ARM64**: the art uses `+`, `-`, `*`, `/` and `sqrt` in f32 and integer box blurs, so the
+  golden tests compare exactly; ARM64 got clippy and a release build, not a test run.

@@ -1,22 +1,29 @@
-//! Icon art as code: tray glyphs, the app icon, ICO and PNG writers.
+//! Icon art as code: the held light as tray glyphs and as the app icon, and the ICO and PNG writers.
 //!
-//! Owner: `p5-icon-art`, then `p5-haik-check`, then `p6-brand-cleanup`.
+//! Owner: `p5-icon-art`, then `p5-haik-check`, `p6-brand-cleanup` and `p6-brand-apply-art`.
 //!
-//! No Windows API here, so the file could move to the core. Shapes use plain arithmetic and `sqrt`, never `sin` or
-//! `cos`: those may differ in the last bit between x64 and ARM64, and the golden test compares exactly.
+//! No Windows API here, so the file could move to the core. Shapes and colours use plain arithmetic and `sqrt` only,
+//! never `sin`, `cos`, `exp`, `powf` or `ln`: those may differ in the last bit between x64 and ARM64, and the golden
+//! tests compare exactly. The soft shadow is integer box blurs, exact everywhere.
 //!
-//! The tray icon draws `tray_mask` at the size the taskbar wants and colours it with `colorize` (`GLYPH_ON_DARK`,
-//! `GLYPH_ON_LIGHT` or the high contrast text colour). The art is the Sunrise (Haik, 2026-11-04); off is always the
-//! idle glyph struck through, as Windows marks its own off states. Design notes and measured colours:
-//! `docs/research.md`, "Tray UX: icon art"; the brand (the Sunrise, the colours, why): `docs/brand.md`.
+//! The mark is the held light in Moss (Haik, 2026-11-05): a round light held over a line. In the tray the light is
+//! filled while holding, the same light as an outline when idle, and the outline struck through when off, as Windows
+//! marks its own off states. The tray icon draws `tray_mask` at the size the taskbar wants and colours it with
+//! `colorize`: the line and the outline in Windows' glyph colour, the light in Moss while holding, every part in the
+//! text colour in high contrast. The app icon is the same mark lit, on a Moss plate. This file is the one source the
+//! page, the media and the README port from. The brand: `docs/brand.md`; what was measured and how:
+//! `docs/research.md`, "Brand apply: the held light in art.rs".
 
 use wakeshot_core::view::IconState;
 
-/// Alpha only, `size` by `size`, top-down rows.
+/// A tray glyph: alpha only, `size` by `size`, top-down rows.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Mask {
     pub size: u32,
+    /// The whole glyph.
     pub alpha: Vec<u8>,
+    /// The part of `alpha` that is the filled light, which takes its own colour while holding. Never above `alpha`.
+    pub light: Vec<u8>,
 }
 
 /// Straight (not premultiplied) RGBA, top-down rows, 4 bytes per pixel.
@@ -27,11 +34,34 @@ pub struct Rgba {
     pub pixels: Vec<u8>,
 }
 
+/// The colours of a tray glyph: `ink` for the line and the outline, `light` for the filled light.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GlyphColours {
+    pub ink: [u8; 3],
+    pub light: [u8; 3],
+}
+
+impl GlyphColours {
+    /// Every part in one colour, as high contrast asks.
+    pub const fn one(rgb: [u8; 3]) -> Self {
+        Self {
+            ink: rgb,
+            light: rgb,
+        }
+    }
+}
+
 /// The sizes Windows asks for in the tray, 100% to 400% scale.
 pub const TRAY_SIZES: [u32; 10] = [16, 20, 24, 28, 32, 36, 40, 48, 56, 64];
 
-/// The frames of `assets/wakeshot.ico` (track note 3.2: no 256 frame).
-pub const APP_ICON_SIZES: [u32; 7] = [16, 20, 24, 32, 40, 48, 64];
+/// The frames of `assets/wakeshot.ico`: every target size in Microsoft's "Construct your Windows app's icon" (updated
+/// 2026-08-05), so Windows finds an exact frame for the title bar, tray, taskbar, Start and its lists at every scale
+/// from 100% to 400% instead of scaling a larger one down. The 256 frame is a PNG, the rest 32-bit bitmaps, as
+/// Microsoft's icon guide asks.
+pub const APP_ICON_SIZES: [u32; 14] = [16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256];
+
+/// The frames of `site/favicon.ico`: a browser tab at 100% and 200%, and 48 for the places that want a larger one.
+pub const FAVICON_SIZES: [u32; 3] = [16, 32, 48];
 
 // Measured in this laptop's screenshots (research "Tray UX: icon art"). The taskbar is translucent, so its colour
 // moves a few steps with the wallpaper.
@@ -41,6 +71,10 @@ pub const GLYPH_ON_DARK: [u8; 3] = [0xff, 0xff, 0xff];
 /// Windows' own glyph colour on a light background (its glyphs there match black at alpha 0xe4; solid 1a1a1a looks the
 /// same and does not need a second alpha).
 pub const GLYPH_ON_LIGHT: [u8; 3] = [0x1a, 0x1a, 0x1a];
+/// The light while holding, on a dark taskbar: Moss's bright green (`docs/brand.md`).
+pub const HOLDING_ON_DARK: [u8; 3] = [0xb6, 0xe0, 0x5a];
+/// The light while holding, on a light taskbar: Moss's deep green.
+pub const HOLDING_ON_LIGHT: [u8; 3] = [0x3b, 0x7a, 0x2a];
 /// The dark taskbar behind the tray.
 pub const TASKBAR_DARK: [u8; 3] = [0x20, 0x20, 0x21];
 /// The light taskbar behind the tray.
@@ -50,33 +84,250 @@ pub const HOVER_DARK: [u8; 3] = [0x2d, 0x2d, 0x2e];
 /// The plate under a tray icon the mouse rests on, light taskbar.
 pub const HOVER_LIGHT: [u8; 3] = [0xec, 0xed, 0xee];
 
-/// The app icon's plate (the brand's night violet) runs from this colour at the top left to `APP_DARK` at the bottom
-/// right. Both keep 3:1 with light and dark backgrounds and with the gold sun on them (`docs/brand.md`).
-const APP_LIGHT: [u8; 3] = [0x79, 0x57, 0xf4];
-const APP_DARK: [u8; 3] = [0x6b, 0x49, 0xf3];
-/// The sun in the app icon (the brand's sun gold); the horizon under it is white.
-const SUN_GOLD: [u8; 3] = [0xff, 0xcc, 0x4d];
+/// The glyph on a dark taskbar: white, the light in Moss while holding.
+pub const ON_DARK: GlyphColours = GlyphColours {
+    ink: GLYPH_ON_DARK,
+    light: HOLDING_ON_DARK,
+};
+/// The glyph on a light taskbar: near black, the light in deep Moss while holding.
+pub const ON_LIGHT: GlyphColours = GlyphColours {
+    ink: GLYPH_ON_LIGHT,
+    light: HOLDING_ON_LIGHT,
+};
+
+// The app icon's colours: Moss (`docs/research/brand-directions-2.md`, the Moss column; Haik's pick 2026-11-05).
+
+/// The plate's ramp runs from this leaf green at the top left to `PLATE_DARK` at the bottom right.
+const PLATE_LIGHT: [u8; 3] = [0x62, 0x8c, 0x2b];
+const PLATE_DARK: [u8; 3] = [0x3e, 0x7c, 0x3b];
+/// The shade that deepens the plate's bottom.
+const PLATE_DEEP: [u8; 3] = [0x2c, 0x5a, 0x26];
+/// The light is near white in the middle and warm at its edge; its glow on the plate is the edge colour.
+const LIGHT_CORE: [u8; 3] = [0xff, 0xfb, 0xe8];
+const LIGHT_EDGE: [u8; 3] = [0xff, 0xea, 0x9c];
+/// The lit light's rim: `LIGHT_EDGE` a third of the way to amber (`#E9C24A`), so the lit light keeps a warm edge.
+const LIGHT_RIM: [u8; 3] = [0xf7, 0xdc, 0x7f];
+const WHITE: [u8; 3] = [0xff; 3];
+
+/// From this size up the app icon is lit: a glow round the light on the plate, a bloom, a shade at the bottom and a
+/// drop shadow. Below it the frames are flat drawings of the same mark, since blur and shadows turn to mud there
+/// (Microsoft's old icon guide: no shadows at 24 px or smaller).
+const LIT_FROM: u32 = 30;
 
 /// The empty border a tray glyph keeps on each side, in pixels: 1 px at 100% scale, 4 px at 400%.
 pub fn padding(size: u32) -> u32 {
     (size / 16).max(1)
 }
 
-/// The tray glyph for `state`.
-pub fn tray_mask(state: IconState, size: u32) -> Mask {
-    let shape = sunrise(state, Grid::new(0, 0, size));
-    Mask {
-        size,
-        alpha: raster(size, size, &shape),
+/// Stroke width in whole pixels, about 1 px per 16 px of icon as Windows' own glyphs, so a straight stroke covers
+/// whole pixels.
+fn stroke(size: u32) -> u32 {
+    (size as f32 / 16.0).round().max(1.0) as u32
+}
+
+/// The held light at one tray size, in whole pixels.
+#[derive(Clone, Copy, Debug)]
+struct Held {
+    /// The stroke of the line and of the outline.
+    t: u32,
+    /// The light's diameter and its top.
+    d: u32,
+    top: u32,
+    /// The line's top, left and right.
+    line_y: u32,
+    x0: u32,
+    x1: u32,
+}
+
+impl Held {
+    fn at(size: u32) -> Self {
+        let t = stroke(size);
+        // Half the box, of the box's parity, so both sides of the light land on pixel edges.
+        let mut d = size / 2;
+        if (d + size) % 2 == 1 {
+            d -= 1;
+        }
+        let gap = (size + 4) / 8;
+        let width = size - 2 * (size / 8);
+        // The light goes where the filled glyph's ink centre sits at 0.455 of the box, level with the next app's icon
+        // on the taskbar (`brand-review.md` T4). The outline keeps that place, so the light does not jump between
+        // states; its own ink centre sits lower, since a ring weighs less than a disc.
+        let (fd, ft) = (d as f32, t as f32);
+        let disc = std::f32::consts::FRAC_PI_4 * fd * fd;
+        let line = (width * t) as f32;
+        let below = (disc * fd / 2.0 + line * (fd + gap as f32 + ft / 2.0)) / (disc + line);
+        let top = (0.455 * size as f32 - below).round().max(0.0) as u32;
+        let x0 = (size - width) / 2;
+        Held {
+            t,
+            d,
+            top,
+            line_y: top + d + gap,
+            x0,
+            x1: x0 + width,
+        }
+    }
+
+    fn line(self) -> Shape {
+        let t = self.t as f32;
+        Shape::Rect {
+            x0: self.x0 as f32,
+            y0: self.line_y as f32,
+            x1: self.x1 as f32,
+            y1: (self.line_y + self.t) as f32,
+            // Round ends once the stroke is 2 px, as the app icon's bar has.
+            r: [if self.t >= 2 { t / 2.0 } else { 0.0 }; 4],
+        }
+    }
+
+    fn disc(self, size: u32, inset: u32) -> Shape {
+        let r = self.d as f32 / 2.0;
+        Shape::Disc {
+            cx: size as f32 / 2.0,
+            cy: self.top as f32 + r,
+            r: r - inset as f32,
+        }
+    }
+
+    /// The outline drawn by hand pixel by pixel, where there is one for this light.
+    fn hand_ring(self) -> Option<&'static [&'static str]> {
+        match (self.t, self.d) {
+            (1, 8) => Some(&RING_8),
+            (1, 10) => Some(&RING_10),
+            _ => None,
+        }
     }
 }
 
-/// The glyph in one colour; the caller picks it from the theme.
-pub fn colorize(mask: &Mask, rgb: [u8; 3]) -> Rgba {
+/// The 1 px outlines of the 8 and 10 px lights (16 and 20 px glyphs), drawn by hand: a curve on its own leaves grey
+/// pixels that make the ring look fainter than the line (`brand-review.md` T2). Whole pixels (`X`), and a
+/// quarter-covered pixel (`s`) softening each step so it still reads round.
+const RING_8: [&str; 8] = [
+    ".sXXXXs.", "sX....Xs", "X......X", "X......X", "X......X", "X......X", "sX....Xs", ".sXXXXs.",
+];
+const RING_10: [&str; 10] = [
+    "..sXXXXs..",
+    ".sX....Xs.",
+    "sX......Xs",
+    "X........X",
+    "X........X",
+    "X........X",
+    "X........X",
+    "sX......Xs",
+    ".sX....Xs.",
+    "..sXXXXs..",
+];
+
+/// The tray glyph for `state`.
+pub fn tray_mask(state: IconState, size: u32) -> Mask {
+    let h = Held::at(size);
+    let n = (size * size) as usize;
+    let outline = Shape::Any(vec![h.line(), minus(h.disc(size, 0), h.disc(size, h.t))]);
+    let (mut alpha, light) = match state {
+        IconState::Holding => (
+            raster(size, size, &h.line()),
+            raster(size, size, &h.disc(size, 0)),
+        ),
+        IconState::Idle => (raster(size, size, &outline), vec![0; n]),
+        IconState::Off if h.t >= 2 => (raster(size, size, &struck(h, outline)), vec![0; n]),
+        IconState::Off => (raster(size, size, &outline), vec![0; n]),
+    };
+    if state != IconState::Holding {
+        if let Some(rows) = h.hand_ring() {
+            let left = (size - h.d) / 2;
+            for (j, row) in rows.iter().enumerate() {
+                for (i, c) in row.bytes().enumerate() {
+                    let at = ((h.top + j as u32) * size + left + i as u32) as usize;
+                    alpha[at] = match c {
+                        b'X' => 255,
+                        b's' => 64,
+                        _ => 0,
+                    };
+                }
+            }
+        }
+        if state == IconState::Off && h.t == 1 {
+            strike_pixels(&mut alpha, h, size);
+        }
+    }
+    // The light and the line never share a pixel: a gap of 2 px at least runs between them.
+    for (a, l) in alpha.iter_mut().zip(&light) {
+        *a = a.saturating_add(*l);
+    }
+    Mask { size, alpha, light }
+}
+
+/// The square the off slash crosses: from the light's top down to the line's bottom, its right side on the line's end,
+/// so the slash stays inside the glyph's own box (`brand-review.md` T7).
+fn strike_box(h: Held) -> (u32, u32, u32, u32) {
+    let bottom = h.line_y + h.t;
+    (h.x1 - (bottom - h.top), h.top, h.x1, bottom)
+}
+
+/// Off at 2 px strokes and up: the outline struck through from top left to bottom right, with a stroke-wide gap on
+/// each side of the slash, as Windows draws its own off glyphs.
+fn struck(h: Held, base: Shape) -> Shape {
+    let t = h.t as f32;
+    let (x0, y0, x1, y1) = strike_box(h);
+    let slash = |w: f32| Shape::Line {
+        ax: x0 as f32 + t / 2.0,
+        ay: y0 as f32 + t / 2.0,
+        bx: x1 as f32 - t / 2.0,
+        by: y1 as f32 - t / 2.0,
+        w,
+    };
+    Shape::Any(vec![minus(base, slash(3.0 * t)), slash(t)])
+}
+
+/// Off at 1 px strokes: a 1 px slash at 45 degrees is a row of grey pairs when drawn as a line, so it is whole pixels
+/// stepping down the diagonal. Every pixel touching a step, corners included, is cleared as the gap: with only the
+/// four beside each step cleared, the ring and the line still touched the slash at its corners.
+fn strike_pixels(alpha: &mut [u8], h: Held, size: u32) {
+    let (x0, y0, _, y1) = strike_box(h);
+    let steps = y1 - y0;
+    let mut set = |x: u32, y: u32, v: u8| {
+        if x < size && y < size {
+            alpha[(y * size + x) as usize] = v;
+        }
+    };
+    for i in 0..steps {
+        let (x, y) = (x0 + i, y0 + i);
+        set(x + 1, y, 0);
+        set(x, y + 1, 0);
+        set(x.wrapping_sub(1), y, 0);
+        set(x, y.wrapping_sub(1), 0);
+        set(x + 1, y.wrapping_sub(1), 0);
+        set(x.wrapping_sub(1), y + 1, 0);
+    }
+    for i in 0..steps {
+        set(x0 + i, y0 + i, 255);
+    }
+}
+
+/// The glyph in its colours; the caller picks them from the theme.
+pub fn colorize(mask: &Mask, colours: GlyphColours) -> Rgba {
     let pixels = mask
         .alpha
         .iter()
-        .flat_map(|&a| [rgb[0], rgb[1], rgb[2], a])
+        .zip(&mask.light)
+        .flat_map(|(&a, &l)| {
+            let rgb = if l == 0 {
+                colours.ink
+            } else if l >= a {
+                colours.light
+            } else {
+                let (a, l) = (u32::from(a), u32::from(l));
+                let one = |ink: u8, light: u8| {
+                    ((l * u32::from(light) + (a - l) * u32::from(ink) + a / 2) / a) as u8
+                };
+                [
+                    one(colours.ink[0], colours.light[0]),
+                    one(colours.ink[1], colours.light[1]),
+                    one(colours.ink[2], colours.light[2]),
+                ]
+            };
+            [rgb[0], rgb[1], rgb[2], a]
+        })
         .collect();
     Rgba {
         width: mask.size,
@@ -85,53 +336,214 @@ pub fn colorize(mask: &Mask, rgb: [u8; 3]) -> Rgba {
     }
 }
 
-/// The app icon: the holding glyph on a violet rounded square, so it reads on light and dark backgrounds alike. The
-/// sun is gold over a white horizon.
-pub fn app_icon(size: u32) -> Rgba {
-    let centre = size as f32 / 2.0;
-    // A margin of size / 24 (2 px at 48), so the plate does not look larger than other apps' icons. A design call:
-    // Microsoft's pages give no margin number.
-    let margin = ((size + 12) / 24) as f32;
-    let half = centre - margin;
-    let corner = (size as f32 * 0.1875).max(1.0);
-    let plate = raster(
-        size,
-        size,
-        &Shape::Rect {
-            x0: margin,
-            y0: margin,
-            x1: size as f32 - margin,
-            y1: size as f32 - margin,
-            r: [corner; 4],
-        },
-    );
-    // About 5/7 of the icon, with an even border so the mark sits on whole pixels.
-    let mut mark_size = (size as f32 * 0.72).round() as u32;
-    if (size - mark_size) % 2 == 1 {
-        mark_size -= 1;
+/// The app icon's layout at one size, in pixels: the plate, the light and the bar under it.
+#[derive(Clone, Copy, Debug)]
+struct Plated {
+    size: u32,
+    lit: bool,
+    /// The plate's inset from the icon's edge, its side and its corner radius.
+    margin: f32,
+    side: f32,
+    corner: f32,
+    /// The light's centre and radius.
+    cx: f32,
+    cy: f32,
+    r: f32,
+    /// The bar: left, top, right, bottom.
+    bar: [f32; 4],
+}
+
+impl Plated {
+    fn at(size: u32, lit: bool) -> Self {
+        let s = size as f32;
+        // A margin of size / 24 (2 px at 48), so the plate does not look larger than other apps' icons. A design
+        // call: Microsoft's pages give no margin number.
+        let margin = ((size + 12) / 24) as f32;
+        let side = s - 2.0 * margin;
+        let r = (s * 3.0 / 16.0).round();
+        let bar_h = (s / 16.0).round().max(1.0);
+        // At least the bar's height and a pixel, so the light never looks set on the bar.
+        let gap = (s * 0.082).round().max(bar_h + 1.0);
+        // The light and the bar sit a little above the middle, as a picture centred by eye does.
+        let top = ((s - (2.0 * r + gap + bar_h)) / 2.0 - 0.014 * s).round();
+        let bar_w = 2.0 * (s * 0.2735).round();
+        let bar_y = top + 2.0 * r + gap;
+        let bar_x = (s - bar_w) / 2.0;
+        Plated {
+            size,
+            lit,
+            margin,
+            side,
+            corner: side * 3.0 / 16.0,
+            cx: s / 2.0,
+            cy: top + r,
+            r,
+            bar: [bar_x, bar_y, bar_x + bar_w, bar_y + bar_h],
+        }
     }
-    let at = (size - mark_size) / 2;
-    let (horizon, sun) = risen_sun(Grid::new(at, at, mark_size));
-    let layers = [
-        (raster(size, size, &sun), SUN_GOLD),
-        (raster(size, size, &horizon), [0xff; 3]),
-    ];
-    // The light falls from the top left (Microsoft's default gradient angle, 120 degrees).
-    let (dx, dy) = (3f32.sqrt() / 2.0, 0.5);
+
+    fn plate(self, dy: f32) -> Shape {
+        let far = self.size as f32 - self.margin;
+        Shape::Rect {
+            x0: self.margin,
+            y0: self.margin + dy,
+            x1: far,
+            y1: far + dy,
+            r: [self.corner; 4],
+        }
+    }
+
+    fn bar_shape(self) -> Shape {
+        let [x0, y0, x1, y1] = self.bar;
+        let h = y1 - y0;
+        Shape::Rect {
+            x0,
+            y0,
+            x1,
+            y1,
+            r: [if h >= 2.0 { h / 2.0 } else { 0.0 }; 4],
+        }
+    }
+
+    fn light_shape(self) -> Shape {
+        Shape::Disc {
+            cx: self.cx,
+            cy: self.cy,
+            r: self.r,
+        }
+    }
+
+    /// The plate's colour at a point, without the bloom: the ramp, then when lit the shade at the bottom and, with
+    /// `glow`, the light's glow.
+    fn plate_colour(self, x: f32, y: f32, glow: bool) -> [f32; 3] {
+        let (m, w) = (self.margin, self.side);
+        // Microsoft's default gradient angle, 120 degrees: lightest at the top left, as if lit from there.
+        let (dx, dy) = (3f32.sqrt() / 2.0, 0.5);
+        let along = ((x - m) * dx + (y - m) * dy) / (w * (dx + dy));
+        let mut rgb = mixf(f(PLATE_LIGHT), f(PLATE_DARK), along.clamp(0.0, 1.0));
+        if self.lit {
+            // Kept modest below 64 px: the glow lightens the plate, and Microsoft asks that at least half the icon
+            // keep 3:1 on light Start, measured at 48 px.
+            let (reach, strength) = if self.size >= 64 {
+                (0.62, 0.6)
+            } else {
+                (0.5, 0.42)
+            };
+            if glow {
+                let t = self.distance(x, y) / (reach * w);
+                let alpha = stops(&[(0.0, strength), (0.45, 0.35 * strength), (1.0, 0.0)], t);
+                rgb = mixf(rgb, f(LIGHT_EDGE), alpha);
+            }
+            let down = (y - m) / w;
+            let shade = (0.35 * (down - 0.55) / 0.45).clamp(0.0, 0.35);
+            rgb = mixf(rgb, f(PLATE_DEEP), shade);
+        }
+        rgb
+    }
+
+    fn distance(self, x: f32, y: f32) -> f32 {
+        let (dx, dy) = (x - self.cx, y - self.cy);
+        (dx * dx + dy * dy).sqrt()
+    }
+
+    /// The light's colour at a point: a radial ramp from a spot up and left of the centre, near white over its middle
+    /// and warm only at the edge, so it reads as lit rather than as a ball.
+    fn light_colour(self, x: f32, y: f32) -> [f32; 3] {
+        let r = self.r;
+        let (fx, fy) = (self.cx - 0.22 * r, self.cy - 0.28 * r);
+        let (vx, vy) = (x - fx, y - fy);
+        let (ex, ey) = (self.cx - fx, self.cy - fy);
+        // The ramp's circles run from the spot (t = 0) to the light's edge (t = 1); solve for the one through (x, y).
+        let a = ex * ex + ey * ey - r * r;
+        let b = vx * ex + vy * ey;
+        let c = vx * vx + vy * vy;
+        let t = ((b - (b * b - a * c).sqrt()) / a).clamp(0.0, 1.0);
+        if self.lit {
+            let rgb = mixf(
+                f(LIGHT_CORE),
+                f(LIGHT_EDGE),
+                ((t - 0.5) / 0.36).clamp(0.0, 1.0),
+            );
+            mixf(rgb, f(LIGHT_RIM), ((t - 0.86) / 0.14).clamp(0.0, 1.0))
+        } else {
+            mixf(
+                f(LIGHT_CORE),
+                f(LIGHT_EDGE),
+                ((t - 0.6) / 0.4).clamp(0.0, 1.0),
+            )
+        }
+    }
+
+    /// The light's soft bloom round its edge, as an alpha.
+    fn bloom(self, x: f32, y: f32) -> f32 {
+        let t = self.distance(x, y) / (1.9 * self.r);
+        stops(&[(0.0, 0.8), (0.53, 0.44), (0.75, 0.144), (1.0, 0.0)], t)
+    }
+
+    /// The drop shadow's alpha under the plate: the plate moved down by a 96th of the icon and blurred to a deviation
+    /// of a 64th, so most of it fades inside the margin (5% black on the icon's last row at 48 px, 1% at 256). Round
+    /// 2's larger shadow (a 48th down, deviation 1.2 px at 48 px) ran past the icon's edge and was cut there, 9% black
+    /// on the last row, a hard grey line under the icon on light Start.
+    fn shadow(self) -> Vec<u8> {
+        let s = self.size as f32;
+        let mut alpha = raster(self.size, self.size, &self.plate(s / 96.0));
+        let sigma = s / 64.0;
+        // Box blurs one after another come close to a Gaussian: a 3 px box adds a variance of 2/3, so small shadows
+        // take that box as often as their variance asks, and large ones three wider boxes.
+        let (width, passes) = if sigma < 1.2 {
+            (3, ((1.5 * sigma * sigma).round() as u32).max(1))
+        } else {
+            let w = ((4.0 * sigma * sigma + 1.0).sqrt() / 2.0).round() as u32 * 2 + 1;
+            (w, 3)
+        };
+        for _ in 0..passes {
+            box_blur(&mut alpha, self.size, width);
+        }
+        alpha
+    }
+}
+
+/// How dark the drop shadow is at its darkest.
+const SHADOW: f32 = 0.3;
+
+/// The app icon: the held light, lit, over its bar on a Moss plate. Frames below `LIT_FROM` are flat.
+pub fn app_icon(size: u32) -> Rgba {
+    draw_plated(Plated::at(size, size >= LIT_FROM))
+}
+
+/// The app icon drawn flat at any size: the plate's ramp, the light and the bar, with no glow, bloom, shade or
+/// shadow. The notice header's picture, which the shell scales down to about 16 logical px.
+pub fn app_icon_flat(size: u32) -> Rgba {
+    draw_plated(Plated::at(size, false))
+}
+
+fn draw_plated(p: Plated) -> Rgba {
+    let size = p.size;
+    let plate = raster(size, size, &p.plate(0.0));
+    let bar = raster(size, size, &p.bar_shape());
+    let light = raster(size, size, &p.light_shape());
+    let shadow = if p.lit {
+        p.shadow()
+    } else {
+        vec![0; (size * size) as usize]
+    };
+    let [bar_x0, _, bar_x1, _] = p.bar;
     let mut pixels = Vec::with_capacity((size * size * 4) as usize);
     for y in 0..size {
         for x in 0..size {
             let i = (y * size + x) as usize;
-            if plate[i] == 0 {
-                pixels.extend([0, 0, 0, 0]);
-                continue;
+            let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
+            let cover = |m: &[u8]| f32::from(m[i]) / 255.0;
+            let mut px = Paint::CLEAR;
+            px.over([0.0; 3], SHADOW * cover(&shadow));
+            px.over(p.plate_colour(fx, fy, true), cover(&plate));
+            let along = ((fx - bar_x0) / (bar_x1 - bar_x0)).clamp(0.0, 1.0);
+            px.over(mixf(f(WHITE), f(LIGHT_CORE), along), cover(&bar));
+            if p.lit {
+                px.over(f(LIGHT_EDGE), p.bloom(fx, fy) * cover(&plate));
             }
-            let along = ((x as f32 + 0.5 - centre) * dx + (y as f32 + 0.5 - centre) * dy) / half;
-            let mut rgb = mix(APP_LIGHT, APP_DARK, ((along + 1.0) / 2.0).clamp(0.0, 1.0));
-            for (mark, colour) in &layers {
-                rgb = mix(rgb, *colour, f32::from(mark[i]) / 255.0);
-            }
-            pixels.extend([rgb[0], rgb[1], rgb[2], plate[i]]);
+            px.over(p.light_colour(fx, fy), cover(&light));
+            pixels.extend(px.bytes());
         }
     }
     Rgba {
@@ -141,15 +553,98 @@ pub fn app_icon(size: u32) -> Rgba {
     }
 }
 
+/// A pixel being painted: straight colour, 0 to 255, and alpha, 0 to 1.
+#[derive(Clone, Copy)]
+struct Paint {
+    rgb: [f32; 3],
+    a: f32,
+}
+
+impl Paint {
+    const CLEAR: Paint = Paint {
+        rgb: [0.0; 3],
+        a: 0.0,
+    };
+
+    /// Lays `rgb` at alpha `a` over the pixel, as a browser does in sRGB.
+    fn over(&mut self, rgb: [f32; 3], a: f32) {
+        if a <= 0.0 {
+            return;
+        }
+        let under = self.a * (1.0 - a);
+        let out = a + under;
+        for (c, top) in self.rgb.iter_mut().zip(rgb) {
+            *c = (top * a + *c * under) / out;
+        }
+        self.a = out;
+    }
+
+    fn bytes(self) -> [u8; 4] {
+        let a = (self.a * 255.0).round() as u8;
+        if a == 0 {
+            return [0; 4];
+        }
+        let c = |v: f32| v.round().clamp(0.0, 255.0) as u8;
+        [c(self.rgb[0]), c(self.rgb[1]), c(self.rgb[2]), a]
+    }
+}
+
+fn f(rgb: [u8; 3]) -> [f32; 3] {
+    [f32::from(rgb[0]), f32::from(rgb[1]), f32::from(rgb[2])]
+}
+
+fn mixf(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
+    [
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+    ]
+}
+
+/// A value along straight segments between `(t, value)` stops, flat past both ends.
+fn stops(points: &[(f32, f32)], t: f32) -> f32 {
+    let (first, last) = (points[0], points[points.len() - 1]);
+    if t <= first.0 {
+        return first.1;
+    }
+    for pair in points.windows(2) {
+        let ((t0, v0), (t1, v1)) = (pair[0], pair[1]);
+        if t <= t1 {
+            return v0 + (v1 - v0) * (t - t0) / (t1 - t0);
+        }
+    }
+    last.1
+}
+
+/// One box blur pass across, then one down, `width` pixels wide (odd); outside the image counts as clear.
+fn box_blur(alpha: &mut [u8], size: u32, width: u32) {
+    let (n, half) = (size as usize, (width / 2) as usize);
+    let mut line = vec![0u8; n];
+    for across in [true, false] {
+        for k in 0..n {
+            let at = |j: usize| if across { k * n + j } else { j * n + k };
+            for (j, slot) in line.iter_mut().enumerate() {
+                let (lo, hi) = (j.saturating_sub(half), (j + half).min(n - 1));
+                let sum: u32 = (lo..=hi).map(|q| u32::from(alpha[at(q)])).sum();
+                *slot = ((sum + width / 2) / width) as u8;
+            }
+            for (j, v) in line.iter().enumerate() {
+                alpha[at(j)] = *v;
+            }
+        }
+    }
+}
+
 /// The bytes of `assets/wakeshot.ico`.
 pub fn app_icon_file() -> Vec<u8> {
     let frames: Vec<Rgba> = APP_ICON_SIZES.iter().map(|&s| app_icon(s)).collect();
     ico(&frames)
 }
 
-fn mix(a: [u8; 3], b: [u8; 3], t: f32) -> [u8; 3] {
-    let one = |a: u8, b: u8| (f32::from(a) + (f32::from(b) - f32::from(a)) * t).round() as u8;
-    [one(a[0], b[0]), one(a[1], b[1]), one(a[2], b[2])]
+/// The bytes of `site/favicon.ico`: the same art as the app icon, so the page's tab shows the app.
+pub fn favicon_file() -> Vec<u8> {
+    let frames: Vec<Rgba> = FAVICON_SIZES.iter().map(|&s| app_icon(s)).collect();
+    ico(&frames)
 }
 
 /// One shape of a glyph, in pixels of the canvas, y down.
@@ -176,14 +671,7 @@ enum Shape {
         by: f32,
         w: f32,
     },
-    /// The points with `nx * x + ny * y <= c`; cuts a ring into an arc.
-    Half {
-        nx: f32,
-        ny: f32,
-        c: f32,
-    },
     Any(Vec<Shape>),
-    All(Vec<Shape>),
     Minus(Box<Shape>, Box<Shape>),
 }
 
@@ -223,9 +711,7 @@ impl Shape {
                 let (dx, dy) = (x - (ax + t * vx), y - (ay + t * vy));
                 dx * dx + dy * dy <= w * w / 4.0
             }
-            Shape::Half { nx, ny, c } => nx * x + ny * y <= *c,
             Shape::Any(all) => all.iter().any(|s| s.contains(x, y)),
-            Shape::All(all) => all.iter().all(|s| s.contains(x, y)),
             Shape::Minus(a, b) => a.contains(x, y) && !b.contains(x, y),
         }
     }
@@ -259,201 +745,14 @@ fn raster(width: u32, height: u32, shape: &Shape) -> Vec<u8> {
     out
 }
 
-/// Stroke width in whole pixels, about 1 px per 16 px of icon, so a straight stroke covers whole pixels.
-fn stroke(size: u32) -> f32 {
-    (size as f32 / 16.0).round().max(1.0)
-}
-
-/// A 16-unit design grid laid over a box of whole pixels. Edges snap to pixel edges, so a 1 px stroke at 16 px stays
-/// one sharp pixel instead of two grey ones.
-#[derive(Clone, Copy)]
-struct Grid {
-    x: f32,
-    y: f32,
-    k: f32,
-    t: f32,
-}
-
-impl Grid {
-    fn new(x: u32, y: u32, size: u32) -> Self {
-        Self {
-            x: x as f32,
-            y: y as f32,
-            k: size as f32 / 16.0,
-            t: stroke(size),
-        }
-    }
-
-    fn ex(self, u: f32) -> f32 {
-        self.x + (u * self.k).round()
-    }
-
-    fn ey(self, u: f32) -> f32 {
-        self.y + (u * self.k).round()
-    }
-
-    fn len(self, u: f32) -> f32 {
-        u * self.k
-    }
-
-    /// Moves a stroke's centre line so both of its edges land on pixel edges.
-    fn centre(self, v: f32) -> f32 {
-        (v - self.t / 2.0).round() + self.t / 2.0
-    }
-}
-
-/// The off state: the idle glyph struck through from top left to bottom right, with a stroke-wide gap on each side
-/// of the bar, as Windows draws its own off glyphs.
-fn slashed(g: Grid, base: Shape) -> Shape {
-    let t = g.t;
-    let bar = |w: f32| Shape::Line {
-        ax: g.ex(1.0) + t / 2.0,
-        ay: g.ey(1.0) + t / 2.0,
-        bx: g.ex(15.0) - t / 2.0,
-        by: g.ey(15.0) - t / 2.0,
-        w,
-    };
-    Shape::Any(vec![minus(base, bar(3.0 * t)), bar(t)])
-}
-
-/// A sun over the horizon: risen with rays while holding, an empty half sun when idle, struck through when off.
-fn sunrise(state: IconState, g: Grid) -> Shape {
-    match state {
-        IconState::Holding => {
-            let (horizon, sun) = risen_sun(g);
-            Shape::Any(vec![horizon, sun])
-        }
-        IconState::Idle => empty_sun(g, false),
-        IconState::Off => slashed(g, empty_sun(g, true)),
-    }
-}
-
-/// The horizon bar with its top at `horizon` units, and a sun centre and radius above it: the centre sits on a pixel
-/// centre for 1 px strokes (so the upright ray is one sharp column), and both sides of the sun on pixel edges.
-/// Returns the bar, the centre's x, the radius and the sun's flat base, one stroke above the bar.
-fn horizon_and_sun(g: Grid, radius: f32, horizon: f32) -> (Shape, f32, f32, f32) {
-    let t = g.t;
-    let top = g.ey(horizon);
-    let bar = Shape::Rect {
-        x0: g.ex(1.0),
-        y0: top,
-        x1: g.ex(15.0),
-        y1: top + t,
-        r: [(t / 2.0).floor(); 4],
-    };
-    let cx = g.centre(g.x + g.len(8.0));
-    let r = (cx + g.len(radius)).round() - cx;
-    (bar, cx, r, top - t)
-}
-
-/// The holding glyph's two layers, so the app icon can colour them apart: the horizon, and the half sun with three
-/// rays (upright and at 45 degrees), each a gap away from the sun.
-fn risen_sun(g: Grid) -> (Shape, Shape) {
-    let t = g.t;
-    let (horizon, cx, r, base) = horizon_and_sun(g, 4.0, 13.0);
-    let gap = g.len(1.25).round().max(t);
-    let len = g.len(3.0).round().max(t);
-    let half_disc = Shape::All(vec![
-        Shape::Disc { cx, cy: base, r },
-        Shape::Half {
-            nx: 0.0,
-            ny: 1.0,
-            c: base,
-        },
-    ]);
-    // Both ends of the upright ray on pixel edges, so it stays sharp.
-    let inner = (base - r - gap).floor();
-    let mut parts = vec![
-        half_disc,
-        Shape::Line {
-            ax: cx,
-            ay: inner - t / 2.0,
-            bx: cx,
-            by: inner - len + t / 2.0,
-            w: t,
-        },
-    ];
-    if t < 1.5 {
-        // A 1 px line at 45 degrees turns into grey pairs; whole pixels stepping along the diagonal stay sharp. The
-        // first pixel is the one whose centre clears the sun by the gap.
-        let (col, row) = ((cx - 0.5) as u32, base as u32);
-        let reach = r + gap + 0.5;
-        let first = (0..row)
-            .find(|&j| {
-                let (dx, dy) = (1.0 + j as f32, 0.5 + j as f32);
-                dx * dx + dy * dy >= reach * reach
-            })
-            .unwrap_or(0);
-        let steps = (len / std::f32::consts::SQRT_2).round().max(1.0) as u32;
-        let dot = |x: u32, y: u32| Shape::Rect {
-            x0: x as f32,
-            y0: y as f32,
-            x1: x as f32 + 1.0,
-            y1: y as f32 + 1.0,
-            r: [0.0; 4],
-        };
-        for j in first..first + steps {
-            if j + 1 > col || j + 1 > row {
-                break;
-            }
-            parts.push(dot(col - 1 - j, row - 1 - j));
-            parts.push(dot(col + 1 + j, row - 1 - j));
-        }
-    } else {
-        let d = std::f32::consts::FRAC_1_SQRT_2;
-        let (a, b) = (r + gap + t / 2.0, r + gap + len - t / 2.0);
-        for side in [-1.0, 1.0] {
-            parts.push(Shape::Line {
-                ax: cx + side * d * a,
-                ay: base - d * a,
-                bx: cx + side * d * b,
-                by: base - d * b,
-                w: t,
-            });
-        }
-    }
-    (horizon, Shape::Any(parts))
-}
-
-/// The idle glyph: a larger, empty half sun on a horizon one unit higher than holding's, so the glyph sits in the
-/// middle of its slot. `off` cuts the horizon at the off bar, so no stub is left past the bar's gap.
-fn empty_sun(g: Grid, off: bool) -> Shape {
-    let t = g.t;
-    let (horizon, cx, r, base) = horizon_and_sun(g, 5.0, 12.0);
-    let ring = Shape::All(vec![
-        minus(
-            Shape::Disc { cx, cy: base, r },
-            Shape::Disc {
-                cx,
-                cy: base,
-                r: r - t,
-            },
-        ),
-        Shape::Half {
-            nx: 0.0,
-            ny: 1.0,
-            c: base,
-        },
-    ]);
-    let horizon = if off {
-        // The off bar runs along x - g.x = y - g.y (`slashed`); keep the horizon on its lower left side.
-        Shape::All(vec![
-            horizon,
-            Shape::Half {
-                nx: 1.0,
-                ny: -1.0,
-                c: g.x - g.y,
-            },
-        ])
-    } else {
-        horizon
-    };
-    Shape::Any(vec![horizon, ring])
-}
-
-/// An ICO file of 32-bit frames, each with an AND mask, in the order given. Each frame is square, 1 to 256 px.
+/// An ICO file of 32-bit frames in the order given, each square, 1 to 256 px. A 256 frame is stored as a PNG and the
+/// others as bitmaps with an AND mask, as Microsoft's icon guide asks ("only the 256x256 pixel image should be
+/// compressed").
 pub fn ico(frames: &[Rgba]) -> Vec<u8> {
-    let images: Vec<Vec<u8>> = frames.iter().map(dib).collect();
+    let images: Vec<Vec<u8>> = frames
+        .iter()
+        .map(|f| if f.width == 256 { png_rgba(f) } else { dib(f) })
+        .collect();
     let mut out = Vec::new();
     out.extend(0u16.to_le_bytes());
     out.extend(1u16.to_le_bytes());
@@ -518,39 +817,41 @@ fn dib(img: &Rgba) -> Vec<u8> {
     out
 }
 
-/// A PNG file, 8 bits per channel: a palette when the image has at most 256 colours (icon sheets have about 65), else
-/// RGBA. Deflate with fixed codes and runs only: flat areas shrink a hundredfold, and no crate is needed.
+/// A PNG file, 8 bits per channel: a palette when the image has at most 256 colours (the review sheets), else RGBA.
 pub fn png(img: &Rgba) -> Vec<u8> {
-    let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
-    let mut header = Vec::with_capacity(13);
-    header.extend(img.width.to_be_bytes());
-    header.extend(img.height.to_be_bytes());
     match palette(img) {
         Some((colours, indices)) => {
-            header.extend([8, 3, 0, 0, 0]);
-            chunk(&mut out, b"IHDR", &header);
+            let mut out = png_header(img, 3);
             let rgb: Vec<u8> = colours.iter().flat_map(|c| [c[0], c[1], c[2]]).collect();
             chunk(&mut out, b"PLTE", &rgb);
             if colours.iter().any(|c| c[3] < 255) {
                 let alpha: Vec<u8> = colours.iter().map(|c| c[3]).collect();
                 chunk(&mut out, b"tRNS", &alpha);
             }
-            chunk(
-                &mut out,
-                b"IDAT",
-                &zlib(&scanlines(&indices, img.width as usize, 1)),
-            );
+            png_end(out, &scanlines(&indices, img.width as usize, 1))
         }
-        None => {
-            header.extend([8, 6, 0, 0, 0]);
-            chunk(&mut out, b"IHDR", &header);
-            chunk(
-                &mut out,
-                b"IDAT",
-                &zlib(&scanlines(&img.pixels, img.width as usize * 4, 4)),
-            );
-        }
+        None => png_rgba(img),
     }
+}
+
+/// A PNG file in RGBA whatever the colours: the form an ICO's 256 frame takes.
+fn png_rgba(img: &Rgba) -> Vec<u8> {
+    let out = png_header(img, 6);
+    png_end(out, &scanlines(&img.pixels, img.width as usize * 4, 4))
+}
+
+fn png_header(img: &Rgba, colour_type: u8) -> Vec<u8> {
+    let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
+    let mut header = Vec::with_capacity(13);
+    header.extend(img.width.to_be_bytes());
+    header.extend(img.height.to_be_bytes());
+    header.extend([8, colour_type, 0, 0, 0]);
+    chunk(&mut out, b"IHDR", &header);
+    out
+}
+
+fn png_end(mut out: Vec<u8>, filtered: &[u8]) -> Vec<u8> {
+    chunk(&mut out, b"IDAT", &zlib(filtered));
     chunk(&mut out, b"IEND", &[]);
     out
 }
@@ -644,8 +945,8 @@ fn paeth(a: u8, b: u8, c: u8) -> u8 {
 }
 
 fn zlib(data: &[u8]) -> Vec<u8> {
-    // Deflate, 32 KB window, no dictionary; 0x7801 is a multiple of 31 as the header check needs.
-    let mut out = vec![0x78, 0x01];
+    // Deflate, 32 KB window, no dictionary, best compression; 0x78da is a multiple of 31 as the header check needs.
+    let mut out = vec![0x78, 0xda];
     out.extend(deflate(data));
     out.extend(adler32(data).to_be_bytes());
     out
@@ -671,18 +972,9 @@ impl BitWriter {
     }
 
     /// Huffman codes go most significant bit first.
-    fn code(&mut self, code: u32, len: u32) {
+    fn code(&mut self, code: u32, len: u8) {
+        let len = u32::from(len);
         self.put(code.reverse_bits() >> (32 - len), len);
-    }
-
-    /// The fixed literal and length codes of RFC 1951 section 3.2.6.
-    fn symbol(&mut self, sym: u32) {
-        match sym {
-            0..=143 => self.code(0x30 + sym, 8),
-            144..=255 => self.code(0x190 + sym - 144, 9),
-            256..=279 => self.code(sym - 256, 7),
-            _ => self.code(0xc0 + sym - 280, 8),
-        }
     }
 
     fn finish(mut self) -> Vec<u8> {
@@ -693,6 +985,7 @@ impl BitWriter {
     }
 }
 
+// RFC 1951 section 3.2.5: the base and extra bits of each length and distance code.
 const LENGTH_BASE: [u16; 29] = [
     3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131,
     163, 195, 227, 258,
@@ -700,42 +993,389 @@ const LENGTH_BASE: [u16; 29] = [
 const LENGTH_EXTRA: [u8; 29] = [
     0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0,
 ];
+const DIST_BASE: [u16; 30] = [
+    1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537,
+    2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577,
+];
+const DIST_EXTRA: [u8; 30] = [
+    0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13,
+    13,
+];
+/// The order the code length code's lengths are sent in (RFC 1951 section 3.2.7).
+const CODE_LENGTH_ORDER: [usize; 19] = [
+    16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15,
+];
 
-/// One fixed-code block. Its only matches repeat the byte before (distance 1), which after the row filters covers
-/// the flat areas.
+const WINDOW: usize = 32 * 1024;
+const MIN_MATCH: usize = 3;
+const MAX_MATCH: usize = 258;
+/// How many earlier places with the same three bytes a match search tries: zlib's level 9 tries 4096; 128 gets within
+/// a few percent of it on these images at a fraction of the time.
+const MAX_CHAIN: usize = 128;
+/// Symbols per block, so each part of an image gets its own codes.
+const BLOCK: usize = 16 * 1024;
+
+#[derive(Clone, Copy, Debug)]
+enum Token {
+    Literal(u8),
+    Match { len: u16, dist: u16 },
+}
+
+/// Deflate (RFC 1951): matches found through hash chains with one step of lazy matching, as zlib does; each block in
+/// the fixed codes or its own, whichever is smaller. Row filters leave images as small differences, which the codes
+/// pack, and flat areas and repeated rows as matches.
 fn deflate(data: &[u8]) -> Vec<u8> {
+    let tokens = lz77(data);
     let mut w = BitWriter::default();
-    w.put(1, 1);
-    w.put(1, 2);
+    let blocks: Vec<&[Token]> = if tokens.is_empty() {
+        vec![&[]]
+    } else {
+        tokens.chunks(BLOCK).collect()
+    };
+    for (i, block) in blocks.iter().enumerate() {
+        write_block(&mut w, block, i + 1 == blocks.len());
+    }
+    w.finish()
+}
+
+struct Matcher<'a> {
+    data: &'a [u8],
+    head: Vec<u32>,
+    prev: Vec<u32>,
+}
+
+const HASH_BITS: u32 = 15;
+const NONE: u32 = u32::MAX;
+
+impl Matcher<'_> {
+    fn hash(&self, i: usize) -> usize {
+        let d = self.data;
+        let v = u32::from(d[i]) << 16 | u32::from(d[i + 1]) << 8 | u32::from(d[i + 2]);
+        (v.wrapping_mul(0x9e37_79b1) >> (32 - HASH_BITS)) as usize
+    }
+
+    fn insert(&mut self, i: usize) {
+        if i + MIN_MATCH <= self.data.len() {
+            let h = self.hash(i);
+            self.prev[i] = self.head[h];
+            self.head[h] = i as u32;
+        }
+    }
+
+    /// The longest earlier match of the bytes at `i`, as length and distance; length 0 when there is none of
+    /// `MIN_MATCH` or more.
+    fn longest(&self, i: usize) -> (usize, usize) {
+        let d = self.data;
+        if i + MIN_MATCH > d.len() {
+            return (0, 0);
+        }
+        let limit = (d.len() - i).min(MAX_MATCH);
+        let (mut best, mut dist) = (0, 0);
+        let mut at = self.head[self.hash(i)];
+        let mut tries = MAX_CHAIN;
+        while at != NONE && tries > 0 {
+            let j = at as usize;
+            if i - j > WINDOW {
+                break;
+            }
+            let len = d[j..]
+                .iter()
+                .zip(&d[i..i + limit])
+                .take_while(|(a, b)| a == b)
+                .count();
+            if len > best {
+                (best, dist) = (len, i - j);
+                if len == limit {
+                    break;
+                }
+            }
+            at = self.prev[j];
+            tries -= 1;
+        }
+        if best >= MIN_MATCH {
+            (best, dist)
+        } else {
+            (0, 0)
+        }
+    }
+}
+
+fn lz77(data: &[u8]) -> Vec<Token> {
+    let mut m = Matcher {
+        data,
+        head: vec![NONE; 1 << HASH_BITS],
+        prev: vec![NONE; data.len()],
+    };
+    let mut out = Vec::new();
     let mut i = 0;
     while i < data.len() {
-        let run = match i {
-            0 => 0,
-            _ => data[i..]
-                .iter()
-                .take(258)
-                .take_while(|&&b| b == data[i - 1])
-                .count(),
-        };
-        if run >= 3 {
-            let k = LENGTH_BASE
-                .iter()
-                .rposition(|&b| usize::from(b) <= run)
-                .unwrap_or(0);
-            w.symbol(257 + k as u32);
-            w.put(
-                (run - usize::from(LENGTH_BASE[k])) as u32,
-                u32::from(LENGTH_EXTRA[k]),
-            );
-            w.code(0, 5);
+        let (len, dist) = m.longest(i);
+        m.insert(i);
+        if len == 0 || m.longest(i + 1).0 > len {
+            // No match, or a longer one starts at the next byte: this byte goes alone.
+            out.push(Token::Literal(data[i]));
+            i += 1;
+            continue;
+        }
+        out.push(Token::Match {
+            len: len as u16,
+            dist: dist as u16,
+        });
+        for j in i + 1..i + len {
+            m.insert(j);
+        }
+        i += len;
+    }
+    out
+}
+
+/// The code of `value` in a base table: its index, extra bits' value and their count.
+fn base_code(value: u16, base: &[u16], extra: &[u8]) -> (usize, u32, u32) {
+    let k = base.iter().rposition(|&b| b <= value).unwrap_or(0);
+    (k, u32::from(value - base[k]), u32::from(extra[k]))
+}
+
+fn write_block(w: &mut BitWriter, tokens: &[Token], last: bool) {
+    let mut lit = [0u32; 286];
+    let mut dist = [0u32; 30];
+    for t in tokens {
+        match *t {
+            Token::Literal(b) => lit[usize::from(b)] += 1,
+            Token::Match { len, dist: d } => {
+                lit[257 + base_code(len, &LENGTH_BASE, &LENGTH_EXTRA).0] += 1;
+                dist[base_code(d, &DIST_BASE, &DIST_EXTRA).0] += 1;
+            }
+        }
+    }
+    lit[256] = 1;
+    let fixed_lit: Vec<u8> = (0..288)
+        .map(|s| match s {
+            0..=143 => 8,
+            144..=255 => 9,
+            256..=279 => 7,
+            _ => 8,
+        })
+        .collect();
+    let fixed_dist = vec![5u8; 30];
+    let lit_len = code_lengths(&lit, 15);
+    let dist_len = code_lengths(&dist, 15);
+    let header = dynamic_header(&lit_len, &dist_len);
+    let cost = |ll: &[u8], dl: &[u8]| -> u64 {
+        let l: u64 = lit
+            .iter()
+            .zip(ll)
+            .map(|(&c, &n)| u64::from(c) * u64::from(n))
+            .sum();
+        let d: u64 = dist
+            .iter()
+            .zip(dl)
+            .map(|(&c, &n)| u64::from(c) * u64::from(n))
+            .sum();
+        l + d
+    };
+    let dynamic = header.bits + cost(&lit_len, &dist_len) < cost(&fixed_lit, &fixed_dist);
+    w.put(u32::from(last), 1);
+    let (ll, dl) = if dynamic {
+        w.put(2, 2);
+        header.write(w);
+        (lit_len, dist_len)
+    } else {
+        w.put(1, 2);
+        (fixed_lit, fixed_dist)
+    };
+    let (lc, dc) = (canonical(&ll), canonical(&dl));
+    for t in tokens {
+        match *t {
+            Token::Literal(b) => w.code(lc[usize::from(b)], ll[usize::from(b)]),
+            Token::Match { len, dist: d } => {
+                let (k, v, n) = base_code(len, &LENGTH_BASE, &LENGTH_EXTRA);
+                w.code(lc[257 + k], ll[257 + k]);
+                w.put(v, n);
+                let (k, v, n) = base_code(d, &DIST_BASE, &DIST_EXTRA);
+                w.code(dc[k], dl[k]);
+                w.put(v, n);
+            }
+        }
+    }
+    w.code(lc[256], ll[256]);
+}
+
+/// A dynamic block's header: how many codes, then all code lengths, run-length coded by the code length code.
+struct Header {
+    lit: usize,
+    dist: usize,
+    order: usize,
+    cl_len: Vec<u8>,
+    runs: Vec<(usize, u32, u32)>,
+    bits: u64,
+}
+
+impl Header {
+    fn write(&self, w: &mut BitWriter) {
+        w.put((self.lit - 257) as u32, 5);
+        w.put((self.dist - 1) as u32, 5);
+        w.put((self.order - 4) as u32, 4);
+        for &s in &CODE_LENGTH_ORDER[..self.order] {
+            w.put(u32::from(self.cl_len[s]), 3);
+        }
+        let codes = canonical(&self.cl_len);
+        for &(sym, value, count) in &self.runs {
+            w.code(codes[sym], self.cl_len[sym]);
+            w.put(value, count);
+        }
+    }
+}
+
+fn dynamic_header(lit_len: &[u8], dist_len: &[u8]) -> Header {
+    let used = |l: &[u8], min: usize| {
+        l.iter()
+            .rposition(|&n| n > 0)
+            .map_or(min, |i| (i + 1).max(min))
+    };
+    let (lit, dist) = (used(lit_len, 257), used(dist_len, 1));
+    let all: Vec<u8> = lit_len[..lit]
+        .iter()
+        .chain(&dist_len[..dist])
+        .copied()
+        .collect();
+    let mut runs = Vec::new();
+    let mut i = 0;
+    while i < all.len() {
+        let v = all[i];
+        let run = all[i..].iter().take_while(|&&x| x == v).count();
+        if v == 0 && run >= 3 {
+            let r = run.min(138);
+            if r >= 11 {
+                runs.push((18, (r - 11) as u32, 7));
+            } else {
+                runs.push((17, (r - 3) as u32, 3));
+            }
+            i += r;
+        } else if v != 0 && run >= 4 {
+            runs.push((usize::from(v), 0, 0));
+            let mut left = run - 1;
+            while left >= 3 {
+                let r = left.min(6);
+                runs.push((16, (r - 3) as u32, 2));
+                left -= r;
+            }
+            for _ in 0..left {
+                runs.push((usize::from(v), 0, 0));
+            }
             i += run;
         } else {
-            w.symbol(u32::from(data[i]));
+            runs.push((usize::from(v), 0, 0));
             i += 1;
         }
     }
-    w.symbol(256);
-    w.finish()
+    let mut freq = [0u32; 19];
+    for &(s, _, _) in &runs {
+        freq[s] += 1;
+    }
+    let cl_len = code_lengths(&freq, 7);
+    let order = CODE_LENGTH_ORDER
+        .iter()
+        .rposition(|&s| cl_len[s] > 0)
+        .map_or(4, |i| (i + 1).max(4));
+    let bits = 14
+        + 3 * order as u64
+        + runs
+            .iter()
+            .map(|&(s, _, n)| u64::from(cl_len[s]) + u64::from(n))
+            .sum::<u64>();
+    Header {
+        lit,
+        dist,
+        order,
+        cl_len,
+        runs,
+        bits,
+    }
+}
+
+/// Huffman code lengths of at most `max` bits for the symbols' counts. When the tree runs deeper, the counts are
+/// halved (each kept above 0) and the tree built again, which flattens it.
+fn code_lengths(counts: &[u32], max: u32) -> Vec<u8> {
+    let mut c = counts.to_vec();
+    // Two symbols at least, so the code is complete, which every inflater accepts; the extra one is never sent.
+    let mut missing = 2usize.saturating_sub(c.iter().filter(|&&n| n > 0).count());
+    for n in c.iter_mut() {
+        if missing > 0 && *n == 0 {
+            *n = 1;
+            missing -= 1;
+        }
+    }
+    loop {
+        let lengths = huffman(&c);
+        if lengths.iter().all(|&l| l <= max) {
+            return lengths.iter().map(|&l| l as u8).collect();
+        }
+        for n in c.iter_mut().filter(|n| **n > 0) {
+            *n = n.div_ceil(2);
+        }
+    }
+}
+
+/// Each symbol's depth in a Huffman tree, by the two-queue method: leaves sorted by count, inner nodes in the order
+/// made. Ties go to the leaf, so the result is the same on every run.
+fn huffman(counts: &[u32]) -> Vec<u32> {
+    let mut leaves: Vec<usize> = (0..counts.len()).filter(|&s| counts[s] > 0).collect();
+    leaves.sort_by_key(|&s| (counts[s], s));
+    let n = leaves.len();
+    let mut weight: Vec<u64> = leaves.iter().map(|&s| u64::from(counts[s])).collect();
+    let mut parent = vec![0usize; 2 * n - 1];
+    let (mut leaf, mut inner) = (0, n);
+    for node in n..2 * n - 1 {
+        let mut pick = || {
+            let take_leaf = leaf < n && (inner >= node || weight[leaf] <= weight[inner]);
+            if take_leaf {
+                leaf += 1;
+                leaf - 1
+            } else {
+                inner += 1;
+                inner - 1
+            }
+        };
+        let (a, b) = (pick(), pick());
+        weight.push(weight[a] + weight[b]);
+        parent[a] = node;
+        parent[b] = node;
+    }
+    let mut depth = vec![0u32; 2 * n - 1];
+    for k in (0..2 * n - 2).rev() {
+        depth[k] = depth[parent[k]] + 1;
+    }
+    let mut out = vec![0; counts.len()];
+    for (k, &s) in leaves.iter().enumerate() {
+        out[s] = depth[k];
+    }
+    out
+}
+
+/// The canonical codes for the lengths (RFC 1951 section 3.2.2).
+fn canonical(lengths: &[u8]) -> Vec<u32> {
+    let mut count = [0u32; 16];
+    for &l in lengths {
+        count[usize::from(l)] += 1;
+    }
+    count[0] = 0;
+    let mut next = [0u32; 16];
+    let mut code = 0;
+    for bits in 1..16 {
+        code = (code + count[bits - 1]) << 1;
+        next[bits] = code;
+    }
+    lengths
+        .iter()
+        .map(|&l| {
+            if l == 0 {
+                return 0;
+            }
+            let c = next[usize::from(l)];
+            next[usize::from(l)] += 1;
+            c
+        })
+        .collect()
 }
 
 const CRC_TABLE: [u32; 256] = {
@@ -783,6 +1423,12 @@ fn adler32(bytes: &[u8]) -> u32 {
 #[cfg(test)]
 const STATES: [IconState; 3] = [IconState::Holding, IconState::Idle, IconState::Off];
 
+#[cfg(test)]
+fn mix(a: [u8; 3], b: [u8; 3], t: f32) -> [u8; 3] {
+    let one = |a: u8, b: u8| (f32::from(a) + (f32::from(b) - f32::from(a)) * t).round() as u8;
+    [one(a[0], b[0]), one(a[1], b[1]), one(a[2], b[2])]
+}
+
 /// Paints `img` (straight alpha) over the opaque `sheet`, enlarged `zoom` times by nearest neighbour.
 #[cfg(test)]
 fn paint(sheet: &mut Rgba, img: &Rgba, left: u32, top: u32, zoom: u32) {
@@ -811,22 +1457,29 @@ fn blank(width: u32, height: u32, rgb: [u8; 3]) -> Rgba {
     }
 }
 
-/// Rows: holding, idle and off. Columns: 16, 20, 24, 32, 40 and 48 px at real size, then the same enlarged 8 times.
-/// `media/scripts/check-art.mjs` reads the glyphs at these places, so a layout change goes there too.
+/// Rows: holding in one colour (the shape), holding in its colours, idle and off. Columns: 16, 20, 24, 32, 40 and 48
+/// px at real size, then the same enlarged 8 times. `media/scripts/check-art.mjs` reads the glyphs at these places,
+/// so a layout change goes there too.
 #[cfg(test)]
-fn sheet(back: [u8; 3], ink: [u8; 3]) -> Rgba {
+fn sheet(back: [u8; 3], colours: GlyphColours) -> Rgba {
     const SIZES: [u32; 6] = [16, 20, 24, 32, 40, 48];
     const ZOOM: u32 = 8;
     const GAP: u32 = 16;
     const MARGIN: u32 = 32;
+    let rows = [
+        (IconState::Holding, GlyphColours::one(colours.ink)),
+        (IconState::Holding, colours),
+        (IconState::Idle, colours),
+        (IconState::Off, colours),
+    ];
     let row = 48 * ZOOM;
     let real: u32 = SIZES.iter().map(|s| s + GAP).sum();
     let zoomed: u32 = SIZES.iter().map(|s| s * ZOOM + GAP).sum();
     let width = MARGIN + real + MARGIN + zoomed - GAP + MARGIN;
-    let height = MARGIN + 3 * row + 2 * GAP + MARGIN;
+    let height = MARGIN + rows.len() as u32 * (row + GAP) - GAP + MARGIN;
     let mut out = blank(width, height, back);
     let mut top = MARGIN;
-    for state in STATES {
+    for (state, ink) in rows {
         let mut left = MARGIN;
         for size in SIZES {
             let glyph = colorize(&tray_mask(state, size), ink);
@@ -844,17 +1497,18 @@ fn sheet(back: [u8; 3], ink: [u8; 3]) -> Rgba {
     out
 }
 
-/// Rows: the app icon on a light and on a dark background. Columns: every frame size at real size, then enlarged 4
-/// times.
+/// Rows: the app icon on light and on dark Start. Columns: every frame at real size, then the small frames, where
+/// each pixel is drawn by hand or by rule, enlarged 4 times.
 #[cfg(test)]
 fn app_sheet() -> Rgba {
+    const ZOOMED: [u32; 5] = [16, 20, 24, 32, 48];
     const ZOOM: u32 = 4;
     const GAP: u32 = 16;
     const MARGIN: u32 = 32;
-    let row = 64 * ZOOM + 2 * GAP;
+    let row = 256 + 2 * MARGIN;
     let real: u32 = APP_ICON_SIZES.iter().map(|s| s + GAP).sum();
-    let zoomed: u32 = APP_ICON_SIZES.iter().map(|s| s * ZOOM + GAP).sum();
-    let width = MARGIN + real + zoomed + MARGIN;
+    let zoomed: u32 = ZOOMED.iter().map(|s| s * ZOOM + GAP).sum();
+    let width = MARGIN + real + MARGIN + zoomed - GAP + MARGIN;
     let mut out = blank(width, 2 * row, [0; 3]);
     let mut top = 0;
     for back in [[0xf3; 3], [0x20; 3]] {
@@ -864,7 +1518,8 @@ fn app_sheet() -> Rgba {
             paint(&mut out, &app_icon(size), left, top + (row - size) / 2, 1);
             left += size + GAP;
         }
-        for size in APP_ICON_SIZES {
+        left += MARGIN;
+        for size in ZOOMED {
             let icon = app_icon(size);
             paint(&mut out, &icon, left, top + (row - size * ZOOM) / 2, ZOOM);
             left += size * ZOOM + GAP;
@@ -874,43 +1529,55 @@ fn app_sheet() -> Rgba {
     out
 }
 
-/// Writes `assets/wakeshot.ico` and the review sheets in `docs/research/img/ux/`, or all of them into
-/// `WAKESHOT_ART_DIR` when it is set (a trial that leaves the repo alone). Run: `cargo test --locked -p
-/// wakeshot-windows tray::art::write_art_files -- --ignored`.
+/// Writes `assets/wakeshot.ico`, `assets/wakeshot-notice.png`, `site/favicon.ico` and the review sheets in
+/// `docs/research/img/ux/`, or all of them into `WAKESHOT_ART_DIR` when it is set (a trial that leaves the repo
+/// alone). Run: `cargo test --locked -p wakeshot-windows tray::art::write_art_files -- --ignored`.
 #[cfg(test)]
 #[test]
-#[ignore = "writes the app icon and the review sheets"]
+#[ignore = "writes the app icon, the notice icon, the favicon and the review sheets"]
 fn write_art_files() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let (icon_dir, img_dir) = match std::env::var_os("WAKESHOT_ART_DIR") {
-        Some(dir) => (dir.clone().into(), dir.into()),
-        None => (root.join("assets"), root.join("docs/research/img/ux")),
+    let (assets, site, img) = match std::env::var_os("WAKESHOT_ART_DIR") {
+        Some(dir) => {
+            let dir = std::path::PathBuf::from(dir);
+            (dir.clone(), dir.clone(), dir)
+        }
+        None => (
+            root.join("assets"),
+            root.join("site"),
+            root.join("docs/research/img/ux"),
+        ),
     };
     let write = |path: std::path::PathBuf, bytes: Vec<u8>| {
         std::fs::write(&path, bytes).expect("write");
         println!("wrote {}", path.display());
     };
-    write(icon_dir.join("wakeshot.ico"), app_icon_file());
-    for (name, back, ink) in [
-        ("dark", TASKBAR_DARK, GLYPH_ON_DARK),
-        ("light", TASKBAR_LIGHT, GLYPH_ON_LIGHT),
-        // A sample high contrast pair: yellow on black.
-        ("contrast", [0, 0, 0], [0xff, 0xff, 0]),
+    write(assets.join("wakeshot.ico"), app_icon_file());
+    write(
+        assets.join(crate::notify::NOTICE_ICON_FILE),
+        crate::notify::notice_icon_png(),
+    );
+    write(site.join("favicon.ico"), favicon_file());
+    for (name, back, colours) in [
+        ("dark", TASKBAR_DARK, ON_DARK),
+        ("light", TASKBAR_LIGHT, ON_LIGHT),
+        // A sample high contrast theme: yellow text on black, every part in the text colour.
+        ("contrast", [0, 0, 0], GlyphColours::one([0xff, 0xff, 0])),
     ] {
         write(
-            img_dir.join(format!("icon-sheet-{name}.png")),
-            png(&sheet(back, ink)),
+            img.join(format!("icon-sheet-{name}.png")),
+            png(&sheet(back, colours)),
         );
     }
-    write(img_dir.join("icon-app.png"), png(&app_sheet()));
+    write(img.join("icon-app.png"), png(&app_sheet()));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn ink(mask: &Mask) -> usize {
-        mask.alpha.iter().filter(|&&a| a >= 128).count()
+    fn ink(alpha: &[u8]) -> usize {
+        alpha.iter().filter(|&&a| a >= 128).count()
     }
 
     #[test]
@@ -920,8 +1587,9 @@ mod tests {
                 let mask = tray_mask(state, size);
                 assert_eq!(mask.size, size);
                 assert_eq!(mask.alpha.len(), (size * size) as usize);
+                assert_eq!(mask.light.len(), (size * size) as usize);
                 // A glyph, not an empty box or a filled one.
-                let share = ink(&mask) as f32 / (size * size) as f32;
+                let share = ink(&mask.alpha) as f32 / (size * size) as f32;
                 assert!(
                     (0.08..0.6).contains(&share),
                     "{state:?} {size}: ink {share:.2}"
@@ -931,9 +1599,26 @@ mod tests {
     }
 
     #[test]
+    fn only_the_holding_glyph_has_a_light_part() {
+        for size in TRAY_SIZES {
+            for state in STATES {
+                let mask = tray_mask(state, size);
+                assert!(mask.light.iter().zip(&mask.alpha).all(|(l, a)| l <= a));
+                let lit = ink(&mask.light);
+                if state == IconState::Holding {
+                    // The filled light, not the line: about a third of the ink or more.
+                    assert!(lit * 3 > ink(&mask.alpha), "{size}: light {lit}");
+                } else {
+                    assert_eq!(lit, 0, "{state:?} {size}");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn states_differ_in_shape() {
         // Shape, not colour: at least a quarter of the ink of two states sits in different pixels.
-        for size in [16, 24] {
+        for size in [16, 20, 24] {
             for (i, a) in STATES.iter().enumerate() {
                 for b in &STATES[i + 1..] {
                     let (ma, mb) = (tray_mask(*a, size), tray_mask(*b, size));
@@ -962,60 +1647,88 @@ mod tests {
         half as f32 / any as f32
     }
 
-    /// The most grey the sunrise may leave at 16 to 32 px (measured: see the test).
-    const SUNRISE_GREY: f32 = 0.35;
+    /// The most grey the held light may leave at 16 to 32 px: its curves and the off slash at 2 px (measured at most
+    /// 0.23, idle at 20 px; `docs/research.md`).
+    const HELD_GREY: f32 = 0.25;
 
     #[test]
     fn strokes_are_crisp_at_small_sizes() {
         // Straight strokes sit on whole pixels, so only curves and diagonals leave grey pixels; one stroke off the
-        // grid would leave 50% or more. The empty sun is a 1 px curve at 16 and 20 px (up to SUNRISE_GREY there); the
-        // rays are whole pixels.
+        // grid would leave 50% or more.
         for state in STATES {
             for size in [16, 20, 24, 32] {
                 let share = half_covered(&tray_mask(state, size));
                 println!("{state:?} {size}: {share:.2}");
-                assert!(share <= SUNRISE_GREY, "{state:?} {size}: {share:.2}");
+                assert!(share <= HELD_GREY, "{state:?} {size}: {share:.2}");
             }
         }
-    }
-
-    fn luminance(rgb: [u8; 3]) -> f64 {
-        let channel = |c: u8| {
-            let v = f64::from(c) / 255.0;
-            if v <= 0.04045 {
-                v / 12.92
-            } else {
-                ((v + 0.055) / 1.055).powf(2.4)
-            }
-        };
-        0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2])
-    }
-
-    fn contrast(a: [u8; 3], b: [u8; 3]) -> f64 {
-        let (la, lb) = (luminance(a), luminance(b));
-        (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
     }
 
     #[test]
-    fn glyph_contrast_on_taskbars() {
-        // WCAG 2 non-text contrast: at least 3:1 on the taskbar and on the hover plate.
-        for (glyph, back) in [
-            (GLYPH_ON_DARK, TASKBAR_DARK),
-            (GLYPH_ON_DARK, HOVER_DARK),
-            (GLYPH_ON_LIGHT, TASKBAR_LIGHT),
-            (GLYPH_ON_LIGHT, HOVER_LIGHT),
-        ] {
-            let ratio = contrast(glyph, back);
-            assert!(ratio >= 3.0, "{glyph:?} on {back:?}: {ratio:.2}");
+    fn the_line_is_solid() {
+        // Every pixel of the line is fully covered, but for the round ends once the stroke is 2 px.
+        for size in TRAY_SIZES {
+            let h = Held::at(size);
+            let mask = tray_mask(IconState::Idle, size);
+            let cap = h.t.div_ceil(2) * u32::from(h.t >= 2);
+            for y in h.line_y..h.line_y + h.t {
+                for x in h.x0 + cap..h.x1 - cap {
+                    assert_eq!(mask.alpha[(y * size + x) as usize], 255, "{size}: {x},{y}");
+                }
+            }
         }
-        // The app icon's gold sun and white horizon on both ends of its plate, and the plate on light and dark
-        // backgrounds.
-        for c in [APP_LIGHT, APP_DARK] {
-            assert!(contrast([0xff; 3], c) >= 3.0, "white on {c:?}");
-            assert!(contrast(SUN_GOLD, c) >= 3.0, "gold on {c:?}");
-            assert!(contrast([0xf3; 3], c) >= 3.0, "{c:?} on light");
-            assert!(contrast([0x20; 3], c) >= 3.0, "{c:?} on dark");
+    }
+
+    #[test]
+    fn the_ring_is_as_solid_as_the_line_at_1_px() {
+        // At 16 and 20 px, the ring's pixels are whole or a quarter: no half-grey pixel that makes it look fainter.
+        for size in [16, 20] {
+            let mask = tray_mask(IconState::Idle, size);
+            let grey = mask.alpha.iter().filter(|&&a| a > 64 && a < 255).count();
+            assert_eq!(grey, 0, "{size}");
         }
+    }
+
+    /// The ink's centre from the top, in pixels: the alpha-weighted mean of pixel centres.
+    fn ink_centre(alpha: &[u8], size: u32) -> f32 {
+        let (mut sum, mut moment) = (0.0, 0.0);
+        for (i, &a) in alpha.iter().enumerate() {
+            let y = (i as u32 / size) as f32 + 0.5;
+            sum += f32::from(a);
+            moment += f32::from(a) * y;
+        }
+        moment / sum
+    }
+
+    #[test]
+    fn the_light_sits_level_with_the_next_icon() {
+        // The filled glyph's ink centre within 0.5 px of 0.455 of the box (`brand-review.md` T4); idle and off keep
+        // the light where it is, so their centres are printed only.
+        for size in TRAY_SIZES {
+            let target = 0.455 * size as f32;
+            let at = |state| ink_centre(&tray_mask(state, size).alpha, size) - target;
+            let (holding, idle, off) = (
+                at(IconState::Holding),
+                at(IconState::Idle),
+                at(IconState::Off),
+            );
+            println!("{size}: holding {holding:+.2} px, idle {idle:+.2}, off {off:+.2}");
+            assert!(holding.abs() <= 0.5, "{size}: {holding:+.2}");
+        }
+    }
+
+    /// The box round every pixel with ink.
+    fn ink_box(alpha: &[u8], size: u32) -> (u32, u32, u32, u32) {
+        let (mut left, mut top, mut right, mut bottom) = (size, size, 0, 0);
+        for y in 0..size {
+            for x in 0..size {
+                if alpha[(y * size + x) as usize] > 0 {
+                    (left, top) = (left.min(x), top.min(y));
+                    (right, bottom) = (right.max(x + 1), bottom.max(y + 1));
+                }
+            }
+        }
+        (left, top, right, bottom)
     }
 
     #[test]
@@ -1024,19 +1737,11 @@ mod tests {
             for size in TRAY_SIZES {
                 let mask = tray_mask(state, size);
                 let pad = padding(size);
-                let (mut left, mut top, mut right, mut bottom) = (size, size, 0, 0);
-                for y in 0..size {
-                    for x in 0..size {
-                        if mask.alpha[(y * size + x) as usize] == 0 {
-                            continue;
-                        }
-                        let inside =
-                            (pad..size - pad).contains(&x) && (pad..size - pad).contains(&y);
-                        assert!(inside, "{state:?} {size}: ink at {x},{y}, pad {pad}");
-                        (left, top) = (left.min(x), top.min(y));
-                        (right, bottom) = (right.max(x + 1), bottom.max(y + 1));
-                    }
-                }
+                let (left, top, right, bottom) = ink_box(&mask.alpha, size);
+                assert!(
+                    left >= pad && top >= pad && right <= size - pad && bottom <= size - pad,
+                    "{state:?} {size}: ink {left},{top} to {right},{bottom}, pad {pad}"
+                );
                 // And it uses its box: no tiny glyph in a large slot.
                 let live = size - 2 * pad;
                 let span = (right - left).max(bottom - top);
@@ -1049,13 +1754,216 @@ mod tests {
     }
 
     #[test]
+    fn the_slash_stays_inside_the_idle_glyph() {
+        // T7: off is no larger than idle; the slash runs inside the glyph's own box.
+        for size in TRAY_SIZES {
+            let idle = ink_box(&tray_mask(IconState::Idle, size).alpha, size);
+            let off = ink_box(&tray_mask(IconState::Off, size).alpha, size);
+            assert!(
+                off.0 >= idle.0 && off.1 >= idle.1 && off.2 <= idle.2 && off.3 <= idle.3,
+                "{size}: off {off:?}, idle {idle:?}"
+            );
+        }
+    }
+
+    /// Pixels at or above `min` with no neighbour (of eight) at or above it.
+    fn loose(alpha: &[u8], size: u32, min: u8) -> Vec<(u32, u32)> {
+        let at = |x: i64, y: i64| {
+            if x < 0 || y < 0 || x >= i64::from(size) || y >= i64::from(size) {
+                0
+            } else {
+                alpha[(y as u32 * size + x as u32) as usize]
+            }
+        };
+        let mut out = Vec::new();
+        for y in 0..i64::from(size) {
+            for x in 0..i64::from(size) {
+                if at(x, y) < min {
+                    continue;
+                }
+                let alone = (-1..=1)
+                    .flat_map(|dy| (-1..=1).map(move |dx| (dx, dy)))
+                    .filter(|&d| d != (0, 0))
+                    .all(|(dx, dy)| at(x + dx, y + dy) < min);
+                if alone {
+                    out.push((x as u32, y as u32));
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn no_loose_pixels_at_small_sizes() {
+        // A4 and T1: a lone pixel at 100% to 150% reads as a speck.
+        for size in [16, 20, 24] {
+            for state in STATES {
+                let mask = tray_mask(state, size);
+                assert_eq!(loose(&mask.alpha, size, 32), [], "{state:?} {size}");
+            }
+            let p = Plated::at(size, size >= LIT_FROM);
+            for (name, shape) in [("light", p.light_shape()), ("bar", p.bar_shape())] {
+                let cover = raster(size, size, &shape);
+                assert_eq!(loose(&cover, size, 32), [], "app icon {name} {size}");
+            }
+        }
+    }
+
+    fn luminance(rgb: [f32; 3]) -> f64 {
+        let channel = |c: f32| {
+            let v = f64::from(c) / 255.0;
+            if v <= 0.04045 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2])
+    }
+
+    fn contrast(a: [f32; 3], b: [f32; 3]) -> f64 {
+        let (la, lb) = (luminance(a), luminance(b));
+        (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+    }
+
+    #[test]
+    fn glyph_contrast_on_taskbars() {
+        // WCAG 2 non-text contrast (1.4.11): every part of the glyph at least 3:1 on the taskbar and on the hover
+        // plate, the holding light's Moss included.
+        for (colours, backs) in [
+            (ON_DARK, [TASKBAR_DARK, HOVER_DARK]),
+            (ON_LIGHT, [TASKBAR_LIGHT, HOVER_LIGHT]),
+        ] {
+            for back in backs {
+                for part in [colours.ink, colours.light] {
+                    let ratio = contrast(f(part), f(back));
+                    println!("{part:02x?} on {back:02x?}: {ratio:.2}");
+                    assert!(ratio >= 3.0, "{part:02x?} on {back:02x?}: {ratio:.2}");
+                }
+            }
+        }
+    }
+
+    const START_LIGHT: [u8; 3] = [0xf3; 3];
+    const START_DARK: [u8; 3] = [0x20; 3];
+
+    #[test]
+    fn app_icon_contrast() {
+        // The plate's two ends on light and dark Start.
+        for plate in [PLATE_LIGHT, PLATE_DARK] {
+            for start in [START_LIGHT, START_DARK] {
+                let ratio = contrast(f(plate), f(start));
+                println!("plate {plate:02x?} on {start:02x?}: {ratio:.2}");
+                assert!(
+                    ratio >= 3.0,
+                    "plate {plate:02x?} on {start:02x?}: {ratio:.2}"
+                );
+            }
+        }
+        // At every frame: the light's rim on the plate round it, a pixel out, and the bar on the plate round it. The
+        // light is checked against the plate without its glow, as the bloom, the glow is the light's own soft edge;
+        // the number with the glow is printed for the record. The bar is checked inside the glow.
+        for size in APP_ICON_SIZES {
+            let p = Plated::at(size, size >= LIT_FROM);
+            let rim = f(if p.lit { LIGHT_RIM } else { LIGHT_EDGE });
+            let (mut light, mut glowing) = (f64::MAX, f64::MAX);
+            for (ux, uy) in round_the_clock() {
+                let (x, y) = (p.cx + ux * (p.r + 1.0), p.cy + uy * (p.r + 1.0));
+                light = light.min(contrast(rim, p.plate_colour(x, y, false)));
+                glowing = glowing.min(contrast(rim, p.plate_colour(x, y, true)));
+            }
+            let [x0, y0, x1, y1] = p.bar;
+            let mut bar = f64::MAX;
+            for x in [x0 - 1.0, x1 + 1.0, (x0 + x1) / 2.0] {
+                for y in [y0 - 1.0, y1 + 1.0] {
+                    for ink in [WHITE, LIGHT_CORE] {
+                        bar = bar.min(contrast(f(ink), p.plate_colour(x, y, true)));
+                    }
+                }
+            }
+            println!("{size}: light's rim {light:.2} (in its glow {glowing:.2}), bar {bar:.2}");
+            assert!(light >= 3.0, "{size}: light's rim {light:.2}");
+            assert!(bar >= 3.0, "{size}: bar {bar:.2}");
+        }
+    }
+
+    /// 64 directions all the way round, as unit vectors: the border of a square, scaled to length 1 (no sin or cos).
+    fn round_the_clock() -> Vec<(f32, f32)> {
+        let mut out = Vec::new();
+        for i in -8..8 {
+            let i = i as f32;
+            for (x, y) in [(i, -8.0), (8.0, i), (-i, 8.0), (-8.0, -i)] {
+                let len = (x * x + y * y).sqrt();
+                out.push((x / len, y / len));
+            }
+        }
+        out
+    }
+
+    /// Microsoft's half rule: the share of the icon's visible pixels (alpha at least half) that keep 3:1 against the
+    /// background, as drawn over it.
+    fn half_rule(icon: &Rgba, back: [u8; 3]) -> f64 {
+        let (mut n, mut ok) = (0, 0);
+        for p in icon.pixels.chunks(4) {
+            if p[3] < 128 {
+                continue;
+            }
+            let a = f32::from(p[3]) / 255.0;
+            let rgb = [0, 1, 2].map(|k| f32::from(p[k]) * a + f32::from(back[k]) * (1.0 - a));
+            n += 1;
+            ok += usize::from(contrast(rgb, f(back)) >= 3.0);
+        }
+        ok as f64 / n as f64
+    }
+
+    #[test]
+    fn half_the_icon_keeps_3_to_1_on_start() {
+        // "Make sure at least half of your icon passes a 3.0:1 contrast ratio on light and dark theme", measured at
+        // 48 px (Microsoft, "Design guidelines for Windows app icons").
+        let icon = app_icon(48);
+        for back in [START_LIGHT, START_DARK] {
+            let share = half_rule(&icon, back);
+            println!("48 px on {back:02x?}: {:.0}%", share * 100.0);
+            assert!(share >= 0.5, "48 px on {back:02x?}: {share:.2}");
+        }
+    }
+
+    #[test]
     fn colorize_keeps_alpha_and_sets_colour() {
-        let mask = tray_mask(IconState::Holding, 16);
-        let img = colorize(&mask, [1, 2, 3]);
+        let mask = tray_mask(IconState::Idle, 16);
+        let img = colorize(&mask, GlyphColours::one([1, 2, 3]));
         assert_eq!((img.width, img.height), (16, 16));
         for (p, a) in img.pixels.chunks(4).zip(&mask.alpha) {
             assert_eq!(p, [1, 2, 3, *a]);
         }
+    }
+
+    #[test]
+    fn colorize_gives_the_light_its_own_colour() {
+        let size = 24;
+        let mask = tray_mask(IconState::Holding, size);
+        let img = colorize(&mask, ON_DARK);
+        let h = Held::at(size);
+        let pixel = |x: u32, y: u32| {
+            let i = ((y * size + x) * 4) as usize;
+            [
+                img.pixels[i],
+                img.pixels[i + 1],
+                img.pixels[i + 2],
+                img.pixels[i + 3],
+            ]
+        };
+        let [r, g, b] = HOLDING_ON_DARK;
+        assert_eq!(
+            pixel(size / 2, h.top + h.d / 2),
+            [r, g, b, 255],
+            "the light"
+        );
+        assert_eq!(
+            pixel(size / 2, h.line_y),
+            [0xff, 0xff, 0xff, 255],
+            "the line"
+        );
     }
 
     #[test]
@@ -1065,14 +1973,16 @@ mod tests {
             assert_eq!((icon.width, icon.height), (size, size));
             assert_eq!(icon.pixels.len(), (size * size * 4) as usize);
             let opaque = icon.pixels.chunks(4).filter(|p| p[3] == 255).count();
-            // The plate's green stays at 0x57 or below; the gold and white mark lifts it.
+            // The plate's channels stay below 0xd0; the light and the bar are near white.
             let mark = icon
                 .pixels
                 .chunks(4)
-                .filter(|p| p[3] == 255 && p[1] > 0xa0)
+                .filter(|p| p[3] == 255 && p[0] > 0xd0 && p[1] > 0xd0)
                 .count();
-            assert!(opaque * 5 > (size * size * 2) as usize, "{size}: plate");
-            assert!(mark * 12 > opaque, "{size}: mark");
+            assert!(opaque * 5 > (size * size * 3) as usize, "{size}: plate");
+            assert!(mark * 16 > opaque, "{size}: mark");
+            // The corners are clear but for the shadow's faint edge: a rounded plate.
+            assert!(icon.pixels[3] < 16, "{size}: corner {}", icon.pixels[3]);
         }
     }
 
@@ -1110,6 +2020,15 @@ mod tests {
             next = offset + len;
             assert!(next <= bytes.len(), "frame {i} inside the file");
             let d = &bytes[offset..next];
+            if d.starts_with(b"\x89PNG") {
+                assert_eq!(w, 256, "only the 256 frame is a PNG");
+                let frame = parse_png(d);
+                assert_eq!(d[25], 6, "the 256 frame is RGBA");
+                assert_eq!((frame.width, frame.height), (w, h));
+                frames.push(frame);
+                continue;
+            }
+            assert!(w < 256, "the 256 frame is a PNG");
             assert_eq!(le32(d, 0), 40, "BITMAPINFOHEADER");
             assert_eq!((le32(d, 4), le32(d, 8)), (w, 2 * h), "DIB size");
             assert_eq!(
@@ -1189,7 +2108,13 @@ mod tests {
         assert_eq!(back.len(), frames.len());
         for (a, b) in frames.iter().zip(&back) {
             assert_eq!((a.width, a.height), (b.width, b.height));
-            assert_eq!(cleared(a), *b, "{} px", a.width);
+            // The PNG frame keeps every byte; the bitmaps clear the colour of transparent pixels.
+            let want = if a.width == 256 {
+                a.clone()
+            } else {
+                cleared(a)
+            };
+            assert_eq!(want, *b, "{} px", a.width);
         }
     }
 
@@ -1235,49 +2160,93 @@ mod tests {
         fn bits(&mut self, n: u32) -> u32 {
             (0..n).fold(0, |v, i| v | (self.bit() << i))
         }
+    }
 
-        /// A Huffman code, read most significant bit first.
-        fn code(&mut self, n: u32) -> u32 {
-            (0..n).fold(0, |v, _| (v << 1) | self.bit())
+    /// A Huffman decoder built from code lengths, as zlib's `puff` does it: counts per length and the symbols in
+    /// code order. Checks that the code is neither over-subscribed nor incomplete.
+    struct Decoder {
+        count: [u32; 16],
+        symbols: Vec<usize>,
+    }
+
+    impl Decoder {
+        fn new(lengths: &[u32]) -> Self {
+            let mut count = [0u32; 16];
+            for &l in lengths {
+                count[l as usize] += 1;
+            }
+            let mut left: i64 = 1;
+            for &c in &count[1..] {
+                left = left * 2 - i64::from(c);
+                assert!(left >= 0, "over-subscribed code");
+            }
+            assert_eq!(left, 0, "incomplete code {lengths:?}");
+            let mut symbols = Vec::new();
+            for len in 1..16 {
+                for (s, &l) in lengths.iter().enumerate() {
+                    if l == len {
+                        symbols.push(s);
+                    }
+                }
+            }
+            count[0] = 0;
+            Decoder { count, symbols }
+        }
+
+        fn decode(&self, r: &mut BitReader) -> usize {
+            let (mut code, mut first, mut index) = (0u32, 0u32, 0u32);
+            for len in 1..16 {
+                code |= r.bit();
+                let n = self.count[len];
+                if code < first + n {
+                    return self.symbols[(index + code - first) as usize];
+                }
+                index += n;
+                first = (first + n) << 1;
+                code <<= 1;
+            }
+            panic!("no code");
         }
     }
 
-    const LENGTH_BASE: [u32; 29] = [
-        3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115,
-        131, 163, 195, 227, 258,
-    ];
-    const LENGTH_EXTRA: [u32; 29] = [
-        0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0,
-    ];
-    const DIST_BASE: [u32; 30] = [
-        1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537,
-        2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577,
-    ];
-    const DIST_EXTRA: [u32; 30] = [
-        0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12,
-        13, 13,
-    ];
-
-    /// The fixed Huffman literal and length codes of RFC 1951 section 3.2.6.
-    fn fixed_symbol(r: &mut BitReader) -> u32 {
-        let mut code = r.code(7);
-        if code <= 0b001_0111 {
-            return 256 + code;
-        }
-        code = (code << 1) | r.bit();
-        if (0x30..=0xbf).contains(&code) {
-            return code - 0x30;
-        }
-        if (0xc0..=0xc7).contains(&code) {
-            return 280 + code - 0xc0;
-        }
-        code = (code << 1) | r.bit();
-        assert!((0x190..=0x1ff).contains(&code), "bad fixed code {code:#x}");
-        144 + code - 0x190
+    fn fixed_decoders() -> (Decoder, Decoder) {
+        let lit: Vec<u32> = (0..288)
+            .map(|s| match s {
+                0..=143 => 8,
+                144..=255 => 9,
+                256..=279 => 7,
+                _ => 8,
+            })
+            .collect();
+        (Decoder::new(&lit), Decoder::new(&[5; 32]))
     }
 
-    /// Inflates a zlib stream of stored and fixed Huffman blocks, the two kinds a small writer emits, and checks its
-    /// header and Adler-32.
+    fn dynamic_decoders(r: &mut BitReader) -> (Decoder, Decoder) {
+        let lit = r.bits(5) as usize + 257;
+        let dist = r.bits(5) as usize + 1;
+        let order = r.bits(4) as usize + 4;
+        assert!(lit <= 286 && dist <= 30, "HLIT {lit}, HDIST {dist}");
+        let mut cl = [0u32; 19];
+        for &s in &CODE_LENGTH_ORDER[..order] {
+            cl[s] = r.bits(3);
+        }
+        let cl = Decoder::new(&cl);
+        let mut lengths: Vec<u32> = Vec::new();
+        while lengths.len() < lit + dist {
+            let sym = cl.decode(r);
+            let (value, times) = match sym {
+                0..=15 => (sym as u32, 1),
+                16 => (*lengths.last().expect("a length to copy"), 3 + r.bits(2)),
+                17 => (0, 3 + r.bits(3)),
+                _ => (0, 11 + r.bits(7)),
+            };
+            lengths.extend(std::iter::repeat_n(value, times as usize));
+        }
+        assert_eq!(lengths.len(), lit + dist, "lengths run past the codes");
+        (Decoder::new(&lengths[..lit]), Decoder::new(&lengths[lit..]))
+    }
+
+    /// Inflates a zlib stream of stored, fixed and dynamic blocks, and checks its header and Adler-32.
     fn inflate(z: &[u8]) -> Vec<u8> {
         let (cmf, flg) = (u32::from(z[0]), u32::from(z[1]));
         assert_eq!(cmf & 0x0f, 8, "deflate");
@@ -1288,7 +2257,7 @@ mod tests {
         let mut out: Vec<u8> = Vec::new();
         loop {
             let last = r.bit();
-            match r.bits(2) {
+            let (lit, dist) = match r.bits(2) {
                 0 => {
                     r.pos = r.pos.div_ceil(8) * 8;
                     let at = r.pos / 8;
@@ -1296,30 +2265,44 @@ mod tests {
                     assert_eq!(le16(body, at + 2) as usize, !len & 0xffff, "NLEN");
                     out.extend(&body[at + 4..at + 4 + len]);
                     r.pos = (at + 4 + len) * 8;
+                    if last == 1 {
+                        break;
+                    }
+                    continue;
                 }
-                1 => loop {
-                    let sym = fixed_symbol(&mut r);
-                    match sym {
-                        0..=255 => out.push(sym as u8),
-                        256 => break,
-                        _ => {
-                            let i = (sym - 257) as usize;
-                            let len = LENGTH_BASE[i] + r.bits(LENGTH_EXTRA[i]);
-                            let d = r.code(5) as usize;
-                            let dist = (DIST_BASE[d] + r.bits(DIST_EXTRA[d])) as usize;
-                            assert!(dist <= out.len(), "distance before the start");
-                            for _ in 0..len {
-                                out.push(out[out.len() - dist]);
-                            }
+                1 => fixed_decoders(),
+                2 => dynamic_decoders(&mut r),
+                other => panic!("block type {other}"),
+            };
+            loop {
+                let sym = lit.decode(&mut r);
+                match sym {
+                    0..=255 => out.push(sym as u8),
+                    256 => break,
+                    _ => {
+                        let i = sym - 257;
+                        assert!(i < 29, "length code {sym}");
+                        let len = u32::from(LENGTH_BASE[i]) + r.bits(u32::from(LENGTH_EXTRA[i]));
+                        let d = dist.decode(&mut r);
+                        assert!(d < 30, "distance code {d}");
+                        let back =
+                            (u32::from(DIST_BASE[d]) + r.bits(u32::from(DIST_EXTRA[d]))) as usize;
+                        assert!(back <= out.len() && back <= WINDOW, "distance {back}");
+                        for _ in 0..len {
+                            out.push(out[out.len() - back]);
                         }
                     }
-                },
-                other => panic!("block type {other}"),
+                }
             }
             if last == 1 {
                 break;
             }
         }
+        assert_eq!(
+            r.pos.div_ceil(8),
+            body.len(),
+            "no bytes after the last block"
+        );
         assert_eq!(adler_check(&out), be32(z, z.len() - 4), "Adler-32");
         out
     }
@@ -1437,14 +2420,14 @@ mod tests {
             height: 90,
             pixels: [9, 8, 7, 255].repeat(700 * 90),
         };
-        let glyph = colorize(&tray_mask(IconState::Holding, 48), [0xff, 0xff, 0]);
+        let glyph = colorize(&tray_mask(IconState::Holding, 48), ON_DARK);
         let cases = [
             (pattern(37, 23), 6),
             (pattern(1, 1), 3),
             (flat, 3),
             (glyph, 3),
-            // The violet plate's gradient is narrow, so the app icon fits a palette.
-            (app_icon(64), 3),
+            (app_icon(256), 6),
+            (app_icon(16), 3),
         ];
         for (img, colour_type) in cases {
             let file = png(&img);
@@ -1458,6 +2441,35 @@ mod tests {
     }
 
     #[test]
+    fn deflate_round_trips() {
+        // Empty, one byte, no repeats, long runs, matches far back in the window and past it, and every byte value.
+        let mut noise = Vec::new();
+        let mut x = 12345u32;
+        for _ in 0..70_000 {
+            x = x.wrapping_mul(1_103_515_245).wrapping_add(12345);
+            noise.push((x >> 16) as u8);
+        }
+        let mut far = noise[..40_000].to_vec();
+        far.extend_from_slice(&noise[..40_000]);
+        let all: Vec<u8> = (0..=255).cycle().take(5000).collect();
+        let cases: Vec<Vec<u8>> = vec![
+            vec![],
+            vec![7],
+            vec![1, 2],
+            b"abcabcabcabcabcabcabcabcabcabcabcx".to_vec(),
+            vec![0; 100_000],
+            noise,
+            far,
+            all,
+            scanlines(&app_icon(256).pixels, 256 * 4, 4),
+        ];
+        for data in cases {
+            let z = zlib(&data);
+            assert_eq!(inflate(&z), data, "{} bytes", data.len());
+        }
+    }
+
+    #[test]
     fn png_compresses_flat_areas() {
         // The review sheets are mostly one colour; a stored PNG of one would be tens of megabytes.
         let flat = Rgba {
@@ -1465,7 +2477,15 @@ mod tests {
             height: 1000,
             pixels: [0x20, 0x20, 0x21, 255].repeat(1000 * 1000),
         };
-        assert!(png(&flat).len() < 60_000);
+        assert!(png(&flat).len() < 2_000, "{}", png(&flat).len());
+    }
+
+    #[test]
+    fn the_256_frame_is_well_compressed() {
+        // 256 KB of pixels; matches and each block's own codes take it to about an eighth (measured 32,229 bytes).
+        let file = png_rgba(&app_icon(256));
+        println!("256 frame: {} bytes", file.len());
+        assert!(file.len() < 36_000, "{}", file.len());
     }
 
     #[test]
@@ -1474,24 +2494,37 @@ mod tests {
         assert_eq!(crc_check(b"123456789"), 0xcbf4_3926);
     }
 
-    fn icon_path() -> std::path::PathBuf {
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/wakeshot.ico")
+    fn repo(path: &str) -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(path)
     }
+
+    const REWRITE: &str =
+        "run `cargo test --locked -p wakeshot-windows tray::art::write_art_files -- --ignored`";
 
     #[test]
     fn app_icon_file_matches_the_art() {
-        let file = std::fs::read(icon_path()).expect("assets/wakeshot.ico");
+        let file = std::fs::read(repo("assets/wakeshot.ico")).expect("assets/wakeshot.ico");
         let frames = parse_ico(&file);
         let sizes: Vec<u32> = frames.iter().map(|f| f.width).collect();
         assert_eq!(sizes, APP_ICON_SIZES, "frame sizes");
-        for frame in &frames {
-            // Exact: the shapes use no sin or cos, so x64 and ARM64 draw the same bytes.
-            assert!(
-                *frame == cleared(&app_icon(frame.width)),
-                "the {} px frame differs from the art: run `cargo test --locked -p wakeshot-windows \
-                 tray::art::write_art_files -- --ignored`",
-                frame.width
-            );
-        }
+        // Exact: the art uses no sin, cos or exp and the writers have no randomness, so x64 and ARM64 write the same
+        // bytes.
+        assert!(
+            file == app_icon_file(),
+            "assets/wakeshot.ico differs from the art: {REWRITE}"
+        );
+    }
+
+    #[test]
+    fn favicon_matches_the_art() {
+        let file = std::fs::read(repo("site/favicon.ico")).expect("site/favicon.ico");
+        let sizes: Vec<u32> = parse_ico(&file).iter().map(|f| f.width).collect();
+        assert_eq!(sizes, FAVICON_SIZES, "frame sizes");
+        assert!(
+            file == favicon_file(),
+            "site/favicon.ico differs from the art: {REWRITE}"
+        );
     }
 }

@@ -1,6 +1,7 @@
 //! The notice seam (architecture section 5, "Tray, notices, sounds"): `BalloonNotifier`.
 //!
-//! Owner: tray track (`p5-notices`). The trait and `FakeNotifier` are contract.
+//! Owner: tray track (`p5-notices`), then `p6-brand-apply-art` (the notice icon). The trait and `FakeNotifier` are
+//! contract.
 //!
 //! A notice is a balloon on Wakeshot's own tray icon: Windows 11 shows it as a banner with no app registration and
 //! does not keep it in the notification centre (research, "Balloon on Windows 11"; `Shell_NotifyIconW` Remarks). The
@@ -421,6 +422,15 @@ pub const NOTICE_ICON_FILE: &str = "wakeshot-notice.png";
 /// size (16 px at 100%, so 24 at 150% and 32 at 200%), and 48 scales down to the two most common laptop scales by a
 /// whole factor. A design call; change it when the header looks soft at some scale.
 pub const NOTICE_ICON_SIZE: u32 = 48;
+
+/// The bytes of `assets/wakeshot-notice.png`, which `tray::art::write_art_files` writes: the app icon drawn flat.
+/// Scaled down to the header's 16 to 24 px, the full drawing's glow and bloom blurred the light into the plate and its
+/// shadow left a grey rim on the light notice; the flat drawing keeps a clear light (`docs/research.md`, "Brand
+/// apply: the held light in art.rs").
+#[cfg(test)]
+pub(crate) fn notice_icon_png() -> Vec<u8> {
+    art::png(&art::app_icon_flat(NOTICE_ICON_SIZE))
+}
 
 /// The name in the notice header.
 pub const NOTICE_NAME: &str = "Wakeshot";
@@ -1131,8 +1141,6 @@ mod tests {
         assert_eq!(size % 8, 0, "{size}");
     }
 
-    use std::path::PathBuf;
-
     use windows::Win32::System::Registry::REG_VALUE_TYPE;
 
     use crate::store::ScratchKey;
@@ -1195,39 +1203,20 @@ mod tests {
         );
     }
 
-    fn notice_icon_path() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../assets")
-            .join(NOTICE_ICON_FILE)
-    }
-
-    fn notice_icon_png() -> Vec<u8> {
-        art::png(&art::app_icon(NOTICE_ICON_SIZE))
-    }
-
     #[test]
     fn notice_icon_file_matches_the_art() {
-        let file = std::fs::read(notice_icon_path()).expect("assets/wakeshot-notice.png");
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets")
+            .join(NOTICE_ICON_FILE);
+        let file = std::fs::read(path).expect("assets/wakeshot-notice.png");
         let side = |at: usize| u32::from_be_bytes(file[at..at + 4].try_into().unwrap());
         assert_eq!((side(16), side(20)), (NOTICE_ICON_SIZE, NOTICE_ICON_SIZE));
-        // Exact: the art uses no sin or cos and the PNG writer has no randomness, so x64 and ARM64 write the same bytes.
+        // Exact: the art uses no sin, cos or exp and the PNG writer has no randomness, so x64 and ARM64 write the same
+        // bytes.
         assert!(
             file == notice_icon_png(),
             "assets/{NOTICE_ICON_FILE} differs from the art: run `cargo test --locked -p wakeshot-windows \
-             notify::tests::write_notice_icon -- --ignored`"
+             tray::art::write_art_files -- --ignored`"
         );
-    }
-
-    /// Writes `assets/wakeshot-notice.png`, or into `WAKESHOT_ART_DIR` when it is set (a trial that leaves the repo
-    /// alone), as `tray::art::write_art_files` does for the ICO.
-    #[test]
-    #[ignore = "writes the notice icon"]
-    fn write_notice_icon() {
-        let path = match std::env::var_os("WAKESHOT_ART_DIR") {
-            Some(dir) => PathBuf::from(dir).join(NOTICE_ICON_FILE),
-            None => notice_icon_path(),
-        };
-        std::fs::write(&path, notice_icon_png()).expect("write");
-        println!("wrote {}", path.display());
     }
 }
