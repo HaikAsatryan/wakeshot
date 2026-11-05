@@ -199,8 +199,11 @@ pub struct Palette {
     /// The menu fill, also for `MENUINFO.hbrBack`.
     pub background: Rgb,
     pub text: Rgb,
-    /// Marks at rest, the chevron, the status line.
+    /// Marks at rest and the chevron.
     pub secondary: Rgb,
+    /// The status line: WinUI's secondary text. The same colour as `secondary` except in high contrast, where WinUI
+    /// gives marks and the chevron the commands' `ButtonText` and secondary text `WindowText`.
+    pub label: Rgb,
     pub disabled: Rgb,
     pub hover: Rgb,
     pub hover_text: Rgb,
@@ -220,13 +223,18 @@ impl Palette {
                 background: c.window,
                 text: c.button_text,
                 secondary: c.button_text,
+                // `TextFillColorSecondaryBrush` and the menu's own secondary text
+                // (`MenuFlyoutItemKeyboardAcceleratorTextForeground`) are `WindowText` in WinUI's high contrast
+                // dictionary, the colour Microsoft gives UI that cannot be picked, so the status line does not look like
+                // one more command.
+                label: c.window_text,
                 disabled: c.gray_text,
                 hover: c.highlight,
                 hover_text: c.highlight_text,
                 hover_secondary: c.highlight_text,
                 separator: c.window_text,
                 border: c.window_text,
-                status: GlyphColours::one(c.button_text.into()),
+                status: GlyphColours::one(c.window_text.into()),
             };
         }
         // ARGB tokens from `Common_themeresources_any.xaml`. The fills are the classic menu's own, measured in Phase 1.
@@ -256,6 +264,7 @@ impl Palette {
             background,
             text: over(primary, background),
             secondary: over(secondary, background),
+            label: over(secondary, background),
             disabled: over(disabled, background),
             hover,
             hover_text: over(primary, hover),
@@ -717,7 +726,7 @@ pub fn paint_item(
         let text_colour = match item {
             // Information, not a command that is off: the secondary text reads at about 6:1 in light and 9:1 in
             // dark, where Phase 0's disabled grey read at 2.5 to 2.7:1.
-            MenuItem::Label { .. } => palette.secondary,
+            MenuItem::Label { .. } => palette.label,
             _ if !enabled => palette.disabled,
             _ if hot => palette.hover_text,
             _ => palette.text,
@@ -1089,10 +1098,6 @@ mod tests {
     use wakeshot_core::holds::HoldKind;
     use wakeshot_core::text::Status;
     use wakeshot_core::view::{IconState, KeepAwake};
-    use windows::Win32::Graphics::Gdi::{
-        COLOR_BTNFACE, COLOR_BTNTEXT, COLOR_GRAYTEXT, COLOR_HIGHLIGHT, COLOR_HIGHLIGHTTEXT,
-        COLOR_HOTLIGHT, COLOR_WINDOW, COLOR_WINDOWTEXT, GetSysColor,
-    };
 
     const DARK: Theme = Theme {
         light: false,
@@ -1190,21 +1195,86 @@ mod tests {
         }
     }
 
-    /// What Phase 1's forced high contrast render used: this PC's system colours, whatever the mode.
-    fn live_system_colours() -> Contrast {
-        // SAFETY: documented indexes; the call only returns a value.
-        let c = |i| Rgb::from_colorref(unsafe { GetSysColor(i) });
-        Contrast {
-            window: c(COLOR_WINDOW),
-            window_text: c(COLOR_WINDOWTEXT),
-            highlight: c(COLOR_HIGHLIGHT),
-            highlight_text: c(COLOR_HIGHLIGHTTEXT),
-            gray_text: c(COLOR_GRAYTEXT),
-            button_face: c(COLOR_BTNFACE),
-            button_text: c(COLOR_BTNTEXT),
-            hot_light: c(COLOR_HOTLIGHT),
+    /// A contrast theme from its `.theme` file's `[Control Panel\Colors]`, in this order: `Window`, `WindowText`,
+    /// `Hilight`, `HilightText`, `GrayText`, `ButtonFace`, `ButtonText`, `HotTrackingColor`.
+    const fn theme_file(c: [[u8; 3]; 8]) -> Theme {
+        const fn rgb(c: [u8; 3]) -> Rgb {
+            Rgb::new(c[0], c[1], c[2])
+        }
+        Theme {
+            light: false,
+            contrast: Some(Contrast {
+                window: rgb(c[0]),
+                window_text: rgb(c[1]),
+                highlight: rgb(c[2]),
+                highlight_text: rgb(c[3]),
+                gray_text: rgb(c[4]),
+                button_face: rgb(c[5]),
+                button_text: rgb(c[6]),
+                hot_light: rgb(c[7]),
+            }),
         }
     }
+
+    /// Windows 11's four contrast themes as they ship, from `C:\Windows\Resources\Ease of Access Themes` on this
+    /// laptop. Which file is which theme in Settings: `docs/research.md`, "Tray UX: menu painting".
+    const CONTRAST_THEMES: [(&str, Theme); 4] = [
+        (
+            "Aquatic, hcblack.theme",
+            theme_file([
+                [32, 32, 32],
+                [255, 255, 255],
+                [142, 227, 240],
+                [38, 59, 80],
+                [166, 166, 166],
+                [32, 32, 32],
+                [255, 255, 255],
+                [117, 233, 252],
+            ]),
+        ),
+        (
+            "Desert, hcwhite.theme",
+            theme_file([
+                [255, 250, 239],
+                [61, 61, 61],
+                [144, 57, 9],
+                [255, 245, 227],
+                [103, 103, 103],
+                [255, 250, 239],
+                [32, 32, 32],
+                [28, 94, 117],
+            ]),
+        ),
+        (
+            "Dusk, hc1.theme",
+            theme_file([
+                [45, 50, 54],
+                [255, 255, 255],
+                [161, 191, 222],
+                [33, 45, 59],
+                [166, 166, 166],
+                [45, 50, 54],
+                [182, 246, 240],
+                [112, 235, 222],
+            ]),
+        ),
+        (
+            "Night sky, hc2.theme",
+            theme_file([
+                [0, 0, 0],
+                [255, 255, 255],
+                [214, 180, 253],
+                [43, 43, 43],
+                [166, 166, 166],
+                [0, 0, 0],
+                [255, 238, 50],
+                [128, 128, 255],
+            ]),
+        ),
+    ];
+
+    /// The contrast theme in which `p6-brand-screen-session` saw the status line in the commands' yellow.
+    const NIGHT_SKY: Theme = CONTRAST_THEMES[3].1;
 
     /// One item painted at the origin of a canvas of its own size.
     struct Painted {
@@ -1362,7 +1432,10 @@ mod tests {
             Rgb::new(0x23, 0x23, 0x23),
             "#33000000, the Phase 1 border"
         );
-        // The status glyph takes the tray icon's colours for the same mode.
+        // The status line is WinUI's secondary text, as the marks and the chevron; its glyph takes the tray icon's
+        // colours for the same mode.
+        assert_eq!(light.label, light.secondary);
+        assert_eq!(dark.label, dark.secondary);
         assert_eq!(light.status, art::ON_LIGHT);
         assert_eq!(dark.status, art::ON_DARK);
     }
@@ -1378,6 +1451,7 @@ mod tests {
             assert_eq!(p.background, c.window);
             assert_eq!(p.text, c.button_text);
             assert_eq!(p.secondary, c.button_text);
+            assert_eq!(p.label, c.window_text);
             assert_eq!(p.disabled, c.gray_text);
             assert_eq!(p.hover, c.highlight);
             assert_eq!(p.hover_text, c.highlight_text);
@@ -1385,7 +1459,52 @@ mod tests {
             assert_eq!(p.separator, c.window_text);
             assert_eq!(p.border, c.window_text);
             // One colour, the status line's own text colour.
-            assert_eq!(p.status, GlyphColours::one(p.secondary.into()));
+            assert_eq!(p.status, GlyphColours::one(p.label.into()));
+        }
+    }
+
+    #[test]
+    fn contrast_status_line_is_window_text_in_every_theme() {
+        let text = "Holding awake: Claude Code (2 sessions)";
+        for (name, theme) in CONTRAST_THEMES {
+            let c = theme.contrast.expect("a contrast theme");
+            let p = Palette::for_theme(&theme);
+            // WinUI's high contrast secondary text, set apart from the commands wherever the theme's colours differ.
+            assert_eq!(p.label, c.window_text, "{name}");
+            assert_eq!(p.status, GlyphColours::one(c.window_text.into()), "{name}");
+            assert_eq!(p.text, c.button_text, "{name}");
+            assert_eq!(p.label != p.text, c.window_text != c.button_text, "{name}");
+            // Marks at rest and the chevron stay with the commands, as WinUI's `MenuFlyoutSubItemChevron`.
+            assert_eq!(p.secondary, c.button_text, "{name}");
+            let (plain, _) = contrast(p.label, p.background);
+            assert!(plain >= 7.0, "{name}: {plain:.2}");
+            println!(
+                "{name}: status line {:02x?}, commands {:02x?}, on {:02x?}: {plain:.2}",
+                <[u8; 3]>::from(p.label),
+                <[u8; 3]>::from(p.text),
+                <[u8; 3]>::from(p.background)
+            );
+
+            // As drawn: the line's fully covered text and its glyph are the status line's colour, never the commands'.
+            for dpi in [96, 144] {
+                let row = Painted::new(&label(text, Some(IconState::Holding)), MOUSE, dpi, &theme);
+                let drawn = |colour: Rgb| {
+                    (0..row.layout.row)
+                        .flat_map(|y| (0..row.w).map(move |x| (x, y)))
+                        .filter(|&(x, y)| row.at(x, y) == colour)
+                        .count()
+                };
+                let l = row.layout;
+                let in_glyph = (0..l.row)
+                    .flat_map(|y| (l.icon_left..l.text_left).map(move |x| (x, y)))
+                    .filter(|&(x, y)| row.at(x, y) == c.window_text)
+                    .count();
+                assert!(drawn(c.window_text) > in_glyph, "text at {dpi}: {name}");
+                assert!(in_glyph > 0, "glyph at {dpi}: {name}");
+                if c.window_text != c.button_text {
+                    assert_eq!(drawn(c.button_text), 0, "at {dpi}: {name}");
+                }
+            }
         }
     }
 
@@ -2049,6 +2168,8 @@ mod tests {
                     // In high contrast every ink of an item is one colour.
                     let (fill, ink) = if hot {
                         (c.highlight, c.highlight_text)
+                    } else if matches!(item, MenuItem::Label { .. }) {
+                        (c.window, c.window_text)
                     } else if enabled {
                         (c.window, c.button_text)
                     } else {
@@ -2228,10 +2349,10 @@ mod tests {
     }
 
     /// Writes the review renders as PNG into `WAKESHOT_RENDER_DIR`: the product menu and its Keep awake submenu side
-    /// by side, at 96, 120 and 144 dpi, light, dark and high contrast (this PC's system colours, as Phase 1's forced
-    /// render did), the menu with a long status line at 144 dpi, light, and the status glyph sheet: the main menu
-    /// holding, idle and off side by side, a row each for dark and light at 100% and at 150%. Run: `cargo test -p
-    /// wakeshot-windows renders_for_review -- --ignored`.
+    /// by side, at 96, 120 and 144 dpi, light, dark and high contrast (Night sky), the four contrast themes at 120 dpi
+    /// (Aquatic, Desert, Dusk, Night sky, top to bottom), the menu with a long status line at 144 dpi, light, and the
+    /// status glyph sheet: the main menu holding, idle and off side by side, a row each for dark and light at 100% and
+    /// at 150%. Run: `cargo test -p wakeshot-windows renders_for_review -- --ignored`.
     #[test]
     #[ignore = "writes pictures for review"]
     fn renders_for_review() {
@@ -2242,12 +2363,10 @@ mod tests {
         let dir = std::path::PathBuf::from(dir);
         let main = product_menu();
         let sub = keep_awake();
-        let contrast = Theme {
-            light: false,
-            contrast: Some(live_system_colours()),
-        };
+        // A real contrast theme rather than this PC's classic colours, which draw the status line and the commands in
+        // one black and so cannot show the difference.
         for dpi in [96u32, 120, 144] {
-            for (name, theme) in [("light", LIGHT), ("dark", DARK), ("contrast", contrast)] {
+            for (name, theme) in [("light", LIGHT), ("dark", DARK), ("contrast", NIGHT_SKY)] {
                 // The main menu with Keep awake open, and in the submenu "2 hours" under the mouse.
                 let file = dir.join(format!("menu-render-{dpi}-{name}.png"));
                 render(
@@ -2274,6 +2393,15 @@ mod tests {
         // 144 dpi, as the review's screen pictures (150%), where a long line made the menu 853 px wide.
         let file = dir.join("menu-render-long-144-light.png");
         render(&[(&long_menu(), None)], 144, &LIGHT, false, &file);
+
+        let themes: Vec<_> = CONTRAST_THEMES
+            .iter()
+            .map(|(_, theme)| paint_menus(&[(&main, Some(3)), (&sub, Some(3))], 120, theme, false))
+            .collect();
+        let file = dir.join("menu-render-themes-contrast.png");
+        let sheet = stack(&themes, scale(16, 120));
+        std::fs::write(&file, crate::tray::art::png(&sheet)).expect("write");
+        println!("{}: {} x {}", file.display(), sheet.width, sheet.height);
 
         let menus = STATES.map(built_menu);
         let row: Vec<(&Vec<MenuItem>, Option<usize>)> = menus.iter().map(|m| (m, None)).collect();

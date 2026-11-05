@@ -2565,8 +2565,8 @@ screen. Code: `crates/wakeshot-windows/src/tray/menu_paint.rs`.
   yet). Rows 33, 41 and 50 px, text 14, 18 and 21 px, marks and chevron 12, 15 and 18 px. The fill, hover and
   separator colours are the same pixels as `tray-look-render-96dpi-dark.png` and `-light.png` (`2c2c2c`, `383838`,
   `3d3d3d`; `f9f9f9`, `f0f0f0`, `eaeaea`), and the hover band is 27 rows at 96 dpi and 42 at 144 in both (pixel
-  counts with a stdlib script). The contrast render uses this PC's system colours, as Phase 1's did (`ffffff`,
-  `0078d7`, `000000`).
+  counts with a stdlib script). The contrast renders use Night sky's system colours since `p6-menu-hc-status`
+  (2026-11-05; Phase 1's used this PC's: `ffffff`, `0078d7`, `000000`).
 - **What changed from the spike, and why:**
   - Icons on Automatic (eye `E890`), Keep awake (clock `E823` "Recent", Haik's pick, 2026-11-05,
     `p6-brand-cleanup`), Restore (`E777`), Open log (`E8A5`) and Quit (cross `E711`), Haik's ask
@@ -2594,6 +2594,21 @@ screen. Code: `crates/wakeshot-windows/src/tray/menu_paint.rs`.
   `MaxWidth` 456 (`gh api`, microsoft-ui-xaml main: `MenuFlyout_themeresources.xaml` last commit 2026-05-30, its
   `_perf2026` copy, `FlyoutPresenter_themeresources.xaml`, `FlyoutBase_partial.cpp`, `themes/generic.xaml`). Not
   verified: what `CLEARTYPE_QUALITY` draws when the user turns font smoothing off.
+- **High contrast status line in `WindowText`** (2026-11-05, `p6-menu-hc-status`). WinUI's HighContrast dictionary
+  (`gh api`, microsoft-ui-xaml main, commit `8463f45`, 2026-05-30): `Common_themeresources_any.xaml` sets
+  `TextFillColorSecondaryBrush` to `SystemColorWindowTextColor`, and `MenuFlyout_themeresources.xaml` sets the menu's
+  own secondary text, `MenuFlyoutItemKeyboardAcceleratorTextForeground`, to `SystemColorWindowTextColorBrush`, while
+  item text and `MenuFlyoutSubItemChevron` (which the check and radio marks also take at rest) are `ButtonText`. So
+  the status line and its glyph now draw in `WindowText`; marks and chevron stay `ButtonText`. Microsoft's "Contrast
+  themes" page (2026-08-29) agrees: `WindowText` is for "any UI that can't be interacted with". The four themes, from
+  `C:\Windows\Resources\Ease of Access Themes`: Aquatic is `hcblack.theme` (the page's Aquatic swatches read
+  `#202020`, `#FFFFFF`, `#8EE3F0`, `#75E9FC`), Desert `hcwhite.theme` and Night sky `hc2.theme` (the only `ButtonText`
+  `#FFEE32`) per "Brand screen session", Dusk `hc1.theme` by elimination. Status line and commands: Aquatic both
+  `#FFFFFF`, Desert `#3D3D3D` and `#202020`, Dusk `#FFFFFF` and `#B6F6F0`, Night sky `#FFFFFF` and `#FFEE32`; the
+  status line on the fill 16.3, 10.4, 13.0 and 21:1 (test `contrast_status_line_is_window_text_in_every_theme`). The
+  contrast renders now use Night sky, not this PC's classic colours, and `menu-render-themes-contrast.png` shows all
+  four at 120 dpi; the light, dark, long and glyph renders came out byte-equal. **Verified** offscreen; a real theme
+  switch was not tested.
 
 ## Watch thread checks
 
@@ -4994,8 +5009,8 @@ step by automation from the agent shell (UI Automation, injected keys and clicks
 - **Closing the tray menu with Esc leaves a focus box on the icon** (light grey on the light taskbar, the contrast
   highlight colour in Night sky) until something else on the taskbar is clicked. **Seen.**
 - **High contrast menu text is `COLOR_BTNTEXT`**: in Night sky every item and the status line are yellow `#FFEE32`
-  (`GetSysColor`: `BTNTEXT` `#FFEE32`, `WINDOWTEXT` and `MENUTEXT` `#FFFFFF`, `GRAYTEXT` `#A6A6A6`). Which colour
-  WinUI uses for secondary text in contrast themes: **not verified**.
+  (`GetSysColor`: `BTNTEXT` `#FFEE32`, `WINDOWTEXT` and `MENUTEXT` `#FFFFFF`, `GRAYTEXT` `#A6A6A6`). WinUI's secondary
+  text in contrast themes is `WindowText` (answered later the same day: "High contrast status line in `WindowText`").
 - **Task Manager shows the old violet Sunrise icon** for the installed exes on Processes and Startup apps, while
   Start, Settings, Explorer, the taskbar button and the notices show Moss. `SHGetFileInfo` (small) and
   `ExtractAssociatedIcon` on the same exe both return Moss (average colours 120,158,88 and 124,158,86). So Task
