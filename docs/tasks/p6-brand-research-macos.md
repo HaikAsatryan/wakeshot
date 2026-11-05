@@ -1,6 +1,6 @@
 # Brand research: what a later macOS Wakeshot needs (Liquid Glass icon, menu bar glyph, menu or panel)
 
-Phase: 6 (brand review). Status: in progress. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 120K tokens. Written by
+Phase: 6 (brand review). Status: done. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 120K tokens. Written by
 the orchestrator of Haik's brand session, 2026-11-05.
 Runs after: none. Parallel with: `p6-brand-research-windows`, `p6-brand-research-identity`, and any building card
 (this card builds nothing and edits no code).
@@ -67,7 +67,21 @@ Code, `docs/brand.md`, `docs/plan.md` and phase files (another orchestrator sess
 
 None expected. If one comes up, write it here with your default and go on.
 
+1. Not blocking this card. Shut the Lid, a free Mac lid-closed keep-awake app released 2026-11-04, already uses a gold
+   half sun over a white line on a blue-indigo rounded square, and a sun-over-horizon menu bar glyph; SF Symbols has
+   `sun.horizon.fill` too. Keep the sunrise idea, or start over? Default: keep the idea, but `p6-brand-directions`
+   gives it a feature of its own and tests every direction side by side with Shut the Lid's icon and
+   `sun.horizon.fill`; drop the sunrise only if no variant reads clearly different.
+
 ## Found outside scope
+
+- `docs/brand.md` says "no keep-awake rival uses violet". True for the Windows rivals it checked; on the Mac, Vigil,
+  Sleepless, Keep Awake: AI Agents and InsomniaZ use violet plates and Shut the Lid a blue-indigo one
+  (`docs/research/brand-macos.md`, section 6). For `p6-brand-research-identity` and `p6-brand-directions`.
+- Not checked: whether Microsoft's Fluent icon set or Segoe Fluent Icons has a sun-on-horizon glyph as well (the
+  Windows twin of the `sun.horizon` question). For `p6-brand-research-windows`.
+- `docs/brand.md`'s wordmark font, Segoe UI Variable, does not exist on the Mac; its noted fallback, Inter, works on
+  both. For `p6-brand-research-identity`.
 
 ## Log
 
@@ -80,5 +94,49 @@ None expected. If one comes up, write it here with your default and go on.
   cross-platform icons (Q4) and Mac keep-awake and menu bar apps (Q3, Q6); results go to the scratch folder.
 - 2026-11-05: orchestrator relayed Haik: "IOS" meant macOS; Mac version is a real plan, nothing ships for it yet; no
   budget, free fonts and our own drawing code only.
+- 2026-11-05: sections 5 (rules for the mark) and 6 (Mac keep-awake apps, from the helper's survey) written; section 4
+  started (platform rules). Waiting for the cross-platform icon survey and the menu bar utility survey.
+- 2026-11-05: both helpers done (9 cross-platform apps; about 65 Mac keep-awake apps and 6 menu bar utilities). Found
+  Shut the Lid (gold sunrise on blue-indigo, Mac, 2026-11-04); checked its listing, icon and glyph myself, and two of
+  the cross-platform icons. Sections 3, 4, 6, short answer and sources finished; research.md entry added.
+- 2026-11-05: acceptance checks run (below). Status done.
 
 ## Result
+
+Done 2026-11-05.
+
+What was done: desk research on what a later Mac Wakeshot needs from the brand, written to
+`docs/research/brand-macos.md` (short answer, sections 1 to 6, iOS, sources). Apple's HIG and developer pages were
+read as exact text through their JSON copies; two helper agents surveyed app icons and menus by downloading and
+looking at the real images and code.
+
+Key findings: the current Mac is macOS 27 Golden Gate; Mac icons are one layered Icon Composer `.icon` masked to the
+rounded square, with six appearances, four of them colourless; a Mac app (Shut the Lid, 2026-11-04) already has a
+gold sunrise on a blue-indigo plate, and SF Symbols has `sun.horizon.fill`; violet is common among new Mac
+keep-awake apps; 9 of 9 cross-platform apps keep one picture with a per-platform finish and none puts glass on
+Windows; macOS 27 hides menu item icons.
+
+Picks: same mark on both platforms, Liquid Glass `.icon` on the Mac and the flat Fluent plate on Windows, from one set
+of SVG layers drawn by our art code. Mac menu: native `NSMenu` with the Windows items and words, a status line as a
+section header, no item icons, three template glyph states. Change triggers are in sections 3 and 4.
+
+Files changed: `docs/research/brand-macos.md` (new), `docs/research.md` (new section "Brand on macOS" at the end),
+this card. No pictures added: none was needed, and the survey images are other people's art.
+
+Acceptance checks:
+
+- Every numbered question answered: yes, sections 1 to 6 each answer theirs; iOS skipped as Haik confirmed. Pass.
+- Every Apple rule quoted has URL, date read and macOS version: each quote names its page; the Sources list gives the
+  URLs, the date (2026-11-05) and the rule that the current pages apply to macOS 26 and 27; API lines give their
+  first macOS version. Pass.
+- Question 4 cites at least 8 apps with where both icons were seen: 9 apps, each with its Mac and Windows source in
+  the table in section 4. Pass.
+- Checked by grep: no em dashes, no lines left "to do".
+
+Not verified (also marked in the report): how our icon renders in Icon Composer's mono, clear and tinted modes (needs
+a Mac); Apple's exact icon grid keylines; the SF Symbols licence text itself; whether a status item's menu counts as
+a "menu bar" menu for the macOS 27 icon hiding; how colour glyphs look on the clear Tahoe menu bar; the glyph sizes
+(Bjango, not Apple); what changed in macOS 27's menu bar icons; the macOS 27 release date (press only).
+
+Open items: Haik's question above (keep the sunrise or not, non-blocking); the three items under "Found outside
+scope".

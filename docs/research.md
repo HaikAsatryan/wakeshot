@@ -4721,3 +4721,32 @@ screen sessions and a probe that adds no icon.
   broadcasts. Spacing every pair of notices instead would delay each notice and would not help if Explorer's state
   after the resume was the cause, so the retry is the lean fix. Change it when a log shows "the notice was refused
   again" after the wait. A design call, not a fact.
+
+## Brand on macOS
+
+Checked 2026-11-05 for card `docs/tasks/p6-brand-research-macos.md`, on the web only (no Mac). Full report with every
+quote and source: `docs/research/brand-macos.md`.
+
+- **The current Mac is macOS 27 Golden Gate** (apple.com/macos; Apple's "macOS 27 Golden Gate Release Notes").
+  **Verified.**
+- **Mac app icons are one layered Icon Composer `.icon`**, square 1024 px layers that macOS masks to a rounded
+  rectangle; "Irregularly shaped icons receive a system-provided background"; six appearances (default, dark, clear
+  light and dark, tinted light and dark), the last four without the icon's own colours. HIG App icons (changed
+  2026-10-28), Icon Composer article, Adopting Liquid Glass, WWDC25 sessions 220 and 361, read through Apple's JSON
+  copies of the pages. **Verified.** Icon Composer "Requires macOS Tahoe 26.4 or later". **Verified.**
+- **Menu bar extras use one-colour template images and a menu, not a popover** (HIG The menu bar; `NSImage.isTemplate`).
+  **Verified.** The glyph size (16 pt body in a 22 pt area) is Bjango's, **not verified** at Apple.
+- **macOS 27 hides menu item images by default** for apps linked on macOS 26 and later (symbol images) and on the 27
+  SDK (all images); `preferredImageVisibility` overrides it (macOS 27 release notes, AppKit). **Verified.**
+- **SF Symbols has `sun.horizon` and `sun.horizon.fill`** (half sun with rays over a line; SFSafeSymbols' list and
+  previews, not Apple's app), and the HIG names "the prohibition against using symbols", "or images that are
+  confusingly similar", "in app icons, logos, or any other trademarked use". **Verified** (names from a third-party
+  list).
+- **Shut the Lid**, a free Mac keep-awake app released 2026-11-04 (iTunes lookup id 6821751029), has a gold half sun
+  over a white line on a blue-indigo rounded square, and a sun-over-horizon menu bar glyph. Icon and screenshot seen.
+  **Verified.**
+- **Violet plates are common among new Mac keep-awake apps for AI agents** (Vigil, Sleepless, Keep Awake: AI Agents,
+  InsomniaZ), icons seen by a helper agent. **Verified** by the helper's downloads, not each by me.
+- **Nine cross-platform apps** (Slack, Telegram, VS Code, Signal, Discord, Figma, Notion, Firefox, 1Password) keep
+  one picture and palette on Mac and Windows with a per-platform shape and finish; none copies glass onto Windows.
+  Icons downloaded and seen by a helper agent; Signal and Figma rechecked by me. **Verified.**
