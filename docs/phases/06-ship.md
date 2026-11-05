@@ -169,7 +169,7 @@ those one at a time across all tracks.
 | `p6-small-fixes` | no | `p6-tray-size` | done (07:08) |
 | `p6-real-install-guard` | no | `p2-6-runonce-keep` | done (2026-11-05 ~03:00, 03415b6; promoted from later): real-settings tests refuse to run beside an installed Wakeshot; worker decisions for Haik's review in the card |
 | `p6-brand-apply-art` | no (Haik's 8 brand decisions, 2026-11-05 ~15:00) | Haik's brand decisions | done (8cd0301): the held light in Moss in `art.rs`; 14-frame ICO, 256 as PNG; x64 and ARM64 checks pass; 7 designer decisions for Haik's review in the card |
-| `p6-brand-apply-web` | no | Part A: Haik's brand decisions; Part B: `p6-brand-apply-art` | in progress: Part A done; Part B running (new worker) |
+| `p6-brand-apply-web` | no | Part A: Haik's brand decisions; Part B: `p6-brand-apply-art` | done (19f7bda, 5570d3c): Moss page, Instrument Sans, icon SVG from `art.rs`, lockup, README header, social card; no splash needed; 6 decisions for Haik's review in the card |
 | `p6-brand-apply-media` | no | Part A: Haik's brand decisions; Part B: `p6-brand-apply-art` | in progress: Part A done; Part B running (new worker) |
 | `p6-brand-docs-sweep` | no | the three apply cards | ready |
 | `p6-brand-screen-session` | no for this run (Haik 15:40: "Do the screen session as well") | `p6-brand-apply-art`; its page block after `p6-brand-apply-web` | in progress (15:52) |
