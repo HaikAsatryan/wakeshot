@@ -22,7 +22,7 @@ export const COPY = {
   outroLine: 'Free and open source. Windows 11, x64 and ARM64.',
   /** The GitHub address until the winget package is live; then `winget install HaikAsatryan.Wakeshot`. */
   install: 'github.com/HaikAsatryan/wakeshot',
-  draft: 'DRAFT: stand-in pictures, speed not measured',
+  draft: 'DRAFT: captures and speed numbers missing',
   standIn: 'stand-in',
   missing: 'no capture yet',
 };

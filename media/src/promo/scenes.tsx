@@ -5,7 +5,7 @@ import speedData from '../../data/speed.json';
 import {AppIcon, HOLDING, type Phase} from '../art/Glyph.tsx';
 import {COPY} from '../copy.ts';
 import {MONO, SANS} from '../fonts.ts';
-import {C} from '../theme.ts';
+import {DARK} from '../theme.ts';
 import {BEATS, SCENES} from '../timeline.ts';
 import {Caption, DraftContext, Laptop, Shot, Terminal, ease} from './parts.tsx';
 
@@ -17,16 +17,9 @@ export const SceneFade: React.FC<{len: number; children: React.ReactNode}> = ({l
 };
 
 /** Idle to holding over the given frames: the sun fills and moves, then the rays grow. */
-export function rise(f: number, from: number, len = 24): Phase {
+function rise(f: number, from: number, len = 24): Phase {
   const p = ease(f, from, from + len);
   return {shift: p, fill: p, rays: ease(f, from + len * 0.55, from + len * 1.35)};
-}
-
-/** Holding to idle: the rays go first, then the sun empties. */
-export function set(f: number, from: number, len = 24): Phase {
-  const r = ease(f, from, from + len * 0.6, [1, 0]);
-  const p = ease(f, from + len * 0.4, from + len * 1.2, [1, 0]);
-  return {shift: p, fill: p, rays: r};
 }
 
 const center: React.CSSProperties = {alignItems: 'center', justifyContent: 'center'};
@@ -36,12 +29,12 @@ export const Title: React.FC = () => {
   const b = BEATS.title;
   return (
     <SceneFade len={SCENES.title.len}>
-      <AbsoluteFill style={{...center, flexDirection: 'column', fontFamily: SANS, color: 'white'}}>
+      <AbsoluteFill style={{...center, flexDirection: 'column', fontFamily: SANS, color: DARK.text}}>
         <div style={{transform: `translateY(${ease(f, 0, 20, [30, 0])}px)`}}>
           <AppIcon size={256} phase={rise(f, b.rise, 26)} id="title" />
         </div>
         <div style={{fontSize: 120, fontWeight: 600, marginTop: 28, opacity: ease(f, 30, 44)}}>{COPY.name}</div>
-        <div style={{fontSize: 44, color: C.dim, marginTop: 8, opacity: ease(f, 42, 56)}}>{COPY.tagline}</div>
+        <div style={{fontSize: 44, color: DARK.dim, marginTop: 8, opacity: ease(f, 42, 56)}}>{COPY.tagline}</div>
       </AbsoluteFill>
     </SceneFade>
   );
@@ -143,8 +136,8 @@ export const SettingsBack: React.FC = () => {
         <div
           style={{
             width: 1000,
-            background: C.panel,
-            border: `2px solid ${C.panelLine}`,
+            background: DARK.panel,
+            border: `2px solid ${DARK.panelLine}`,
             borderRadius: 20,
             padding: '24px 48px',
             fontFamily: SANS,
@@ -160,18 +153,18 @@ export const SettingsBack: React.FC = () => {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   height: 120,
-                  borderTop: i > 0 ? `2px solid ${C.panelLine}` : undefined,
+                  borderTop: i > 0 ? `2px solid ${DARK.panelLine}` : undefined,
                 }}
               >
-                <div style={{fontSize: 46, color: 'white'}}>{row.label}</div>
+                <div style={{fontSize: 46, color: DARK.text}}>{row.label}</div>
                 <div style={{position: 'relative', width: 420, height: 100, overflow: 'hidden', textAlign: 'right'}}>
                   {[
-                    {text: row.held, note: COPY.settingsHeld, colour: C.gold, y: -t * 100},
-                    {text: row.own, note: COPY.settingsOwn, colour: 'white', y: (1 - t) * 100},
+                    {text: row.held, note: COPY.settingsHeld, colour: DARK.accent, y: -t * 100},
+                    {text: row.own, note: COPY.settingsOwn, colour: DARK.text, y: (1 - t) * 100},
                   ].map((v) => (
                     <div key={v.note} style={{position: 'absolute', right: 0, top: 6, transform: `translateY(${v.y}px)`}}>
                       <div style={{fontSize: 46, fontWeight: 600, color: v.colour}}>{v.text}</div>
-                      <div style={{fontSize: 24, color: C.dim}}>{v.note}</div>
+                      <div style={{fontSize: 24, color: DARK.dim}}>{v.note}</div>
                     </div>
                   ))}
                 </div>
@@ -204,7 +197,7 @@ export const KeepAwake: React.FC = () => {
         {menus('light')}
         <div style={{position: 'absolute', inset: 0, clipPath: `inset(0 0 0 ${split}%)`}}>{menus('dark')}</div>
         {split < 100 ? (
-          <div style={{position: 'absolute', top: -12, bottom: -12, left: `${split}%`, width: 4, background: C.gold, borderRadius: 2}} />
+          <div style={{position: 'absolute', top: -12, bottom: -12, left: `${split}%`, width: 4, background: DARK.accent, borderRadius: 2}} />
         ) : null}
       </div>
       <Caption text={COPY.keepAwake} from={10} />
@@ -224,22 +217,22 @@ export const Speed: React.FC = () => {
   ];
   return (
     <SceneFade len={SCENES.speed.len}>
-      <AbsoluteFill style={{...center, flexDirection: 'column', fontFamily: SANS, color: 'white'}}>
+      <AbsoluteFill style={{...center, flexDirection: 'column', fontFamily: SANS, color: DARK.text}}>
         <div style={{fontSize: 64, fontWeight: 600, marginBottom: 70}}>{COPY.speedTitle}</div>
         <div style={{display: 'flex', gap: 60}}>
           {items.map(([value, label, beat, digits]) => {
             const t = ease(f, beat, beat + 18);
             return (
               <div key={label} style={{width: 520, textAlign: 'center', opacity: ease(f, beat - 4, beat + 4)}}>
-                <div style={{fontSize: 128, fontWeight: 600, color: C.gold, fontVariantNumeric: 'tabular-nums'}}>
+                <div style={{fontSize: 128, fontWeight: 600, color: DARK.accent, fontVariantNumeric: 'tabular-nums'}}>
                   {value === null ? '?' : (value * t).toFixed(digits)}
                 </div>
-                <div style={{fontSize: 30, color: C.dim, marginTop: 8}}>{label}</div>
+                <div style={{fontSize: 30, color: DARK.dim, marginTop: 8}}>{label}</div>
               </div>
             );
           })}
         </div>
-        <div style={{fontSize: 26, color: C.dim, marginTop: 70, opacity: ease(f, 40, 52)}}>
+        <div style={{fontSize: 26, color: DARK.dim, marginTop: 70, opacity: ease(f, 40, 52)}}>
           {s.measured ? `Measured on Wakeshot ${s.build}, ${s.date}, x64.` : draft ? COPY.speedNotMeasured : ''}
         </div>
       </AbsoluteFill>
@@ -250,20 +243,20 @@ export const Speed: React.FC = () => {
 export const Outro: React.FC = () => {
   const f = useCurrentFrame();
   return (
-    <AbsoluteFill style={{...center, flexDirection: 'column', fontFamily: SANS, color: 'white', opacity: ease(f, 0, 10)}}>
+    <AbsoluteFill style={{...center, flexDirection: 'column', fontFamily: SANS, color: DARK.text, opacity: ease(f, 0, 10)}}>
       <AppIcon size={192} phase={HOLDING} id="outro" />
       <div style={{fontSize: 96, fontWeight: 600, marginTop: 24}}>{COPY.name}</div>
-      <div style={{fontSize: 38, color: C.dim, marginTop: 8}}>{COPY.outroLine}</div>
+      <div style={{fontSize: 38, color: DARK.dim, marginTop: 8}}>{COPY.outroLine}</div>
       <div
         style={{
           fontFamily: MONO,
           fontSize: 36,
           marginTop: 44,
           padding: '16px 32px',
-          background: C.panel,
-          border: `2px solid ${C.panelLine}`,
+          background: DARK.panel,
+          border: `2px solid ${DARK.panelLine}`,
           borderRadius: 12,
-          color: C.violetLight,
+          color: DARK.accent,
         }}
       >
         {COPY.install}

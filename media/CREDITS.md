@@ -5,18 +5,10 @@ under `public/` or `out/` has no line here. Wakeshot's own work is MIT (`../LICE
 
 ## Pictures
 
-| File | Source | Licence |
-|---|---|---|
-| `public/shots/tray-dark-idle.png` | Stand-in: `docs/research/img/ux/taskbar-dark-idle.png`, a screen capture of Wakeshot's demo icon on Haik's taskbar | MIT, ours |
-| `public/shots/tray-dark-holding.png` | Stand-in: `docs/research/img/ux/taskbar-dark-holding.png`, same | MIT, ours |
-| `public/shots/tooltip-dark-idle.png` | Stand-in: `docs/research/img/ux/taskbar-tooltip-dark.png`, Wakeshot's tooltip on Haik's taskbar | MIT, ours |
-| `public/shots/menu-light-main.png` | Stand-in: `docs/research/img/ux/menu-screen-light-main.png`, Wakeshot's menu on Haik's screen | MIT, ours |
-| `public/shots/menu-light-sub.png` | Stand-in: `docs/research/img/ux/menu-screen-light-sub.png`, same | MIT, ours |
-| `public/shots/menu-dark-main.png` | Stand-in: `docs/research/img/ux/menu-screen-dark-main.png`, same | MIT, ours |
-| `public/shots/menu-dark-sub.png` | Stand-in: `docs/research/img/ux/menu-screen-dark-sub.png`, same | MIT, ours |
-
-The captures show parts of the Windows taskbar around Wakeshot's own icon and menu. Microsoft's terms for showing
-Windows screenshots: not checked.
+None yet. The video's screen pictures come from the capture session of `p6-media` Part B, each with a line here
+(file, what it shows, where it was taken). Until then the draft draws a plain box naming each missing shot
+(`data/shots.json`). The captures will show parts of the Windows taskbar around Wakeshot's own icon and menu.
+Microsoft's terms for showing Windows screenshots: not checked.
 
 ## Sound
 
@@ -29,21 +21,23 @@ the worker made everything in code instead, so there is no third-party file at a
 
 ## Fonts
 
-| Package | Font | Licence |
+| File or package | Font | Licence |
 |---|---|---|
-| `@fontsource/inter` 5.3.0 | Inter, "Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)" | SIL Open Font License 1.1 |
+| `public/fonts/InstrumentSans-Regular.woff2` | Instrument Sans Regular, Version 1.000, from `fonts/webfonts/` of https://github.com/Instrument/instrument-sans at commit `7fa22308a3d0c94ee2b3cd537a1196b65db34a3e` (the commit Google Fonts also ships), unchanged. "Copyright 2022 The Instrument Sans Project Authors (https://github.com/Instrument/instrument-sans)" | SIL Open Font License 1.1, no Reserved Font Name |
+| `public/fonts/InstrumentSans-SemiBold.woff2` | Instrument Sans SemiBold, the same source, commit and copyright | Same |
+| `public/fonts/OFL.txt` | The licence file of the same commit, unchanged | Same |
 | `@fontsource/jetbrains-mono` 5.3.0 | JetBrains Mono, "Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)" | SIL Open Font License 1.1 |
 
-The licence lines are quoted from each package's `LICENSE`. The OFL allows using the fonts in pictures and video; the
-font files are not shipped in any output, only drawn into it.
+The copyright lines are quoted from `OFL.txt` and from the package's `LICENSE`. The OFL allows using the fonts in
+pictures and video; the font files are not shipped in any output, only drawn into it.
 
 ## Outputs
 
 | File | Made from | Licence |
 |---|---|---|
-| `out/icon-loop-light.gif` | `src/loop/IconLoop.tsx` and the Sunrise art (`src/art/sunrise.ts`, a checked port of `crates/wakeshot-windows/src/tray/art.rs`) | MIT, ours |
+| `out/icon-loop-light.gif` | `src/loop/IconLoop.tsx` and the tray glyph, the held light (`src/art/`), written by `scripts/lib/gif.mjs` | MIT, ours |
 | `out/icon-loop-dark.gif` | Same | MIT, ours |
-| `out/wakeshot-promo.mp4` | `src/promo/`, the pictures and the sound above, Inter and JetBrains Mono. Not built yet: waits for the real captures and the speed numbers | MIT, ours |
+| `out/wakeshot-promo.mp4` | `src/promo/`, the pictures, the sound and the fonts above. Not built yet: waits for the real captures and the speed numbers | MIT, ours |
 | `out/wakeshot-promo-poster.png` | A still of the video (frame 75). Not built yet | MIT, ours |
 
 The drafts in `out/draft/` are not kept in git and carry a DRAFT mark on every frame.

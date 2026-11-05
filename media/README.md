@@ -20,9 +20,9 @@ sends no usage event (`@remotion/renderer` 4.0.540, `render-media.js`: the event
 
 | File | Command | Notes |
 |---|---|---|
-| `out/icon-loop-light.gif`, `out/icon-loop-dark.gif` | `npm run loop` | 480 x 240, 25 fps, 5 s, loops forever. Show at 240 px wide for sharp HiDPI |
-| `out/wakeshot-promo.mp4`, `out/wakeshot-promo-poster.png` | `npm run video` | Refuses while any picture is a stand-in or a speed number is missing |
-| `out/draft/wakeshot-promo-draft.mp4` and its poster | `npm run draft` | Stand-ins allowed; DRAFT on every frame; not kept in git |
+| `out/icon-loop-light.gif`, `out/icon-loop-dark.gif` | `npm run loop` | 480 x 240, 5 s, loops forever, on GitHub's page colours. Remotion renders 125 PNG frames (25 fps); `scripts/lib/gif.mjs` writes the GIF with each frame's exact colours. Show at 240 px wide for sharp HiDPI |
+| `out/wakeshot-promo.mp4`, `out/wakeshot-promo-poster.png` | `npm run video` | Refuses while any picture is missing or a stand-in, or a speed number is missing |
+| `out/draft/wakeshot-promo-draft.mp4` and its poster | `npm run draft` | A missing capture shows as a plain box naming the shot; DRAFT on every frame; not kept in git |
 | `out/wakeshot-promo-poster.png` alone | `npm run poster` | Frame 75 of the video, for the Pages `<video poster>` |
 | `public/sound/soundtrack.wav` | `npm run sounds` | Also run by `draft` and `video`; not kept in git |
 | Speed numbers | `pwsh scripts/measure-speed.ps1 -Mode <mode>` | See "Speed numbers" below |
@@ -36,8 +36,8 @@ takes about a minute on the test laptop.
 | Check | Command |
 |---|---|
 | The art port draws exactly what `art.rs` draws (tray glyphs at 16 to 48 px, light and dark, and every app icon frame) | `node scripts/check-art.mjs` |
-| No em dash, en dash or emoji in the text files; every asset credited | `npm run check` |
-| Video: H.264 and AAC, 1920 x 1080, 30 fps, 30 s plus or minus 2, under 10 MB; loops: GIF, 4 to 6 s, forever, under 1 MB | `npm run check-video` (add `-- --draft` for the draft) |
+| No em dash, en dash or emoji in the text files; every asset credited; every text colour pair in `src/theme.ts` at 4.5:1 or more and every graphic pair at 3:1 | `npm run check` |
+| Video: H.264 and AAC, 1920 x 1080, 30 fps, 30 s plus or minus 2, under 10 MB; loops, read frame by frame: GIF, 480 x 240, 4 to 6 s, forever, under 1 MB, last frame equal to the first, a 40 px border of every frame exactly GitHub's page colour | `npm run check-video` (add `-- --draft` for the draft) |
 | A clean checkout rebuilds the same bytes | `npm run check-rebuild` (add `-- --final` once the final video exists) |
 | Types | `npm run typecheck` |
 
@@ -59,11 +59,12 @@ takes about a minute on the test laptop.
 | Input | From |
 |---|---|
 | Icon art | `src/art/sunrise.ts`, a port of the Sunrise in `art.rs`, checked pixel for pixel by `check-art.mjs` (exact at every size, 2026-11-04) |
-| Screen pictures | `public/shots/`, listed in `data/shots.json` with their source. Today all stand-ins (see the card) |
+| Screen pictures | `public/shots/`, listed in `data/shots.json` with their source. None yet: the capture session of `p6-media` Part B makes them |
 | Settings values in the video | `data/settings.json` (stand-in: the test laptop's own values) |
 | Speed numbers | `data/speed.json` (empty until measured) |
 | Sound | Made in code, `scripts/make-sounds.mjs` |
-| Fonts | npm packages, `src/fonts.ts` |
+| Fonts | Instrument Sans in `public/fonts/` with its `OFL.txt` (from the designer's repo); JetBrains Mono from npm; loaded in `src/fonts.ts` |
+| Colours | `src/theme.ts`: Moss (`docs/research/brand-directions-2.md`), GitHub's page colours for the loop |
 
 Licences: `CREDITS.md`.
 
@@ -89,14 +90,21 @@ PowerShell window with no Claude Code session working.
    tune) and every effect are sine waves and seeded noise; the chimes come from `chime.rs`. Why: no third-party file,
    no licence question, the same bytes on every build. Change it when Haik finds the bed or the effects thin: then a
    CC0 loop from Freesound, committed with its link.
-2. **Inter and JetBrains Mono from npm, not Segoe UI.** Microsoft allows Windows fonts in pictures and video ("We
-   view this as the same as graphic files, providing the captions or text is rendered as a bitmap image", Font
-   redistribution FAQ, learn.microsoft.com, read 2026-11-04), but a system font makes the build depend on the
-   machine. Inter is the brand's named fallback. Change it when the video must match Windows' own text exactly and
-   every build runs on Windows 11.
-3. **The tray glyph in the loop keeps its taskbar colours** (ink on light, white on dark), with a soft gold light
-   behind the risen sun: the brand's holding highlight, not a recoloured icon. Change it when Haik wants the gold sun
-   of the app icon.
+2. **Instrument Sans for every word of the video, self-hosted; JetBrains Mono only in the drawn terminal and the
+   install command.** Instrument Sans SemiBold is the brand's wordmark face (`docs/research/brand-identity.md`
+   section 7); the other lines use the same family so the name and the words read as one. The WOFF2 files and the
+   licence sit in `public/fonts/`, copied unchanged from the designer's repo, so a render never fetches a font and
+   draws the same letters on any machine. Segoe UI is not used: a system font makes the build depend on the machine.
+   Change it when the video must match Windows' own text exactly and every build runs on Windows 11.
+3. **The loop is the tray glyph as the tray draws it, on GitHub's own page colour.** The held light goes idle,
+   holding, idle: it fades on and off in place, only the light takes the brand colour (`#B6E05A` on dark, `#3B7A2A`
+   on light) and the line keeps the glyph colour; no glow. The outline takes the light colour in the first third of
+   the fade and the inside brightens over all of it, so the frames in between read as one dim light. On in 0.44 s
+   (ease out, a lamp coming on), off in 0.8 s (ease in and out), idle 1.6 s and holding about 2.2 s. Backgrounds are
+   GitHub's default light and dark page colours (`#FFFFFF`, `#0D1117`; dark dimmed `#212830` and high contrast
+   `#010409` show a faint box: the README's `<picture>` can only choose by light or dark). The GIF is written by our
+   own writer: Remotion's single GIF palette moved the old loop's background by one level. Change it when GitHub
+   changes its page colours (the loop check then fails) or when Haik wants the app icon in the loop.
 4. **Screen pictures zoom by whole numbers with hard pixels**, other zooms smooth, so a capture is never blurred into
    something it was not, and uneven pixels never garble text.
 5. **The final render refuses stand-ins and missing numbers** (`build.mjs`), and every draft frame says DRAFT, so a

@@ -1,13 +1,18 @@
 // Builds the media files. One mode per command (media/README.md):
-//   node scripts/build.mjs loop     out/icon-loop-light.gif, out/icon-loop-dark.gif
+//   node scripts/build.mjs loop     out/icon-loop-light.gif, out/icon-loop-dark.gif (frames from Remotion, the GIF
+//                                   from scripts/lib/gif.mjs so its colours stay exact)
 //   node scripts/build.mjs draft    out/draft/wakeshot-promo-draft.mp4 and its poster (stand-ins allowed, marked)
 //   node scripts/build.mjs video    out/wakeshot-promo.mp4 and out/wakeshot-promo-poster.png (refuses stand-ins)
 //   node scripts/build.mjs poster   out/wakeshot-promo-poster.png only (refuses stand-ins)
 // MEDIA_CONCURRENCY sets how many frames render at once (default 4, so other work on the laptop keeps its cores).
 import {spawnSync} from 'node:child_process';
-import {existsSync, mkdirSync, readFileSync} from 'node:fs';
+import {existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {LOOP} from '../src/timeline.ts';
+import {writeGif} from './lib/gif.mjs';
+import {readPng} from './lib/png.mjs';
 
 const media = join(dirname(fileURLToPath(import.meta.url)), '..');
 const cli = join(media, 'node_modules', '@remotion', 'cli', 'remotion-cli.js');
@@ -23,12 +28,34 @@ const remotion = (...args) => run([cli, ...args]);
 const sounds = () => run([join(media, 'scripts', 'make-sounds.mjs')]);
 const json = (p) => JSON.parse(readFileSync(join(media, p), 'utf8'));
 
+/** Renders one loop composition as PNG frames and writes them as a GIF with exact colours. */
+function loop(theme) {
+  const delay = 100 / LOOP.fps;
+  if (!Number.isInteger(delay)) throw new Error(`a GIF frame lasts whole hundredths of a second; ${LOOP.fps} fps does not fit`);
+  const frames = mkdtempSync(join(tmpdir(), 'wakeshot-loop-'));
+  try {
+    const flags = ['--sequence', '--image-format=png', `--concurrency=${concurrency}`];
+    remotion('render', 'src/index.ts', `IconLoop${theme}`, frames, ...flags);
+    const files = readdirSync(frames).filter((f) => f.endsWith('.png')).sort();
+    if (files.length !== LOOP.frames) throw new Error(`expected ${LOOP.frames} frames, Remotion wrote ${files.length}`);
+    const out = join(media, 'out', `icon-loop-${theme.toLowerCase()}.gif`);
+    const r = writeGif(out, LOOP.width, LOOP.height, files.map((f) => ({rgba: readPng(join(frames, f)).rgba, delay})));
+    console.log(
+      `${out}: ${r.frames} GIF frames from ${files.length}, at most ${r.mostColours} colours in one frame, ` +
+        `merged edge colours moved at most ${r.worstMerge} levels`,
+    );
+  } finally {
+    rmSync(frames, {recursive: true, force: true});
+  }
+}
+
 /** The final video shows only real captures and measured numbers; this lists what is not there yet. */
 function missingForFinal() {
   const out = [];
   for (const [id, s] of Object.entries(json('data/shots.json').shots)) {
-    if (s.standIn) out.push(`shot ${s.shot} ${id} is a stand-in`);
-    else if (!s.file || !existsSync(join(media, 'public', s.file))) out.push(`shot ${s.shot} ${id} has no file`);
+    if (!s.file) out.push(`shot ${s.shot} ${id} has no capture yet`);
+    else if (s.standIn) out.push(`shot ${s.shot} ${id} is a stand-in`);
+    else if (!existsSync(join(media, 'public', s.file))) out.push(`shot ${s.shot} ${id}: public/${s.file} is missing`);
   }
   const speed = json('data/speed.json');
   if (!speed.measured) out.push('data/speed.json: not measured');
@@ -61,9 +88,8 @@ const mode = process.argv[2];
 mkdirSync(join(media, 'out', 'draft'), {recursive: true});
 switch (mode) {
   case 'loop':
-    for (const theme of ['Light', 'Dark']) {
-      remotion('render', 'src/index.ts', `IconLoop${theme}`, `out/icon-loop-${theme.toLowerCase()}.gif`, '--codec=gif', `--concurrency=${concurrency}`);
-    }
+    loop('Light');
+    loop('Dark');
     break;
   case 'draft':
     sounds();

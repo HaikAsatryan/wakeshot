@@ -3,10 +3,19 @@ import {Easing, Img, interpolate, staticFile, useCurrentFrame} from 'remotion';
 import shotsData from '../../data/shots.json';
 import {COPY} from '../copy.ts';
 import {MONO, SANS} from '../fonts.ts';
-import {C} from '../theme.ts';
+import {DARK, LIGHT, MOSS} from '../theme.ts';
 import {TERMINAL} from '../timeline.ts';
 
-type ShotInfo = {shot: string; file: string | null; w: number; h: number; standIn: boolean; from: string};
+type ShotInfo = {
+  shot: string;
+  what: string;
+  theme: 'light' | 'dark';
+  file: string | null;
+  w: number;
+  h: number;
+  standIn: boolean;
+  from: string;
+};
 const SHOTS = shotsData.shots as Record<string, ShotInfo>;
 
 export const ease = (frame: number, from: number, to: number, out: [number, number] = [0, 1]) =>
@@ -22,13 +31,17 @@ export const DraftContext = React.createContext(true);
 /**
  * A real capture from `data/shots.json`, shown `width` pixels wide. At a whole-number zoom the pixels stay hard, so a
  * screen picture is shown as it was taken; at other zooms the browser smooths it, since uneven hard pixels garble
- * text. A stand-in carries a tag in the draft; a missing capture is an outlined box of the expected size.
+ * text. A stand-in carries a tag in the draft. A missing capture is a plain box of the expected size that names the
+ * shot, so a draft runs before the captures exist and never draws an old picture; the final video throws instead.
  */
 export const Shot: React.FC<{id: string; width: number; style?: React.CSSProperties}> = ({id, width, style}) => {
   const draft = React.useContext(DraftContext);
   const info = SHOTS[id];
   if (!info) throw new Error(`no shot ${id} in data/shots.json`);
+  if (!info.file && !draft) throw new Error(`shot ${info.shot} ${id} has no capture; the final video needs it`);
   const zoom = width / info.w;
+  // A missing light capture is drawn light, so a scene that wipes from light to dark still shows the wipe.
+  const plain = info.theme === 'light' ? LIGHT : DARK;
   const box: React.CSSProperties = {width, height: info.h * zoom, position: 'relative', ...style};
   return (
     <div style={box}>
@@ -45,30 +58,36 @@ export const Shot: React.FC<{id: string; width: number; style?: React.CSSPropert
       ) : (
         <div
           style={{
+            boxSizing: 'border-box',
             width: '100%',
             height: '100%',
-            border: `3px dashed ${C.dim}`,
+            background: plain.panel,
+            border: `3px dashed ${plain.panelLine}`,
             borderRadius: 12,
-            color: C.dim,
+            padding: 16,
             fontFamily: SANS,
-            fontSize: 28,
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
             textAlign: 'center',
+            gap: 6,
           }}
         >
-          {info.shot} {id}: {COPY.missing}
+          <div style={{color: plain.text, fontSize: 28, fontWeight: 600}}>
+            {info.shot}: {info.what}
+          </div>
+          <div style={{color: plain.dim, fontSize: 22}}>{COPY.missing}</div>
         </div>
       )}
-      {draft && info.standIn ? (
+      {draft && info.standIn && info.file ? (
         <div
           style={{
             position: 'absolute',
             left: 6,
             top: 6,
-            background: '#B42318',
-            color: 'white',
+            background: DARK.draft,
+            color: DARK.onDraft,
             fontFamily: SANS,
             fontWeight: 600,
             fontSize: 18,
@@ -102,14 +121,14 @@ export const Caption: React.FC<{text: string; from?: number; small?: string; sma
         bottom: 96,
         textAlign: 'center',
         fontFamily: SANS,
-        color: 'white',
+        color: DARK.text,
       }}
     >
       <div style={{fontSize: 56, fontWeight: 600, opacity: show, transform: `translateY(${(1 - show) * 24}px)`}}>
         {text}
       </div>
       {small ? (
-        <div style={{fontSize: 30, color: C.dim, marginTop: 16, opacity: showSmall}}>{small}</div>
+        <div style={{fontSize: 30, color: DARK.dim, marginTop: 16, opacity: showSmall}}>{small}</div>
       ) : null}
     </div>
   );
@@ -140,23 +159,23 @@ export const Terminal: React.FC<{
       style={{
         width: 980,
         height: 330,
-        background: '#0C0B14',
-        border: `2px solid ${C.panelLine}`,
+        background: DARK.terminal,
+        border: `2px solid ${DARK.panelLine}`,
         borderRadius: 16,
         overflow: 'hidden',
         fontFamily: MONO,
         fontSize: 30,
-        color: '#E6E3F2',
+        color: DARK.terminalText,
         boxShadow: '0 30px 80px rgba(0,0,0,0.45)',
       }}
     >
-      <div style={{height: 52, background: C.panel, display: 'flex', alignItems: 'center', paddingLeft: 22}}>
+      <div style={{height: 52, background: DARK.panel, display: 'flex', alignItems: 'center', paddingLeft: 22}}>
         <div
           style={{
             fontFamily: SANS,
             fontSize: 22,
-            color: C.dim,
-            background: '#0C0B14',
+            color: DARK.dim,
+            background: DARK.terminal,
             padding: '10px 20px',
             borderRadius: '10px 10px 0 0',
             marginTop: 12,
@@ -167,19 +186,19 @@ export const Terminal: React.FC<{
       </div>
       <div style={{padding: '24px 32px'}}>
         <div style={line}>
-          <span style={{color: C.dim}}>{TERMINAL.path} </span>
+          <span style={{color: DARK.dim}}>{TERMINAL.path} </span>
           {cmd}
           {!promptShown ? caret : ''}
         </div>
         {promptShown ? (
           <div style={line}>
-            <span style={{color: C.violetLight}}>{'> '}</span>
+            <span style={{color: DARK.dim}}>{'> '}</span>
             {prompt}
             {!working ? caret : ''}
           </div>
         ) : null}
         {working ? (
-          <div style={{...line, color: isDone ? '#8FE3A8' : C.gold}}>
+          <div style={{...line, color: isDone ? DARK.text : DARK.accent}}>
             {isDone ? `${CHECK} ${doneText}` : `* Working${dots}`}
           </div>
         ) : null}
@@ -198,18 +217,18 @@ export const Laptop: React.FC<{closed: number; lock: number; moon?: number}> = (
   const angle = interpolate(closed, [0, 1], [-104, 0]);
   return (
     <svg width={760} height={580} viewBox="0 0 760 580">
-      <rect x={hinge.x - 10} y={hinge.y} width={480} height={22} rx={10} fill={C.violetLight} />
+      <rect x={hinge.x - 10} y={hinge.y} width={480} height={22} rx={10} fill={DARK.dim} />
       <g transform={`rotate(${angle} ${hinge.x} ${hinge.y})`}>
-        <rect x={hinge.x} y={hinge.y - 14} width={440} height={14} rx={7} fill={C.panel} stroke={C.violetLight} strokeWidth={5} />
-        <rect x={hinge.x + 24} y={hinge.y - 4} width={392} height={4} rx={2} fill={C.gold} opacity={0.8 * (1 - closed)} />
+        <rect x={hinge.x} y={hinge.y - 14} width={440} height={14} rx={7} fill={DARK.panel} stroke={DARK.dim} strokeWidth={5} />
+        <rect x={hinge.x + 24} y={hinge.y - 4} width={392} height={4} rx={2} fill={MOSS.lightEdge} opacity={0.8 * (1 - closed)} />
       </g>
       <g opacity={lock} transform={`translate(400 ${340 - 10 * lock}) scale(${0.8 + 0.2 * lock})`}>
-        <rect x={-50} y={-10} width={100} height={80} rx={14} fill={C.gold} />
-        <path d="M -30 -10 L -30 -40 A 30 30 0 0 1 30 -40 L 30 -10" fill="none" stroke={C.gold} strokeWidth={14} />
-        <circle cx={0} cy={26} r={10} fill={C.night} />
+        <rect x={-50} y={-10} width={100} height={80} rx={14} fill={DARK.text} />
+        <path d="M -30 -10 L -30 -40 A 30 30 0 0 1 30 -40 L 30 -10" fill="none" stroke={DARK.text} strokeWidth={14} />
+        <circle cx={0} cy={26} r={10} fill={DARK.page} />
       </g>
       <g opacity={moon} transform={`translate(400 ${340 - 10 * moon})`}>
-        <path d="M 0 -50 A 50 50 0 1 0 50 12 A 40 40 0 1 1 0 -50 Z" fill={C.violetLight} />
+        <path d="M 0 -50 A 50 50 0 1 0 50 12 A 40 40 0 1 1 0 -50 Z" fill={DARK.dim} />
       </g>
     </svg>
   );
@@ -222,8 +241,8 @@ export const DraftBanner: React.FC = () => (
       position: 'absolute',
       top: 24,
       right: 24,
-      background: '#B42318',
-      color: 'white',
+      background: DARK.draft,
+      color: DARK.onDraft,
       fontFamily: SANS,
       fontWeight: 600,
       fontSize: 24,
