@@ -467,14 +467,14 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   stays 480 epx; Instrument Sans SemiBold for the wordmark outside the Windows app; after the build, the GitHub repo gets
   a description, website link, topics and the social card. Also Haik: no legacy left anywhere; old brand assets are
   deleted, not kept.
-- 2026-11-05 ~15:30 (brand session orchestrator, Haik away about an hour): five cards written: `p6-brand-apply-art`,
+- 2026-11-05 14:35 (brand session orchestrator, Haik away about an hour): five cards written: `p6-brand-apply-art`,
   `p6-brand-apply-web`, `p6-brand-apply-media`, `p6-brand-docs-sweep`, `p6-brand-screen-session`. Running:
   `p6-brand-apply-art` and Part A of the web and media cards (Part B of both waits for the art). Orchestrator
   decisions, for Haik's review: (1) the web and media apply work is two cards, not one, so they run beside the art card
   and stay under a worker's context; (2) the research history list goes into a new `docs/tasks/p8-cleanup.md`
   (Status: later), not into `p8-store.md`, which is about the Store; (3) the screen-session checklist is written after
   the apply cards, so its steps name the real files and states.
-- 2026-11-05 ~16:20: `p6-brand-apply-art` done and committed (8cd0301; 535K tokens); Part A of the web (19f7bda) and media
+- 2026-11-05 15:27: `p6-brand-apply-art` done and committed (8cd0301; 535K tokens); Part A of the web (19f7bda) and media
   (b4d4864) cards committed. Velopack 1.2.161 shows its own install window, so no splash (I1 closed). Part B of both
   runs with new workers (the Part A workers used 260K and 314K tokens).
 - 2026-11-05 15:35: Haik approved the 7 designer decisions of `p6-brand-apply-art` ("all 7 decisions ok").
