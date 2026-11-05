@@ -5106,3 +5106,21 @@ findings 2 and 6; scripts in the card's scratch folder `p6-brand-media-fixes\`).
   cap line 0.278; outro (plate 176) 0.392 and 0.301; ink centre 0.9 and 0.5 px right of the plate's. After (cap 0.36,
   gap 0.26, ink centred): title gap 61 px and cap 84 (design 60.84, 84.24), outro 45 and 64 (45.76, 63.36), ink
   centre 960.15 and 960.23 against 960. **Verified** (`measure.mjs`, `inkx.mjs`).
+
+## Menu status glyph: place and contrast
+
+Checked 2026-11-05 by `p6-menu-status-glyph`, offscreen renders through `menu_paint::paint_item` on this laptop
+(Segoe UI Variable Text and Segoe Fluent Icons installed). No screen picture.
+
+- **Where WinUI puts a row icon**: at the left edge of the 28 epx icon column, 16 epx wide, and the text 28 epx
+  after that edge, which is why a status line with no icon starts after an empty space of two columns (check and
+  icon, 56 epx). The status glyph takes that same box. **Verified** in our layout constants (`menu_paint.rs`, from
+  the WinUI 3 template, `docs/research/tray-menu-look.md`); WinUI's template itself was not re-read.
+- **The glyph lines up with the row icons**: across its ink, the status glyph spans 45..57 px and the Automatic eye
+  43..59 px at 96 dpi, 56..72 and 54..74 at 120, 68..86 and 65..89 at 144, 78..100 and 75..103 at 168, 90..114 and
+  86..118 at 192: the same centre at every scale. The glyph's ink is narrower than the eye's, as the tray frame keeps
+  its padding. **Verified** (test `status_glyph_sits_where_the_row_icons_sit`, printed).
+- **Contrast on the menu's fill**, WCAG 2 and the worst of protan, deutan and tritan (Machado 2009, as `art.rs`), on
+  the fully covered drawn pixels at 96, 120 and 144 dpi: dark menu `#2C2C2C`: ink `#FFFFFF` 13.97 (colour-blind
+  13.97), light `#B6E05A` 9.18 (9.03); light menu `#F9F9F9`: ink `#1A1A1A` 16.53 (16.53), light `#3B7A2A` 4.98 (4.76).
+  All over 3:1. **Verified** (test `status_glyph_keeps_3_to_1`, printed).

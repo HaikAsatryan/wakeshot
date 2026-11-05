@@ -490,7 +490,7 @@ impl Open {
             match item {
                 MenuItem::Separator => mii.fType |= MFT_SEPARATOR,
                 // A status line: Enter on it does nothing, and screen readers hear it as unavailable.
-                MenuItem::Label(_) => mii.fState = MFS_GRAYED,
+                MenuItem::Label { .. } => mii.fState = MFS_GRAYED,
                 MenuItem::Action {
                     command,
                     checked,
@@ -602,7 +602,7 @@ impl ItemData {
 
 fn text_of(item: &MenuItem) -> &str {
     match item {
-        MenuItem::Label(t)
+        MenuItem::Label { text: t, .. }
         | MenuItem::Action { text: t, .. }
         | MenuItem::Submenu { text: t, .. } => t,
         MenuItem::Separator => "",
@@ -618,7 +618,7 @@ fn command_ids(items: &[MenuItem]) -> Vec<MenuCommand> {
             match item {
                 MenuItem::Action { command, .. } => out.push(*command),
                 MenuItem::Submenu { items, .. } => walk(items, out),
-                MenuItem::Label(_) | MenuItem::Separator => {}
+                MenuItem::Label { .. } | MenuItem::Separator => {}
             }
         }
     }
@@ -879,7 +879,7 @@ mod tests {
     use crate::sink::FakeEventSink;
     use crate::tray::theme::{Contrast, Rgb};
     use wakeshot_core::text;
-    use wakeshot_core::view::KeepAwake;
+    use wakeshot_core::view::{IconState, KeepAwake};
     use windows::Win32::Foundation::ERROR_INVALID_DATA;
     use windows::Win32::Graphics::Gdi::{
         BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleDC, CreateDIBSection, DIB_RGB_COLORS,
@@ -922,7 +922,10 @@ mod tests {
         keep_awake.push(MenuItem::Separator);
         keep_awake.push(action(MenuCommand::KeepScreenOn(true), false, false));
         vec![
-            MenuItem::Label("Holding awake: R&&D build".to_owned()),
+            MenuItem::Label {
+                text: "Holding awake: R&&D build".to_owned(),
+                icon: Some(IconState::Holding),
+            },
             MenuItem::Separator,
             action(MenuCommand::Automatic(false), true, true),
             MenuItem::Submenu {
@@ -996,12 +999,18 @@ mod tests {
     #[test]
     fn labels_get_no_id() {
         let items = vec![
-            MenuItem::Label("Idle".to_owned()),
+            MenuItem::Label {
+                text: "Idle".to_owned(),
+                icon: Some(IconState::Idle),
+            },
             MenuItem::Separator,
             MenuItem::Submenu {
                 text: text::keep_awake_menu(),
                 items: vec![
-                    MenuItem::Label("Inner".to_owned()),
+                    MenuItem::Label {
+                        text: "Inner".to_owned(),
+                        icon: None,
+                    },
                     action(MenuCommand::KeepAwake(KeepAwake::Off), true, true),
                 ],
             },
@@ -1042,7 +1051,11 @@ mod tests {
     fn msaa_text_is_the_menu_text() {
         let layout = Layout::new(96, Columns::default());
         for text in ["&Keep awake", "Holding awake: R&&D build", "\u{54a}\u{561}"] {
-            let data = ItemData::new(&MenuItem::Label(text.to_owned()), layout);
+            let label = MenuItem::Label {
+                text: text.to_owned(),
+                icon: Some(IconState::Holding),
+            };
+            let data = ItemData::new(&label, layout);
             assert_eq!(data.msaa.dwMSAASignature, MSAA_MENU_SIG as u32);
             let units: Vec<u16> = text.encode_utf16().collect();
             assert_eq!(data.msaa.cchWText as usize, units.len(), "{text}");
@@ -1103,7 +1116,7 @@ mod tests {
                 let radio = mii.fType.0 & MFT_RADIOCHECK.0 != 0;
                 match item {
                     MenuItem::Separator => assert!(separator && mii.wID == 0),
-                    MenuItem::Label(_) => assert!(grayed && !separator && mii.wID == 0),
+                    MenuItem::Label { .. } => assert!(grayed && !separator && mii.wID == 0),
                     MenuItem::Action {
                         command,
                         checked: c,

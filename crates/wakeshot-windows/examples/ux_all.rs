@@ -434,7 +434,7 @@ impl Demo {
             return;
         }
         let line = match view.menu.items.first() {
-            Some(MenuItem::Label(line)) => line.as_str(),
+            Some(MenuItem::Label { text: line, .. }) => line.as_str(),
             _ => "",
         };
         say!("shown: icon {:?}, status line {line:?}", view.icon);
@@ -714,7 +714,7 @@ mod tests {
     /// The icon state and the menu's status line.
     fn shows(sample: &Sample, now: Now) -> (IconState, String) {
         let view = sample.view(now);
-        let Some(MenuItem::Label(line)) = view.menu.items.first() else {
+        let Some(MenuItem::Label { text: line, .. }) = view.menu.items.first() else {
             panic!("no status line: {view:?}");
         };
         (view.icon, line.clone())

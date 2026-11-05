@@ -87,7 +87,11 @@ pub fn build(snapshot: &Snapshot, now: Now) -> (TrayView, StateFile) {
     };
     let groups = groups(&snapshot.holds, now);
     let (tooltip, shown) = fit_tooltip(&status, &groups);
-    let menu = menu(snapshot, screen_on, text::status_line(&status, &shown));
+    let status_line = MenuItem::Label {
+        text: text::status_line(&status, &shown),
+        icon: Some(icon),
+    };
+    let menu = menu(snapshot, screen_on, status_line);
     let view = TrayView {
         icon,
         tooltip,
@@ -183,7 +187,7 @@ fn fit_tooltip(status: &Status, groups: &[String]) -> (String, Vec<String>) {
 }
 
 /// The product's menu sketch (decision 33), and nothing it rules out (decision 39).
-fn menu(snapshot: &Snapshot, screen_on: bool, status_line: String) -> MenuModel {
+fn menu(snapshot: &Snapshot, screen_on: bool, status_line: MenuItem) -> MenuModel {
     let keep_awake_on = snapshot.keep_awake != KeepAwake::Off;
     let mut keep_awake: Vec<MenuItem> = KEEP_AWAKE_CHOICES
         .into_iter()
@@ -205,7 +209,7 @@ fn menu(snapshot: &Snapshot, screen_on: bool, status_line: String) -> MenuModel 
     let automatic = snapshot.automatic;
     MenuModel {
         items: vec![
-            MenuItem::Label(status_line),
+            status_line,
             MenuItem::Separator,
             action(MenuCommand::Automatic(!automatic), automatic, true),
             MenuItem::Submenu {
@@ -338,8 +342,8 @@ mod tests {
     }
 
     /// Checks that the view names `groups` under `status`: the tooltip fits and shows the longest run of whole groups
-    /// that fits plus how many more, and the status line names the same. Gives how many groups it shows whole. Built
-    /// only from `text`, so a wording change never breaks it.
+    /// that fits plus how many more, and the status line names the same and carries the tray icon's state. Gives how
+    /// many groups it shows whole. Built only from `text`, so a wording change never breaks it.
     fn assert_names(view: &TrayView, status: &Status, groups: &[String]) -> usize {
         let keep = (0..=groups.len())
             .rev()
@@ -354,7 +358,14 @@ mod tests {
             );
         }
         let line = text::status_line(status, &cut(groups, keep));
-        assert_eq!(view.menu.items[0], MenuItem::Label(line));
+        assert_eq!(view.icon, status.icon);
+        assert_eq!(
+            view.menu.items[0],
+            MenuItem::Label {
+                text: line,
+                icon: Some(status.icon),
+            }
+        );
         keep
     }
 
@@ -710,7 +721,10 @@ mod tests {
         };
         let expected = MenuModel {
             items: vec![
-                MenuItem::Label(text::status_line(&status(IconState::Idle), &[])),
+                MenuItem::Label {
+                    text: text::status_line(&status(IconState::Idle), &[]),
+                    icon: Some(IconState::Idle),
+                },
                 MenuItem::Separator,
                 item(MenuCommand::Automatic(false), true, true),
                 MenuItem::Submenu {

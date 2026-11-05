@@ -35,14 +35,18 @@ pub struct MenuModel {
     pub items: Vec<MenuItem>,
 }
 
-/// One menu row. `Label` is a line that cannot be picked (the "Holding awake: ..." status). `checked` marks the
-/// current choice; the drawing side picks the mark (tick or bullet). A text may hold `&` before its access key; `&&`
-/// shows one `&` (the Win32 rule).
+/// One menu row. `Label` is a line that cannot be picked (the "Holding awake: ..." status); its `icon` is the tray
+/// state it describes, which the drawing side shows beside it as the tray glyph (Haik, 2026-11-05), `None` for a
+/// line with no state. `checked` marks the current choice; the drawing side picks the mark (tick or bullet). A text
+/// may hold `&` before its access key; `&&` shows one `&` (the Win32 rule).
 ///
 /// Owner: core track (Phase 2) builds it; tray track (Phase 5) draws it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MenuItem {
-    Label(String),
+    Label {
+        text: String,
+        icon: Option<IconState>,
+    },
     Separator,
     Action {
         text: String,

@@ -11,7 +11,7 @@ use std::cell::RefCell;
 use std::ffi::c_void;
 
 use wakeshot_core::text;
-use wakeshot_core::view::{MenuCommand, MenuItem};
+use wakeshot_core::view::{IconState, MenuCommand, MenuItem};
 use windows::Win32::Foundation::{
     COLORREF, ERROR_NOT_ENOUGH_MEMORY, ERROR_NOT_FOUND, GetLastError, RECT, SIZE, WIN32_ERROR,
 };
@@ -30,6 +30,7 @@ use windows::Win32::UI::WindowsAndMessaging::{NONCLIENTMETRICSW, SPI_GETNONCLIEN
 use windows::core::PCWSTR;
 
 use crate::WinError;
+use crate::tray::art::{self, GlyphColours};
 use crate::tray::theme::{Rgb, Theme};
 
 // Effective pixels (epx, 96 dpi) from the WinUI 3 template, with the narrow padding WinUI uses when the menu was
@@ -207,6 +208,9 @@ pub struct Palette {
     pub separator: Rgb,
     /// For `DWMWA_BORDER_COLOR` on the menu window (`p5-menu-view`).
     pub border: Rgb,
+    /// The tray glyph on the status line: the tray icon's own colours for this mode, so the light is Moss while
+    /// holding; in high contrast one colour, the status line's text colour, as every other glyph of a row takes.
+    pub status: GlyphColours,
 }
 
 impl Palette {
@@ -222,6 +226,7 @@ impl Palette {
                 hover_secondary: c.highlight_text,
                 separator: c.window_text,
                 border: c.window_text,
+                status: GlyphColours::one(c.button_text.into()),
             };
         }
         // ARGB tokens from `Common_themeresources_any.xaml`. The fills are the classic menu's own, measured in Phase 1.
@@ -257,6 +262,13 @@ impl Palette {
             hover_secondary: over(secondary, hover),
             separator: over(divider, background),
             border: over(stroke, background),
+            // The tray's own pair for a taskbar of this mode; both keep 3:1 on this fill too (test
+            // `status_glyph_keeps_3_to_1`).
+            status: if theme.light {
+                art::ON_LIGHT
+            } else {
+                art::ON_DARK
+            },
         }
     }
 }
@@ -307,20 +319,33 @@ pub fn mark_for(command: MenuCommand) -> Option<Mark> {
     }
 }
 
-/// The icon glyph of an item. Only items with a picture Windows users know get one (Microsoft's menu guidance:
+/// What an item shows in the icon column.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Icon {
+    /// A glyph of the icon font, in the item's text colour.
+    Font(u16),
+    /// The tray icon's glyph for this state (`art::tray_mask`), in `Palette::status`.
+    Tray(IconState),
+}
+
+/// The icon of an item. Only items with a picture Windows users know get one (Microsoft's menu guidance:
 /// "Don't feel obligated to provide icons for commands that don't have a standard visualization"): the Keep awake
-/// lengths and Keep screen on are a list of choices with marks, and the status line is not a command.
-pub fn icon_for(item: &MenuItem) -> Option<u16> {
+/// lengths and Keep screen on are a list of choices with marks. The status line shows the tray's own glyph for the
+/// state it names (Haik, 2026-11-05), so the column WinUI keeps empty beside it says the state as the tray does.
+pub fn icon_for(item: &MenuItem) -> Option<Icon> {
     match item {
         MenuItem::Action { command, .. } => match command {
-            MenuCommand::Automatic(_) => Some(ICON_AUTOMATIC),
-            MenuCommand::Restore => Some(ICON_RESTORE),
-            MenuCommand::OpenLog => Some(ICON_LOG),
-            MenuCommand::Quit => Some(ICON_QUIT),
+            MenuCommand::Automatic(_) => Some(Icon::Font(ICON_AUTOMATIC)),
+            MenuCommand::Restore => Some(Icon::Font(ICON_RESTORE)),
+            MenuCommand::OpenLog => Some(Icon::Font(ICON_LOG)),
+            MenuCommand::Quit => Some(Icon::Font(ICON_QUIT)),
             MenuCommand::KeepAwake(_) | MenuCommand::KeepScreenOn(_) => None,
         },
-        MenuItem::Submenu { text: t, .. } if *t == text::keep_awake_menu() => Some(ICON_KEEP_AWAKE),
-        MenuItem::Submenu { .. } | MenuItem::Label(_) | MenuItem::Separator => None,
+        MenuItem::Submenu { text: t, .. } if *t == text::keep_awake_menu() => {
+            Some(Icon::Font(ICON_KEEP_AWAKE))
+        }
+        MenuItem::Label { icon, .. } => icon.map(Icon::Tray),
+        MenuItem::Submenu { .. } | MenuItem::Separator => None,
     }
 }
 
@@ -629,7 +654,7 @@ fn visible(text: &str) -> Vec<u16> {
 
 fn text_of(item: &MenuItem) -> Option<&str> {
     match item {
-        MenuItem::Label(t)
+        MenuItem::Label { text: t, .. }
         | MenuItem::Action { text: t, .. }
         | MenuItem::Submenu { text: t, .. } => Some(t),
         MenuItem::Separator => None,
@@ -638,7 +663,7 @@ fn text_of(item: &MenuItem) -> Option<&str> {
 
 /// The access key is underlined only when Windows asks for keyboard cues; a label is a status line with no key.
 fn prefix_format(item: &MenuItem, state: ItemState) -> DRAW_TEXT_FORMAT {
-    if state.keyboard_cues && !matches!(item, MenuItem::Label(_)) {
+    if state.keyboard_cues && !matches!(item, MenuItem::Label { .. }) {
         DRAW_TEXT_FORMAT(0)
     } else {
         DT_HIDEPREFIX
@@ -692,7 +717,7 @@ pub fn paint_item(
         let text_colour = match item {
             // Information, not a command that is off: the secondary text reads at about 6:1 in light and 9:1 in
             // dark, where Phase 0's disabled grey read at 2.5 to 2.7:1.
-            MenuItem::Label(_) => palette.secondary,
+            MenuItem::Label { .. } => palette.secondary,
             _ if !enabled => palette.disabled,
             _ if hot => palette.hover_text,
             _ => palette.text,
@@ -735,18 +760,22 @@ pub fn paint_item(
                 DT_CENTER | DT_NOPREFIX,
             );
         }
-        if layout.columns.icons
-            && let Some(icon) = icon_for(item)
-        {
+        if layout.columns.icons {
             let left = layout.icon_left;
-            draw(
-                &mut canvas,
-                fonts.icons,
-                &[icon],
-                line(left, left + layout.icon),
-                text_colour,
-                DT_CENTER | DT_NOPREFIX,
-            );
+            match icon_for(item) {
+                Some(Icon::Font(glyph)) => draw(
+                    &mut canvas,
+                    fonts.icons,
+                    &[glyph],
+                    line(left, left + layout.icon),
+                    text_colour,
+                    DT_CENTER | DT_NOPREFIX,
+                ),
+                Some(Icon::Tray(icon)) => {
+                    tray_glyph(&mut canvas, w, h, icon, layout, palette.status)
+                }
+                None => {}
+            }
         }
         let submenu = matches!(item, MenuItem::Submenu { .. });
         let right = w - if submenu {
@@ -885,6 +914,47 @@ fn draw(
 
 fn rgb_of(p: u32) -> Rgb {
     Rgb::new((p >> 16) as u8, (p >> 8) as u8, p as u8)
+}
+
+/// The tray icon's glyph for `icon`, drawn at the icon size by the tray's own art (`art::tray_mask`, so the hand-made
+/// frames at 16, 20 and 24 px come with it) in the box the font icons of the rows below take: the column's left edge,
+/// centred on the text line. Laid over the row by its alpha, as the shell lays the tray icon over the taskbar.
+fn tray_glyph(
+    canvas: &mut Canvas,
+    w: i32,
+    h: i32,
+    icon: IconState,
+    layout: &Layout,
+    colours: GlyphColours,
+) {
+    let size = layout.icon;
+    let Ok(side) = u32::try_from(size) else {
+        return;
+    };
+    if side == 0 {
+        return;
+    }
+    let glyph = art::colorize(&art::tray_mask(icon, side), colours);
+    let (left, top) = glyph_origin(layout);
+    let px = canvas.pixels();
+    for (i, &[r, g, b, alpha]) in glyph.pixels.as_chunks::<4>().0.iter().enumerate() {
+        let i = i as i32;
+        let (x, y) = (left + i % size, top + i / size);
+        if alpha == 0 || !(0..w).contains(&x) || !(0..h).contains(&y) {
+            continue;
+        }
+        let at = (y * w + x) as usize;
+        let mixed = lerp(rgb_of(px[at]), Rgb::new(r, g, b), f32::from(alpha) / 255.0);
+        px[at] = pixel(mixed);
+    }
+}
+
+/// The top left corner of the status glyph's box in the item.
+fn glyph_origin(layout: &Layout) -> (i32, i32) {
+    (
+        layout.icon_left,
+        layout.line_top + (layout.line - layout.icon) / 2,
+    )
 }
 
 /// One grey for a ClearType pixel. GDI moved each channel of `under` toward `ink` by the coverage of its own subpixel;
@@ -1046,6 +1116,15 @@ mod tests {
         }
     }
 
+    fn label(text: &str, icon: Option<IconState>) -> MenuItem {
+        MenuItem::Label {
+            text: text.to_owned(),
+            icon,
+        }
+    }
+
+    const STATES: [IconState; 3] = [IconState::Holding, IconState::Idle, IconState::Off];
+
     fn keep_awake() -> Vec<MenuItem> {
         let mut items: Vec<MenuItem> = [
             KeepAwake::Off,
@@ -1079,7 +1158,10 @@ mod tests {
             screen_on: false,
         };
         vec![
-            MenuItem::Label(text::status_line(&status, groups)),
+            MenuItem::Label {
+                text: text::status_line(&status, groups),
+                icon: Some(status.icon),
+            },
             MenuItem::Separator,
             action(MenuCommand::Automatic(false), true, true),
             MenuItem::Submenu {
@@ -1280,6 +1362,9 @@ mod tests {
             Rgb::new(0x23, 0x23, 0x23),
             "#33000000, the Phase 1 border"
         );
+        // The status glyph takes the tray icon's colours for the same mode.
+        assert_eq!(light.status, art::ON_LIGHT);
+        assert_eq!(dark.status, art::ON_DARK);
     }
 
     #[test]
@@ -1299,6 +1384,8 @@ mod tests {
             assert_eq!(p.hover_secondary, c.highlight_text);
             assert_eq!(p.separator, c.window_text);
             assert_eq!(p.border, c.window_text);
+            // One colour, the status line's own text colour.
+            assert_eq!(p.status, GlyphColours::one(p.secondary.into()));
         }
     }
 
@@ -1324,20 +1411,24 @@ mod tests {
     #[test]
     fn icons_only_for_commands_with_a_known_picture() {
         let menu = product_menu();
-        let icons: Vec<Option<u16>> = menu.iter().map(icon_for).collect();
+        let icons: Vec<Option<Icon>> = menu.iter().map(icon_for).collect();
         assert_eq!(
             icons,
             [
+                Some(Icon::Tray(IconState::Holding)),
                 None,
+                Some(Icon::Font(ICON_AUTOMATIC)),
+                Some(Icon::Font(ICON_KEEP_AWAKE)),
                 None,
-                Some(ICON_AUTOMATIC),
-                Some(ICON_KEEP_AWAKE),
-                None,
-                Some(ICON_RESTORE),
-                Some(ICON_LOG),
-                Some(ICON_QUIT),
+                Some(Icon::Font(ICON_RESTORE)),
+                Some(Icon::Font(ICON_LOG)),
+                Some(Icon::Font(ICON_QUIT)),
             ]
         );
+        for state in STATES {
+            assert_eq!(icon_for(&label("x", Some(state))), Some(Icon::Tray(state)));
+        }
+        assert_eq!(icon_for(&label("x", None)), None, "a line with no state");
         assert!(keep_awake().iter().all(|i| icon_for(i).is_none()));
         let other = MenuItem::Submenu {
             text: "&Other".into(),
@@ -1405,6 +1496,15 @@ mod tests {
             }
         );
         assert_eq!(Columns::of(&[]), Columns::default());
+        // The status glyph takes the icon column like any icon; a line with no state takes none.
+        assert_eq!(
+            Columns::of(&[label("Idle", Some(IconState::Idle))]),
+            Columns {
+                marks: false,
+                icons: true
+            }
+        );
+        assert_eq!(Columns::of(&[label("x", None)]), Columns::default());
     }
 
     #[test]
@@ -1434,7 +1534,7 @@ mod tests {
             "underlined"
         );
         assert_eq!(prefix_format(&quit, MOUSE), DT_HIDEPREFIX);
-        let label = MenuItem::Label("Holding awake".into());
+        let label = label("Holding awake", Some(IconState::Holding));
         assert_eq!(
             prefix_format(&label, cues),
             DT_HIDEPREFIX,
@@ -1465,7 +1565,10 @@ mod tests {
 
     #[test]
     fn label_never_highlights() {
-        let label = MenuItem::Label("Holding awake: Claude Code (2 sessions)".into());
+        let label = label(
+            "Holding awake: Claude Code (2 sessions)",
+            Some(IconState::Holding),
+        );
         let p = Painted::new(&label, HOT, 96, &DARK);
         let (x, y) = (p.layout.inset_x + 2, p.layout.row / 2);
         assert_eq!(p.at(x, y), p.palette.background, "no hover fill on a label");
@@ -1484,6 +1587,215 @@ mod tests {
             p.palette.background,
             "no hover fill on a disabled item"
         );
+    }
+
+    /// The status line painted with its state, and the same line with none, as it was drawn before the glyph.
+    fn status_pair(state: IconState, dpi: u32, theme: &Theme) -> (Painted, Painted) {
+        let text = "Holding awake: Claude Code (2 sessions)";
+        (
+            Painted::new(&label(text, Some(state)), MOUSE, dpi, theme),
+            Painted::new(&label(text, None), MOUSE, dpi, theme),
+        )
+    }
+
+    /// Pixels of the whole row in columns `x0..x1` that are not `fill`.
+    fn row_ink(p: &Painted, x0: i32, x1: i32, fill: Rgb) -> usize {
+        (0..p.layout.row)
+            .flat_map(|y| (x0..x1).map(move |x| (x, y)))
+            .filter(|&(x, y)| p.at(x, y) != fill)
+            .count()
+    }
+
+    /// The left, right, top and bottom of the ink in columns `x0..x1` of the row, edges exclusive at the far end.
+    fn ink_box(p: &Painted, x0: i32, x1: i32, fill: Rgb) -> (i32, i32, i32, i32) {
+        let mut b = (i32::MAX, i32::MIN, i32::MAX, i32::MIN);
+        for y in 0..p.layout.row {
+            for x in x0..x1 {
+                if p.at(x, y) != fill {
+                    b = (b.0.min(x), b.1.max(x + 1), b.2.min(y), b.3.max(y + 1));
+                }
+            }
+        }
+        b
+    }
+
+    #[test]
+    fn status_row_draws_the_tray_glyph() {
+        let contrast = Theme {
+            light: false,
+            contrast: Some(sample_contrast()),
+        };
+        // The icon size follows the dpi as every size does: 16 epx is 16, 20, 24, 28 and 32 px.
+        for (dpi, icon) in [(96, 16), (120, 20), (144, 24), (168, 28), (192, 32)] {
+            assert_eq!(Layout::new(dpi, BOTH).icon, icon, "icon at {dpi}");
+            for theme in [LIGHT, DARK, contrast] {
+                for state in STATES {
+                    let at = format!("{state:?} at {dpi} dpi, light {}", theme.light);
+                    let (with, without) = status_pair(state, dpi, &theme);
+                    let (l, bg, colours) =
+                        (with.layout, with.palette.background, with.palette.status);
+                    // The tray's own frame at the icon size, laid over the row in the glyph's box; every other
+                    // pixel, the text and its ellipsis included, as the line drew without a glyph.
+                    let glyph =
+                        art::colorize(&art::tray_mask(state, l.icon.unsigned_abs()), colours);
+                    let (left, top) = glyph_origin(&l);
+                    for y in 0..l.row {
+                        for x in 0..with.w {
+                            let under = without.at(x, y);
+                            let want = if in_glyph_box(&l, x, y) {
+                                let i = (((y - top) * l.icon + (x - left)) * 4) as usize;
+                                let g = &glyph.pixels[i..i + 4];
+                                lerp(under, Rgb::new(g[0], g[1], g[2]), f32::from(g[3]) / 255.0)
+                            } else {
+                                under
+                            };
+                            assert_eq!(with.at(x, y), want, "{x},{y}: {at}");
+                        }
+                    }
+                    // Ink in the icon column, none in the check column, and the text starts where it did.
+                    assert!(row_ink(&with, l.icon_left, l.text_left, bg) > 0, "{at}");
+                    assert_eq!(row_ink(&with, 0, l.icon_left, bg), 0, "{at}");
+                    let text = |p: &Painted| ink_box(p, l.icon_left + l.icon, p.w, bg).0;
+                    assert_eq!(text(&with), text(&without), "{at}");
+                    assert!(text(&with) >= l.text_left, "{at}");
+                    // Centred in the icon box: the glyph's widest part, its line, sits in the middle of its frame.
+                    let (x0, x1, y0, y1) = ink_box(&with, 0, l.text_left, bg);
+                    assert!((x0 + x1 - (2 * l.icon_left + l.icon)).abs() <= 1, "{at}");
+                    assert!(y0 >= top && y1 <= top + l.icon, "{at}");
+                    // The light is Moss while holding and nowhere else.
+                    let light = Rgb::new(colours.light[0], colours.light[1], colours.light[2]);
+                    let lit = (0..l.row)
+                        .flat_map(|y| (l.icon_left..l.text_left).map(move |x| (x, y)))
+                        .filter(|&(x, y)| with.at(x, y) == light)
+                        .count();
+                    if theme.contrast.is_none() {
+                        assert_eq!(lit > 0, state == IconState::Holding, "{at}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn status_glyph_sits_where_the_row_icons_sit() {
+        // The Automatic row's eye and the status glyph, each across its own ink: centred on the same column within a
+        // pixel, at every scale.
+        for dpi in [96, 120, 144, 168, 192] {
+            let (status, _) = status_pair(IconState::Holding, dpi, &DARK);
+            let auto = Painted::new(
+                &action(MenuCommand::Automatic(false), false, true),
+                MOUSE,
+                dpi,
+                &DARK,
+            );
+            let l = status.layout;
+            let bg = status.palette.background;
+            let (a0, a1, _, _) = ink_box(&status, l.icon_left, l.text_left, bg);
+            let (b0, b1, _, _) = ink_box(&auto, l.icon_left, l.text_left, bg);
+            println!("{dpi} dpi: glyph {a0}..{a1}, eye {b0}..{b1}");
+            assert!(((a0 + a1) - (b0 + b1)).abs() <= 2, "{dpi} dpi");
+        }
+    }
+
+    fn linear(c: u8) -> f64 {
+        let v = f64::from(c) / 255.0;
+        if v <= 0.04045 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    }
+
+    fn luminance(l: [f64; 3]) -> f64 {
+        0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2]
+    }
+
+    fn ratio(a: f64, b: f64) -> f64 {
+        (a.max(b) + 0.05) / (a.min(b) + 0.05)
+    }
+
+    /// Protan, deutan and tritan at full strength in linear sRGB (Machado, Oliveira and Fernandes 2009), as `art.rs`
+    /// checks the tray glyph.
+    const MACHADO: [[[f64; 3]; 3]; 3] = [
+        [
+            [0.152286, 1.052583, -0.204868],
+            [0.114503, 0.786281, 0.099216],
+            [-0.003882, -0.048116, 1.051998],
+        ],
+        [
+            [0.367322, 0.860646, -0.227968],
+            [0.280085, 0.672501, 0.047413],
+            [-0.011820, 0.042940, 0.968881],
+        ],
+        [
+            [1.255528, -0.076749, -0.178779],
+            [-0.078411, 0.930809, 0.147602],
+            [0.004733, 0.691367, 0.303900],
+        ],
+    ];
+
+    /// WCAG 2 contrast, plain and under the worst of the three simulations.
+    fn contrast(a: Rgb, b: Rgb) -> (f64, f64) {
+        let lin = |c: Rgb| [linear(c.r), linear(c.g), linear(c.b)];
+        let plain = ratio(luminance(lin(a)), luminance(lin(b)));
+        let blind = MACHADO
+            .iter()
+            .map(|m| {
+                let seen =
+                    |c: Rgb| {
+                        let l = lin(c);
+                        luminance(m.map(|row| {
+                            (row[0] * l[0] + row[1] * l[1] + row[2] * l[2]).clamp(0.0, 1.0)
+                        }))
+                    };
+                ratio(seen(a), seen(b))
+            })
+            .fold(f64::MAX, f64::min);
+        (plain, blind)
+    }
+
+    #[test]
+    fn status_glyph_keeps_3_to_1() {
+        // WCAG 2 non-text contrast (1.4.11) on the drawn pixels: every fully covered pixel of each part of the glyph
+        // against the menu fill, plain and colour-blind.
+        for theme in [LIGHT, DARK] {
+            for dpi in [96, 120, 144] {
+                for state in STATES {
+                    let (p, _) = status_pair(state, dpi, &theme);
+                    let (l, bg, colours) = (p.layout, p.palette.background, p.palette.status);
+                    let mut parts = vec![("ink", colours.ink)];
+                    if state == IconState::Holding {
+                        parts.push(("light", colours.light));
+                    }
+                    for (name, rgb) in parts {
+                        let part = Rgb::new(rgb[0], rgb[1], rgb[2]);
+                        let drawn: Vec<Rgb> = (0..l.row)
+                            .flat_map(|y| (l.icon_left..l.text_left).map(move |x| (x, y)))
+                            .map(|(x, y)| p.at(x, y))
+                            .filter(|&c| c == part)
+                            .collect();
+                        assert!(!drawn.is_empty(), "{name} drawn: {state:?} at {dpi}");
+                        for c in drawn {
+                            let (plain, blind) = contrast(c, bg);
+                            assert!(
+                                plain >= 3.0 && blind >= 3.0,
+                                "{name} {plain:.2} ({blind:.2}): {state:?} at {dpi}, light {}",
+                                theme.light
+                            );
+                        }
+                        if dpi == 96 && state == IconState::Holding {
+                            let (plain, blind) = contrast(part, bg);
+                            println!(
+                                "light {}: {name} {:02x?} on {:02x?}: {plain:.2} (colour-blind {blind:.2})",
+                                theme.light,
+                                rgb,
+                                <[u8; 3]>::from(bg)
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 
     #[test]
@@ -1648,18 +1960,28 @@ mod tests {
         assert_eq!(fold(Rgb::new(0, 0, 0), light, text), text);
     }
 
+    /// Whether `(x, y)` is in the status glyph's box.
+    fn in_glyph_box(l: &Layout, x: i32, y: i32) -> bool {
+        let (left, top) = glyph_origin(l);
+        (left..left + l.icon).contains(&x) && (top..top + l.icon).contains(&y)
+    }
+
     #[test]
     fn text_and_glyphs_draw_grayscale() {
         // Windows' own XAML menus draw grayscale (chroma 0 in Explorer's menu text, brand review M1); ClearType's
         // fringes turned the grey check red-brown. Light and dark are greys only, so any spread between R, G and B
-        // is a fringe.
+        // is a fringe. The status glyph's Moss light is the one colour, by design; its box is checked on its own
+        // (`status_row_draws_the_tray_glyph`).
         for dpi in [96, 120, 144] {
             for theme in [LIGHT, DARK] {
                 for item in every_kind() {
+                    let tray = matches!(icon_for(&item), Some(Icon::Tray(_)));
                     for state in [MOUSE, HOT] {
                         let p = Painted::new(&item, state, dpi, &theme);
                         let worst = (0..p.px.len() as i32)
-                            .map(|i| spread(p.at(i % p.w, i / p.w)))
+                            .map(|i| (i % p.w, i / p.w))
+                            .filter(|&(x, y)| !(tray && in_glyph_box(&p.layout, x, y)))
+                            .map(|(x, y)| spread(p.at(x, y)))
                             .max()
                             .unwrap_or(0);
                         assert!(
@@ -1723,7 +2045,7 @@ mod tests {
                 }
                 let enabled = !matches!(item, MenuItem::Action { enabled: false, .. });
                 for state in [MOUSE, HOT] {
-                    let hot = state.selected && enabled && !matches!(item, MenuItem::Label(_));
+                    let hot = state.selected && enabled && !matches!(item, MenuItem::Label { .. });
                     // In high contrast every ink of an item is one colour.
                     let (fill, ink) = if hot {
                         (c.highlight, c.highlight_text)
@@ -1764,7 +2086,7 @@ mod tests {
         let armenian = "\u{54a}\u{561}\u{570}\u{578}\u{582}\u{574} \u{567} \u{561}\u{580}\u{569}\u{578}\u{582}\u{576}, "
             .repeat(8);
         let english = long_menu().swap_remove(0);
-        for label in [english, MenuItem::Label(armenian)] {
+        for label in [english, label(&armenian, Some(IconState::Holding))] {
             for dpi in [96, 120, 144] {
                 let fonts = Fonts::new(dpi).expect("fonts");
                 let layout = Layout::new(dpi, BOTH);
@@ -1816,7 +2138,7 @@ mod tests {
         assert_eq!(fonts.font_for(&visible("&Quit")), fonts.text);
         // Measure and paint take the same font, so an Armenian label is as wide as its glyphs.
         let layout = Layout::new(96, BOTH);
-        let label = MenuItem::Label(armenian.into());
+        let label = label(armenian, Some(IconState::Holding));
         let (w, _) = measure(&label, &fonts, &layout);
         assert!(w > 60, "measured {w}");
     }
@@ -1851,16 +2173,65 @@ mod tests {
     fn a_long_label_is_capped() {
         let fonts = Fonts::new(96).expect("fonts");
         let layout = Layout::new(96, BOTH);
-        let long = MenuItem::Label("Holding awake: ".repeat(20));
+        let long = label(&"Holding awake: ".repeat(20), Some(IconState::Holding));
         let (w, _) = measure(&long, &fonts, &layout);
         let cap = layout.width_for(scale(TEXT_MAX, 96), false) - fonts.windows_adds();
         assert_eq!(i64::from(w), i64::from(cap));
     }
 
+    /// The main menu as the core builds it in `icon`: holding for two Claude Code sessions and Keep awake with 25
+    /// minutes left, idle with Automatic on, off with Automatic off.
+    fn built_menu(icon: IconState) -> Vec<MenuItem> {
+        use wakeshot_core::present::{Holder, Snapshot, build};
+        use wakeshot_core::process::{FileTime, ProcessRef};
+        use wakeshot_core::time::Now;
+        let now = Now {
+            wall_ms: 1_767_225_600_000,
+            mono_ms: 0,
+        };
+        let holding = icon == IconState::Holding;
+        let agent = Holder {
+            kind: HoldKind::Agent,
+            label: Some("Claude Code".into()),
+            expires_wall_ms: None,
+        };
+        let keep_awake = Holder {
+            kind: HoldKind::KeepAwake,
+            label: None,
+            expires_wall_ms: Some(now.wall_ms + 25 * 60_000),
+        };
+        let snapshot = Snapshot {
+            automatic: icon != IconState::Off,
+            holds: if holding {
+                vec![agent.clone(), agent, keep_awake]
+            } else {
+                vec![]
+            },
+            keep_awake: if holding {
+                KeepAwake::Minutes(30)
+            } else {
+                KeepAwake::Off
+            },
+            screen_on: false,
+            requests_on: holding,
+            requests_only: false,
+            stepped_back: false,
+            overridden: vec![],
+            tray: ProcessRef {
+                pid: 1,
+                start: FileTime(0),
+            },
+        };
+        let (view, _) = build(&snapshot, now);
+        assert_eq!(view.icon, icon);
+        view.menu.items
+    }
+
     /// Writes the review renders as PNG into `WAKESHOT_RENDER_DIR`: the product menu and its Keep awake submenu side
     /// by side, at 96, 120 and 144 dpi, light, dark and high contrast (this PC's system colours, as Phase 1's forced
-    /// render did), and the menu with a long status line at 144 dpi, light. Run: `cargo test -p wakeshot-windows
-    /// renders_for_review -- --ignored`.
+    /// render did), the menu with a long status line at 144 dpi, light, and the status glyph sheet: the main menu
+    /// holding, idle and off side by side, a row each for dark and light at 100% and at 150%. Run: `cargo test -p
+    /// wakeshot-windows renders_for_review -- --ignored`.
     #[test]
     #[ignore = "writes pictures for review"]
     fn renders_for_review() {
@@ -1889,8 +2260,9 @@ mod tests {
             }
             // Scratch check: an Armenian status line and keyboard cues.
             let armenian = vec![
-                MenuItem::Label(
-                    "\u{54a}\u{561}\u{570}\u{578}\u{582}\u{574} \u{567} \u{561}\u{580}\u{569}\u{578}\u{582}\u{576}: Claude Code (2 sessions)".into(),
+                label(
+                    "\u{54a}\u{561}\u{570}\u{578}\u{582}\u{574} \u{567} \u{561}\u{580}\u{569}\u{578}\u{582}\u{576}: Claude Code (2 sessions)",
+                    Some(IconState::Holding),
                 ),
                 MenuItem::Separator,
                 action(MenuCommand::Automatic(false), true, true),
@@ -1902,6 +2274,19 @@ mod tests {
         // 144 dpi, as the review's screen pictures (150%), where a long line made the menu 853 px wide.
         let file = dir.join("menu-render-long-144-light.png");
         render(&[(&long_menu(), None)], 144, &LIGHT, false, &file);
+
+        let menus = STATES.map(built_menu);
+        let row: Vec<(&Vec<MenuItem>, Option<usize>)> = menus.iter().map(|m| (m, None)).collect();
+        let mut rows = Vec::new();
+        for dpi in [96, 144] {
+            for theme in [DARK, LIGHT] {
+                rows.push(paint_menus(&row, dpi, &theme, false));
+            }
+        }
+        let file = dir.join("menu-render-status-glyph.png");
+        let sheet = stack(&rows, scale(16, 144));
+        std::fs::write(&file, crate::tray::art::png(&sheet)).expect("write");
+        println!("{}: {} x {}", file.display(), sheet.width, sheet.height);
     }
 
     fn render(
@@ -1911,6 +2296,42 @@ mod tests {
         cues: bool,
         file: &std::path::Path,
     ) {
+        let image = paint_menus(menus, dpi, theme, cues);
+        std::fs::write(file, crate::tray::art::png(&image)).expect("write");
+        println!("{}", file.display());
+    }
+
+    /// Rows one under another on the renders' grey, left aligned, `gap` apart.
+    fn stack(rows: &[crate::tray::art::Rgba], gap: i32) -> crate::tray::art::Rgba {
+        let gap = gap.unsigned_abs();
+        let width = rows.iter().map(|r| r.width).max().unwrap_or(0);
+        let height = rows.iter().map(|r| r.height).sum::<u32>()
+            + gap * (rows.len() as u32).saturating_sub(1);
+        let mut pixels = [0x80, 0x80, 0x80, 0xff].repeat((width * height) as usize);
+        let mut top = 0;
+        for r in rows {
+            for y in 0..r.height {
+                let from = (y * r.width * 4) as usize;
+                let to = (((top + y) * width) * 4) as usize;
+                pixels[to..to + (r.width * 4) as usize]
+                    .copy_from_slice(&r.pixels[from..from + (r.width * 4) as usize]);
+            }
+            top += r.height + gap;
+        }
+        crate::tray::art::Rgba {
+            width,
+            height,
+            pixels,
+        }
+    }
+
+    /// Menus side by side on the renders' grey, each item as Windows sizes it, `hot` the item under the mouse.
+    fn paint_menus(
+        menus: &[(&Vec<MenuItem>, Option<usize>)],
+        dpi: u32,
+        theme: &Theme,
+        cues: bool,
+    ) -> crate::tray::art::Rgba {
         let fonts = Fonts::new(dpi).expect("fonts");
         let palette = Palette::for_theme(theme);
         let gap = scale(8, dpi);
@@ -1955,7 +2376,16 @@ mod tests {
             }
             x += width + gap;
         }
-        let image = crate::tray::art::Rgba {
+        println!(
+            "{dpi} dpi: {w} x {h}, row {} px, font {} px, marks {} px, icons {} px, faces {:?} {:?}",
+            sizes[0].0.row,
+            sizes[0].0.font,
+            sizes[0].0.mark,
+            sizes[0].0.icon,
+            fonts.text_face(),
+            fonts.glyph_face()
+        );
+        crate::tray::art::Rgba {
             width: w.unsigned_abs(),
             height: h.unsigned_abs(),
             pixels: canvas
@@ -1963,16 +2393,6 @@ mod tests {
                 .iter()
                 .flat_map(|&p| [(p >> 16) as u8, (p >> 8) as u8, p as u8, 0xff])
                 .collect(),
-        };
-        std::fs::write(file, crate::tray::art::png(&image)).expect("write");
-        println!(
-            "{}: {w} x {h}, row {} px, font {} px, glyphs {} px, faces {:?} {:?}",
-            file.display(),
-            sizes[0].0.row,
-            sizes[0].0.font,
-            sizes[0].0.mark,
-            fonts.text_face(),
-            fonts.glyph_face()
-        );
+        }
     }
 }

@@ -34,7 +34,7 @@ mod tests {
 
     use wakeshot_core::command::{Failure, Outcome, SoundEnd};
     use wakeshot_core::event::Event;
-    use wakeshot_core::view::{Cue, KeepAwake, MenuCommand, MenuItem, Notice};
+    use wakeshot_core::view::{Cue, IconState, KeepAwake, MenuCommand, MenuItem, Notice};
 
     use super::*;
     use crate::WinError;
@@ -48,7 +48,10 @@ mod tests {
         let pick = MenuCommand::KeepAwake(KeepAwake::Minutes(30));
         let model = MenuModel {
             items: vec![
-                MenuItem::Label("Holding awake: Claude Code".into()),
+                MenuItem::Label {
+                    text: "Holding awake: Claude Code".into(),
+                    icon: Some(IconState::Holding),
+                },
                 MenuItem::Separator,
                 MenuItem::Action {
                     text: "30 minutes".into(),

@@ -92,6 +92,10 @@ for the page's colour-blind column (`docs/research.md`).
 - **Level with its neighbours.** The filled glyph's ink centre sits at 0.455 of the box, where the next app's icon
   sits on the taskbar: within 0.5 px at every size. Idle and off sit 1 to 4 px lower by ink, because the light
   keeps its place in every state.
+- **The menu shows it too.** The menu's status line has the same glyph for the state in its icon column, drawn by
+  `tray_mask` at the menu's icon size in the tray's colours (high contrast: the line's own text colour; on the menu's
+  fill at least 4.98:1, `docs/research.md`). Several holds stay one line: groups by commas, `and N more`, an ellipsis
+  past 480 epx (Haik, 2026-11-05).
 
 ## App icon (Windows)
 

@@ -122,7 +122,10 @@ fn view() -> TrayView {
         tooltip: text::tooltip(&status, &groups),
         menu: MenuModel {
             items: vec![
-                MenuItem::Label(text::status_line(&status, &groups)),
+                MenuItem::Label {
+                    text: text::status_line(&status, &groups),
+                    icon: Some(status.icon),
+                },
                 MenuItem::Separator,
                 action(MenuCommand::Automatic(false), true, true),
                 MenuItem::Submenu {
