@@ -1,14 +1,12 @@
 import React from 'react';
 import {AbsoluteFill, Easing, interpolate, useCurrentFrame} from 'remotion';
-import {HeldLight, hex} from '../art/Glyph.tsx';
-import {GLYPH_ON_DARK, GLYPH_ON_LIGHT} from '../art/sunrise.ts';
-import {GITHUB, MOSS} from '../theme.ts';
+import {TrayGlyph} from '../art/Glyph.tsx';
+import {ON_DARK, ON_LIGHT} from '../art/heldLight.ts';
+import {rgbOf, trayPlace} from '../art/motion.ts';
+import {GITHUB} from '../theme.ts';
 import {LOOP} from '../timeline.ts';
 
 export type LoopProps = {theme: 'light' | 'dark'};
-
-/** Art size of the glyph in the loop, in pixels: the art is drawn at this size, not scaled from a smaller one. */
-const ART = 128;
 
 /**
  * The light comes on quickly and settles, as a lamp does, and dims more slowly; the rest of the 5 s is the two
@@ -30,21 +28,22 @@ export function lit(f: number): number {
 /**
  * The README's silent loop: the tray glyph goes idle, holding, idle. The light fades on and off in place, in the
  * colours the tray draws (only the light takes the brand colour), on GitHub's own page colour so the GIF has no box.
- * The first and last frames are both idle, so the loop has no jump.
+ * The first and last frames are both idle, so the loop has no jump. The glyph's ink box is centred in the frame on
+ * whole pixels; its pixels are the port's, so idle and holding are `tray_mask` byte for byte.
  */
 export const IconLoop: React.FC<LoopProps> = ({theme}) => {
   const f = useCurrentFrame();
   if (LOOP_BEATS.off.from + LOOP_BEATS.off.len >= LOOP.frames) throw new Error('the loop must end idle');
   const page = GITHUB[theme];
-  const ink = hex(theme === 'dark' ? GLYPH_ON_DARK : GLYPH_ON_LIGHT);
+  const {left, top} = trayPlace(LOOP.width, LOOP.height, LOOP.art);
   return (
-    <AbsoluteFill style={{background: page, alignItems: 'center', justifyContent: 'center'}}>
-      <HeldLight
-        size={ART}
+    <AbsoluteFill style={{background: page}}>
+      <TrayGlyph
+        size={LOOP.art}
         on={lit(f)}
-        ink={ink}
-        light={theme === 'dark' ? MOSS.holdingOnDark : MOSS.holdingOnLight}
-        page={page}
+        colours={theme === 'dark' ? ON_DARK : ON_LIGHT}
+        page={rgbOf(page)}
+        style={{position: 'absolute', left, top}}
       />
     </AbsoluteFill>
   );

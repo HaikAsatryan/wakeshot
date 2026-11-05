@@ -1,16 +1,22 @@
 // The brand's colours: Moss, Haik's pick of 2026-11-05 (`docs/research/brand-directions-2.md`, "Step 2: the colour").
 // `scripts/check.mjs` holds every pair in TEXT_PAIRS to WCAG AA and every pair in GRAPHIC_PAIRS to 3:1, so a colour
 // change that hurts reading fails the check, not the viewer.
+import * as art from './art/heldLight.ts';
+import {hex} from './art/motion.ts';
 
-/** The brand itself: the app icon's plate ramp and its light, and the tray glyph's light while holding. */
+/**
+ * The brand itself, from the art port (one source, art.rs): the app icon's plate ramp and its light, and the tray
+ * glyph's colours. Only the light takes the brand colour while holding; the line under it keeps the glyph colour.
+ */
 export const MOSS = {
-  plateLight: '#628C2B',
-  plateDark: '#3E7C3B',
-  lightCore: '#FFFBE8',
-  lightEdge: '#FFEA9C',
-  /** Only the light takes the brand colour while holding; the line under it keeps the glyph colour. */
-  holdingOnDark: '#B6E05A',
-  holdingOnLight: '#3B7A2A',
+  plateLight: hex(art.PLATE_LIGHT),
+  plateDark: hex(art.PLATE_DARK),
+  lightCore: hex(art.LIGHT_CORE),
+  lightEdge: hex(art.LIGHT_EDGE),
+  holdingOnDark: hex(art.HOLDING_ON_DARK),
+  holdingOnLight: hex(art.HOLDING_ON_LIGHT),
+  glyphOnDark: hex(art.GLYPH_ON_DARK),
+  glyphOnLight: hex(art.GLYPH_ON_LIGHT),
 };
 
 /**
@@ -70,4 +76,6 @@ export const TEXT_PAIRS: [string, string, string][] = [
 export const GRAPHIC_PAIRS: [string, string, string][] = [
   ['loop light while holding, dark', MOSS.holdingOnDark, GITHUB.dark],
   ['loop light while holding, light', MOSS.holdingOnLight, GITHUB.light],
+  ['loop line and outline, dark', MOSS.glyphOnDark, GITHUB.dark],
+  ['loop line and outline, light', MOSS.glyphOnLight, GITHUB.light],
 ];

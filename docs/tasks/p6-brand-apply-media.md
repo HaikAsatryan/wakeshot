@@ -1,6 +1,6 @@
 # Apply the new brand to media/: colours, font, the art port, the icon loop, the poster
 
-Phase: 6 (brand apply). Status: in progress (Part A done; Part B waits for p6-brand-apply-art). Needs Haik: no (his 8
+Phase: 6 (brand apply). Status: done (Parts A and B, 2026-11-05). Needs Haik: no (his 8
 brand decisions, 2026-11-05 ~15:00, all defaults).
 Agent: `wakeshot-worker`. Size: about 150K tokens. Written by the orchestrator of Haik's brand session, 2026-11-05.
 Runs after: Part A: Haik's brand decisions. Part B: `p6-brand-apply-art` done (the orchestrator resumes you, or a new
@@ -109,6 +109,20 @@ Made by the worker as principal designer; reasons and "change it when" triggers 
    yet", light or dark per shot; the draft banner now says "DRAFT: captures and speed numbers missing". The final
    render refuses twice: `build.mjs` before rendering ("has no capture yet") and the `Shot` component throws outside
    a draft.
+9. **(Part B) The port is exact, no tolerance**: every f32 step of `art.rs` rounded with `Math.fround` in Rust's
+   order, so `check-art` allows 0 difference (the old port allowed 8 levels). Change it when `art.rs` takes a
+   function JavaScript cannot match bit for bit (`sin`, `exp`): then a written tolerance for those pixels only.
+10. **(Part B) The art is drawn from the port's pixels on a canvas**, 1:1 at whole-pixel places, never redrawn as
+    SVG: the loop's ends are `tray_mask(128)` and the title and outro icons `app_icon(256)` and `app_icon(192)`, byte
+    for byte. The loop glyph's ink box is centred in the frame (4 art px lower than the square's centre). Change it
+    when the video needs the icon zoomed: then draw the port at each size, never scale a bitmap.
+11. **(Part B) The title's light comes on**: the icon slides in unlit (plate, shade, bar as the app icon, no glow, the
+    light a white outline as heavy as the bar, the tray's idle look), then at frame 20 the light comes on in 0.44 s
+    (the loop's curve): the inside leads, the edge warms after, the glow spreads. The sound beat moved with it (frame
+    14 to 20; `title.rise` renamed `lightOn`, the sounds `lightOn` and `lightOff`). Change it when Haik wants the title
+    to open on the lit icon.
+12. **(Part B) H.264 at CRF 16**, not 20: at 20 the plate's edge broke into blocks while the light came on; the draft
+    is 2.5 MB of the 10 MB limit. Change it when the final video with captures passes about 8 MB.
 
 ## Found outside scope
 
@@ -117,7 +131,11 @@ Made by the worker as principal designer; reasons and "change it when" triggers 
   the horizon"). Owner: the README's media placeholders (`p6-media` Part B or a docs sweep), not this card.
 - `docs/tasks/p6-media.md` Part B list and Result still speak of 8 stand-in shots in `media/public/shots/`; they are
   now gone (this card), and every shot is a named placeholder until the capture session. Its Part B wording needs a
-  touch when it runs.
+  touch when it runs. Its Part A Result also names `src/art/sunrise.ts` and the Sunrise `Glyph.tsx` (history; now
+  `src/art/heldLight.ts`, `motion.ts`, `Glyph.tsx`).
+- `check-art` has no `npm run` script (`node scripts/check-art.mjs`, as before). Adding one changes `package.json`,
+  which this card may touch only for a font package; for whoever next owns it.
+- Nothing wrong found in `art.rs` or `assets/`: the port matches every file it writes.
 
 ## Log
 
@@ -204,5 +222,96 @@ Made by the worker as principal designer; reasons and "change it when" triggers 
     grep of the acceptance checks, and 2 or 3 pictures to `docs/research/img/brand/apply-media-*.png`. Scratch
     tools for looking: `<scratchpad>\p6-brand-apply-media\tools\sheet.mjs` (enlarged key frames),
     `sheet100.mjs` (100% and README size), `gifinfo.mjs`, `gifframes.mjs`.
+- 2026-11-05: Part B started (a new worker; `p6-brand-apply-art` done). Read this card's Log, the art card's Result.
+- 2026-11-05: plan. Port `art.rs` to `src/art/heldLight.ts` with every f32 step rounded by `Math.fround` in Rust's
+  order (a double rounded once to f32 after each +, -, *, / or sqrt is the f32 result), so `check-art` can hold it to
+  0 difference instead of the old 8. The loop and the title draw the port's own pixels on a canvas (no SVG
+  redraw), with the in-between frames mixed per pixel from the two exact end pictures, so both ends are the port
+  byte for byte.
+- 2026-11-05: `src/art/heldLight.ts` written (tray glyph, hand rings, off slash, `colorize`, plated app icon with
+  glow, bloom, shade and shadow, flat frames, `mix`, `paint`, `sheet` from art.rs's tests). `scripts/lib/png.mjs`
+  reads PNG frames inside an ICO. `check-art.mjs` rewritten: all three sheets whole (dark, light, contrast; 1892 x
+  1648, four rows, real size and enlarged), the 14 ICO frames and their list, the notice picture (flat, 48 px):
+  9,458,740 pixels, 0 differ, 1.5 s. Control run in scratch with `F` as a no-op (f64 math): 11 app icon frames
+  differ by 1 level in 4 to 186 pixels, so the f32 rounding is needed and the check sees a 1-level slip.
+- 2026-11-05: media on the port. `src/art/motion.ts` (new): OKLab mixing, `fadeAt` (per pixel from one exact end
+  picture to the other; the outline's share at the rim's pace, the rest at `on`), `trayFade` (idle and holding
+  composed as the sheets are), `appIconUnlit` (plate, shade, shadow and bar as `app_icon`, no glow or bloom, the
+  light as a white outline one bar height thick) and `appIconFade`. `Glyph.tsx` rewritten: `Pixels` (canvas, 1:1),
+  `TrayGlyph`, `AppIcon` (`on` 1 is `app_icon(size)`). `IconLoop.tsx` draws `TrayGlyph` at 128 px with `ON_DARK` and
+  `ON_LIGHT`, ink box centred on whole pixels. Title and outro: a `Lockup` that sets the icon's top on a whole pixel
+  (the text's line heights are fixed) so the icon is never resampled at rest; the title's light comes on at frame 20
+  over 13 frames (the loop's 0.44 s, ease out); beat `title.rise` renamed `lightOn` (sound follows). `theme.ts` takes
+  `MOSS` from the port and holds the glyph ink on GitHub's pages to 3:1 (18 pairs pass). `sunrise.ts` deleted.
+  Typecheck ok.
+- 2026-11-05: `npm run loop` (18 s): 29 GIF frames each, at most 40 colours in a frame, nothing merged; 20,343 and
+  21,561 bytes. `check-video` now also holds the whole frame to the port: frame 0 is the idle glyph and a 2.28 s
+  stretch is the holding glyph, every pixel, both themes (pass: the canvas path through Chrome is exact). Looked at
+  key frames enlarged (scratch `partb\look\on-sheet.png`, `edge-sheet.png`) and at 100% and README size
+  (`loop-100.png`): edges clean, no seam between outline and inside, holding one solid disc, glyph centred.
+- 2026-11-05: title stills (frames 12 to 28, 75) and outro (870). The title and outro icons are the port's
+  `app_icon(256)` and `(192)`, 0 of 52,952 and 29,920 opaque pixels differ (scratch `iconexact.mjs`). Fixed after
+  looking (`title-on.png` to `title-on4.png`): with the outline leading, as in the loop, the in-between frames showed
+  a gold ring round a grey-green middle; the inside now leads instead (`Fade.lead`, generalised from the loop's
+  `ring`), and as a step that left a seam (the lit middle's warm edge against a near-white outline, and a dark
+  hairline), so the lead falls off across the outline. Now one light warming up, glow spreading over 13 frames.
+- 2026-11-05: `npm run draft` (78 s): 1.9 MB video and poster. Poster looked at full size and at 100% beside video
+  frame 75 (`look\poster-100.png`), outro frame 870. Found in the video: at CRF 20 the plate's top edge broke into
+  blocks while the light came on (the whole plate changes at once; scratch `look\vid-22-top.png`). Title rendered at
+  CRF 20 and 16 side by side (`look\crf.png`): 16 is clean, 1.5 times the bytes. `build.mjs` now uses CRF 16.
+- 2026-11-05: draft again at CRF 16: 2.48 MB, `check-video --draft` all ok. Loops rebuilt: byte-identical.
+  `check-rebuild.mjs`: `REPO_INPUTS` now the three sheets, the ICO, the notice picture and `chime.rs`. Run: `npm ci`
+  in a temp copy, `check-art` 0 differ, loop and draft rebuilt, all 5 outputs the same bytes (2 min).
+- 2026-11-05: final render still refuses: `build.mjs video` and `poster` exit 1 ("has no capture yet"), a
+  `draft:false` still throws "shot S1 tray-dark-idle has no capture". Legacy grep clean. Old names out: sounds
+  `rise`/`fall` now `lightOn`/`lightOff`, `.gitignore` comment, `TRAY_SIZES` (unused) dropped. `media/README.md`:
+  art rows, checks, "When something changes", decisions 7 to 9. Pictures kept: `apply-media-loop.png`,
+  `apply-media-title.png`, `apply-media-poster.png`. `docs/research.md`: section "Media: the art port in f32, and
+  the loop and title drawn from it". Final `check-rebuild`: all 5 outputs the same bytes. **Part B done.**
 
 ## Result
+
+Done 2026-11-05 (Part A by the first worker, see its Result in the Log; Part B below).
+
+Part B, what changed:
+
+- **The art port**: `media/src/art/heldLight.ts` replaces `sunrise.ts`: tray glyph in three states with both parts
+  (light and line), hand rings, off slash, `colorize`, the plated app icon (ramp, glow, shade, bloom, rim, shadow,
+  flat frames), and the sheets' `mix`, `paint`, `sheet`. Every f32 step rounded as Rust does, so it is exact.
+- **In-between states**: `media/src/art/motion.ts`: OKLab mixing, `fadeAt` from one exact end picture to the other,
+  the loop's fade (outline leads) and the title's (inside leads, falling off across the outline), the unlit icon.
+- **Drawing**: `Glyph.tsx` (`Pixels` canvas, `TrayGlyph`, `AppIcon`), `IconLoop.tsx`, `scenes.tsx` (title and outro
+  `Lockup` on whole pixels, the light coming on), `theme.ts` (`MOSS` from the port, glyph ink pairs), `timeline.ts`
+  (`LOOP.art`, `LIGHT_ON_FRAMES`, beat `lightOn`), `make-sounds.mjs` (names), `build.mjs` (CRF 16).
+- **Checks**: `check-art.mjs` (whole sheets, ICO list and frames, notice picture, 0 tolerance), `lib/png.mjs` (PNG
+  frames in an ICO), `check-video.mjs` (loop ends equal the port), `check-rebuild.mjs` (inputs).
+- **Rendered**: `media/out/icon-loop-dark.gif` (21,561 bytes), `icon-loop-light.gif` (20,343), the draft video
+  (2.48 MB) and poster (not in git).
+
+Files: `media/src/art/heldLight.ts` (new), `motion.ts` (new), `Glyph.tsx`, `src/loop/IconLoop.tsx`,
+`src/promo/scenes.tsx`, `src/theme.ts`, `src/timeline.ts`, `scripts/check-art.mjs`, `check-video.mjs`,
+`check-rebuild.mjs`, `build.mjs`, `make-sounds.mjs`, `lib/png.mjs`, `README.md`, `.gitignore`, `out/*.gif`;
+deleted `src/art/sunrise.ts`. Outside `media/`: `docs/research.md` (one section), new
+`docs/research/img/brand/apply-media-loop.png`, `apply-media-title.png`, `apply-media-poster.png`.
+
+Checks (final code):
+
+| Check | Outcome |
+|---|---|
+| `npm run typecheck` | pass |
+| `npm run check` | pass: 40 files, 6 assets credited, 18 colour pairs |
+| `node scripts/check-art.mjs` | pass: 9,458,740 pixels, 0 differ (control with f64 math: 1-level misses, so the check is sharp) |
+| `npm run check-video -- --draft` | pass, 25 checks: draft H.264, AAC, 1920 x 1080, 30 fps, 30.02 s, 2.48 MB; each loop GIF89a, 480 x 240, 5.00 s in 29 frames, loops forever, 20 to 22 KB, seamless, every border pixel GitHub's colour, first frame the port's idle glyph and 2.28 s the holding glyph, every pixel |
+| `npm run check-rebuild` | pass: clean `npm ci` copy, loops, sound, draft video and poster all the same bytes |
+| Final render refuses placeholders | pass: `build.mjs video` and `poster` exit 1; a `draft:false` frame throws |
+| Legacy grep (`#7250F4` ... `EC32`, sunrise, Inter) in `media/` | no hits |
+
+Looked at (scratch `<scratchpad>\p6-brand-apply-media\partb\look\`): loop key frames at 2 and 5 times and at 100%
+and README size; title frames 12 to 28 and the poster at full size and at 100%; outro; video frames against stills.
+Changed after looking: the title's fade (warm ring round a grey-green middle, then a seam, now one light), CRF 16.
+
+Pictures for Haik: `docs/research/img/brand/apply-media-loop.png`, `apply-media-title.png`, `apply-media-poster.png`;
+the files themselves: `media/out/icon-loop-dark.gif`, `icon-loop-light.gif`, `media/out/draft/wakeshot-promo-draft.mp4`,
+`wakeshot-promo-poster-draft.png`.
+
+Open items: `p6-media` Part B (captures, speed numbers, final video); the root README's media alt texts (docs sweep).

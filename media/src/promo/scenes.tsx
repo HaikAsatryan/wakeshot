@@ -1,12 +1,12 @@
 import React from 'react';
-import {AbsoluteFill, useCurrentFrame} from 'remotion';
+import {AbsoluteFill, Easing, interpolate, useCurrentFrame} from 'remotion';
 import settingsData from '../../data/settings.json';
 import speedData from '../../data/speed.json';
-import {AppIcon, HOLDING, type Phase} from '../art/Glyph.tsx';
+import {AppIcon} from '../art/Glyph.tsx';
 import {COPY} from '../copy.ts';
 import {MONO, SANS} from '../fonts.ts';
 import {DARK} from '../theme.ts';
-import {BEATS, SCENES} from '../timeline.ts';
+import {BEATS, LIGHT_ON_FRAMES, SCENES, VIDEO} from '../timeline.ts';
 import {Caption, DraftContext, Laptop, Shot, Terminal, ease} from './parts.tsx';
 
 /** Fades a scene in and out over a few frames, so cuts are soft. */
@@ -16,26 +16,48 @@ export const SceneFade: React.FC<{len: number; children: React.ReactNode}> = ({l
   return <AbsoluteFill style={{opacity: o}}>{children}</AbsoluteFill>;
 };
 
-/** Idle to holding over the given frames: the sun fills and moves, then the rays grow. */
-function rise(f: number, from: number, len = 24): Phase {
-  const p = ease(f, from, from + len);
-  return {shift: p, fill: p, rays: ease(f, from + len * 0.55, from + len * 1.35)};
-}
+/** The light coming on from `from`: quick and settling, as a lamp does, the same curve as the README loop. */
+const lightOn = (f: number, from: number) =>
+  interpolate(f, [from, from + LIGHT_ON_FRAMES], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
+  });
 
 const center: React.CSSProperties = {alignItems: 'center', justifyContent: 'center'};
+
+/**
+ * The app icon over lines of text, centred as a group. The icon is drawn from the port's pixels, so it sits on whole
+ * pixels at rest: its top is set, not left to the text's line heights, which are fractional.
+ */
+const Lockup: React.FC<{icon: number; height: number; iconStyle?: React.CSSProperties; on?: number; children: React.ReactNode}> = ({
+  icon,
+  height,
+  iconStyle,
+  on,
+  children,
+}) => {
+  const top = Math.round((VIDEO.height - height) / 2);
+  return (
+    <AbsoluteFill style={{fontFamily: SANS, color: DARK.text}}>
+      <AppIcon size={icon} on={on} style={{position: 'absolute', left: (VIDEO.width - icon) / 2, top, ...iconStyle}} />
+      <div style={{position: 'absolute', left: 0, right: 0, top: top + icon, display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
+        {children}
+      </div>
+    </AbsoluteFill>
+  );
+};
 
 export const Title: React.FC = () => {
   const f = useCurrentFrame();
   const b = BEATS.title;
+  // Icon 256, then 28 + 140 (name) + 8 + 56 (tagline).
   return (
     <SceneFade len={SCENES.title.len}>
-      <AbsoluteFill style={{...center, flexDirection: 'column', fontFamily: SANS, color: DARK.text}}>
-        <div style={{transform: `translateY(${ease(f, 0, 20, [30, 0])}px)`}}>
-          <AppIcon size={256} phase={rise(f, b.rise, 26)} id="title" />
-        </div>
-        <div style={{fontSize: 120, fontWeight: 600, marginTop: 28, opacity: ease(f, 30, 44)}}>{COPY.name}</div>
-        <div style={{fontSize: 44, color: DARK.dim, marginTop: 8, opacity: ease(f, 42, 56)}}>{COPY.tagline}</div>
-      </AbsoluteFill>
+      <Lockup icon={256} height={256 + 28 + 140 + 8 + 56} on={lightOn(f, b.lightOn)} iconStyle={{transform: `translateY(${ease(f, 0, 18, [30, 0])}px)`}}>
+        <div style={{fontSize: 120, lineHeight: '140px', fontWeight: 600, marginTop: 28, opacity: ease(f, 30, 44)}}>{COPY.name}</div>
+        <div style={{fontSize: 44, lineHeight: '56px', color: DARK.dim, marginTop: 8, opacity: ease(f, 42, 56)}}>{COPY.tagline}</div>
+      </Lockup>
     </SceneFade>
   );
 };
@@ -242,25 +264,28 @@ export const Speed: React.FC = () => {
 
 export const Outro: React.FC = () => {
   const f = useCurrentFrame();
+  // Icon 192, then 24 + 112 (name) + 8 + 48 (line) + 44 + 84 (the install box: 48 + 2 x 16 padding + 2 x 2 border).
   return (
-    <AbsoluteFill style={{...center, flexDirection: 'column', fontFamily: SANS, color: DARK.text, opacity: ease(f, 0, 10)}}>
-      <AppIcon size={192} phase={HOLDING} id="outro" />
-      <div style={{fontSize: 96, fontWeight: 600, marginTop: 24}}>{COPY.name}</div>
-      <div style={{fontSize: 38, color: DARK.dim, marginTop: 8}}>{COPY.outroLine}</div>
-      <div
-        style={{
-          fontFamily: MONO,
-          fontSize: 36,
-          marginTop: 44,
-          padding: '16px 32px',
-          background: DARK.panel,
-          border: `2px solid ${DARK.panelLine}`,
-          borderRadius: 12,
-          color: DARK.accent,
-        }}
-      >
-        {COPY.install}
-      </div>
+    <AbsoluteFill style={{opacity: ease(f, 0, 10)}}>
+      <Lockup icon={192} height={192 + 24 + 112 + 8 + 48 + 44 + 84}>
+        <div style={{fontSize: 96, lineHeight: '112px', fontWeight: 600, marginTop: 24}}>{COPY.name}</div>
+        <div style={{fontSize: 38, lineHeight: '48px', color: DARK.dim, marginTop: 8}}>{COPY.outroLine}</div>
+        <div
+          style={{
+            fontFamily: MONO,
+            fontSize: 36,
+            lineHeight: '48px',
+            marginTop: 44,
+            padding: '16px 32px',
+            background: DARK.panel,
+            border: `2px solid ${DARK.panelLine}`,
+            borderRadius: 12,
+            color: DARK.accent,
+          }}
+        >
+          {COPY.install}
+        </div>
+      </Lockup>
     </AbsoluteFill>
   );
 };

@@ -1,7 +1,7 @@
 // Proves the rebuild commands work from a clean checkout and give the same files: copies media/ without anything
 // built or installed, plus the few repo files media reads, into a temp folder; runs `npm ci` and each build command
 // there; then compares every output with the one in this media/ folder, byte for byte.
-//   node scripts/check-rebuild.mjs           loop and draft (works with stand-ins)
+//   node scripts/check-rebuild.mjs           loop and draft (works before the captures exist)
 //   node scripts/check-rebuild.mjs --final   also the final video and poster (after the captures and speed numbers)
 // Build the same outputs here first. The Chrome copy Remotion downloads on first use is copied over, not fetched
 // again: it is not in the lock file anyway, and Remotion's version pins it.
@@ -17,12 +17,14 @@ const repo = join(media, '..');
 const final = process.argv.includes('--final');
 const keep = process.argv.includes('--keep');
 
-/** The repo files outside media/ that media's scripts read. */
+/** The repo files outside media/ that media's scripts read: the chimes (make-sounds), the art files (check-art). */
 const REPO_INPUTS = [
   'crates/wakeshot-windows/src/sound/chime.rs',
   'docs/research/img/ux/icon-sheet-dark.png',
   'docs/research/img/ux/icon-sheet-light.png',
+  'docs/research/img/ux/icon-sheet-contrast.png',
   'assets/wakeshot.ico',
+  'assets/wakeshot-notice.png',
 ];
 /** What each build mode writes, relative to media/. */
 const OUTPUTS = {

@@ -4,5 +4,5 @@ node_modules/
 .remotion/
 # Built on every render by scripts/make-sounds.mjs.
 public/sound/
-# Drafts carry stand-in pictures and no speed numbers; never published.
+# Drafts carry placeholder boxes for missing captures and no speed numbers; never published.
 out/draft/

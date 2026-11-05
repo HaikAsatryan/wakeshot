@@ -1,75 +1,68 @@
-// Checks that the TypeScript port of the Sunrise (src/art/sunrise.ts) draws what the Rust art code draws: the tray
-// glyphs against the review sheets and the app icon against assets/wakeshot.ico, both written by art.rs
+// Checks that the port of the art (src/art/heldLight.ts) draws exactly what the Rust art code draws, with no
+// tolerance: every pixel of the three review sheets (tray glyphs at 16 to 48 px, four rows, real size and enlarged),
+// every frame of assets/wakeshot.ico (the 256 frame is a PNG) and the notice picture, all written by art.rs
 // (`write_art_files`). Run after any change to the art: `node scripts/check-art.mjs`.
 import {fileURLToPath} from 'node:url';
 import {dirname, join} from 'node:path';
 import {readPng, readIco} from './lib/png.mjs';
-import * as art from '../src/art/sunrise.ts';
+import * as art from '../src/art/heldLight.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const img = join(root, 'docs', 'research', 'img', 'ux');
 
-// The sheet layout from `sheet` in art.rs: rows holding, idle, off.
-const SIZES = [16, 20, 24, 32, 40, 48];
-const ZOOM = 8;
-const GAP = 16;
-const MARGIN = 32;
-const ROW = 48 * ZOOM;
-const STATES = ['holding', 'idle', 'off'];
-
-// Rust samples in f32 and this port in f64, so a sample point that lands exactly on an edge can fall the other way:
-// one sample of 64 moves a pixel by 4 levels of 255. Anything larger is a real difference in the art.
-const MAX_DIFF = 8;
-
-let worst = 0;
 let failed = false;
+let pixels = 0;
 
-function compare(label, want, got, count) {
-  let max = 0;
+/** Compares two RGBA images of `width` x `height`; prints the first differing pixel. */
+function compare(label, width, height, want, got) {
   let off = 0;
-  for (let i = 0; i < count; i++) {
+  let max = 0;
+  let first = '';
+  for (let i = 0; i < width * height; i++) {
     let d = 0;
     for (let c = 0; c < 4; c++) d = Math.max(d, Math.abs(want[i * 4 + c] - got[i * 4 + c]));
-    if (d > 1) off++;
+    if (d === 0) continue;
+    off++;
     max = Math.max(max, d);
-  }
-  worst = Math.max(worst, max);
-  const ok = max <= MAX_DIFF;
-  if (!ok) failed = true;
-  console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}: max diff ${max}, pixels off by more than 1: ${off} of ${count}`);
-}
-
-for (const [name, back, ink] of [
-  ['dark', art.TASKBAR_DARK, art.GLYPH_ON_DARK],
-  ['light', art.TASKBAR_LIGHT, art.GLYPH_ON_LIGHT],
-]) {
-  const sheet = readPng(join(img, `icon-sheet-${name}.png`));
-  let top = MARGIN;
-  for (const state of STATES) {
-    let left = MARGIN;
-    for (const size of SIZES) {
-      const alpha = art.raster(size, size, art.glyphShape(state, art.grid(0, 0, size)));
-      const y0 = top + Math.floor((ROW - size) / 2);
-      const want = new Uint8Array(size * size * 4);
-      const got = new Uint8Array(size * size * 4);
-      for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-          const i = y * size + x;
-          want.set([...art.mix(back, ink, alpha[i] / 255), 255], i * 4);
-          const s = ((y0 + y) * sheet.width + left + x) * 4;
-          got.set(sheet.rgba.subarray(s, s + 4), i * 4);
-        }
-      }
-      compare(`tray ${state} ${size} px on ${name}`, want, got, size * size);
-      left += size + GAP;
+    if (!first) {
+      const at = (a) => Array.from(a.subarray(i * 4, i * 4 + 4)).join(',');
+      first = `, first at ${i % width},${Math.floor(i / width)}: art.rs ${at(want)}, port ${at(got)}`;
     }
-    top += ROW + GAP;
   }
+  pixels += width * height;
+  if (off) failed = true;
+  console.log(`${off ? 'FAIL' : 'ok  '} ${label}: ${off ? `${off} pixels differ, by up to ${max}${first}` : 'every pixel equal'}`);
 }
 
-for (const frame of readIco(join(root, 'assets', 'wakeshot.ico'))) {
-  compare(`app icon ${frame.size} px`, art.appIconRgba(frame.size), frame.rgba, frame.size * frame.size);
+// The review sheets: `write_art_files` in art.rs, the same backgrounds and colours.
+for (const [name, back, colours] of [
+  ['dark', art.TASKBAR_DARK, art.ON_DARK],
+  ['light', art.TASKBAR_LIGHT, art.ON_LIGHT],
+  ['contrast', [0, 0, 0], art.one([0xff, 0xff, 0])],
+]) {
+  const file = readPng(join(img, `icon-sheet-${name}.png`));
+  const want = art.sheet(back, colours);
+  if (file.width !== want.width || file.height !== want.height) {
+    failed = true;
+    console.log(`FAIL sheet ${name}: ${file.width} x ${file.height}, the port's layout is ${want.width} x ${want.height}`);
+    continue;
+  }
+  compare(`sheet ${name} (${file.width} x ${file.height})`, file.width, file.height, file.rgba, want.pixels);
 }
 
-console.log(failed ? `FAIL: the port differs from art.rs (worst ${worst})` : `ok: the port matches art.rs (worst ${worst})`);
+const frames = readIco(join(root, 'assets', 'wakeshot.ico'));
+const sizes = frames.map((f) => f.size).join(',');
+const listOk = sizes === art.APP_ICON_SIZES.join(',');
+if (!listOk) failed = true;
+console.log(`${listOk ? 'ok  ' : 'FAIL'} wakeshot.ico frames ${sizes} (the port lists ${art.APP_ICON_SIZES.join(',')})`);
+for (const frame of frames) {
+  const want = art.appIcon(frame.size);
+  compare(`app icon ${frame.size} px${frame.png ? ' (PNG frame)' : ''}`, frame.size, frame.size, frame.rgba, want.pixels);
+}
+
+// The notice header's picture: the flat drawing at 48 px (`notice_icon_png` in notify.rs calls `app_icon_flat(48)`).
+const notice = readPng(join(root, 'assets', 'wakeshot-notice.png'));
+compare('notice picture 48 px (flat)', notice.width, notice.height, notice.rgba, art.appIconFlat(notice.width).pixels);
+
+console.log(failed ? 'FAIL: the port differs from art.rs' : `ok: the port matches art.rs in all ${pixels} pixels`);
 process.exit(failed ? 1 : 0);

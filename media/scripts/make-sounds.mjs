@@ -134,12 +134,13 @@ const FX = {
     );
   },
   enter: () => add(noise(0.06, 7, 3500, 300, (t) => 1.3 * Math.exp(-t * 80)), tone(0.05, () => 900, (t) => 0.2 * Math.exp(-t * 90))),
-  rise: () =>
+  // A glide up and a glide down: the light coming on and going off.
+  lightOn: () =>
     add(
       tone(0.7, (t) => 330 + 330 * fade(t / 0.7), (t) => 0.35 * fade(t / 0.15) * fade((0.7 - t) / 0.3), [1, 0.3, 0.12]),
       noise(0.7, 11, 2500, 400, (t) => 0.5 * fade(t / 0.5) * fade((0.7 - t) / 0.2)),
     ),
-  fall: () =>
+  lightOff: () =>
     add(
       tone(0.7, (t) => 660 - 330 * fade(t / 0.7), (t) => 0.3 * fade(t / 0.08) * fade((0.7 - t) / 0.35), [1, 0.3, 0.12]),
       noise(0.7, 13, 2000, 300, (t) => 0.4 * fade(t / 0.1) * fade((0.7 - t) / 0.5)),
@@ -291,14 +292,14 @@ for (let i = 0; i < TERMINAL.prompt.length; i += 2) {
   place(FX.key(200 + i), SCENES.start.from + s.typePrompt + i * TERMINAL.promptRate, 0.28, 0.45);
 }
 place(FX.enter(), at('start', 'enter'), 0.45, 0.45);
-place(FX.rise(), at('title', 'rise'), 0.5);
-place(FX.rise(), at('start', 'morph'), 0.5, 0.6);
+place(FX.lightOn(), at('title', 'lightOn'), 0.5);
+place(FX.lightOn(), at('start', 'morph'), 0.5, 0.6);
 place(FX.thud(), at('lid', 'shut'), 0.6);
 duck(at('lid', 'shut') + 2, chimes.lidClosed.notes.at(-1).start / 1000 + 0.5, -9);
 place(lidChime, at('lid', 'shut') + 2, 1);
 place(FX.lock(), at('lid', 'lock'), 0.5);
 place(FX.tick(), at('end', 'done'), 0.3, 0.4);
-place(FX.fall(), at('end', 'morph'), 0.5, 0.6);
+place(FX.lightOff(), at('end', 'morph'), 0.5, 0.6);
 duck(at('end', 'sleepChime'), chimes.goingToSleep.notes.at(-1).start / 1000 + 0.6, -9);
 place(sleepChime, at('end', 'sleepChime'), 1);
 place(FX.tick(), at('settings', 'tick1'), 0.35);

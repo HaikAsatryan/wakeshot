@@ -20,7 +20,7 @@ sends no usage event (`@remotion/renderer` 4.0.540, `render-media.js`: the event
 
 | File | Command | Notes |
 |---|---|---|
-| `out/icon-loop-light.gif`, `out/icon-loop-dark.gif` | `npm run loop` | 480 x 240, 5 s, loops forever, on GitHub's page colours. Remotion renders 125 PNG frames (25 fps); `scripts/lib/gif.mjs` writes the GIF with each frame's exact colours. Show at 240 px wide for sharp HiDPI |
+| `out/icon-loop-light.gif`, `out/icon-loop-dark.gif` | `npm run loop` | 480 x 240, 5 s, loops forever, on GitHub's page colours; the tray glyph drawn at 128 px. Remotion renders 125 PNG frames (25 fps); `scripts/lib/gif.mjs` writes the GIF with each frame's exact colours. Show at 240 px wide for sharp HiDPI |
 | `out/wakeshot-promo.mp4`, `out/wakeshot-promo-poster.png` | `npm run video` | Refuses while any picture is missing or a stand-in, or a speed number is missing |
 | `out/draft/wakeshot-promo-draft.mp4` and its poster | `npm run draft` | A missing capture shows as a plain box naming the shot; DRAFT on every frame; not kept in git |
 | `out/wakeshot-promo-poster.png` alone | `npm run poster` | Frame 75 of the video, for the Pages `<video poster>` |
@@ -35,17 +35,18 @@ takes about a minute on the test laptop.
 
 | Check | Command |
 |---|---|
-| The art port draws exactly what `art.rs` draws (tray glyphs at 16 to 48 px, light and dark, and every app icon frame) | `node scripts/check-art.mjs` |
+| The art port draws exactly what `art.rs` draws, no tolerance: every pixel of the three review sheets (tray glyphs at 16 to 48 px in four rows, dark, light and high contrast), the 14 frames of `assets/wakeshot.ico` and the notice picture | `node scripts/check-art.mjs` |
 | No em dash, en dash or emoji in the text files; every asset credited; every text colour pair in `src/theme.ts` at 4.5:1 or more and every graphic pair at 3:1 | `npm run check` |
-| Video: H.264 and AAC, 1920 x 1080, 30 fps, 30 s plus or minus 2, under 10 MB; loops, read frame by frame: GIF, 480 x 240, 4 to 6 s, forever, under 1 MB, last frame equal to the first, a 40 px border of every frame exactly GitHub's page colour | `npm run check-video` (add `-- --draft` for the draft) |
+| Video: H.264 and AAC, 1920 x 1080, 30 fps, 30 s plus or minus 2, under 10 MB; loops, read frame by frame: GIF, 480 x 240, 4 to 6 s, forever, under 1 MB, last frame equal to the first, a 40 px border of every frame exactly GitHub's page colour, the first frame the port's idle glyph and a held stretch its holding glyph, every pixel | `npm run check-video` (add `-- --draft` for the draft) |
 | A clean checkout rebuilds the same bytes | `npm run check-rebuild` (add `-- --final` once the final video exists) |
 | Types | `npm run typecheck` |
 
 ## When something changes
 
-- **The icon** (`crates/wakeshot-windows/src/tray/art.rs`): run its `write_art_files` test to refresh the sheets and
-  `assets/wakeshot.ico`, then `node scripts/check-art.mjs`. It fails until `src/art/sunrise.ts` draws the same; then
-  `npm run loop` and `npm run video`.
+- **The icon** (`crates/wakeshot-windows/src/tray/art.rs`): run its `write_art_files` test to refresh the sheets,
+  `assets/wakeshot.ico` and the notice picture, then `node scripts/check-art.mjs`. It fails until
+  `src/art/heldLight.ts` draws the same bytes: port the change step by step, each f32 operation wrapped in `F` in
+  Rust's order (the file's head says why). Then `npm run loop` and `npm run video`.
 - **The chimes** (`crates/wakeshot-windows/src/sound/chime.rs`): nothing to port; `make-sounds.mjs` reads the numbers
   from that file. If the file changes shape, the script stops with the name of what it could not find.
 - **The menu or tooltip words**: new captures into `public/shots/`, then update `data/shots.json` (file, size, and
@@ -58,7 +59,7 @@ takes about a minute on the test laptop.
 
 | Input | From |
 |---|---|
-| Icon art | `src/art/sunrise.ts`, a port of the Sunrise in `art.rs`, checked pixel for pixel by `check-art.mjs` (exact at every size, 2026-11-04) |
+| Icon art | `src/art/heldLight.ts`, a port of the held light in `art.rs` (tray glyph, app icon, the sheets' composition), equal to every file `art.rs` writes (`check-art.mjs`, 0 of 9,458,740 pixels differ, 2026-11-05). The states in between (the light coming on) are the media's own: `src/art/motion.ts` |
 | Screen pictures | `public/shots/`, listed in `data/shots.json` with their source. None yet: the capture session of `p6-media` Part B makes them |
 | Settings values in the video | `data/settings.json` (stand-in: the test laptop's own values) |
 | Speed numbers | `data/speed.json` (empty until measured) |
@@ -98,8 +99,9 @@ PowerShell window with no Claude Code session working.
    Change it when the video must match Windows' own text exactly and every build runs on Windows 11.
 3. **The loop is the tray glyph as the tray draws it, on GitHub's own page colour.** The held light goes idle,
    holding, idle: it fades on and off in place, only the light takes the brand colour (`#B6E05A` on dark, `#3B7A2A`
-   on light) and the line keeps the glyph colour; no glow. The outline takes the light colour in the first third of
-   the fade and the inside brightens over all of it, so the frames in between read as one dim light. On in 0.44 s
+   on light) and the line keeps the glyph colour; no glow. The outline takes the light colour in the first 35% of
+   the fade and the inside brightens over all of it, so the frames in between read as one dim light. The idle and
+   holding frames are `tray_mask` at 128 px, every pixel (`check-video` holds them to it). On in 0.44 s
    (ease out, a lamp coming on), off in 0.8 s (ease in and out), idle 1.6 s and holding about 2.2 s. Backgrounds are
    GitHub's default light and dark page colours (`#FFFFFF`, `#0D1117`; dark dimmed `#212830` and high contrast
    `#010409` show a faint box: the README's `<picture>` can only choose by light or dark). The GIF is written by our
@@ -111,6 +113,20 @@ PowerShell window with no Claude Code session working.
    draft cannot be mistaken for the real video.
 6. **After the lid beat, the video says the closed laptop sleeps** once nothing has happened for 5 minutes (the
    2026-11-04 behaviour in `docs/product.md`), with Wakeshot's own going-to-sleep chime.
+7. **The art is drawn from the port's pixels, never redrawn as vectors.** `src/art/Glyph.tsx` puts them on a canvas
+   1:1 at whole-pixel places, so the title and outro icons are `app_icon(256)` and `app_icon(192)` and the loop's
+   ends are `tray_mask(128)`, byte for byte. The port rounds to f32 at every step, as `art.rs` computes, so it draws
+   the same bytes, not bytes a level off. Why: a vector redraw anti-aliases its own way and drifts from the app. Change
+   it when the video needs the icon at a size between whole pixels (a zoom): then draw the port at each size, never
+   scale a bitmap.
+8. **The title's light comes on.** It opens on the app icon unlit (plate, shade, shadow and bar as the app icon, no
+   glow, the light as a white outline as heavy as the bar, the tray's idle look) and ends on the app icon itself. The
+   inside of the light leads (lit by 35% of the fade) and the lead falls off across the outline, so the light fills
+   at once and its edge warms after; the glow and bloom spread over the whole 0.44 s (ease out, the loop's curve).
+   Why: with the outline leading, as in the loop, the frames in between showed a warm ring round a grey-green middle,
+   and a hard edge between the two parts left a seam. Change it when Haik wants the title to open on the lit icon.
+9. **H.264 at CRF 16**, not 20: at 20 the plate's edge broke into blocks while the light came on (the whole plate
+   changes at once). The draft is 2.5 MB. Change it when the final video with its captures passes about 8 MB.
 
 ## Where the video lives
 

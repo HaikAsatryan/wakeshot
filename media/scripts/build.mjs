@@ -74,11 +74,13 @@ function assertFinal() {
   }
 }
 
+// CRF 16, not 20: at 20 the plate's edge broke into blocks while the title's light came on (the whole plate
+// changes colour at once); at 16 it stays clean. The draft is 2.5 MB, far under GitHub's 10 MB.
 const VIDEO_FLAGS = [
   '--codec=h264',
   '--audio-codec=aac',
   '--audio-bitrate=192k',
-  '--crf=20',
+  '--crf=16',
   '--pixel-format=yuv420p',
   '--image-format=png',
   `--concurrency=${concurrency}`,
