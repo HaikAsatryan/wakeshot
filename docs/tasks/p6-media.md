@@ -462,3 +462,50 @@ Log in Part C's Log above; result here when done.
    fixed, two causes left in the tray shot and at 14 to 17 s).
 
 Output: `<scratchpad>\p6-media-c\draft-3.mp4` (7.17 MB), `draft-3-sheet.png`, `draft-3-poster.png`.
+
+## Round 4: the final (2026-11-06)
+
+Written by the orchestrator (overnight run, Haik asleep). Status: ready. Agent: `wakeshot-worker`. Owns what Part C
+owns, plus a new `## Speed numbers` section at the end of `docs/research.md` (additions only; re-read right before
+the edit; the README links to `docs/research.md#speed-numbers`, so keep that heading). Real laptop: no screen, no
+power settings, no Claude Code test session. Build folder: `<scratchpad>\p6-media-final\`. Round 3's files are in
+the old scratchpad: `C:\Users\haika\AppData\Local\Temp\claude\f7c2c08a8f04f07b\d7052579-3169-4874-8004-3ff3befa980b\scratchpad\p6-media-c\`.
+
+1. **Speed numbers.** Measured 2026-11-06 02:09 to 02:32 on Haik's installed build (0.1.0, local x64 release of
+   c9da3dd; it lacks only the high contrast menu fix, which does not touch speed). Raw files: `speed-size.json`,
+   `speed-idle.json`, `speed-hold.json`, `speed-delays.json`, `idle-check.json`, `before.json`, `after.json`,
+   `run.log` in `C:\Users\haika\AppData\Local\Temp\claude\f7c2c08a8f04f07b\de37e39e-ac9f-4f08-8aa0-3d773dd2f757\scratchpad\speed\`;
+   the wrapper that ran them is `speed-run.ps1` there. Fill `data/speed.json` from them and write the research.md
+   section: method (launch.md part 1, and where the wrapper differs), values, date, build.
+   - Idle, 10 min, 0 holds: tray private memory median 4.27 MB (max 4.30), working set median 17.14 MB, CPU 109 ms in
+     10 min (0.018% of one core). Task Manager's default Memory column (private working set) read 3.4 MB for the tray
+     at 03:55.
+   - Hold, 10 min (`wakeshot run -- ping -n 600`): tray the same; guard private 1.67 MB, working set 11.66 MB; guard
+     CPU not recorded (the ping ended about 15 s before the last sample, so the guard had exited).
+   - Start delay, five `claude -p --model haiku` runs: status file seen (50 ms poll) to "Holding starts": 298, 114,
+     155, 104, 108 ms; median 114, max 298.
+   - End: in 4 of 5 runs "Holding ends" came about 0.75 s before the status file was removed, in one 2 ms after. The
+     launch.md end method (the `idle` write's `statusUpdatedAt`) was not used, so give no end delay number.
+   - Size: Setup.exe 12,310,500 bytes; `wakeshot-tray.exe` 2,907,648; `wakeshot.exe` 700,416; install folder
+     14,269,755.
+   - Before and after: the power settings the same (lid 1 and 1, sleep 18000 and 18000).
+   - Orchestrator decision, for Haik's review: the video's memory number is the private memory (4.3 MB), the one
+     Task Manager's Memory column comes close to and the PowerToys figure uses; the working set (17.1 MB) counts
+     shared Windows files. Say "about 0.1 s" or the median for the start, never "instant".
+2. **Haik's note, 2026-11-06 00:56** (`docs/phases/06-ship.md` work log): no 5:00 countdown after the closed-lid
+   work. Show the closed laptop working behind the scenes, then the work clearly done, then it sleeps as usual. No
+   countdown on screen and no timing claim the app does not keep (in v1 it sleeps after 5 minutes with no input,
+   `docs/product.md`; a time cut is fine, a claim that it sleeps at once is not).
+3. **`check-rebuild`**: fix what is still open: a frame showing its neighbour's state at the S1 to S2 swap near 5.5 s,
+   the terminal tab border, and the word blur at 14 to 17 s. Compare decoded pixels, not PNG bytes.
+4. **Final render**: DRAFT mark off, CRF 18, under 8 MB; `check-video` in its final mode and every other check
+   (`npm run check`, typecheck, `check-art`, `check-rebuild`, loudness) passing. Output
+   `<scratchpad>\p6-media-final\wakeshot-promo.mp4` plus its sheet and poster; anything `media/README.md` says goes
+   into the repo goes there. Look at full-size frames, not only sheets.
+5. Haik's notes so far, all done: music 3; a little fast in one place; the ending sounds; the laptop quality (he says
+   it is OK now); Claude Code starts and the real icon goes green, then back. Keep them.
+6. A fresh review follows (`wakeshot-reviewer`, against `promo-video.md`); its blockers and majors come back to you.
+
+### Log (round 4)
+
+### Result (round 4)

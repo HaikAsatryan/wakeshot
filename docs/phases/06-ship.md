@@ -176,6 +176,7 @@ those one at a time across all tracks.
 | `p6-menu-status-glyph` | no (Haik ~20:10: "1 yes, 2 yes, go ahead") | `p6-brand-apply-art` | done: the tray glyph for the current state in the status row's icon column (`MenuItem::Label { text, icon }`); x64 and ARM64 checks clean; sheet `docs/research/img/ux/menu-render-status-glyph.png` |
 | `p6-menu-hc-status` | no (orchestrator decision for Haik's review) | `p6-menu-status-glyph` | done: status line and its glyph in `WindowText` in high contrast (WinUI's `TextFillColorSecondary` there); marks and chevron stay `ButtonText`; x64 and ARM64 checks clean |
 | `p6-media-captures` | stays off the PC while it runs (Haik ~21:50: "Dell is connected go on") | `p6-media` Part C first draft | done: 22 captures on the DELL at 200% (work set S1 to S4 and S7, menu set S1 and S5a to S5d, light and dark, README stills), S9 from the log; Haik's settings equal before and after; about 11 min of screen |
+| `p6-repo-files` | yes: reads the files; turns on private vulnerability reporting | none | in progress (2026-11-06): contributing, security, conduct, issue and PR templates |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
 dependency 110K, pack and release 110K, install e2e 130K, winget 60K, README 70K, Pages 60K. About 880K in all.
@@ -505,3 +506,14 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
 - 2026-11-06 00:43: speed numbers, unattended (Haik away). Two tries found no quiet minute: first a worker's leftover wait loop kept this session busy (stopped by PID); then the Part C worker, resumed when its loop was stopped, kept the session busy until 00:43 (the orchestrator first blamed Remote Control's waiting rule: wrong, the log shows the hold ended at 00:43:52 as soon as the session went idle; Haik's settings restored then). `measure-speed.ps1`: an open Claude Code session that waits no longer refuses a run (orchestrator change); the idle mode still refuses while a guard runs. Third try started: waits up to 100 min for nothing to hold, then size, idle 10 min, hold 10 min, five `claude -p --model haiku` runs for the start and end delays, snapshot compare.
 - 2026-11-06 00:56: Haik (new note on the video, not given before): after the work ends with the lid closed, the draft counts 5:00 down with no input and only then sleeps; true to the product (`docs/product.md`, the 5 minute no-input rule) but confusing to a viewer. Show the closed laptop working behind the scenes, then the work clearly done, then it sleeps as usual; no countdown on screen, and no timing claim the app does not keep. Queued for the final render worker (after the speed run, so no turn spoils the quiet wait).
 - 2026-11-06 01:05: third speed run: quiet at 00:44:54, then `measure-speed.ps1 -Mode snapshot` crashed ("Cannot index into a null array"): `powercfg /q` shows no current index for `SUB_BUTTONS LIDACTION` and `SUB_ENERGYSAVER ESBATTTHRESHOLD` on this laptop (hidden settings; `/qh` shows them). No number measured yet. Haik asked for a continuation prompt to a new orchestrator; scheduled check-ins deleted.
+- 2026-11-06 03:58 (overnight orchestrator, Haik asleep): speed numbers measured (02:09 to 02:32, on Haik's installed
+  0.1.0 build of c9da3dd, which lacks only the high contrast menu fix): idle 10 min with 0 holds, tray 4.27 MB private
+  (17.14 MB working set), 109 ms CPU (0.018% of one core); hold 10 min the same for the tray, guard 1.67 MB private;
+  start delay median 114 ms, max 298 ms (5 `claude -p` runs); Setup.exe 12.3 MB; power settings the same before and
+  after. Values and raw file paths in `p6-media` round 4. Fix first: `measure-speed.ps1` reads with `powercfg /qh`
+  (00de7bb). Lesson: Wakeshot holds for an idle session whose cron is due within 1 hour (`product.md`, timers), so a
+  45 min check-back held the PC from 01:17 to 02:07 (the product working as designed); the next check-back, 105 min
+  out, left the run its quiet. Unattended runs need the check-back more than 1 hour plus the run's length away.
+  Orchestrator decision, for Haik's review: the headline memory number is the private memory (4.3 MB; Task Manager's
+  Memory column read 3.4 MB), not the working set (17.1 MB, counts shared Windows files). Started: `p6-media` round 4
+  (the final video), `p6-readme` round 4 (his story, media, numbers, site copy in line) and the new `p6-repo-files`.

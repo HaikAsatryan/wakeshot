@@ -506,3 +506,70 @@ Help block not checked again: not touched.
    know before he calls Awake "limited".
 3. Don't Sleep's History names a "Smart Screen Lock" twice (fix lines 9.81 and 9.91) without saying what it is. If it
    is a lock that Don't Sleep starts, the bold lock row is wrong for Don't Sleep. Not verified.
+
+## Round 4: the story, the media and the numbers (Haik, 2026-11-06)
+
+Written by the orchestrator (overnight run, Haik asleep). Status: ready. Agent: `wakeshot-worker`. Owns `README.md`;
+the copy in `site/` only where it repeats the README (keep the two in line; `site/check_page.py` must still pass);
+additions to `docs/research.md` for the rival facts (re-read right before each edit). Runs beside `p6-media` round 4
+(it owns `media/` and writes `docs/research.md#speed-numbers`) and `p6-repo-files` (it writes `CONTRIBUTING.md`,
+`SECURITY.md`, `CODE_OF_CONDUCT.md` and `.github/` templates; link to them by those names). Build folder: none.
+
+1. **The story.** A short, honest section in Haik's voice (plain, first person, his facts, no sales words) on why he
+   built Wakeshot and why the built-in or Windows tools did not fit him. His words below, from voice input (read for
+   intent; the paste lost a few words at line ends, shown in brackets). Keep it short: the README is long already.
+   Unverified parts are his own experience ("I", "for me"), never a fact about another tool. Every claim about
+   another tool is checked against its current docs or source, with the link and the date read in
+   `docs/research.md`: the PowerToys download size (the table has 323.9 MB for v0.102.3001: still current?);
+   whether PowerToys Awake allows longer or custom periods and where; whether it shows the time left and can extend a
+   running timer; what "Claude's built-in tool" is (a keep-awake setting in a Claude app? find it in Anthropic's own
+   docs; if none exists, leave that part out and say so in the Log). Round 3's Found outside scope 2 applies: our own
+   timers are 30 min, 1 h, 2 h, 4 h or until off, so do not mock PowerToys for fixed periods.
+2. **The future, from his words**: Windows only for now because he built it for himself; the design is ready for other
+   systems; macOS if it gets popular or gets donations (it needs a Mac to build and test on); Linux is fragmented
+   (desktops, distributions, package managers), so not planned now. PRs welcome; Haik reviews the architecture (link
+   `CONTRIBUTING.md`). No date, no promise beyond his words. No donation link yet (that waits for his account choice).
+3. **Media**: fill every `<!-- media: ... -->` spot that has a committed file: the icon loop
+   (`media/out/icon-loop-dark.gif`, `-light.gif`), the menu and tooltip stills (`media/public/shots/readme-*.png`),
+   the state icons if committed PNG or SVG files exist (else leave that spot and say so). Use `<picture>` with
+   `prefers-color-scheme`, alt text from the spot. The video plays inline only from a
+   `https://github.com/user-attachments/assets/<id>` URL, and that upload waits for Haik: leave one clearly marked
+   spot for it (a visible line is wrong; an HTML comment saying "Haik: paste the video URL here" is right), and link
+   nothing else for the video.
+4. **Numbers** (`p6-media` round 4 has the raw values): the speed line at the top and the Download cell. Use:
+   private memory 4.3 MB idle (median), CPU 109 ms in 10 minutes idle (0.018% of one core), start of a hold about
+   0.1 s after Claude Code starts work (median of 5 runs, 114 ms; max 298 ms), Setup.exe 12.3 MB, measured
+   2026-11-06 on 0.1.0, x64. Link each to `docs/research.md#speed-numbers`. Give no end delay number.
+5. Plain short English, no em dashes, no emojis, the house voice of the rest of the README. Read the result once as
+   a stranger: the top must still sell in the first screen.
+
+Haik's words (2026-11-06, voice input, as pasted):
+
+> Our readme and repo should follow best practices! We should write a story of why [I] created this software and why
+> claude's built-in tool or windows ones are not fit to us. The story is follow[ing]: [before] that then using agents
+> or downloading long files usually I use keep awake of windows power toys. I download[ed] this 300mb tool only for
+> ke[ep] awake feature. BTW it does not allow to set longer periods maybe hidden in settin[gs] but not a good ux. And
+> when you click for instance the max (2 hours), you do not see how much left and cant refresh it. Other tools hav[e]
+> problems as well. So I ended up constantly switching my laptop settings for long sessions. And not only ai w[ork],
+> sometimes download of a big items and so on. Another bigger problem is that sometimes you are forced al[so to
+> close] the lid. In this case you should change extra settings. This is constant micro stresses that starting to
+> m[ess] with you, but it's not critical. The critical part is that sometimes you forget t[o] return back the
+> settings an[d] that's it. You feel how your bag become hot piece of thing or at the important ti[me] you have died
+> battery and so on. That's why I decided to create something that first of all helps me, that's w[hy] it's only on
+> windows now. I have made its architecture ready for cross platform but as it's only for me and I['m a] windows user
+> I did only for windows. If this software will become popular, or get some donations, I will develop mac os version
+> as well. To [be] honest for now it's too time consuming, as project is heavily relying on OS specifics and APIs and
+> even [...] that's why it's a long job for a windows guy. + need to borrow apple laptop and so on :) Linux is another
+> beas[t]. This OS is used for a very few people compared to windows and mac. And these few peoples use different
+> desktop environments like KDE and Gnome, and also different OS with different package managers. This one is very
+> [...] one. Everything in short. If this software will become mainstream, everything will be in place. And also as
+> th[is is] open source, if someone like me wants to do something it can do itself as well, as I welcome PRs, and
+> only will review architecture. Hope this software will help community, as it is crafted very carefully. It's doing
+> very simple thing, very trivial thing. It's just for certain processes and conditions does not allow laptop to
+> sl[eep] but under the hood it's too complicated. Dozen of cases of careful crafted works and so on. Even
+> Microsoft's kee[p] awake has lots of bugs time to time that I faced, but this one was crafted with a great care of
+> many nuances. Every notification and sound has been carefully designed. Every scenario.
+
+### Log (round 4)
+
+### Result (round 4)
