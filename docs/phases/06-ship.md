@@ -477,3 +477,4 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
 - 2026-11-05 ~16:20: `p6-brand-apply-art` done and committed (8cd0301; 535K tokens); Part A of the web (19f7bda) and media
   (b4d4864) cards committed. Velopack 1.2.161 shows its own install window, so no splash (I1 closed). Part B of both
   runs with new workers (the Part A workers used 260K and 314K tokens).
+- 2026-11-05 15:35: Haik approved the 7 designer decisions of `p6-brand-apply-art` ("all 7 decisions ok").
