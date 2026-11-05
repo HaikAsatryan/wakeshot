@@ -113,7 +113,8 @@ function Read-Plan {
     $active = (powercfg /getactivescheme) -replace '.*GUID: ([0-9a-f-]+).*', '$1'
     $read = {
         param($sub, $setting)
-        $text = powercfg /q $active $sub $setting
+        # /qh: on some laptops LIDACTION and ESBATTTHRESHOLD are hidden, and /q prints no index for them.
+        $text = powercfg /qh $active $sub $setting
         $ac = ($text | Select-String 'Current AC Power Setting Index: (0x[0-9a-f]+)').Matches[0].Groups[1].Value
         $dc = ($text | Select-String 'Current DC Power Setting Index: (0x[0-9a-f]+)').Matches[0].Groups[1].Value
         @{ ac = [Convert]::ToInt64($ac, 16); dc = [Convert]::ToInt64($dc, 16) }
