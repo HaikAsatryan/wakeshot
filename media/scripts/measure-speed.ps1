@@ -5,7 +5,8 @@
 
 .DESCRIPTION
   Run each mode at a normal (Medium) PowerShell, with Wakeshot installed by its Setup.exe and running from the tray.
-  Before idle and hold: no other agent, build or large program running, nobody using the laptop.
+  Before idle and hold: no agent working (an open Claude Code session that waits for input is fine), no build or
+  large program running, nobody using the laptop.
 
     -Mode snapshot -Out before.json    the power settings the e2e checks compare (read only)
     -Mode compare  -Before before.json -After after.json
@@ -59,10 +60,21 @@ function Wakeshot-Processes {
     }
 }
 
-# Other work that would spoil an idle number: builds, agents, the e2e suites.
+# Other work that would spoil an idle number: builds, agents, the e2e suites. An open Claude Code session that waits
+# is not work and is what users have open, so only a busy one refuses. A `waiting` session with Remote Control on
+# holds for up to an hour (`docs/product.md`); the idle mode's guard check refuses while it still does.
 function Assert-Quiet {
-    $busy = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '^(cargo|rustc|link|claude|node|msbuild|dotnet)$' }
+    $busy = Get-Process -ErrorAction SilentlyContinue |
+        Where-Object { $_.ProcessName -match '^(cargo|rustc|link|claude|node|msbuild|dotnet)$' } |
+        Where-Object { -not ($_.ProcessName -eq 'claude' -and (Session-Waits $_.Id)) }
     if ($busy) { throw "other work is running: $(($busy | ForEach-Object { "$($_.ProcessName) $($_.Id)" }) -join ', ')" }
+}
+
+# Only the status file named by the process id; never the .key files next to it (CLAUDE.md).
+function Session-Waits([int] $id) {
+    $f = Join-Path $sessions "$id.json"
+    if (-not (Test-Path $f)) { return $false }
+    try { return (Get-Content $f -Raw | ConvertFrom-Json).status -in 'idle', 'waiting' } catch { return $false }
 }
 
 function Sample([int[]] $ids, [int] $minutes) {
