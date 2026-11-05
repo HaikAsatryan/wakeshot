@@ -90,7 +90,7 @@ Facts with how they were checked: `docs/research.md`. Longer research: `docs/res
 | 5 | Tray UX (track) | Icons (design, light and dark, high contrast, every scale), menu, notifications, sounds, first run, log | Built (`docs/phases/05-tray-ux.md`) |
 | 6 | Ship (track, then integration) | Velopack installer and updates, start at login, uninstall restore, signing, winget manifest, README, GitHub Pages; then wiring all tracks into the two exes, end-to-end tests, Haik's manual checklist | Built and checked with Haik; README, Pages and media wait for his UI review (`docs/phases/06-ship.md`, `docs/phases/06-integration.md`) |
 | 7 | Field test | A week of real use on the test laptop, fixes, v1.0 | |
-| 8 | Launch cleanup | A clean public repo (Haik, 2026-11-03): short `CLAUDE.md`, the README for users (long but never boring, Haik 2026-11-04), maybe one Claude skill if it matters; internal planning, reviews and junk removed; history squashed into one commit (Haik's go right before the force push); then the winget submission, and the Microsoft Store if free and automated (`docs/tasks/p8-store.md`) | |
+| 8 | Launch cleanup | A clean public repo (Haik, 2026-11-03): short `CLAUDE.md`, the README for users (long but never boring, Haik 2026-11-04), maybe one Claude skill if it matters; internal planning, reviews and junk removed; history squashed into one commit (Haik's go right before the force push); then the winget submission, and the Microsoft Store if free and automated (`docs/tasks/p8-store.md`); what to remove is listed in `docs/tasks/p8-cleanup.md` | |
 
 Phases 2 to 6 are parallel tracks, not steps (Haik, 2026-11-03: like two devs and a devops person on separate parts,
 test-first). They start together after Phase 1 and build against the Phase 1 contracts: the boundary types and
@@ -281,3 +281,14 @@ tests, Haik's checklist) starts when the tracks it needs are done.
 - 2026-11-05 14:20 (Haik's brand session): brand review done (`docs/phases/06-ship.md` work log, same time). The cup
   is gone from the menu, the menu text is grey. Next: Haik's 8 brand decisions (board "Wakeshot brand review"), then
   a brand apply card (about 150K to 200K tokens), the screen session, `p6-media` Part B, README and Pages.
+- 2026-11-05 ~18:20 (Haik's brand session): the new brand is applied everywhere: the held light in Moss in `art.rs`
+  (tray, app icon, notice icon, favicon, page icon and lockups, all written by the art writer with golden tests), the
+  page, the README header, the social card, `media/` (port at 0 pixel difference, checked in CI), `docs/brand.md`;
+  old-brand history listed in `docs/tasks/p8-cleanup.md`. Final review 0/2/6, both majors fixed and verified. The
+  screen session ran with the worker alone (Haik away): 46 captures, his settings equal. Phase 6 work log has the
+  orchestrator decisions for his review.
+- Next (orchestrator): Haik's steps: upload `site/social-card.png` as the repo's social preview; his 2 to 3 person
+  check at 16 px (also: does idle read as Windows' person glyph?); a Narrator check of the tray button's name (it
+  kept the old tooltip after a state change); retake the Task Manager captures after his next sign-out. Then
+  `p6-media` Part B (captures, speed numbers, the final video), the README and Pages finish, the website link on the
+  repo once Pages is live; Phase 7 field test; Phase 8 cleanup.

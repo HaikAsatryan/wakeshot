@@ -1856,6 +1856,21 @@ fn site_svgs() -> [(&'static str, String); 3] {
     ]
 }
 
+/// The review sheets in `docs/research/img/ux/`, by file name: one list for the writer and its golden test.
+#[cfg(test)]
+fn review_sheets() -> [(&'static str, Rgba); 4] {
+    [
+        ("icon-sheet-dark.png", sheet(TASKBAR_DARK, ON_DARK)),
+        ("icon-sheet-light.png", sheet(TASKBAR_LIGHT, ON_LIGHT)),
+        // A sample high contrast theme: yellow text on black, every part in the text colour.
+        (
+            "icon-sheet-contrast.png",
+            sheet([0, 0, 0], GlyphColours::one([0xff, 0xff, 0])),
+        ),
+        ("icon-app.png", app_sheet()),
+    ]
+}
+
 /// Writes `assets/wakeshot.ico`, `assets/wakeshot-notice.png`, and in `site/` `favicon.ico`, the icon's SVG and the
 /// two lockups, and the review sheets in `docs/research/img/ux/`; or all of them into `WAKESHOT_ART_DIR` when it is
 /// set (a trial that leaves the repo alone). Run: `cargo test --locked -p wakeshot-windows tray::art::write_art_files
@@ -1889,18 +1904,9 @@ fn write_art_files() {
     for (name, svg) in site_svgs() {
         write(site.join(name), svg.into_bytes());
     }
-    for (name, back, colours) in [
-        ("dark", TASKBAR_DARK, ON_DARK),
-        ("light", TASKBAR_LIGHT, ON_LIGHT),
-        // A sample high contrast theme: yellow text on black, every part in the text colour.
-        ("contrast", [0, 0, 0], GlyphColours::one([0xff, 0xff, 0])),
-    ] {
-        write(
-            img.join(format!("icon-sheet-{name}.png")),
-            png(&sheet(back, colours)),
-        );
+    for (name, picture) in review_sheets() {
+        write(img.join(name), png(&picture));
     }
-    write(img.join("icon-app.png"), png(&app_sheet()));
 }
 
 #[cfg(test)]
@@ -3016,6 +3022,20 @@ mod tests {
             let path = format!("site/{name}");
             let file = std::fs::read_to_string(repo(&path)).expect(&path);
             assert!(file == svg, "{path} differs from the art: {REWRITE}");
+        }
+    }
+
+    #[test]
+    fn review_sheets_match_the_art() {
+        // `media/scripts/check-art.mjs` holds the media port to the glyph sheets, so without this a tray glyph change
+        // made without the writer run passes every check while the media keep the old glyph.
+        for (name, picture) in review_sheets() {
+            let path = format!("docs/research/img/ux/{name}");
+            let file = std::fs::read(repo(&path)).expect(&path);
+            assert!(
+                file == png(&picture),
+                "{path} differs from the art: {REWRITE}"
+            );
         }
     }
 

@@ -257,6 +257,25 @@ under "Decisions for Haik's review" in the Result.
   section "Brand apply review fixes", social card bytes). Temporary look test removed; module doc names the SVGs.
 - 2026-11-05: final checks all pass (table in Result); writer run twice, 10 files byte-equal; check_page 0 errors.
   Build folder deleted. Status done.
+- 2026-11-05: fix check gap started (`docs/reviews/p6-brand-apply.md`, "Fix check", finding 2's gap): the four review
+  sheets have no golden test, yet `docs/brand.md`'s asset table says they do. Build folder
+  `<scratchpad>\p6-brand-sheet-golden\target`. Read: `check-art.mjs` reads the three `icon-sheet-*.png` (line 44),
+  not `icon-app.png` (it reads the ICO for the app icon). `p8-cleanup.md` line 33 to 34 already lists all four under
+  "Keep", not under removal.
+- 2026-11-05: `art.rs`: `review_sheets()` (test code) lists the four sheets by file name, and the writer loops over it,
+  so the writer and the test cannot drift apart (a design call: the test alone was the brief; one list is the house
+  way, as `site_svgs()`). New golden test `review_sheets_match_the_art`, the same "run the writer" message. It passed
+  on the files in the repo, so the shared list writes the same bytes as the old writer. Mutation check: the dark sheet
+  drawn with the light taskbar's colours failed the test with `icon-sheet-dark.png differs from the art: run ...`;
+  reverted. The four sheets take 2.8 s in a debug test run.
+- 2026-11-05: `docs/brand.md` asset table: the "golden tests" claim is true now (ICO, favicon, SVGs, sheets in
+  `art.rs`; the notice PNG in `notify.rs`); added that the three glyph sheets are what `check-art.mjs` holds the media's
+  tray glyphs to. `p8-cleanup.md` not changed: the sheets are on its Keep list already. Whole-workspace checks running
+  (script `<scratchpad>\p6-brand-sheet-golden\checks.ps1`, a log per check).
+- 2026-11-05: every check passed, 0 warnings: fmt; clippy x64 and ARM64 (Llvm folder on PATH), with and without
+  `--all-targets`; `cargo test --workspace --locked` (wakeshot-windows lib 612 passed, 23 ignored; every crate 0
+  failed); release builds x64 and ARM64; `node media/scripts/check-art.mjs` 9,458,740 pixels, 0 differ. Build folder
+  deleted. Status done.
 
 ## Result
 
@@ -366,6 +385,11 @@ Review `docs/reviews/p6-brand-apply.md`; the orchestrator's brief: findings 1, 3
   stroke above the line; new test `the_slash_leaves_the_line_whole`.
 - **`docs/brand.md`**: the contrast rows (drawn numbers, colour-blind column from the tests), the light's rule, the off
   glyph, the bloom, ICO and social card sizes, and the asset table (SVGs written by `art.rs`, CI check for media).
+- **Fix check gap, fixed**: golden test `review_sheets_match_the_art` holds the three `icon-sheet-*.png` and
+  `icon-app.png` to the art (one list, `review_sheets()`, for it and the writer), so a tray glyph change without a
+  writer run fails `cargo test` and cannot leave `check-art` green on old sheets; `brand.md`'s "golden tests" line is
+  true now and names the sheets' link to `check-art.mjs`; `p8-cleanup.md` already keeps the sheets. All checks pass
+  (Log, last line).
 
 Files: `crates/wakeshot-windows/src/tray/art.rs`; `assets/wakeshot.ico` (184,720 bytes), `site/favicon.ico`,
 `site/wakeshot.svg`, `site/wakeshot-lockup-light.svg`, `-dark.svg`, `site/social-card.png` (285,193);
