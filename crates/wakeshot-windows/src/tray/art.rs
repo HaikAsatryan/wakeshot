@@ -10,9 +10,11 @@
 //! filled while holding, the same light as an outline when idle, and the outline struck through when off, as Windows
 //! marks its own off states. The tray icon draws `tray_mask` at the size the taskbar wants and colours it with
 //! `colorize`: the line and the outline in Windows' glyph colour, the light in Moss while holding, every part in the
-//! text colour in high contrast. The app icon is the same mark lit, on a Moss plate. This file is the one source the
-//! page, the media and the README port from. The brand: `docs/brand.md`; what was measured and how:
-//! `docs/research.md`, "Brand apply: the held light in art.rs".
+//! text colour in high contrast. The app icon is the same mark lit, on a Moss plate. This file is the one source of the
+//! drawing: its writer makes the ICO, the notice picture, the favicon and the page's SVG icon and lockups, and the
+//! media's port (`media/src/art/heldLight.ts`) must draw the same pixels (`media/scripts/check-art.mjs`). The brand:
+//! `docs/brand.md`; what was measured and how: `docs/research.md`, "Brand apply: the held light in art.rs" and "Brand
+//! apply review fixes".
 
 use wakeshot_core::view::IconState;
 
@@ -105,7 +107,7 @@ const PLATE_DEEP: [u8; 3] = [0x2c, 0x5a, 0x26];
 /// The light is near white in the middle and warm at its edge; its glow on the plate is the edge colour.
 const LIGHT_CORE: [u8; 3] = [0xff, 0xfb, 0xe8];
 const LIGHT_EDGE: [u8; 3] = [0xff, 0xea, 0x9c];
-/// The lit light's rim: `LIGHT_EDGE` a third of the way to amber (`#E9C24A`), so the lit light keeps a warm edge.
+/// The lit light's rim, round 2's `#F7DC7F`, so the lit light keeps a warm edge.
 const LIGHT_RIM: [u8; 3] = [0xf7, 0xdc, 0x7f];
 const WHITE: [u8; 3] = [0xff; 3];
 
@@ -229,7 +231,7 @@ pub fn tray_mask(state: IconState, size: u32) -> Mask {
             raster(size, size, &h.disc(size, 0)),
         ),
         IconState::Idle => (raster(size, size, &outline), vec![0; n]),
-        IconState::Off if h.t >= 2 => (raster(size, size, &struck(h, outline)), vec![0; n]),
+        IconState::Off if h.t >= 2 => (raster(size, size, &struck(h, size, outline)), vec![0; n]),
         IconState::Off => (raster(size, size, &outline), vec![0; n]),
     };
     if state != IconState::Holding {
@@ -257,18 +259,21 @@ pub fn tray_mask(state: IconState, size: u32) -> Mask {
     Mask { size, alpha, light }
 }
 
-/// The square the off slash crosses: from the light's top down to the line's bottom, its right side on the line's end,
-/// so the slash stays inside the glyph's own box (`brand-review.md` T7).
-fn strike_box(h: Held) -> (u32, u32, u32, u32) {
-    let bottom = h.line_y + h.t;
-    (h.x1 - (bottom - h.top), h.top, h.x1, bottom)
+/// The square the off slash crosses: from the light's top left corner through its centre, down to a stroke above the
+/// line. So the slash strikes the light, stays inside the glyph's own box (`brand-review.md` T7) and leaves the line
+/// whole: a slash that ran on to the line's end cut a gap into it, which read as the slash running through the line
+/// (the brand screen session, 20 px).
+fn strike_box(h: Held, size: u32) -> (u32, u32, u32, u32) {
+    let left = (size - h.d) / 2;
+    let bottom = h.line_y - h.t;
+    (left, h.top, left + (bottom - h.top), bottom)
 }
 
 /// Off at 2 px strokes and up: the outline struck through from top left to bottom right, with a stroke-wide gap on
 /// each side of the slash, as Windows draws its own off glyphs.
-fn struck(h: Held, base: Shape) -> Shape {
+fn struck(h: Held, size: u32, base: Shape) -> Shape {
     let t = h.t as f32;
-    let (x0, y0, x1, y1) = strike_box(h);
+    let (x0, y0, x1, y1) = strike_box(h, size);
     let slash = |w: f32| Shape::Line {
         ax: x0 as f32 + t / 2.0,
         ay: y0 as f32 + t / 2.0,
@@ -283,7 +288,7 @@ fn struck(h: Held, base: Shape) -> Shape {
 /// stepping down the diagonal. Every pixel touching a step, corners included, is cleared as the gap: with only the
 /// four beside each step cleared, the ring and the line still touched the slash at its corners.
 fn strike_pixels(alpha: &mut [u8], h: Held, size: u32) {
-    let (x0, y0, _, y1) = strike_box(h);
+    let (x0, y0, _, y1) = strike_box(h, size);
     let steps = y1 - y0;
     let mut set = |x: u32, y: u32, v: u8| {
         if x < size && y < size {
@@ -395,14 +400,19 @@ impl Plated {
 
     fn bar_shape(self) -> Shape {
         let [x0, y0, x1, y1] = self.bar;
-        let h = y1 - y0;
         Shape::Rect {
             x0,
             y0,
             x1,
             y1,
-            r: [if h >= 2.0 { h / 2.0 } else { 0.0 }; 4],
+            r: [self.bar_corner(); 4],
         }
+    }
+
+    /// Round ends once the bar is 2 px high.
+    fn bar_corner(self) -> f32 {
+        let h = self.bar[3] - self.bar[1];
+        if h >= 2.0 { h / 2.0 } else { 0.0 }
     }
 
     fn light_shape(self) -> Shape {
@@ -413,32 +423,38 @@ impl Plated {
         }
     }
 
-    /// The plate's colour at a point, without the bloom: the ramp, then when lit the shade at the bottom and, with
-    /// `glow`, the light's glow.
-    fn plate_colour(self, x: f32, y: f32, glow: bool) -> [f32; 3] {
+    /// The plate's colour at a point, without the bloom: the ramp, then when lit the light's glow and the shade at the
+    /// bottom.
+    fn plate_colour(self, x: f32, y: f32) -> [f32; 3] {
         let (m, w) = (self.margin, self.side);
         // Microsoft's default gradient angle, 120 degrees: lightest at the top left, as if lit from there.
         let (dx, dy) = (3f32.sqrt() / 2.0, 0.5);
         let along = ((x - m) * dx + (y - m) * dy) / (w * (dx + dy));
         let mut rgb = mixf(f(PLATE_LIGHT), f(PLATE_DARK), along.clamp(0.0, 1.0));
         if self.lit {
-            // Kept modest below 64 px: the glow lightens the plate, and Microsoft asks that at least half the icon
-            // keep 3:1 on light Start, measured at 48 px.
-            let (reach, strength) = if self.size >= 64 {
-                (0.62, 0.6)
-            } else {
-                (0.5, 0.42)
-            };
-            if glow {
-                let t = self.distance(x, y) / (reach * w);
-                let alpha = stops(&[(0.0, strength), (0.45, 0.35 * strength), (1.0, 0.0)], t);
-                rgb = mixf(rgb, f(LIGHT_EDGE), alpha);
-            }
+            let (reach, glow) = self.glow();
+            let t = self.distance(x, y) / (reach * w);
+            rgb = mixf(rgb, f(LIGHT_EDGE), stops(&glow, t));
             let down = (y - m) / w;
-            let shade = (0.35 * (down - 0.55) / 0.45).clamp(0.0, 0.35);
+            let shade = (SHADE * (down - SHADE_FROM) / (1.0 - SHADE_FROM)).clamp(0.0, SHADE);
             rgb = mixf(rgb, f(PLATE_DEEP), shade);
         }
         rgb
+    }
+
+    /// The glow round the light: how far it reaches, as a share of the plate's side, and its alpha along that reach.
+    /// Kept modest below 64 px: the glow lightens the plate, and Microsoft asks that at least half the icon keep 3:1
+    /// on light Start, measured at 48 px.
+    fn glow(self) -> (f32, [(f32, f32); 3]) {
+        let (reach, strength) = if self.size >= 64 {
+            (0.62, 0.6)
+        } else {
+            (0.5, 0.42)
+        };
+        (
+            reach,
+            [(0.0, strength), (0.45, 0.35 * strength), (1.0, 0.0)],
+        )
     }
 
     fn distance(self, x: f32, y: f32) -> f32 {
@@ -450,7 +466,7 @@ impl Plated {
     /// and warm only at the edge, so it reads as lit rather than as a ball.
     fn light_colour(self, x: f32, y: f32) -> [f32; 3] {
         let r = self.r;
-        let (fx, fy) = (self.cx - 0.22 * r, self.cy - 0.28 * r);
+        let (fx, fy) = self.focus();
         let (vx, vy) = (x - fx, y - fy);
         let (ex, ey) = (self.cx - fx, self.cy - fy);
         // The ramp's circles run from the spot (t = 0) to the light's edge (t = 1); solve for the one through (x, y).
@@ -459,12 +475,14 @@ impl Plated {
         let c = vx * vx + vy * vy;
         let t = ((b - (b * b - a * c).sqrt()) / a).clamp(0.0, 1.0);
         if self.lit {
+            let [core, edge] = LIT_RAMP;
             let rgb = mixf(
                 f(LIGHT_CORE),
                 f(LIGHT_EDGE),
-                ((t - 0.5) / 0.36).clamp(0.0, 1.0),
+                ((t - core) / (edge - core)).clamp(0.0, 1.0),
             );
-            mixf(rgb, f(LIGHT_RIM), ((t - 0.86) / 0.14).clamp(0.0, 1.0))
+            // 0.14 written out: 1.0 - 0.86 in f32 is one bit off it, and the ports copy these sums exactly.
+            mixf(rgb, f(LIGHT_RIM), ((t - edge) / 0.14).clamp(0.0, 1.0))
         } else {
             mixf(
                 f(LIGHT_CORE),
@@ -474,10 +492,14 @@ impl Plated {
         }
     }
 
+    /// The spot the light's ramp starts from, up and left of its centre.
+    fn focus(self) -> (f32, f32) {
+        (self.cx - 0.22 * self.r, self.cy - 0.28 * self.r)
+    }
+
     /// The light's soft bloom round its edge, as an alpha.
     fn bloom(self, x: f32, y: f32) -> f32 {
-        let t = self.distance(x, y) / (1.9 * self.r);
-        stops(&[(0.0, 0.8), (0.53, 0.44), (0.75, 0.144), (1.0, 0.0)], t)
+        stops(&BLOOM, self.distance(x, y) / self.r)
     }
 
     /// The drop shadow's alpha under the plate: the plate moved down by a 96th of the icon and blurred to a deviation
@@ -485,26 +507,51 @@ impl Plated {
     /// 2's larger shadow (a 48th down, deviation 1.2 px at 48 px) ran past the icon's edge and was cut there, 9% black
     /// on the last row, a hard grey line under the icon on light Start.
     fn shadow(self) -> Vec<u8> {
-        let s = self.size as f32;
-        let mut alpha = raster(self.size, self.size, &self.plate(s / 96.0));
-        let sigma = s / 64.0;
-        // Box blurs one after another come close to a Gaussian: a 3 px box adds a variance of 2/3, so small shadows
-        // take that box as often as their variance asks, and large ones three wider boxes.
-        let (width, passes) = if sigma < 1.2 {
-            (3, ((1.5 * sigma * sigma).round() as u32).max(1))
-        } else {
-            let w = ((4.0 * sigma * sigma + 1.0).sqrt() / 2.0).round() as u32 * 2 + 1;
-            (w, 3)
-        };
+        let mut alpha = raster(self.size, self.size, &self.plate(self.shadow_drop()));
+        let (width, passes) = self.shadow_blur();
         for _ in 0..passes {
             box_blur(&mut alpha, self.size, width);
         }
         alpha
     }
+
+    fn shadow_drop(self) -> f32 {
+        self.size as f32 / 96.0
+    }
+
+    /// The shadow's box blur, its width and passes. Box blurs one after another come close to a Gaussian: a 3 px box
+    /// adds a variance of 2/3, so small shadows take that box as often as their variance asks, and large ones three
+    /// wider boxes.
+    fn shadow_blur(self) -> (u32, u32) {
+        let sigma = self.size as f32 / 64.0;
+        if sigma < 1.2 {
+            (3, ((1.5 * sigma * sigma).round() as u32).max(1))
+        } else {
+            let w = ((4.0 * sigma * sigma + 1.0).sqrt() / 2.0).round() as u32 * 2 + 1;
+            (w, 3)
+        }
+    }
 }
 
 /// How dark the drop shadow is at its darkest.
 const SHADOW: f32 = 0.3;
+
+/// The lit plate's shade deepens it from this share of its height down to its bottom, where it reaches `SHADE`.
+const SHADE_FROM: f32 = 0.55;
+const SHADE: f32 = 0.35;
+
+/// The lit light's ramp from its focus (0) to its edge (1): the core colour up to the first stop, the edge colour at
+/// the second, the rim at the edge.
+const LIT_RAMP: [f32; 2] = [0.5, 0.86];
+
+/// The light's bloom, alpha by distance from its centre in light radii: round 2's bloom, 0.44 at the light's edge,
+/// with its tail ending at `BLOOM_END` instead of 1.9. The longer tail lay over the plate just above the bar and took
+/// the bar under 3:1 from 64 px up.
+const BLOOM: [(f32, f32); 4] = [(0.0, 0.8), (1.0, 0.44), (1.28, 0.144), (BLOOM_END, 0.0)];
+
+/// Where the bloom ends. The bar's top sits 1.42 to 1.5 radii out, where the bloom is down to 0.08 or less, so the
+/// bar keeps 3:1 against the plate above it as drawn.
+const BLOOM_END: f32 = 1.6;
 
 /// The app icon: the held light, lit, over its bar on a Moss plate. Frames below `LIT_FROM` are flat.
 pub fn app_icon(size: u32) -> Rgba {
@@ -536,7 +583,7 @@ fn draw_plated(p: Plated) -> Rgba {
             let cover = |m: &[u8]| f32::from(m[i]) / 255.0;
             let mut px = Paint::CLEAR;
             px.over([0.0; 3], SHADOW * cover(&shadow));
-            px.over(p.plate_colour(fx, fy, true), cover(&plate));
+            px.over(p.plate_colour(fx, fy), cover(&plate));
             let along = ((fx - bar_x0) / (bar_x1 - bar_x0)).clamp(0.0, 1.0);
             px.over(mixf(f(WHITE), f(LIGHT_CORE), along), cover(&bar));
             if p.lit {
@@ -1529,12 +1576,293 @@ fn app_sheet() -> Rgba {
     out
 }
 
-/// Writes `assets/wakeshot.ico`, `assets/wakeshot-notice.png`, `site/favicon.ico` and the review sheets in
-/// `docs/research/img/ux/`, or all of them into `WAKESHOT_ART_DIR` when it is set (a trial that leaves the repo
-/// alone). Run: `cargo test --locked -p wakeshot-windows tray::art::write_art_files -- --ignored`.
+/// A number in an SVG: three decimals at most, no trailing zeros.
+#[cfg(test)]
+fn svg_num(v: f64) -> String {
+    let text = format!("{v:.3}");
+    let text = text.trim_end_matches('0').trim_end_matches('.');
+    if text == "-0" {
+        "0".to_owned()
+    } else {
+        text.to_owned()
+    }
+}
+
+#[cfg(test)]
+fn svg_colour(rgb: [u8; 3]) -> String {
+    format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2])
+}
+
+/// The app icon at 256 px as SVG gradients, a blur and a plate mask (`defs`, ids `i-`), and the shapes that use them
+/// (`body`): the layers of `draw_plated` in its order, from the same layout and constants, so the page, the README
+/// and the social card draw the ICO's picture sharp at any size.
+#[cfg(test)]
+fn svg_icon_parts() -> (String, String) {
+    let p = Plated::at(256, true);
+    let n = |v: f32| svg_num(f64::from(v));
+    let (m, w) = (f64::from(p.margin), f64::from(p.side));
+    // `plate_colour`'s ramp: 0 at the plate's top left corner, 1 at its bottom right, along 120 degrees.
+    let (dx, dy) = (3f64.sqrt() / 2.0, 0.5);
+    let length = w * (dx + dy);
+    let (reach, glow) = p.glow();
+    let [x0, y0, x1, y1] = p.bar;
+    let (fx, fy) = p.focus();
+    let bloom_r = BLOOM_END * p.r;
+    // `draw_plated` cuts the bloom at the plate's edge and an SVG gradient would not be cut, so it must end inside.
+    let plate = p.plate(0.0);
+    assert!(
+        (0..64).all(|i| {
+            let a = std::f32::consts::TAU * i as f32 / 64.0;
+            plate.contains(p.cx + bloom_r * a.cos(), p.cy + bloom_r * a.sin())
+        }),
+        "the bloom reaches the plate's edge"
+    );
+    let (width, passes) = p.shadow_blur();
+    let sigma = (f64::from(passes) * f64::from(width * width - 1) / 12.0).sqrt();
+    let centre = format!("cx=\"{}\" cy=\"{}\"", n(p.cx), n(p.cy));
+    let edge = svg_colour(LIGHT_EDGE);
+    let faded = |id: &str, r: f32, at: &[(f32, f32)], unit: f32| {
+        let mut out = format!(
+            "<radialGradient id=\"i-{id}\" gradientUnits=\"userSpaceOnUse\" {centre} r=\"{}\">",
+            n(r)
+        );
+        for (t, alpha) in at {
+            out += &format!(
+                "\n      <stop offset=\"{}\" stop-color=\"{edge}\" stop-opacity=\"{}\"/>",
+                svg_num(f64::from(*t) / f64::from(unit)),
+                n(*alpha)
+            );
+        }
+        out + "\n    </radialGradient>"
+    };
+    let stop = |at: &str, rgb: [u8; 3]| {
+        format!(
+            "  <stop offset=\"{at}\" stop-color=\"{}\"/>",
+            svg_colour(rgb)
+        )
+    };
+    let defs = [
+        format!(
+            "<linearGradient id=\"i-ramp\" gradientUnits=\"userSpaceOnUse\" x1=\"{0}\" y1=\"{0}\" x2=\"{1}\" \
+             y2=\"{2}\">",
+            svg_num(m),
+            svg_num(m + length * dx),
+            svg_num(m + length * dy)
+        ),
+        stop("0", PLATE_LIGHT),
+        stop("1", PLATE_DARK),
+        "</linearGradient>".to_owned(),
+        faded("glow", reach * p.side, &glow, 1.0),
+        format!(
+            "<linearGradient id=\"i-shade\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"{}\" x2=\"0\" y2=\"{}\">",
+            svg_num(m + f64::from(SHADE_FROM) * w),
+            svg_num(m + w)
+        ),
+        format!(
+            "  <stop offset=\"0\" stop-color=\"{}\" stop-opacity=\"0\"/>",
+            svg_colour(PLATE_DEEP)
+        ),
+        format!(
+            "  <stop offset=\"1\" stop-color=\"{}\" stop-opacity=\"{}\"/>",
+            svg_colour(PLATE_DEEP),
+            n(SHADE)
+        ),
+        "</linearGradient>".to_owned(),
+        format!(
+            "<linearGradient id=\"i-bar\" gradientUnits=\"userSpaceOnUse\" x1=\"{}\" y1=\"0\" x2=\"{}\" y2=\"0\">",
+            n(x0),
+            n(x1)
+        ),
+        stop("0", WHITE),
+        stop("1", LIGHT_CORE),
+        "</linearGradient>".to_owned(),
+        faded("bloom", bloom_r, &BLOOM, BLOOM_END),
+        format!(
+            "<radialGradient id=\"i-light\" gradientUnits=\"userSpaceOnUse\" {centre} r=\"{}\" fx=\"{}\" fy=\"{}\">",
+            n(p.r),
+            n(fx),
+            n(fy)
+        ),
+        stop(&n(LIT_RAMP[0]), LIGHT_CORE),
+        stop(&n(LIT_RAMP[1]), LIGHT_EDGE),
+        stop("1", LIGHT_RIM),
+        "</radialGradient>".to_owned(),
+        "<filter id=\"i-soft\" x=\"-10%\" y=\"-10%\" width=\"120%\" height=\"120%\">".to_owned(),
+        format!("  <feGaussianBlur stdDeviation=\"{}\"/>", svg_num(sigma)),
+        "</filter>".to_owned(),
+        "<mask id=\"i-plate\" maskUnits=\"userSpaceOnUse\" x=\"0\" y=\"0\" width=\"256\" height=\"256\">".to_owned(),
+        format!(
+            "  <rect x=\"{0}\" y=\"{0}\" width=\"{1}\" height=\"{1}\" rx=\"{2}\" fill=\"#FFF\"/>",
+            n(p.margin),
+            n(p.side),
+            n(p.corner)
+        ),
+        "</mask>".to_owned(),
+    ]
+    .join("\n    ");
+    let body = [
+        format!(
+            "<rect x=\"{0}\" y=\"{1}\" width=\"{2}\" height=\"{2}\" rx=\"{3}\" fill=\"#000\" fill-opacity=\"{4}\" \
+             filter=\"url(#i-soft)\"/>",
+            n(p.margin),
+            svg_num(m + f64::from(p.shadow_drop())),
+            n(p.side),
+            n(p.corner),
+            n(SHADOW)
+        ),
+        "<g mask=\"url(#i-plate)\">".to_owned(),
+        "  <rect width=\"256\" height=\"256\" fill=\"url(#i-ramp)\"/>".to_owned(),
+        "  <rect width=\"256\" height=\"256\" fill=\"url(#i-glow)\"/>".to_owned(),
+        "  <rect width=\"256\" height=\"256\" fill=\"url(#i-shade)\"/>".to_owned(),
+        "</g>".to_owned(),
+        format!(
+            "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" rx=\"{}\" fill=\"url(#i-bar)\"/>",
+            n(x0),
+            n(y0),
+            n(x1 - x0),
+            n(y1 - y0),
+            n(p.bar_corner())
+        ),
+        format!("<circle {centre} r=\"{}\" fill=\"url(#i-bloom)\"/>", n(bloom_r)),
+        format!("<circle {centre} r=\"{}\" fill=\"url(#i-light)\"/>", n(p.r)),
+    ]
+    .join("\n  ");
+    (defs, body)
+}
+
+/// `site/wakeshot.svg`.
+#[cfg(test)]
+fn app_icon_svg() -> String {
+    let (defs, body) = svg_icon_parts();
+    format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\" width=\"256\" height=\"256\">
+  <!-- The Wakeshot app icon, the held light in Moss: the 256 px frame of assets/wakeshot.ico as shapes, so it stays
+       sharp at any size. Written by crates/wakeshot-windows/src/tray/art.rs (write_art_files) from the ICO's layout
+       and layers; change the art there, not here. -->
+  <defs>
+    {defs}
+  </defs>
+  {body}
+</svg>
+"
+    )
+}
+
+/// "Wakeshot" in Instrument Sans SemiBold 1.000 as outlines, set beside the 256 px plate (margin 11, side 234): cap
+/// height 0.46 of the plate's side and centred on it, the ink starting 0.26 of the side after the plate, tracking
+/// -0.01em as on the page. `p6-brand-apply-web` shaped it with HarfBuzz and drew the font's outlines with fontTools
+/// (its Log); the outlines change only with the font, those ratios or the plate, and are then made again that way.
+#[cfg(test)]
+const WORDMARK: &str = concat!(
+    "M336.79 181.82 305.84 74.18H325.57L348.9 161.94L370.57 74.18H393L414.38 162.09",
+    "L437.85 74.18H456.69L425.74 181.82H403.61L381.34 94.21L358.91 181.82ZM481.65 183.31",
+    "Q470.14 183.31 463.34 177.56Q456.54 171.8 456.54 162.09Q456.54 151.62 464.16 145.49",
+    "Q471.79 139.36 485.69 137.27L506.02 134.13V130.39Q506.02 118.28 492.42 118.28",
+    "Q478.66 118.28 476.87 127.85H458.78Q459.97 117.24 468.87 110.66",
+    "Q477.77 104.08 493.01 104.08Q508.56 104.08 516.71 111.18Q524.86 118.28 524.86 132.04",
+    "V166.57Q524.86 173.9 526.95 181.82H508.11Q506.92 177.04 506.77 169.71",
+    "Q499.74 183.31 481.65 183.31ZM475.37 159.99Q475.37 164.33 478.51 166.65",
+    "Q481.65 168.96 487.18 168.96Q495.26 168.96 500.64 164.85Q506.02 160.74 506.02 155.06",
+    "V146.24L488.83 148.78Q475.37 150.87 475.37 159.99ZM542.5 181.82V73.13H561.34V137.42",
+    "L590.64 105.58H613.36L578.38 141.75L614.86 181.82H591.68L561.34 147.29V181.82Z",
+    "M653.43 183.31Q641.32 183.31 632.27 178.23Q623.23 173.15 618.22 164.25",
+    "Q613.21 155.36 613.21 143.55Q613.21 131.89 618.22 122.99Q623.23 114.1 632.2 109.09",
+    "Q641.17 104.08 653.13 104.08Q664.49 104.08 672.86 108.79Q681.23 113.5 685.87 122.02",
+    "Q690.5 130.54 690.5 141.9Q690.5 144.15 690.35 145.87Q690.2 147.58 689.91 149.38H632.35",
+    "Q633.54 159.1 639 164.1Q644.46 169.11 653.58 169.11Q659.56 169.11 663.97 166.87",
+    "Q668.38 164.63 670.62 159.99H688.41Q684.67 170.91 675.78 177.11",
+    "Q666.88 183.31 653.43 183.31ZM652.83 118.28Q644.76 118.28 639.52 122.84",
+    "Q634.29 127.4 632.8 136.22H671.37Q670.62 127.25 665.76 122.77Q660.9 118.28 652.83 118.28",
+    "ZM732.66 183.31Q716.82 183.31 707.4 176.66Q697.98 170.01 697.08 158.2H714.27",
+    "Q715.77 170.01 732.66 170.01Q747.31 170.01 747.31 161.04Q747.31 157.9 745.22 155.81",
+    "Q743.13 153.71 737.3 152.52L725.04 149.68Q712.33 146.99 706.35 141.31",
+    "Q700.37 135.62 700.37 126.8Q700.37 116.19 708.52 110.13Q716.67 104.08 731.02 104.08",
+    "Q745.22 104.08 753.74 110.13Q762.26 116.19 763.31 126.8H746.12",
+    "Q744.62 117.39 730.57 117.39Q717.56 117.39 717.56 125.31Q717.56 128.3 720.1 130.32",
+    "Q722.65 132.34 728.63 133.83L741.78 136.82Q753.14 139.36 758.83 145.64",
+    "Q764.51 151.92 764.51 160.44Q764.51 171.35 756.13 177.33Q747.76 183.31 732.66 183.31Z",
+    "M775.87 181.82V74.18H794.71V118.73Q798.89 112 805.84 108.04Q812.79 104.08 822.06 104.08",
+    "Q834.47 104.08 841.42 111.03Q848.38 117.98 848.38 129.79V181.82H829.39V133.68",
+    "Q829.39 119.48 815.34 119.48Q806.22 119.48 800.46 125.38Q794.71 131.29 794.71 140.71",
+    "V181.82ZM900.55 183.31Q888.44 183.31 879.25 178.23Q870.05 173.15 864.97 164.1",
+    "Q859.89 155.06 859.89 143.4Q859.89 131.74 864.97 122.84Q870.05 113.95 879.17 109.01",
+    "Q888.29 104.08 900.55 104.08Q912.81 104.08 921.93 109.01Q931.05 113.95 936.13 122.84",
+    "Q941.22 131.74 941.22 143.4Q941.22 155.06 936.06 164.1Q930.9 173.15 921.78 178.23",
+    "Q912.66 183.31 900.55 183.31ZM900.55 168.22Q909.52 168.22 915.5 161.41",
+    "Q921.48 154.61 921.48 143.25Q921.48 132.04 915.58 125.61Q909.67 119.18 900.55 119.18",
+    "Q891.43 119.18 885.45 125.61Q879.47 132.04 879.47 143.25Q879.47 154.61 885.45 161.41",
+    "Q891.43 168.22 900.55 168.22ZM986.07 183.31Q972.01 183.31 965.36 176.74",
+    "Q958.71 170.16 958.71 156.7V120.38H944.06V105.58H958.71V88.23L977.69 81.21V105.58H998.47",
+    "V120.38H977.69V157.15Q977.69 168.07 990.1 168.07Q992.64 168.07 994.66 167.69",
+    "Q996.68 167.32 998.47 166.72V181.37Q994.59 183.31 986.07 183.31Z",
+);
+
+/// Where the wordmark's ink ends on the right, in the same units.
+#[cfg(test)]
+const WORDMARK_RIGHT: f64 = 998.47;
+
+/// `site/wakeshot-lockup-light.svg` and `-dark.svg`: the icon beside the wordmark, 80 px high, the word in the page's
+/// text colour for that theme (`site/style.css`, `--text`).
+#[cfg(test)]
+fn lockup_svg(dark: bool) -> String {
+    let p = Plated::at(256, true);
+    assert_eq!(
+        (p.margin, p.side),
+        (11.0, 234.0),
+        "the wordmark's outlines sit beside this plate: make them again"
+    );
+    let (defs, body) = svg_icon_parts();
+    let (theme, ink) = if dark {
+        ("dark", "#EEF2E8")
+    } else {
+        ("light", "#1A1D17")
+    };
+    // The shadow's blur reaches about three deviations past the plate: keep it inside the picture.
+    let pad = 16.0;
+    let (m, side) = (f64::from(p.margin), f64::from(p.side));
+    let (left, top, height) = (m - pad, m - pad, side + 2.0 * pad + 2.0);
+    let px_high = 80.0;
+    let px_wide = ((WORDMARK_RIGHT + pad - left) * px_high / height).round();
+    // The right edge widened to the picture's exact aspect, so it shows no letterbox at its own size.
+    let wide = px_wide * height / px_high;
+    format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"{} {} {} {}\" width=\"{px_wide}\" height=\"{px_high}\" \
+         role=\"img\" aria-label=\"Wakeshot\">
+  <!-- The Wakeshot lockup, {theme} backgrounds: the app icon as in site/wakeshot.svg and the wordmark in Instrument
+       Sans SemiBold (site/fonts/OFL.txt), tracking -0.01em as on the page, the letters as outlines so any viewer
+       draws them without the font. Written by crates/wakeshot-windows/src/tray/art.rs (write_art_files); change it
+       there, not here. -->
+  <defs>
+    {defs}
+  </defs>
+  {body}
+  <path fill=\"{ink}\" d=\"{WORDMARK}\"/>
+</svg>
+",
+        svg_num(left),
+        svg_num(top),
+        svg_num(wide),
+        svg_num(height)
+    )
+}
+
+/// The SVG files the art writes into `site/`, by name.
+#[cfg(test)]
+fn site_svgs() -> [(&'static str, String); 3] {
+    [
+        ("wakeshot.svg", app_icon_svg()),
+        ("wakeshot-lockup-light.svg", lockup_svg(false)),
+        ("wakeshot-lockup-dark.svg", lockup_svg(true)),
+    ]
+}
+
+/// Writes `assets/wakeshot.ico`, `assets/wakeshot-notice.png`, and in `site/` `favicon.ico`, the icon's SVG and the
+/// two lockups, and the review sheets in `docs/research/img/ux/`; or all of them into `WAKESHOT_ART_DIR` when it is
+/// set (a trial that leaves the repo alone). Run: `cargo test --locked -p wakeshot-windows tray::art::write_art_files
+/// -- --ignored`.
 #[cfg(test)]
 #[test]
-#[ignore = "writes the app icon, the notice icon, the favicon and the review sheets"]
+#[ignore = "writes the app icon, the notice icon, the page's icons and lockups, and the review sheets"]
 fn write_art_files() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let (assets, site, img) = match std::env::var_os("WAKESHOT_ART_DIR") {
@@ -1558,6 +1886,9 @@ fn write_art_files() {
         crate::notify::notice_icon_png(),
     );
     write(site.join("favicon.ico"), favicon_file());
+    for (name, svg) in site_svgs() {
+        write(site.join(name), svg.into_bytes());
+    }
     for (name, back, colours) in [
         ("dark", TASKBAR_DARK, ON_DARK),
         ("light", TASKBAR_LIGHT, ON_LIGHT),
@@ -1766,6 +2097,20 @@ mod tests {
         }
     }
 
+    #[test]
+    fn the_slash_leaves_the_line_whole() {
+        // The slash strikes the light only: the line and the rows round it are the same in off as in idle.
+        for size in TRAY_SIZES {
+            let h = Held::at(size);
+            let rows = ((h.line_y - 1) * size) as usize..((h.line_y + h.t + 1) * size) as usize;
+            let (idle, off) = (
+                tray_mask(IconState::Idle, size),
+                tray_mask(IconState::Off, size),
+            );
+            assert_eq!(idle.alpha[rows.clone()], off.alpha[rows], "{size}");
+        }
+    }
+
     /// Pixels at or above `min` with no neighbour (of eight) at or above it.
     fn loose(alpha: &[u8], size: u32, min: u8) -> Vec<(u32, u32)> {
         let at = |x: i64, y: i64| {
@@ -1809,36 +2154,115 @@ mod tests {
         }
     }
 
-    fn luminance(rgb: [f32; 3]) -> f64 {
-        let channel = |c: f32| {
+    fn linear(rgb: [f32; 3]) -> [f64; 3] {
+        rgb.map(|c| {
             let v = f64::from(c) / 255.0;
             if v <= 0.04045 {
                 v / 12.92
             } else {
                 ((v + 0.055) / 1.055).powf(2.4)
             }
-        };
-        0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2])
+        })
     }
 
-    fn contrast(a: [f32; 3], b: [f32; 3]) -> f64 {
-        let (la, lb) = (luminance(a), luminance(b));
+    fn luminance(l: [f64; 3]) -> f64 {
+        0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2]
+    }
+
+    fn ratio(la: f64, lb: f64) -> f64 {
         (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+    }
+
+    /// WCAG 2 contrast.
+    fn contrast(a: [f32; 3], b: [f32; 3]) -> f64 {
+        ratio(luminance(linear(a)), luminance(linear(b)))
+    }
+
+    /// Protan, deutan and tritan at full strength, applied in linear sRGB (Machado, Oliveira and Fernandes 2009),
+    /// the brand's colour-blind check since round 1.
+    const MACHADO: [[[f64; 3]; 3]; 3] = [
+        [
+            [0.152286, 1.052583, -0.204868],
+            [0.114503, 0.786281, 0.099216],
+            [-0.003882, -0.048116, 1.051998],
+        ],
+        [
+            [0.367322, 0.860646, -0.227968],
+            [0.280085, 0.672501, 0.047413],
+            [-0.011820, 0.042940, 0.968881],
+        ],
+        [
+            [1.255528, -0.076749, -0.178779],
+            [-0.078411, 0.930809, 0.147602],
+            [0.004733, 0.691367, 0.303900],
+        ],
+    ];
+
+    /// WCAG 2 contrast under the worst of the three simulations.
+    fn contrast_colour_blind(a: [f32; 3], b: [f32; 3]) -> f64 {
+        MACHADO
+            .iter()
+            .map(|m| {
+                let seen =
+                    |rgb: [f32; 3]| {
+                        let l = linear(rgb);
+                        luminance(m.map(|row| {
+                            (row[0] * l[0] + row[1] * l[1] + row[2] * l[2]).clamp(0.0, 1.0)
+                        }))
+                    };
+                ratio(seen(a), seen(b))
+            })
+            .fold(f64::MAX, f64::min)
+    }
+
+    /// The lowest contrast of some colour pairs, plain and under the worst colour-blind simulation.
+    #[derive(Clone, Copy)]
+    struct Lowest {
+        plain: f64,
+        blind: f64,
+    }
+
+    impl Lowest {
+        const NONE: Lowest = Lowest {
+            plain: f64::MAX,
+            blind: f64::MAX,
+        };
+
+        fn of(a: [f32; 3], b: [f32; 3]) -> Self {
+            let mut low = Lowest::NONE;
+            low.add(a, b);
+            low
+        }
+
+        fn add(&mut self, a: [f32; 3], b: [f32; 3]) {
+            self.plain = self.plain.min(contrast(a, b));
+            self.blind = self.blind.min(contrast_colour_blind(a, b));
+        }
+
+        fn at_least(self, min: f64) -> bool {
+            self.plain >= min && self.blind >= min
+        }
+    }
+
+    impl std::fmt::Display for Lowest {
+        fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(out, "{:.2} (colour-blind {:.2})", self.plain, self.blind)
+        }
     }
 
     #[test]
     fn glyph_contrast_on_taskbars() {
-        // WCAG 2 non-text contrast (1.4.11): every part of the glyph at least 3:1 on the taskbar and on the hover
-        // plate, the holding light's Moss included.
+        // WCAG 2 non-text contrast (1.4.11), plain and colour-blind: every part of the glyph at least 3:1 on the
+        // taskbar and on the hover plate, the holding light's Moss included.
         for (colours, backs) in [
             (ON_DARK, [TASKBAR_DARK, HOVER_DARK]),
             (ON_LIGHT, [TASKBAR_LIGHT, HOVER_LIGHT]),
         ] {
             for back in backs {
                 for part in [colours.ink, colours.light] {
-                    let ratio = contrast(f(part), f(back));
-                    println!("{part:02x?} on {back:02x?}: {ratio:.2}");
-                    assert!(ratio >= 3.0, "{part:02x?} on {back:02x?}: {ratio:.2}");
+                    let low = Lowest::of(f(part), f(back));
+                    println!("{part:02x?} on {back:02x?}: {low}");
+                    assert!(low.at_least(3.0), "{part:02x?} on {back:02x?}: {low}");
                 }
             }
         }
@@ -1847,63 +2271,113 @@ mod tests {
     const START_LIGHT: [u8; 3] = [0xf3; 3];
     const START_DARK: [u8; 3] = [0x20; 3];
 
+    fn colour_at(img: &Rgba, x: u32, y: u32) -> [f32; 3] {
+        let i = ((y * img.width + x) * 4) as usize;
+        [0, 1, 2].map(|k| f32::from(img.pixels[i + k]))
+    }
+
+    /// Plain plate: what the plate covers whole and the light and the bar leave alone.
+    fn bare_plate(p: Plated) -> Vec<bool> {
+        let size = p.size;
+        let plate = raster(size, size, &p.plate(0.0));
+        let light = raster(size, size, &p.light_shape());
+        let bar = raster(size, size, &p.bar_shape());
+        (0..plate.len())
+            .map(|i| plate[i] == 255 && light[i] == 0 && bar[i] == 0)
+            .collect()
+    }
+
+    /// A shape's edge as drawn: every pixel it covers whole, against the first pixel of plain plate one or two steps
+    /// away up, down, left or right. Two steps, so a rounded end's half-covered pixel does not hide the pair.
+    fn edge_contrast(icon: &Rgba, p: Plated, shape: &Shape) -> Lowest {
+        let size = p.size;
+        let mask = raster(size, size, shape);
+        let bare = bare_plate(p);
+        let mut low = Lowest::NONE;
+        for y in 0..size {
+            for x in 0..size {
+                if mask[(y * size + x) as usize] < 255 {
+                    continue;
+                }
+                for (dx, dy) in [(0, -1), (0, 1), (-1, 0), (1, 0)] {
+                    for step in 1..=2 {
+                        let inside =
+                            |v: u32, d: i32| v.checked_add_signed(d * step).filter(|&v| v < size);
+                        let (Some(qx), Some(qy)) = (inside(x, dx), inside(y, dy)) else {
+                            break;
+                        };
+                        let q = (qy * size + qx) as usize;
+                        if mask[q] == 255 {
+                            break;
+                        }
+                        if bare[q] {
+                            low.add(colour_at(icon, x, y), colour_at(icon, qx, qy));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        low
+    }
+
+    /// The light's core as drawn, at its centre, against every pixel of plain plate in the ring just past the
+    /// bloom's end, where the plate shows with only its glow.
+    fn core_past_the_bloom(icon: &Rgba, p: Plated) -> Lowest {
+        let core = colour_at(icon, p.cx as u32, p.cy as u32);
+        let end = BLOOM_END * p.r;
+        let bare = bare_plate(p);
+        let mut low = Lowest::NONE;
+        for y in 0..p.size {
+            for x in 0..p.size {
+                let d = p.distance(x as f32 + 0.5, y as f32 + 0.5);
+                if d >= end && d < end + 1.0 && bare[(y * p.size + x) as usize] {
+                    low.add(core, colour_at(icon, x, y));
+                }
+            }
+        }
+        low
+    }
+
     #[test]
     fn app_icon_contrast() {
         // The plate's two ends on light and dark Start.
         for plate in [PLATE_LIGHT, PLATE_DARK] {
             for start in [START_LIGHT, START_DARK] {
-                let ratio = contrast(f(plate), f(start));
-                println!("plate {plate:02x?} on {start:02x?}: {ratio:.2}");
+                let low = Lowest::of(f(plate), f(start));
+                println!("plate {plate:02x?} on {start:02x?}: {low}");
                 assert!(
-                    ratio >= 3.0,
-                    "plate {plate:02x?} on {start:02x?}: {ratio:.2}"
+                    low.at_least(3.0),
+                    "plate {plate:02x?} on {start:02x?}: {low}"
                 );
             }
         }
-        // At every frame: the light's rim on the plate round it, a pixel out, and the bar on the plate round it. The
-        // light is checked against the plate without its glow, as the bloom, the glow is the light's own soft edge;
-        // the number with the glow is printed for the record. The bar is checked inside the glow.
+        // Every frame as `app_icon` draws it, plain and colour-blind. The bar's edge against the plate next to it.
+        // The light: in a flat frame its edge against the plate next to it; in a lit frame its core against the plate
+        // just past the bloom, since the bloom and the glow are the light's own soft edge, which a crisp rim cannot
+        // beat (its edge as drawn is printed for the record, 1.4 to 2.0).
         for size in APP_ICON_SIZES {
+            let icon = app_icon(size);
             let p = Plated::at(size, size >= LIT_FROM);
-            let rim = f(if p.lit { LIGHT_RIM } else { LIGHT_EDGE });
-            let (mut light, mut glowing) = (f64::MAX, f64::MAX);
-            for (ux, uy) in round_the_clock() {
-                let (x, y) = (p.cx + ux * (p.r + 1.0), p.cy + uy * (p.r + 1.0));
-                light = light.min(contrast(rim, p.plate_colour(x, y, false)));
-                glowing = glowing.min(contrast(rim, p.plate_colour(x, y, true)));
-            }
-            let [x0, y0, x1, y1] = p.bar;
-            let mut bar = f64::MAX;
-            for x in [x0 - 1.0, x1 + 1.0, (x0 + x1) / 2.0] {
-                for y in [y0 - 1.0, y1 + 1.0] {
-                    for ink in [WHITE, LIGHT_CORE] {
-                        bar = bar.min(contrast(f(ink), p.plate_colour(x, y, true)));
-                    }
-                }
-            }
-            println!("{size}: light's rim {light:.2} (in its glow {glowing:.2}), bar {bar:.2}");
-            assert!(light >= 3.0, "{size}: light's rim {light:.2}");
-            assert!(bar >= 3.0, "{size}: bar {bar:.2}");
+            let bar = edge_contrast(&icon, p, &p.bar_shape());
+            let edge = edge_contrast(&icon, p, &p.light_shape());
+            let light = if p.lit {
+                let core = core_past_the_bloom(&icon, p);
+                println!("{size}: bar {bar}; light's core past the bloom {core}; its edge {edge}");
+                core
+            } else {
+                println!("{size}: bar {bar}; light's edge {edge}");
+                edge
+            };
+            assert!(bar.at_least(3.0), "{size}: bar {bar}");
+            assert!(light.at_least(3.0), "{size}: light {light}");
         }
-    }
-
-    /// 64 directions all the way round, as unit vectors: the border of a square, scaled to length 1 (no sin or cos).
-    fn round_the_clock() -> Vec<(f32, f32)> {
-        let mut out = Vec::new();
-        for i in -8..8 {
-            let i = i as f32;
-            for (x, y) in [(i, -8.0), (8.0, i), (-i, 8.0), (-8.0, -i)] {
-                let len = (x * x + y * y).sqrt();
-                out.push((x / len, y / len));
-            }
-        }
-        out
     }
 
     /// Microsoft's half rule: the share of the icon's visible pixels (alpha at least half) that keep 3:1 against the
-    /// background, as drawn over it.
-    fn half_rule(icon: &Rgba, back: [u8; 3]) -> f64 {
-        let (mut n, mut ok) = (0, 0);
+    /// background, as drawn over it; plain, and under all three colour-blind simulations.
+    fn half_rule(icon: &Rgba, back: [u8; 3]) -> (f64, f64) {
+        let (mut n, mut plain, mut blind) = (0, 0, 0);
         for p in icon.pixels.chunks(4) {
             if p[3] < 128 {
                 continue;
@@ -1911,20 +2385,28 @@ mod tests {
             let a = f32::from(p[3]) / 255.0;
             let rgb = [0, 1, 2].map(|k| f32::from(p[k]) * a + f32::from(back[k]) * (1.0 - a));
             n += 1;
-            ok += usize::from(contrast(rgb, f(back)) >= 3.0);
+            plain += usize::from(contrast(rgb, f(back)) >= 3.0);
+            blind += usize::from(contrast_colour_blind(rgb, f(back)) >= 3.0);
         }
-        ok as f64 / n as f64
+        (plain as f64 / n as f64, blind as f64 / n as f64)
     }
 
     #[test]
     fn half_the_icon_keeps_3_to_1_on_start() {
         // "Make sure at least half of your icon passes a 3.0:1 contrast ratio on light and dark theme", measured at
-        // 48 px (Microsoft, "Design guidelines for Windows app icons").
+        // 48 px (Microsoft, "Design guidelines for Windows app icons"). Held under colour-blind simulation too.
         let icon = app_icon(48);
         for back in [START_LIGHT, START_DARK] {
-            let share = half_rule(&icon, back);
-            println!("48 px on {back:02x?}: {:.0}%", share * 100.0);
-            assert!(share >= 0.5, "48 px on {back:02x?}: {share:.2}");
+            let (plain, blind) = half_rule(&icon, back);
+            println!(
+                "48 px on {back:02x?}: {:.0}% (colour-blind {:.0}%)",
+                plain * 100.0,
+                blind * 100.0
+            );
+            assert!(
+                plain >= 0.5 && blind >= 0.5,
+                "48 px on {back:02x?}: {plain:.2}, {blind:.2}"
+            );
         }
     }
 
@@ -2526,5 +3008,25 @@ mod tests {
             file == favicon_file(),
             "site/favicon.ico differs from the art: {REWRITE}"
         );
+    }
+
+    #[test]
+    fn site_svgs_match_the_art() {
+        for (name, svg) in site_svgs() {
+            let path = format!("site/{name}");
+            let file = std::fs::read_to_string(repo(&path)).expect(&path);
+            assert!(file == svg, "{path} differs from the art: {REWRITE}");
+        }
+    }
+
+    #[test]
+    fn svg_numbers_are_short_and_exact() {
+        assert_eq!(svg_num(11.0), "11");
+        assert_eq!(svg_num(43.875), "43.875");
+        assert_eq!(svg_num(287.825_403), "287.825");
+        assert_eq!(svg_num(0.0), "0");
+        assert_eq!(svg_num(-0.000_1), "0");
+        assert_eq!(svg_num(100.0), "100");
+        assert_eq!(svg_num(f64::from(0.21_f32)), "0.21");
     }
 }

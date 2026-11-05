@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
   <!-- The Wakeshot app icon, the held light in Moss: the 256 px frame of assets/wakeshot.ico as shapes, so it stays
-     sharp at any size. Every number is art.rs's at 256 px (crates/wakeshot-windows/src/tray/art.rs, Plated::at and
-     the colour functions after it); change the art there first, then port it here. -->
+       sharp at any size. Written by crates/wakeshot-windows/src/tray/art.rs (write_art_files) from the ICO's layout
+       and layers; change the art there, not here. -->
   <defs>
     <linearGradient id="i-ramp" gradientUnits="userSpaceOnUse" x1="11" y1="11" x2="287.825" y2="170.825">
       <stop offset="0" stop-color="#628C2B"/>
@@ -20,10 +20,10 @@
       <stop offset="0" stop-color="#FFFFFF"/>
       <stop offset="1" stop-color="#FFFBE8"/>
     </linearGradient>
-    <radialGradient id="i-bloom" gradientUnits="userSpaceOnUse" cx="128" cy="106" r="91.2">
+    <radialGradient id="i-bloom" gradientUnits="userSpaceOnUse" cx="128" cy="106" r="76.8">
       <stop offset="0" stop-color="#FFEA9C" stop-opacity="0.8"/>
-      <stop offset="0.53" stop-color="#FFEA9C" stop-opacity="0.44"/>
-      <stop offset="0.75" stop-color="#FFEA9C" stop-opacity="0.144"/>
+      <stop offset="0.625" stop-color="#FFEA9C" stop-opacity="0.44"/>
+      <stop offset="0.8" stop-color="#FFEA9C" stop-opacity="0.144"/>
       <stop offset="1" stop-color="#FFEA9C" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="i-light" gradientUnits="userSpaceOnUse" cx="128" cy="106" r="48" fx="117.44" fy="92.56">
@@ -45,6 +45,6 @@
     <rect width="256" height="256" fill="url(#i-shade)"/>
   </g>
   <rect x="58" y="175" width="140" height="16" rx="8" fill="url(#i-bar)"/>
-  <circle cx="128" cy="106" r="91.2" fill="url(#i-bloom)"/>
+  <circle cx="128" cy="106" r="76.8" fill="url(#i-bloom)"/>
   <circle cx="128" cy="106" r="48" fill="url(#i-light)"/>
 </svg>

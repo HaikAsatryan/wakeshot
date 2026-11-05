@@ -4843,11 +4843,17 @@ offline (headless Edge at device scale 1); no live taskbar, Start or notice was 
   | Holding light 3B7A2A on light taskbar / hover | 3.74 / 4.48 | 3.0 |
   | Plate 628C2B on light / dark Start (f3f3f3, 202020) | 3.57 / 4.12 | 3.0 |
   | Plate 3E7C3B on light / dark Start | 4.56 / 3.22 | 3.0 |
-  | Light's rim on the plate round it, flat frames 16 to 24 (FFEA9C) | 3.50 to 3.51 | 3.0 |
-  | Light's rim on the plate round it, lit frames 30 to 256 (F7DC7F) | 3.13 to 3.16 | 3.0 |
-  | Same, inside the light's glow (lit frames; the glow is the light's soft edge, as round 2 drew it) | 2.53 to 2.58 (30 to 60), 2.03 to 2.10 (64 up) | none |
-  | Bar (white to FFFBE8) on the plate round it, every frame | 3.46 to 4.15 | 3.0 |
-  | Half rule at 48 px, light / dark Start (share of the icon at 3:1) | 63% / 91% | 50% |
+  | Light's edge on the plate next to it, flat frames 16 to 24, as drawn | 3.75 to 3.95 | 3.0 |
+  | Light's core FFFBE8 on the plate just past its bloom, lit frames 30 to 256, as drawn | 3.11 to 3.60 | 3.0 |
+  | Lit light's edge on the plate next to it, as drawn (bloom and glow are its soft edge) | 1.40 to 2.03 | none |
+  | Bar (white to FFFBE8) on the plate next to it, every frame, as drawn | 3.12 to 4.34 | 3.0 |
+  | Half rule at 48 px, light / dark Start (share of the icon at 3:1) | 69% / 91% | 50% |
+
+  Corrected 2026-11-05 by the review fixes (`docs/reviews/p6-brand-apply.md` finding 1): the first numbers here
+  compared the rim and the bar with a plate colour that left out the bloom, which `draw_plated` paints over the plate
+  round the light and over the bar. Measured on the drawn pixels, the bar was 2.78 to 2.95 from 64 px up, so the bloom
+  now ends at 1.6 light radii instead of 1.9; the rows above are after that change. Method and the colour-blind
+  numbers: "Brand apply review fixes" at the end of this file.
 - **Notice colours**: the notice header's background in this laptop's pictures is 252525 (dark) and e5e5e5 (light),
   the most common colour of the header band in `img/ux/notice-dark-first-run.png` and `notice-light-first-run.png`
   (Acrylic over a grey test background, so a real desktop shifts them a little). The 48 px full drawing scaled to 16,
@@ -4855,9 +4861,10 @@ offline (headless Edge at device scale 1); no live taskbar, Start or notice was 
   the flat drawing at 48 px keeps a clear light, so `assets/wakeshot-notice.png` is the flat drawing (palette PNG,
   48 px, 1,798 bytes, the same form as the old file the header showed on screen). Which filter the shell scales with:
   not verified.
-- **Files and sizes**: `assets/wakeshot.ico` 185,835 bytes (was 43,006); its 256 PNG frame 32,229 bytes, 12% of the
-  262,144 bytes of pixels, by `art.rs`'s new deflate (LZ77 through hash chains with lazy matching, fixed or dynamic
-  Huffman codes per block; the old one wrote fixed codes and runs of one byte only). `site/favicon.ico` 15,086 bytes
+- **Files and sizes** (184,720 and 31,114 bytes since the review fixes): `assets/wakeshot.ico` 185,835 bytes (was
+  43,006); its 256 PNG frame 32,229 bytes, 12% of the 262,144 bytes of pixels, by `art.rs`'s new deflate (LZ77
+  through hash chains with lazy matching, fixed or dynamic Huffman codes per block; the old one wrote fixed codes and
+  runs of one byte only). `site/favicon.ico` 15,086 bytes
   (16, 32, 48; was a copy of the old ICO). Python's own `zlib` inflated every PNG the writer made, and Windows'
   `LoadImageW` (LR_LOADFROMFILE) loaded all 14 frames of the ICO and the three of the favicon at their sizes with the
   light's core colour fffbe8 and a clear corner (`loadico.ps1`). A second writer run left every file byte-equal.
@@ -4876,8 +4883,9 @@ Checked 2026-11-05 by `p6-brand-apply-web` Part B (files in `site/` and the top 
 headless Edge at device scale 1 or 2, offscreen.
 
 - **`site/wakeshot.svg` against the ICO's 256 frame**: the SVG ports `Plated::at(256)` and every layer of `art.rs`
-  (`gen_icon.py`). Rendered at 256 px with a clear background and compared pixel by pixel (`compare_icon.py`): over
-  white mean 0.64 and max 41 of 255; over `#121610` mean 0.47, max 29; alpha mean 0.23, max 52. Inside the shapes the
+  (`gen_icon.py`; since the review fixes `art.rs` writes the SVG itself, see "Brand apply review fixes"). Rendered
+  at 256 px with a clear background and compared pixel by pixel (`compare_icon.py`): over white mean 0.64 and max 41
+  of 255; over `#121610` mean 0.47, max 29; alpha mean 0.23, max 52. Inside the shapes the
   difference is 3 at most (Chrome dithers gradients). The larger values are single edge pixels where Chrome's
   anti-aliasing of a curve close to its tangent covers less than the true area (plate corners 41, bar ends 29, light
   edge 14); `art.rs` matches the true area there (checked by sampling each pixel 64 x 64 times). A mask, a clip path
@@ -4900,7 +4908,8 @@ headless Edge at device scale 1 or 2, offscreen.
 - **GitHub's social preview**: "Your image should be a PNG, JPG, or GIF file under 1 MB in size", "at least 640 by
   320 pixels (1280 by 640 pixels for best display)", transparency allowed but a solid background advised
   (docs.github.com, "Customizing your repository's social media preview", read 2026-11-05). **Verified.**
-  `site/social-card.png` is 1280 x 640, 285,642 bytes, solid background, all content at least 108 px from each edge.
+  `site/social-card.png` is 1280 x 640, 285,642 bytes (285,193 since the review fixes re-rendered it), solid
+  background, all content at least 108 px from each edge.
 - **The page's Pages address** in the share tags, `https://haikasatryan.github.io/wakeshot/`, follows GitHub's project
   site pattern `https://<owner>.github.io/<repository>/`. **Not verified** live: Pages is off until v1
   (`gh api repos/HaikAsatryan/wakeshot/pages` gives 404). `check_page.py` fails the page if a share tag leaves that
@@ -4954,5 +4963,117 @@ tritan). Each pair's plain ratio was computed again and equals the apply cards' 
   frames' edge `#FFEA9C` 3.25 (protan), the lit frames' rim `#F7DC7F` 2.88 to 2.92 (protan), the bar 3.36 to 4.01.
   Against the plate's light end `#628C2B` alone the rim is 2.92 plain and 2.72 protan; the light sits nearer the
   middle of the ramp. **Verified** (script). The plate colour was rounded to whole levels before the simulation.
+  Superseded for the app icon by the review fixes (2026-11-05): that test's model left out the bloom; the icon is now
+  measured on its drawn pixels and the rule is the light's core against the plate past the bloom ("Brand apply review
+  fixes" at the end of this file).
 - **Every brand colour is 34.8 or more from Claude's orange `#D97757`** (CIEDE2000, round 1's `de2000`): the rim
   `#F7DC7F` is the nearest, the plate and holding greens 46 to 52. **Verified** (script).
+
+## Brand screen session: what Windows shows
+
+Card `docs/tasks/p6-brand-screen-session.md`, 2026-11-05 15:55 to 16:44, on this laptop with only its own screen
+(1920x1200, 125%), on battery, a local x64 release build installed per user at Medium and uninstalled after. Every
+step by automation from the agent shell (UI Automation, injected keys and clicks, `CopyFromScreen`); pictures
+`docs/research/img/brand/screen-*.png`.
+
+- **SmartScreen shows for a downloaded `Setup.exe`, and nothing shows without the download mark.** A copy with a
+  `Zone.Identifier` stream (`ZoneId=3`) opened by `explorer.exe` got "Windows protected your PC" in the Windows
+  accent colour, with More info giving "App: HaikAsatryan.Wakeshot-win-x64-Setup.exe, Publisher: Unknown publisher"
+  and Run anyway. The same file without the stream started Setup at once. **Seen.**
+- **Velopack's progress window stays up about half a second.** Class `#32770`, title "Wakeshot Setup", Windows'
+  blue information icon, "Installing Wakeshot", "Setting up Wakeshot 0.1.0, please wait...", a green bar and an OK
+  button; drawn light while Windows was in dark mode. Grabbed at 16:37:41.755 (empty bar) and 16:37:42.017 (bar a
+  third along); the install hook ended 16:37:42.102. **Seen** (window loop every 150 ms).
+- **The first-run banner can come seconds after the tray logs it.** First install: logged 16:02:39.29, on screen
+  from 16:02:39.58. Second install: logged 16:37:42.22, on screen only from 16:37:48.18. Cause **not verified**.
+- **Tray icon placement now matches Windows' own glyphs** (ink centre in the taskbar, pixels 40 levels or more from
+  the taskbar colour, script): 150% holding 35.9 of 72 (OneDrive 35.6, chevron 35.3); 125% holding 29.7 of 60
+  (OneDrive 29.6); 100% holding 23.4 of 48 (OneDrive 23.6). Idle sits 0.4 to 1 px lower, by design.
+- **The tray glyph follows each switch with no restart**: dark, light, Desert (`hcwhite.theme`, dark grey glyph),
+  Night sky (white glyph) and the scale changes 125 to 150, 150 to 100, 100 to 125. **Seen.**
+- **Closing the tray menu with Esc leaves a focus box on the icon** (light grey on the light taskbar, the contrast
+  highlight colour in Night sky) until something else on the taskbar is clicked. **Seen.**
+- **High contrast menu text is `COLOR_BTNTEXT`**: in Night sky every item and the status line are yellow `#FFEE32`
+  (`GetSysColor`: `BTNTEXT` `#FFEE32`, `WINDOWTEXT` and `MENUTEXT` `#FFFFFF`, `GRAYTEXT` `#A6A6A6`). Which colour
+  WinUI uses for secondary text in contrast themes: **not verified**.
+- **Task Manager shows the old violet Sunrise icon** for the installed exes on Processes and Startup apps, while
+  Start, Settings, Explorer, the taskbar button and the notices show Moss. `SHGetFileInfo` (small) and
+  `ExtractAssociatedIcon` on the same exe both return Moss (average colours 120,158,88 and 124,158,86). So Task
+  Manager keeps its own icon cache per path; this path held older builds. That a sign-out clears it: **not
+  verified**.
+- **Turning a contrast theme off re-applies `Custom.theme`**: after Light was chosen in Settings and Desert, Night
+  sky, then None applied, Windows came back in Dark, because `Custom.theme` still said `SystemMode=Dark`. A later
+  Light choice did rewrite `Custom.theme` (`SystemMode=Light`, new `ThemeId`), and the Dark choice after it did not.
+  Contrast also set `Control Panel\Colors` `Hilight` and `MenuHilight` to the theme's defaults and left the
+  `HighContrast` key naming "High Contrast White". **Seen** (registry and file reads before and after).
+- **Viewing Settings > Apps > Startup or Task Manager's Startup apps writes `StartupApproved\Run`**: a `02` value for
+  each enabled Run entry that had none, and Docker's disabled `01` form became `03`. **Seen** (before and after
+  reads; the earlier `01` bytes found by hashing).
+- **A scale change makes `Control Panel\Desktop\PerMonitorSettings\<monitor id>`** with `DpiValue` 0 when set back
+  to the recommended 125%. **Seen.**
+- **A throwaway Edge profile on this laptop pulls in Haik's extensions**: `msedge --user-data-dir=<scratch>` opened
+  Bitwarden's "Getting Started" page and grew to 188 MB in under two minutes (deleted after). Signed in by
+  Windows' account or synced otherwise: **not verified**.
+- **`--blink-settings=preferredColorScheme=1` forces light** in Edge 2026 (the page drew light in dark Windows);
+  `=0` forces dark. A second launch on the same profile joins the running browser and ignores its own flags.
+  **Seen.**
+
+## Brand apply review fixes
+
+Checked 2026-11-05 by the review fix round of `p6-brand-apply-art` (review `docs/reviews/p6-brand-apply.md`; code
+`crates/wakeshot-windows/src/tray/art.rs`; pictures `docs/research/img/brand/apply-*.png`, before and after in
+`apply-fixes.png`; scripts in the card's scratch folder `p6-brand-art-fixes\`). Offline renders only.
+
+- **The app icon is measured as drawn.** `app_icon_contrast` reads the pixels of `app_icon(size)` at all 14 frames:
+  every pixel a shape covers whole, against the first plain plate pixel (plate whole, clear of the light and the bar)
+  one or two steps up, down, left or right; and the light's core, the drawn pixel at its centre, against every plain
+  plate pixel in the 1 px ring just past the bloom's end. Plain WCAG 2 and under Machado 2009 protan, deutan and
+  tritan at full strength in linear sRGB, the simulated colour not rounded to whole levels (the docs sweep's script
+  rounded it: its numbers differ by up to 0.03). The half rule takes the simulations too: a pixel counts when it keeps
+  3:1 plain, and under all three for the colour-blind share. **Verified** (test output below).
+- **Before the fix, drawn** (a numpy port of `draw_plated`, `proto.py`, equal to the ICO's 14 frames within 1
+  level): the bar against the plate above it 3.27 to 3.36 at 30 to 60 px, 3.05 at 36, 2.78 to 2.95 from 64 px up;
+  colour-blind 2.73 at worst, 2.98 already at 36. The light's core against the plate past the old bloom (1.9 light
+  radii) 3.25 to 3.76, colour-blind 3.16 or more. The model the old test used (the plate without the bloom) gave the
+  bar 3.46 to 4.15. **Verified**; the same as the review's own reads.
+- **Why the bloom, and the end picked.** The bloom painted `#FFEA9C` at 0.14 to 0.18 over the plate just above the
+  bar, which sits 1.42 to 1.5 light radii from the light's centre. Painting the bar over the bloom alone gave 2.85 at
+  64 px. Keeping the bloom's 0.44 at the light's edge and squeezing its tail to end at E radii: E 1.75 bar 2.96, 1.7
+  3.00, 1.65 3.05 (colour-blind 2.98), 1.6 3.12 (3.05), 1.5 3.27. Scaling the whole bloom to 1.6 changed the icon
+  more (mean 4.3 levels, max 25) than squeezing the tail (mean 3.0, max 17). Picked: stops in light radii (0, 0.8),
+  (1.0, 0.44), (1.28, 0.144), (1.6, 0). Against round 2's approved frames the lit frames now differ by 3.5 to 5.0
+  levels of 255 on average (2 to 3 before). **Verified** (port and the Rust test agree).
+- **After the fix, test output** (`app_icon_contrast`, `half_the_icon_keeps_3_to_1_on_start`,
+  `glyph_contrast_on_taskbars`):
+
+  | Pair, as drawn | Plain | Colour-blind | Needs |
+  |---|---|---|---|
+  | Bar on the plate next to it, 16 to 24 px / 30 to 60 / 64 to 256 | 4.34 / 3.46 to 3.74 / 3.12 to 3.25 | 4.19 to 4.20 / 3.36 to 3.63 / 3.05 to 3.17 | 3.0 |
+  | Light's edge on the plate next to it, flat frames 16 to 24 | 3.75 to 3.95 | 3.53 to 3.76 | 3.0 |
+  | Light's core on the plate past the bloom, 30 to 60 / 64 to 256 | 3.50 to 3.60 / 3.11 to 3.15 | 3.39 to 3.48 / 3.03 to 3.08 | 3.0 |
+  | Lit light's edge on the plate next to it (its soft edge) | 1.40 to 2.03 | 1.35 to 1.97 | none |
+  | Half rule at 48 px, light / dark Start | 69% / 91% | 68% / 87% | 50% |
+  | Plate ends on light Start / dark Start | 3.57, 4.56 / 4.12, 3.22 | 3.48, 4.35 / 4.04, 3.11 | 3.0 |
+  | Tray parts on taskbars and hovers (lowest: `#3B7A2A` on `#D8DADC`) | 3.74 | 3.58 | 3.0 |
+
+- **The off slash at 1 px ran through the line.** At 16, 20 and 24 px the slash ended on the line's last pixel with a
+  2 px cut before it, and ran 1 to 2 px left of the light's centre; the screen session saw it at 20 px. Now it runs
+  from the light's top left corner through its centre and stops a stroke above the line (`strike_box`). Idle and off
+  still differ in 28% (16 px), 31% (20) and 35% (24) of their ink, the test asking 25%; off sits 1.0 to 3.2 px lower by
+  ink than the 0.455 target, idle 1.0 to 4.0. **Verified** (tests, text dumps and the look pages).
+- **`art.rs` writes the page's SVGs.** `site/wakeshot.svg` and both lockups come from `Plated::at(256)` and the
+  constants the drawing uses. Every raster file written before and after moving those constants into shared helpers
+  is byte-equal (7 of 7), and the SVGs equal the web card's files but for the header comment and the bloom. In
+  headless Edge at scale 1 the new SVG against the new ICO's 256 frame: over white mean 0.62, max 41; over `#121610`
+  mean 0.46, max 29; alpha mean 0.23, max 52 (the web card's pair: 0.64, 0.47, 0.23); the larger values are the
+  plate's corner pixels, as before. **Verified** (`compare_icon.py`, the web card's script).
+- **Files and sizes after the fix**: `assets/wakeshot.ico` 184,720 bytes, its 256 PNG frame 31,114; the notice PNG
+  unchanged (1,798, flat); `site/favicon.ico` 15,086 (new bytes); `site/social-card.png` 285,193 (re-rendered, a second
+  run byte-equal). Release exes: x64 tray 2,906,624, CLI 700,416; ARM64 tray 2,564,096, CLI 674,816 (each 1,024
+  bytes smaller); all 14 ICO frames byte for byte in all four. A second writer run left all 10 written files
+  byte-equal. **Verified.**
+- **The media check needs no install**: `media/scripts/check-art.mjs` imports `node:url`, `node:path`,
+  `./lib/png.mjs` (`node:zlib`, `node:fs`) and `../src/art/heldLight.ts` (no imports), which Node 26 runs as is. CI
+  job `art-port` runs it on ubuntu-latest with `actions/setup-node@v7` (v7.1.0, 2026-10-08) and Node 26 (26.13.0 LTS
+  in setup-node's manifest); actionlint 1.7.12 found nothing. Read from the files and `gh api`; **not verified** on a
+  CI run.

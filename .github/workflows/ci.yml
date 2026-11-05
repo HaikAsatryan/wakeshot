@@ -132,3 +132,22 @@ jobs:
             echo "::error::wakeshot-core depends on a windows crate"
             exit 1
           fi
+
+  # The media's port of the art (media/src/art/heldLight.ts) draws the README loop and the video. It must draw every
+  # pixel art.rs writes, so an art change that is not ported fails here instead of living on in a GIF.
+  art-port:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The check imports only node: modules and the .ts port, which Node runs as is: no npm install, nothing to cache.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          package-manager-cache: false
+
+      - name: The media port draws what art.rs draws
+        run: node media/scripts/check-art.mjs

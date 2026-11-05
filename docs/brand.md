@@ -46,31 +46,40 @@ Contrast (WCAG 2) and the worst of protan, deutan and tritan simulation (Machado
 
 | Pair | Ratio | Worst colour-blind | Needs |
 |---|---|---|---|
-| Glyph ink white on dark taskbar `#202021` / its hover `#2D2D2E` | 16.28 / 13.76 | same | 3.0 |
-| Glyph ink `#1A1A1A` on light taskbar `#D8DADC` / its hover `#ECEDEE` | 12.42 / 14.85 | 12.38 / 14.84 | 3.0 |
+| Glyph ink white on dark taskbar `#202021` / its hover `#2D2D2E` | 16.28 / 13.76 | 16.27 / 13.75 | 3.0 |
+| Glyph ink `#1A1A1A` on light taskbar `#D8DADC` / its hover `#ECEDEE` | 12.42 / 14.85 | 12.40 / 14.84 | 3.0 |
 | Holding `#B6E05A` on dark taskbar / hover | 10.70 / 9.04 | 10.53 / 8.90 | 3.0 |
-| Holding `#3B7A2A` on light taskbar / hover | 3.74 / 4.48 | 3.60 / 4.31 | 3.0 |
-| Plate ends on light Start `#F3F3F3` | 3.57, 4.56 | 3.47, 4.34 | 3.0 |
-| Plate ends on dark Start `#202020` | 4.12, 3.22 | 4.05, 3.09 | 3.0 |
-| Light's edge on the plate round it, flat frames 16 to 24 px | 3.50 to 3.51 | 3.25 | 3.0 |
-| Lit rim on the plate round it, frames 30 to 256 px | 3.13 to 3.16 | **2.88 to 2.92** (protan) | 3.0 |
-| White bar on the plate round it, every frame | 3.46 to 4.15 | 3.36 to 4.01 | 3.0 |
-| Half rule at 48 px (share of the icon at 3:1), light / dark Start | 63% / 91% | not run | 50% |
+| Holding `#3B7A2A` on light taskbar / hover | 3.74 / 4.48 | 3.58 / 4.28 | 3.0 |
+| Plate ends on light Start `#F3F3F3` | 3.57, 4.56 | 3.48, 4.35 | 3.0 |
+| Plate ends on dark Start `#202020` | 4.12, 3.22 | 4.04, 3.11 | 3.0 |
+| App icon, drawn: the light's edge on the plate next to it, flat frames 16 to 24 px | 3.75 to 3.95 | 3.53 to 3.76 | 3.0 |
+| App icon, drawn: the light's core `#FFFBE8` on the plate just past its bloom, lit frames 30 to 256 px | 3.11 to 3.60 | 3.03 to 3.48 | 3.0 |
+| App icon, drawn: the lit light's edge on the plate next to it (its soft edge; for the record) | 1.40 to 2.03 | 1.35 to 1.97 | none |
+| App icon, drawn: the bar (white to `#FFFBE8`) on the plate next to it, every frame | 3.12 to 4.34 | 3.05 to 4.20 | 3.0 |
+| Half rule at 48 px (share of the icon at 3:1), light / dark Start | 69% / 91% | 68% / 87% | 50% |
 | Page text on page, light / dark | 16.53 / 16.12 | 16.47 / 16.05 | 4.5 |
 | Page link on page, light / dark | 5.86 / 12.02 | 5.58 / 11.79 | 4.5 |
 | Step number `#FFEA9C` on its disc `#33701F` (the page's lowest text pair) | 5.03 | 4.61 | 4.5 |
 | Lockup word on GitHub `#FFFFFF` / `#0D1117` | 17.04 / 16.67 | 17.02 / 16.67 | 4.5 |
 
-The lit rim is counted against the plate without the glow, which is the light's own soft edge (inside it: 2.03 to
-2.58). Under protan simulation it is just under 3:1; the small frames' edge `#FFEA9C` stays over it. Checked by the
-`art.rs` tests `glyph_contrast_on_taskbars`, `app_icon_contrast` and `half_the_icon_keeps_3_to_1_on_start`, by
-`python site/check_page.py --colours site` for the page (every pair, both themes, under the hero's glows too), and by a
-script for the colour-blind column (`docs/research.md`).
+The app icon is measured on its drawn pixels, `app_icon(size)` at every frame: each fully covered pixel of a shape
+against the nearest plain plate pixel one or two steps away, and the half rule over the whole icon. The rule for the
+light: in a lit frame its core keeps 3:1 against the plate just past the bloom, plain and under protan, deutan and
+tritan. The bloom and the glow are the light's own soft edge, so its edge as drawn sits under 3:1 by design; the warm
+rim `#F7DC7F` is a detail of that edge, round 2's look as Haik approved it, and is not counted. A flat frame has no
+bloom, so there the light's edge itself keeps 3:1. The bloom ends 1.6 light radii from the centre, so at the bar's
+top edge it is down to 0.08 or less and the bar keeps 3:1 as drawn at every frame. Checked by the `art.rs` tests
+`glyph_contrast_on_taskbars`, `app_icon_contrast` and `half_the_icon_keeps_3_to_1_on_start`, plain and colour-blind
+(the simulation is not rounded to whole levels, so these numbers differ from a rounded run by up to 0.03); by `python
+site/check_page.py --colours site` for the page (every pair, both themes, under the hero's glows too); and by a script
+for the page's colour-blind column (`docs/research.md`).
 
 ## Tray icon
 
 - **Three states, by shape.** Holding: the filled light over the line. Idle: the same light as an outline, in the
-  same place. Off: the idle outline struck through inside its box, the Windows sign for off. Why three: with two,
+  same place. Off: the idle outline with the light struck through, the Windows sign for off; the slash runs from the
+  light's top left corner through its centre and stops a stroke above the line, so the line stays whole and off is no
+  larger than idle (Windows' own off glyphs keep the slash inside the shape). Why three: with two,
   idle and off look the same, so a user who turned Automatic off and forgot sees nothing wrong, starts a long agent
   run, and the PC sleeps mid-run (Haik, 2026-11-04). Change it when users say the off icon confuses them.
 - **Brand colour only while holding.** The line and the outline are Windows' glyph colour (white on a dark taskbar,
@@ -79,24 +88,25 @@ script for the colour-blind column (`docs/research.md`).
   states still differ by shape, so colour is never the only sign (WCAG 1.4.1); high contrast stays the system's.
 - **Drawn per pixel at the taskbar's size** (16 to 64 px, 100% to 400%): the light half the box, the line 3/4 of it,
   a gap of 1/8, whole-pixel strokes of size / 16. The 1 px rings at 16 and 20 px are drawn by hand, so the ring is as
-  solid as the line. The states differ in 33% to 62% of their ink at 16 to 24 px (the test asks 25%).
+  solid as the line. The states differ in 28% to 58% of their ink at 16 to 24 px (the test asks 25%).
 - **Level with its neighbours.** The filled glyph's ink centre sits at 0.455 of the box, where the next app's icon
-  sits on the taskbar: within 0.5 px at every size. Idle and off sit 0.7 to 4 px lower by ink, because the light
+  sits on the taskbar: within 0.5 px at every size. Idle and off sit 1 to 4 px lower by ink, because the light
   keeps its place in every state.
 
 ## App icon (Windows)
 
 - **Plated.** The lit light over a white bar on a rounded Moss square: the plate inset by size / 24, its corners 3/16
   of its side, the ramp at Microsoft's default 120 degrees. From 30 px up the frames are lit: a glow round the light,
-  a bloom, the warm rim, a shade at the bottom and a soft drop shadow (a 96th of the icon down, blurred by a 64th,
-  30% black). Below 30 px they are flat drawings of the same mark, tuned to whole pixels. Why plated: a light is pale
-  and needs dark round it to glow; without a plate the icon keeps 3:1 on only 24% of its area on light Start, under
-  Microsoft's half rule (round 2's drawing). Why flat when small: blur and shadow turn to mud there (Microsoft's old
-  guide: no shadows at 24 px or below). Change it when a free shape shows well on light Start in a screen test, or
-  when an MSIX package lets us ship light and dark icons.
+  a bloom that fades out by 1.6 light radii (nearly gone where the bar starts), the warm rim, a shade at the bottom
+  and a soft drop shadow (a 96th of the icon down, blurred by a 64th, 30% black). Below 30 px they are flat drawings
+  of the same mark, tuned to whole pixels. Why plated: a light is pale and needs dark round it to glow; without a
+  plate the icon keeps 3:1 on only 24% of its area on light Start, under Microsoft's half rule (round 2's drawing).
+  Why flat when small: blur and shadow turn to mud there (Microsoft's old guide: no shadows at 24 px or below).
+  Change it when a free shape shows well on light Start in a screen test, or when an MSIX package lets us ship light
+  and dark icons.
 - **All 14 of Microsoft's target sizes** in `assets/wakeshot.ico`: 16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96
-  and 256, the 256 frame as PNG (32,229 bytes), the rest 32-bit bitmaps; 185,835 bytes, about 143 KB in each exe, and
-  Setup.exe carries it whole. Why: Windows finds an exact frame at every scale instead of shrinking a larger one.
+  and 256, the 256 frame as PNG (31,114 bytes), the rest 32-bit bitmaps; 184,720 bytes, every frame of it in each exe,
+  and Setup.exe carries it whole. Why: Windows finds an exact frame at every scale instead of shrinking a larger one.
   Change it when exe size matters more: PNG frames from 64 px up, after a Start and Explorer check.
 - **Notice header picture** `assets/wakeshot-notice.png`: the flat drawing at 48 px (1,798 bytes), shipped beside the
   tray exe. Why: the shell shows it at about 16 px, and the lit drawing blurred there. Change it when a screen session
@@ -122,7 +132,7 @@ script for the colour-blind column (`docs/research.md`).
   `-dark.svg` (304 x 80 px) carry the letters as outlines, so any viewer draws them. The README header is the lockup
   in a centred `<h1>`, one `<picture>` with alt "Wakeshot"; the page hero is the same lockup in live text, a row, not
   the icon over the name. Change it when the lockup sits beside other apps' lockups and looks small.
-- **The social card** `site/social-card.png`: 1280 x 640, 285,642 bytes, on `#121610` with the warm light round the
+- **The social card** `site/social-card.png`: 1280 x 640, 285,193 bytes, on `#121610` with the warm light round the
   icon; the lockup and the README's first line, every part at least 108 px from each edge. It is the page's
   `og:image` and the repo's social preview. Why dark: a light left on at night, and it stands out in a white feed.
   Change it when a dark feed shows it as a dark block.
@@ -160,8 +170,7 @@ The rules a Mac version must meet (`docs/research/brand-macos.md` section 5; rou
 | Asset | Made by |
 |---|---|
 | Tray glyphs | `art.rs` `tray_mask` and `colorize`, at run time, at the size the taskbar asks |
-| `assets/wakeshot.ico`, `assets/wakeshot-notice.png`, `site/favicon.ico` (16, 32, 48), the review sheets `docs/research/img/ux/icon-sheet-*.png` and `icon-app.png` | `art.rs`: `cargo test --locked -p wakeshot-windows tray::art::write_art_files -- --ignored`; golden tests hold each file equal to the art |
-| `site/wakeshot.svg`, `site/wakeshot-lockup-light.svg`, `-dark.svg` | ported from `art.rs`'s numbers by `p6-brand-apply-web` (the port scripts are not in the repo) |
-| `site/social-card.png` | `python site/social_card.py`, from `site/social-card.html` |
-| `media/out/icon-loop-*.gif`, the video and its poster | `npm run loop` and `npm run draft` in `media/`, drawn from `media/src/art/heldLight.ts`, an exact port of `art.rs` (`node scripts/check-art.mjs`, 0 pixels differ) |
+| `assets/wakeshot.ico`, `assets/wakeshot-notice.png`, `site/favicon.ico` (16, 32, 48), `site/wakeshot.svg`, `site/wakeshot-lockup-light.svg`, `-dark.svg`, the review sheets `docs/research/img/ux/icon-sheet-*.png` and `icon-app.png` | `art.rs`: `cargo test --locked -p wakeshot-windows tray::art::write_art_files -- --ignored`; golden tests hold each file equal to the art. The SVGs are the 256 px frame as shapes, from the same layout and constants; the lockups add the word's outlines, kept in `art.rs` as fixed path data that changes only with the font |
+| `site/social-card.png` | `python site/social_card.py`, from `site/social-card.html` (which shows the dark lockup): run it again after an art change |
+| `media/out/icon-loop-*.gif`, the video and its poster | `npm run loop` and `npm run draft` in `media/`, drawn from `media/src/art/heldLight.ts`, an exact port of `art.rs`: `node scripts/check-art.mjs` fails on any pixel that differs, and CI runs it (job `art-port`) |
 | `site/fonts/`, `media/public/fonts/` | the designer's repo, `Instrument/instrument-sans` at commit `7fa22308`, unchanged |

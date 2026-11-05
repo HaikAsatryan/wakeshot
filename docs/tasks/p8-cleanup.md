@@ -22,7 +22,9 @@ Pictures:
 
 - `docs/research/img/brand/`: `dir-*.png` (round 1, 23 files), `dir2-*.png` (round 2, 8), `review-*.png` (the brand
   review, 12), `win-*.png` (the Windows report, 3). Keep `apply-*.png` (today's brand) and the screen session's
-  `screen-*.png`.
+  `screen-*.png`, except `screen-taskmgr-processes.png` and `screen-taskmgr-startup.png`: both show the old violet
+  icon from Task Manager's own cache of the install path (`p6-brand-screen-session.md`, finding 1), not today's icon.
+  Retake them after the cache clears (sign out or reboot; not tested which is enough) or remove them.
 - `docs/research/img/ux/`, screen pictures of the old art: `int-exe-icon.png`, `int-first-run-balloon.png`,
   `int-icon-holding.png`, `int-icon-idle.png`, `int-smoke-holding.png`; `menu-screen-dark-main.png`,
   `menu-screen-dark-sub.png`, `menu-screen-light-main.png`, `menu-screen-light-sub.png`; every `notice-*.png` except
@@ -46,7 +48,8 @@ Dated lines inside files that stay:
 - `docs/tasks/p6-media.md`: the Log lines of 2026-11-04 (the old port and font).
 - `docs/tasks/p6-readme.md`: "Round 2" (its item 3, Log and Result name the old art).
 - `docs/phases/05-tray-ux.md`: the `p5-icon-art` row of the card table; the work log lines of 2026-11-04 on the
-  icon pick, the menu glyphs and `p5-haik-check`.
+  icon pick, the menu glyphs and `p5-haik-check`, and the 2026-11-04 12:07 line (the screen slot, "built from an
+  export of f47391d (the Sunrise)").
 - `docs/phases/06-integration.md`: the `p6-int-tray-mode` row; the work log line on its pictures.
 - `docs/phases/06-ship.md`: the work log lines 2026-11-04 14:08 and 2026-11-05 14:20.
 - `docs/plan.md`: the status lines 2026-11-04 14:09 and 2026-11-05 14:20.
@@ -93,5 +96,7 @@ Written when Phase 8 is planned.
 ## Log
 
 - 2026-11-05: card created by `p6-brand-docs-sweep` with the brand history list.
+- 2026-11-05: `p6-brand-apply-art` review fix round (`docs/reviews/p6-brand-apply.md` findings 4 and 5) added the
+  2026-11-04 12:07 work log line of `05-tray-ux.md` and the two Task Manager captures.
 
 ## Result

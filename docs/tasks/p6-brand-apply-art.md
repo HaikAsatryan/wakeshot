@@ -1,6 +1,7 @@
 # Apply the held light in Moss to the Windows app: tray glyphs, app icon, notice icon
 
-Phase: 6 (brand apply). Status: done. Needs Haik: no (his 8 brand decisions, 2026-11-05 ~15:00, all defaults).
+Phase: 6 (brand apply). Status: done (review fixes too, `docs/reviews/p6-brand-apply.md`). Needs Haik: no (his 8
+brand decisions, 2026-11-05 ~15:00, all defaults).
 Agent: `wakeshot-worker`. Size: about 200K tokens. Written by the orchestrator of Haik's brand session, 2026-11-05.
 Runs after: Haik's brand decisions (`docs/phases/06-ship.md` work log, 2026-11-05 ~15:00).
 Parallel with: Part A of `p6-brand-apply-web` and `p6-brand-apply-media` (no Rust, no cargo). Nothing else that
@@ -135,6 +136,16 @@ under "Decisions for Haik's review" in the Result.
   shows the installer's icon.
 - I ran `cargo fmt -p wakeshot-windows` once before switching to `rustfmt` on my own files. If another file of that
   crate was not formatted, it is now; `cargo fmt --all --check` passes. Not checked with git (workers do not run it).
+- Review fix round (2026-11-05):
+  - `docs/tasks/p6-pages.md` item 2 (lines 195 to 197) says to port `site/wakeshot.svg` and the lockups by hand
+    ("its port scripts are not in the repo"). Stale now: `write_art_files` writes all three and golden tests hold
+    them; after an art change only `python site/social_card.py` stays a hand step. For `p6-pages` or the orchestrator.
+  - `media/README.md` line 62 ("0 of 9,458,740 pixels differ") and `docs/brand.md`'s media row are true again only
+    after the media worker ports the two changes in the Log (bloom, strike box); `check-art.mjs` fails until then, and
+    so will the new CI job `art-port`. The media's pictures of the three icon states (`p6-media`) show the new off
+    glyph only after that port.
+  - Whether `actions/setup-node@v7` with Node 26 and the `.ts` import work on the CI runner: not verified (no CI run
+    from a worker).
 
 ## Log
 
@@ -169,6 +180,83 @@ under "Decisions for Haik's review" in the Result.
   no art (text and Segoe glyphs only), so not regenerated.
 - 2026-11-05: every acceptance check passed on the final code (table in Result); writer run twice, byte-equal; exes
   checked for all 14 frames; `docs/research.md` section added. Build folder deleted. Status done.
+- 2026-11-05: review fix round started (`docs/reviews/p6-brand-apply.md` findings 1, 2, 3, 5, 7; the orchestrator's
+  brief). Build folder `<scratchpad>\p6-brand-art-fixes\target`. The orchestrator added one item: the 20 px off
+  glyph, whose slash the screen session saw cutting through the line.
+- 2026-11-05: finding 1, measured. A numpy port of `draw_plated` (scratch `p6-brand-art-fixes\proto.py`) equals the
+  ICO's 14 frames to 1 level. Drawn pairs (every fully covered bar pixel against the first clean plate pixel 1 or 2
+  steps away): bar 3.27 to 3.36 at 30 to 60 px but 3.05 at 36 and 2.78 to 2.95 from 64 up; under the simulations 2.73
+  at worst, and 2.98 already at 36. Light's core against the plate past the bloom (1.9 r): 3.25 to 3.76, simulations
+  3.16 or more. Matches the review. Painting the bar over the bloom alone gives 2.85 at 64: not enough.
+- 2026-11-05: finding 1, the fix tried. The bloom's tail squeezed so it ends at E r instead of 1.9 r, its value at the
+  light's edge (0.44) kept: E 1.75 gives bar 2.96, 1.7 3.00, 1.65 3.05 (simulations 2.98), 1.6 3.12 (simulations
+  3.05), 1.5 3.27; the core past the shorter bloom stays 3.12 / 3.04 at 1.6. Scaling the whole bloom to 1.6 r changes
+  more (mean 4.3 levels, max 25) than squeezing the tail (mean 3.0, max 17). Picked stops in light radii (0, 0.8),
+  (1.0, 0.44), (1.28, 0.144), (1.6, 0): mean difference to today 2.2 to 3.0 levels per frame, max 17; half rule at 48
+  px 69% / 91% (was 63% / 91%). Looked at 64 px x5 and 256 px x1 on both Starts beside today: the halo a little
+  tighter, the bar cleaner; same look.
+- 2026-11-05: finding 1 in `art.rs`: `BLOOM_END` 1.6 and the new stops; `app_icon_contrast` now measures the pixels
+  of `app_icon(size)` (bar edge pairs; flat frames the light's edge pairs; lit frames the core against the 1 px ring
+  just past the bloom), plain and under Machado protan, deutan and tritan; the glyph test and the half rule take the
+  simulations too. `plate_colour`'s `glow` switch and `round_the_clock` are gone (no caller left). Test output: bar
+  3.12 to 4.34 (colour-blind 3.05 to 4.20), core past the bloom 3.11 to 3.60 (3.03 to 3.48), flat light edge 3.75
+  to 3.95 (3.53 to 3.76), lit light edge as drawn 1.40 to 2.03 (record only), half rule 69% / 91% (colour-blind 68% /
+  87%).
+- 2026-11-05: the 20 px off glyph. Text dumps of the sheet: 16, 20 and 24 px all end the slash on the line's last
+  pixel, with a 2 px cut before it, so the line reads as broken with a stray end pixel; 20 px shows it most (3 rows
+  between light and line). The slash also ran 1 to 2 px left of the light's centre. A senior icon designer fixes
+  this. Tried in a Python port (scratch `offglyph.py`): "above" (from the light's top left corner through its centre
+  to a stroke above the line) and "even" (the same, overshooting both ends; fails
+  `the_slash_stays_inside_the_idle_glyph` since it rises above the light). Picked "above": line whole, slash centred, glyph no larger than idle. States
+  differ idle/off 28% at 16 px (was 43%), 31% at 20 (33%), 35% at 24 (48%); minimum 25%. New test
+  `the_slash_leaves_the_line_whole`.
+- 2026-11-05: finding 2, the art side. `art.rs` writes `site/wakeshot.svg` and both lockups (`svg_icon_parts`,
+  `app_icon_svg`, `lockup_svg`, `site_svgs`), a port of the web card's `gen_icon.py` and `gen_lockup.py` that reads
+  `Plated::at(256)` and the same constants the drawing uses: `glow()`, `focus()`, `shadow_drop()`, `shadow_blur()`,
+  `bar_corner()` and the consts `SHADE_FROM`, `SHADE`, `LIT_RAMP`, `BLOOM`, now shared by the drawing and the SVG. The
+  word's outlines are fixed path data from today's lockups (`WORDMARK`, ink right 998.47), with an assert that the
+  256 plate is still margin 11, side 234. The deviation of the SVG blur is now the exact one of the box passes,
+  sqrt(passes x (w^2 - 1) / 12) (`gen_icon.py` doubled it for small sizes; only 256 is written, where both give
+  4.472). Golden test `site_svgs_match_the_art`. Checks: every raster file written before the refactor (bloom and
+  slash only) and after it byte-equal (7 of 7); the three SVGs equal today's but for the header comment and the
+  bloom (r 76.8, stops 0.625 and 0.8). Headless Edge (scratch `compare_icon.py`, the web card's) against the new 256
+  frame: over white mean 0.62, max 41; over `#121610` mean 0.46, max 29; alpha mean 0.23, max 52 (today's pair: 0.64,
+  0.47, 0.23); the larger values are the plate's corner pixels, as before.
+- 2026-11-05: art written into the repo: `assets/wakeshot.ico` 184,720 bytes (256 frame 31,114), notice PNG
+  1,798 (unchanged bytes), `site/favicon.ico` 15,086 (new bytes), the three SVGs, the four sheets. Art and notify
+  tests: 47 passed. Slip: I ran one read-only `git show HEAD:site/favicon.ico` to compare a hash; nothing changed.
+- 2026-11-05: looked again. A temporary test wrote the look frames (removed later); the earlier worker's
+  `look.py`, `compare.py` and `shoot.ps1` (copied to my scratch) rebuilt the five `apply-*.png` pages, headless Edge
+  at scale 1. Old and new frames compared: only the lit app icon frames (30 px up) and the off glyphs changed; the
+  other 120 look frames are byte-equal. Mean difference to round 2's approved frames: lit frames 3.5 to 5.0 levels
+  (2 to 3 before), 16 to 24 px unchanged. Looked at all five at 100% and enlarged, and at a new before/after sheet
+  (`apply-fixes.png`): the halo a little tighter, the bar cleaner, the light still glows; the off glyph reads as a
+  struck light over a whole line beside Windows' glyphs. Two captions updated (tray detail, compare). Replaced
+  `apply-tray.png`, `apply-tray-detail.png`, `apply-icon.png`, `apply-compare.png`, `apply-notice.png`; added
+  `apply-fixes.png`.
+- 2026-11-05: `site/social-card.png` re-rendered with `python site/social_card.py`: 285,193 bytes (was 285,642); a
+  second run gave the same SHA-256 (`1c166fd6...`). Looked at it: right.
+- 2026-11-05: finding 2, the media side. `check-art.mjs` imports `node:url`, `node:path`, `./lib/png.mjs` (only
+  `node:zlib`, `node:fs`) and `../src/art/heldLight.ts` (no imports): no `npm ci`. New CI job `art-port` on
+  ubuntu-latest: checkout, `actions/setup-node@v7` (latest release v7.1.0, 2026-10-08, read with `gh api`) with Node
+  26 (26.13.0 LTS is in setup-node's manifest; `media/README.md` asks Node 26) and `package-manager-cache: false`,
+  then `node media/scripts/check-art.mjs`. Runs in about 2 s here. actionlint 1.7.12 (the copy in session
+  `ca4fed46...` scratch; its zip matches the release checksum list and the exe equals the zip's): 0 findings, without
+  shellcheck. The check fails now, as expected: app icon 30 to 256 px differ (bloom) and the off glyphs.
+  **For the media port** (`media/src/art/heldLight.ts`), two changes in `art.rs`, both exact f32 as before:
+  1. `bloom`: `t = distance / r` (was `distance / (1.9 r)`), then `stops(BLOOM, t)` with
+     `BLOOM = [(0.0, 0.8), (1.0, 0.44), (1.28, 0.144), (1.6, 0.0)]` (`BLOOM_END` 1.6).
+  2. `strike_box(h, size)`: `left = (size - d) / 2` (integer), `bottom = line_y - t`, box `(left, top, left + (bottom
+     - top), bottom)`; used by `struck` (2 px strokes up) and `strike_pixels` (1 px) as before.
+  Nothing else changes a pixel: `plate_colour` lost its `glow` switch (always on), and the shade and the light's ramp
+  now read named constants whose f32 sums equal the old literals (`1.0 - 0.55` is `0.45`, `0.86 - 0.5` is `0.36`;
+  the rim keeps `/ 0.14` written out, since `1.0 - 0.86` is not `0.14` in f32). The SVG side needs nothing from media.
+- 2026-11-05: finding 5 (`p8-cleanup.md`: the 12:07 work log line and the two Task Manager captures) and the docs:
+  `docs/brand.md` (contrast rows from the test output, the light's rule, off glyph, bloom, sizes, asset table),
+  `docs/research.md` (my section's rows corrected with a note, the web and colour-blind sections pointed at the new
+  section "Brand apply review fixes", social card bytes). Temporary look test removed; module doc names the SVGs.
+- 2026-11-05: final checks all pass (table in Result); writer run twice, 10 files byte-equal; check_page 0 errors.
+  Build folder deleted. Status done.
 
 ## Result
 
@@ -249,3 +337,74 @@ Decisions for Haik's review (my calls as designer; each with its trigger):
 
 Open items: the media and web ports (Part B of their cards; see Found outside scope); a screen session to see the
 tray, Start, the installer and the notice header live; Haik's 2 to 3 person check at 16 px.
+
+### Review fixes (2026-11-05)
+
+Review `docs/reviews/p6-brand-apply.md`; the orchestrator's brief: findings 1, 3, 7, 2 (art and media sides), 5, the
+`brand.md` rows, and the 20 px off glyph.
+
+- **Finding 1 (major), fixed.** `app_icon_contrast` measures the pixels of `app_icon(size)`: the bar's and the flat
+  light's edges as pairs of a fully covered pixel and the nearest plain plate pixel, the lit light's core against the
+  ring just past the bloom; plain and under protan, deutan and tritan (Machado 2009). The bar was 2.78 to 2.95 as drawn
+  from 64 px up: the bloom's tail now ends at 1.6 light radii instead of 1.9 (stops (0, 0.8), (1.0, 0.44), (1.28,
+  0.144), (1.6, 0)), the least change that keeps 3:1 with the simulations (1.65 gave 2.98). Half rule re-run: 69% /
+  91%, colour-blind 68% / 87%.
+- **Finding 3, as decided** (orchestrator, under Haik's "However you want"): the rim stays `#F7DC7F`; the rule is the
+  light's core against the plate past the bloom, 3:1 plain and colour-blind, in the test, `docs/brand.md` and
+  `docs/research.md`, with the drawn edge (1.40 to 2.03) as information.
+- **Finding 7, fixed**: the rim comment says round 2's `#F7DC7F`, no derivation.
+- **Finding 2, art side, fixed**: `art.rs` writes `site/wakeshot.svg` and both lockups from `Plated::at(256)` and the
+  drawing's own constants (now shared helpers); the word is fixed path data with an assert on the plate it was set
+  for; golden test `site_svgs_match_the_art`. The new SVG against the new ICO in headless Edge: mean 0.62 over white,
+  as the old pair (0.64). `site/social-card.png` re-rendered, byte-stable.
+- **Finding 2, media side, done on our side**: CI job `art-port` (ubuntu, setup-node v7, Node 26) runs
+  `node media/scripts/check-art.mjs`, no npm install needed; actionlint 0 findings. It fails until the media worker
+  ports the bloom and the strike box (exact changes in the Log, 2026-11-05 "finding 2, the media side").
+- **Finding 5, fixed**: `docs/tasks/p8-cleanup.md` lists the 12:07 work log line and both Task Manager captures.
+- **The 20 px off glyph, fixed**: the slash ended on the line's last pixel at 16, 20 and 24 px (most visible at 20)
+  and ran left of the light's centre. It now runs from the light's top left corner through its centre and stops a
+  stroke above the line; new test `the_slash_leaves_the_line_whole`.
+- **`docs/brand.md`**: the contrast rows (drawn numbers, colour-blind column from the tests), the light's rule, the off
+  glyph, the bloom, ICO and social card sizes, and the asset table (SVGs written by `art.rs`, CI check for media).
+
+Files: `crates/wakeshot-windows/src/tray/art.rs`; `assets/wakeshot.ico` (184,720 bytes), `site/favicon.ico`,
+`site/wakeshot.svg`, `site/wakeshot-lockup-light.svg`, `-dark.svg`, `site/social-card.png` (285,193);
+`docs/research/img/ux/icon-sheet-*.png`, `icon-app.png`; `docs/research/img/brand/apply-tray.png`,
+`apply-tray-detail.png`, `apply-icon.png`, `apply-compare.png`, `apply-notice.png`, new `apply-fixes.png` (before and
+after); `.github/workflows/ci.yml`; `docs/brand.md`; `docs/research.md` (rows corrected, new section "Brand apply
+review fixes"); `docs/tasks/p8-cleanup.md`. `notify.rs`, `icon.rs` and `assets/wakeshot-notice.png` unchanged.
+
+| Check | Outcome |
+|---|---|
+| `cargo fmt --all --check` | pass |
+| clippy x64, with and without `--all-targets`, `-D warnings` | pass, pass |
+| clippy ARM64 (Llvm folder on PATH), with and without `--all-targets` | pass, pass |
+| `cargo test --workspace --locked` | pass (wakeshot-windows lib 611 passed, 23 ignored; every crate 0 failed) |
+| release build x64, ARM64 | pass, pass; tray 2,906,624 / 2,564,096, CLI 700,416 / 674,816 bytes; 14 of 14 ICO frames in all four exes |
+| `python site/check_page.py site` | 0 errors, 8 waits |
+| writer run twice | all 10 written files byte-equal |
+| refactor neutral | every raster file byte-equal before and after sharing the constants (7 of 7) |
+| actionlint 1.7.12 on `ci.yml` | 0 findings (no shellcheck) |
+| `social_card.py` twice | same SHA-256 |
+| `node media/scripts/check-art.mjs` | fails as expected until the media port (lit frames and off glyphs) |
+
+Decisions for Haik's review:
+
+1. **Bloom ends at 1.6 light radii** (was 1.9) so the bar keeps 3:1 as drawn. The lit frames now differ from round 2's
+   approved ones by 3.5 to 5 levels of 255 on average (2 to 3 before); the halo is a little tighter. Change it when a
+   screen look finds the light glowing less than approved: then the other way is a bar rule that counts the bloom.
+2. **The off slash strikes the light only** and stops above the line, through the light's centre. Round 2's approved
+   slash crossed the whole glyph. Idle and off now differ in 28% of their ink at 16 px (43% before; the test asks
+   25%). Change it when Haik's 2 to 3 person check at 16 px mixes up idle and off.
+3. **The colour-blind rule is in the tests** for every tray and app icon pair and the half rule, stricter than
+   Microsoft's plain half rule. Change it when a colour-blind check needs its own tolerance.
+4. **The SVG writer is test code** (like the ICO writer's sheets) and the word's outlines are fixed data, made again
+   with HarfBuzz and fontTools only when the font, the lockup ratios or the 256 plate change (an assert catches the
+   plate). Change it when the lockup needs kerning work: then move the web card's scripts into the repo.
+5. **CI `art-port` runs on ubuntu-latest with Node 26**, apart from the Rust jobs, about 2 s of work. Change it when the
+   media check needs npm packages (then `npm ci` in `media/`).
+
+Pictures to look at: `docs/research/img/brand/apply-fixes.png` (before and after: 256, 64, 48 px icons on both
+Starts; off at 16, 20, 24 px), then `apply-tray.png` and `apply-compare.png`.
+
+Open items: the media port of the two changes (next worker), then `check-art` green in CI; the `p6-pages` line above.
