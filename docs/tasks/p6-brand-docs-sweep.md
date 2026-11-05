@@ -1,6 +1,6 @@
 # Rewrite the brand doc, fix every doc of the old brand, delete what is left of it
 
-Phase: 6 (brand apply). Status: ready. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 120K tokens. Written by
+Phase: 6 (brand apply). Status: in progress. Needs Haik: no. Agent: `wakeshot-worker`. Size: about 120K tokens. Written by
 the orchestrator of Haik's brand session, 2026-11-05.
 Runs after: `p6-brand-apply-art`, `p6-brand-apply-web`, `p6-brand-apply-media` (their numbers and files are final).
 Parallel with: `p6-brand-screen-session` Part A (it writes only its own card). No cargo builds unless a doc comment in
