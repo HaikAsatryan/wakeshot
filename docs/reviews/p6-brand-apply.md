@@ -167,3 +167,85 @@ What I verified, so it need not be redone:
   when it is done". `README.md` line 8 gives "Wakeshot's tray icon: the light comes on while an agent works and goes
   off when it is done", and line 69 of the page says "Alt text as in the README". The same line 40 asks for "a still
   PNG for `prefers-reduced-motion`", which `media/` does not make yet.
+
+## Fix check (2026-11-05)
+
+Scope: the two majors only, against the "Review fixes" parts of `docs/tasks/p6-brand-apply-art.md` and
+`p6-brand-apply-media.md`. Scripts: my scratch folder `p6-brand-recheck\pix2.py` (new: the bar's rows and the light's
+core on the real ICO pixels), and `p6-brand-review\pix.py` and `half.py` unchanged. Tests in my own build folder,
+deleted after.
+
+### Finding 1: Fixed
+
+- `app_icon_contrast` (`art.rs` lines 2292 to 2375) now reads the pixels of `app_icon(size)`: every fully covered
+  pixel of the bar and of the light against the nearest plain plate pixel, so the bloom and the glow count as drawn;
+  in lit frames the light's core (its centre pixel) against the 1 px ring of plain plate just past the bloom's end.
+  Plain and the worst of protan, deutan and tritan. A later bloom or glow change now moves these numbers and can fail
+  the test (follows from the method; I did not run a changed bloom).
+- The bloom ends at 1.6 light radii (`art.rs` lines 550 to 554). The SVG's bloom has the same stops (r 76.8; offsets
+  0, 0.625, 0.8, 1; alpha 0.8, 0.44, 0.144, 0).
+- `cargo test --locked -p wakeshot-windows --lib -- tray::art`: 27 passed, 1 ignored (the writer), among them
+  `app_icon_contrast`, `half_the_icon_keeps_3_to_1_on_start` and the golden tests.
+- My reads of the new `assets/wakeshot.ico` (184,720 bytes), plain / worst colour-blind (protan is the worst
+  everywhere):
+
+  | Frame | Bar's top row against the row above | Core against the plate past 1.6 r | Edge, ring means (record) |
+  |---|---|---|---|
+  | 30 | 3.64 / 3.53 | 3.55 / 3.44 | 2.18 |
+  | 32 | 3.58 / 3.48 | 3.50 / 3.39 | 2.15 |
+  | 36 | 3.46 / 3.36 | 3.60 / 3.48 | 2.09 |
+  | 40 | 3.74 / 3.63 | 3.60 / 3.48 | 2.02 |
+  | 48 | 3.50 / 3.40 | 3.54 / 3.43 | 1.95 |
+  | 60 | 3.55 / 3.45 | 3.54 / 3.43 | 1.89 |
+  | 64 | 3.12 / 3.05 | 3.12 / 3.04 | 1.66 |
+  | 72 | 3.16 / 3.09 | 3.15 / 3.08 | 1.62 |
+  | 80 | 3.25 / 3.17 | 3.11 / 3.03 | 1.60 |
+  | 96 | 3.21 / 3.13 | 3.11 / 3.04 | 1.55 |
+  | 256 | 3.24 / 3.17 | 3.11 / 3.04 | 1.44 |
+
+  Before the fix the bar's top was 2.78 to 2.95 from 64 px up. Now every lit frame keeps 3:1 plain and colour-blind.
+  The bar and core numbers equal the test's printed ones at every frame, to 0.01. The bar's bottom row is 4.01 or
+  more. My edge method (ring means) differs from the test's pixel pairs, so 1.44 to 2.18 against its 1.40 to 2.03 is
+  expected; both say the edge is soft.
+- Half rule at 48 px (`half.py`): 69% / 91% plain, 68% / 87% colour-blind. Every lit frame on light Start keeps 56% or
+  more colour-blind.
+- `docs/brand.md` lines 53 to 59 equal the drawn numbers: flat edge 3.75 to 3.95 / 3.53 to 3.76; core 3.11 to 3.60 /
+  3.03 to 3.48; lit edge 1.40 to 2.03 / 1.35 to 1.97; bar 3.12 to 4.34 / 3.05 to 4.20; half rule 69% / 91% and 68% /
+  87%. Lines 107 to 108 (184,720 bytes, 256 frame 31,114) equal the file and the test. `docs/research.md` lines 4846
+  to 4850 and 5049 to 5057 equal them too. The old section at line 4962 is marked superseded at 4966.
+- The rim rule is now the core past the bloom, as my finding 3 recommended; the orchestrator's call, not judged again.
+- Margins are thin (bar 3.05 at 64 px, core 3.03 at 80 px, colour-blind). Not a fault: a warmer glow or longer bloom
+  later fails the test, which is the point.
+- Look: `docs/research/img/brand/apply-fixes.png`, before and after at 256, 64 and 48 px on both Starts. The tighter
+  halo is hard to tell from the old one. No new problem seen.
+
+### Finding 2: Fixed, one gap left (minor, not new)
+
+- `art.rs` writes `site/wakeshot.svg` and both lockups (`svg_icon_parts`, `app_icon_svg`, `lockup_svg`, lines 1596 to
+  1857) from `Plated::at(256)` and the drawing's own constants. `site_svgs_match_the_art` (line 3014) holds the three
+  files byte-equal, and passed. `.gitattributes` gives every text file LF on checkout, so the string compare also
+  holds on the Windows runners. The lockups' icon part equals `site/wakeshot.svg` line for line; the word is fixed
+  path data with an assert on the plate it was set for (margin 11, side 234).
+- `site/social-card.png`: I rendered it again from a copy of `site/` with `social_card.py`. Same SHA-256 as the
+  shipped file, so it shows the current dark lockup. It stays a hand step after an art change, and `brand.md` line
+  180 says so (GitHub's social preview is uploaded by hand anyway).
+- `node media/scripts/check-art.mjs` (Node 26.13.0): 9,458,740 pixels, 0 differ, exit 0.
+- CI job `art-port` (`.github/workflows/ci.yml` lines 136 to 153): ubuntu-latest, `actions/setup-node@v7` (v7.1.0 is
+  out, 2026-10-08, by `gh api`), Node 26, no npm install, runs the check on every push and pull request. The check
+  imports only `node:` modules, `lib/png.mjs` (`node:zlib`, `node:fs`) and `heldLight.ts` (no imports). Not verified
+  on a real CI run.
+- Gap: the review sheets `docs/research/img/ux/icon-sheet-*.png` and `icon-app.png` have no golden test (the only
+  reader is `check-art.mjs`), yet `brand.md` line 179 says "golden tests hold each file equal to the art". The sheets
+  are the only path by which the tray glyphs reach `check-art`. Failure: a change to `tray_mask` or `colorize`
+  without a writer run passes `cargo test` (the ICO does not change) and passes `art-port` (the port equals the old
+  sheets), so the README loop GIFs keep the old glyph while CI is green. This round's off slash change was such a
+  change; it was caught only because the worker ran the writer. Fix: a golden test for the three sheets and
+  `icon-app.png`, as for the ICO; at least correct line 179.
+- Note only: `check-video` holds the loop GIFs to the port but is not in CI, so a port change without a GIF re-render
+  also stays green. My finding did not ask for it; this round's GIFs did not change.
+
+### New problems from the fixes
+
+None a user would see. Note: the art card's first Result table (`p6-brand-apply-art.md` lines 312 to 314) keeps the
+old numbers (rim 3.13 to 3.51, bar 3.46 to 4.15, half rule 63%); its "Review fixes" part supersedes them. History, no
+action.
