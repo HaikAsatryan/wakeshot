@@ -264,6 +264,8 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   name and icon), docs pass round 7. Whole-workspace checks on x64 green before the push. Orchestrator and worker
   decisions for Haik's review: the `06-integration.md` work log, 2026-11-05 lines, and each card's decisions. CI
   green on 5f1b1db (all three jobs); release dry run 41931334598 built, packed and smoke-tested both CPUs.
+- 2026-11-05 (orchestrator, after a /clear): no agent runs; the list below went to Haik as numbered asks with
+  defaults (the 06-integration work log, last 2026-11-05 line). Waits for his answers and the screen session.
 - Next (orchestrator), all with Haik: his read of the 2026-11-05 decisions; `p6-notice-app-icon` Part B (about 5 min
   at the screen); `p6-int-haik-checks` findings 4 (delete the stale Settings icon key), 9 (rerun block 6 step 3,
   about 10 min) and 10 (`%TEMP%` test leftovers); the optional floor re-check (`p2-6-floor-grace` Found outside

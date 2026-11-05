@@ -449,3 +449,11 @@ integration plus Haik's session), and by Haik's time. Computed by a script over 
 - 2026-11-05 ~05:10 (orchestrator): docs pass round 7 done (5f1b1db). Pushed 5f1b1db: CI green on all three jobs;
   release dry run 41931334598 built, packed (with the notice PNG) and smoke-tested both CPUs. Nothing runs now; every
   card left needs Haik.
+- 2026-11-05 (orchestrator, after a /clear): no `git pull --rebase` (the tree has an uncommitted 09:52 line in
+  `06-ship.md`, velopack #1146; asked Haik whose). Checked: clang still missing (vswhere finds none), no tray runs, no
+  install folder. `06-ship.md` table row of `p6-real-install-guard` set to done (it said later). Orchestrator plan,
+  for Haik's yes: one screen session worker does `p6-notice-app-icon` Part B, plus finding 4 (delete the stale
+  Settings icon key, then Haik looks at Settings), finding 10 (`%TEMP%` leftovers), finding 9 (block 6 step 3 rerun)
+  and the floor re-check (`p2-6-floor-grace` Found outside scope 3); after it, one small card for the two known
+  minors (two sounds overlap; the smoke test skips the notice key) and the ARM64 rerun of `p6-velopack-dependency`
+  once clang is in.

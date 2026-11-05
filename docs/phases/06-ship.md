@@ -167,7 +167,7 @@ those one at a time across all tracks.
 | `p6-tray-size` | no (stop 2, a dependency change, waits for the orchestrator) | `p6-int-update-wiring` | done (07:01: release tray 3.95 to 2.71 MB, CLI 0.67 to 0.56 MB) |
 | `p6-uninstall-startup-approval` | no (orchestrator decision for his review) | `p6-startup-switch-check` | done (06:45: 1287 workspace tests; `e2e.ps1` 88 of 88) |
 | `p6-small-fixes` | no | `p6-tray-size` | done (07:08) |
-| `p6-real-install-guard` | no | `p2-6-runonce-keep` | later (18:43): before Haik installs the first release; real-settings tests refuse to run beside an installed Wakeshot |
+| `p6-real-install-guard` | no | `p2-6-runonce-keep` | done (2026-11-05 ~03:00, 03415b6; promoted from later): real-settings tests refuse to run beside an installed Wakeshot; worker decisions for Haik's review in the card |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
 dependency 110K, pack and release 110K, install e2e 130K, winget 60K, README 70K, Pages 60K. About 880K in all.
@@ -439,3 +439,8 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   (Wakeshot's chimes from `chime.rs`), `README.md`, `CREDITS.md`, `measure-speed.ps1` (not run). 10 worker decisions
   for Haik's review. Part B: speed numbers (from a plain PowerShell window, no busy Claude Code session), final
   captures at 150% and 125%, a real Claude Code session, Haik's look.
+- 2026-11-05 09:52: velopack/velopack#1146 closed by Haik as not planned, after the maintainer's answer (native TLS
+  caused them problems before, all velopack libraries should behave the same, native TLS means OpenSSL on Linux).
+  The update check stays rustls with `ring` and ureq's bundled roots. Change it when a user reports a failed update
+  behind a company network: velopack's `UpdateSource` trait is public (1.2.161 and 1.3.39), so our own source on
+  WinHTTP would trust the Windows store and use the system proxy (not built, not tested).
