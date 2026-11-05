@@ -2,10 +2,11 @@
 
 Fails when: an HTML file does not parse into balanced tags; a local link, image or CSS url() does not resolve inside
 the folder; a src or href leaves https://github.com/HaikAsatryan/wakeshot and the page itself; the page has a script,
-an event handler attribute or an embedded frame; any text file holds an em dash or an emoji. With --final it also
-fails while a spot still waits for another card (an HTML comment that starts with "waits for").
+an event handler attribute or an embedded frame; any text file holds an em dash or an emoji; a colour pair of
+style.css drops below WCAG 2.2 AA in the light or the dark theme (text 4.5, focus ring and button edge 3.0). With
+--final it also fails while a spot still waits for another card (an HTML comment that starts with "waits for").
 
-Run: python site/check_page.py [--final] site
+Run: python site/check_page.py [--final] [--colours] site (--colours prints every contrast ratio)
 Python 3.8 or later, standard library only.
 """
 
@@ -33,6 +34,21 @@ EMOJI_RANGES = [
 ]
 EMOJI = re.compile("[" + "".join(f"{chr(a)}-{chr(b)}" for a, b in EMOJI_RANGES) + "]")
 WAITS = re.compile(r"^\s*waits for\b", re.IGNORECASE)
+# A font's licence travels beside it; no page links it.
+UNLINKED_OK = {"OFL.txt"}
+
+# The colour pairs style.css must keep, by custom property name: (front, back, least WCAG ratio). "hero" is the page
+# under the hero's two see-through glows, bottom layer first: a pair must hold on the bare page, under each glow alone
+# and under both at full strength, because the hero's text sits on every mix between them.
+SURFACES = {"hero": ("bg", "glow", "glow-core")}
+PAIRS = [
+    ("text", "bg", 4.5), ("text", "panel", 4.5), ("text", "hero", 4.5),
+    ("muted", "bg", 4.5), ("muted", "panel", 4.5), ("muted", "hero", 4.5),
+    ("link", "bg", 4.5), ("link", "panel", 4.5), ("link", "hero", 4.5),
+    ("button-text", "button-bg", 4.5), ("on-step", "step", 4.5),
+    ("button-bg", "bg", 3.0), ("button-bg", "hero", 3.0),
+    ("focus", "bg", 3.0), ("focus", "panel", 3.0), ("focus", "hero", 3.0),
+]
 
 
 class Page(HTMLParser):
@@ -166,6 +182,95 @@ def check_text(path, text):
     return errors
 
 
+def parse_colour(value):
+    """Returns (r, g, b, alpha) with r, g, b in 0..1, or None for a value that is not a plain colour."""
+    value = value.strip().lower()
+    m = re.fullmatch(r"#([0-9a-f]{3}|[0-9a-f]{6})", value)
+    if m:
+        h = m.group(1)
+        if len(h) == 3:
+            h = "".join(c * 2 for c in h)
+        return tuple(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)) + (1.0,)
+    m = re.fullmatch(r"rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)", value)
+    if m:
+        alpha = float(m.group(4)) if m.group(4) is not None else 1.0
+        return tuple(int(m.group(i)) / 255 for i in (1, 2, 3)) + (alpha,)
+    return None
+
+
+def over(top, below):
+    """A see-through colour laid over an opaque one."""
+    a = top[3]
+    return tuple(top[i] * a + below[i] * (1 - a) for i in range(3)) + (1.0,)
+
+
+def luminance(rgb):
+    lin = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in rgb[:3]]
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+
+def ratio(a, b):
+    hi, lo = sorted((luminance(a), luminance(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def custom_properties(block):
+    return dict(re.findall(r"--([\w-]+)\s*:\s*([^;]+);", block))
+
+
+def themes(css):
+    """The custom properties of the light and the dark theme. Dark starts from light: a property the dark block does
+    not set keeps its light value, as in the browser."""
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    light = re.search(r"(?<![\w-]):root\s*\{([^}]*)\}", css)
+    dark = re.search(r"@media\s*\(prefers-color-scheme:\s*dark\)\s*\{\s*:root\s*\{([^}]*)\}", css)
+    base = custom_properties(light.group(1)) if light else {}
+    return {"light": base, "dark": {**base, **(custom_properties(dark.group(1)) if dark else {})}}
+
+
+def surfaces(props, name):
+    """Every opaque colour a back surface can show: the bare one, or for a layered surface each mix of its glows."""
+    layers = SURFACES.get(name, (name,))
+    base = parse_colour(props[layers[0]])
+    if base is None or base[3] != 1.0:
+        raise ValueError(f"--{layers[0]} must be an opaque colour")
+    found = []
+    for mask in range(1 << (len(layers) - 1)):
+        colour = base
+        for i, layer in enumerate(layers[1:]):
+            if mask >> i & 1:
+                top = parse_colour(props[layer])
+                if top is None:
+                    raise ValueError(f"--{layer} is not a plain colour")
+                colour = over(top, colour)
+        found.append(colour)
+    return found
+
+
+def check_colours(rel, css):
+    """Errors for each pair of PAIRS below its least ratio, in either theme, and the table of all ratios."""
+    errors, table = [], []
+    for theme, props in themes(css).items():
+        for front, back, least in PAIRS:
+            names = [front] + list(SURFACES.get(back, (back,)))
+            missing = [n for n in names if n not in props]
+            if missing:
+                errors.append(f"{rel}: {theme} theme has no --{', --'.join(missing)}")
+                continue
+            try:
+                fg = parse_colour(props[front])
+                if fg is None or fg[3] != 1.0:
+                    raise ValueError(f"--{front} must be an opaque colour")
+                worst = min(ratio(fg, bg) for bg in surfaces(props, back))
+            except ValueError as e:
+                errors.append(f"{rel}: {theme} theme: {e}")
+                continue
+            table.append(f"{theme:5} {worst:5.2f} (>= {least}) --{front} on {back}")
+            if worst < least:
+                errors.append(f"{rel}: {theme} theme: --{front} on {back} is {worst:.2f}, below {least}")
+    return errors, table
+
+
 def check_svg(root, path, errors):
     try:
         tree = ET.parse(path)
@@ -193,7 +298,8 @@ def check_svg(root, path, errors):
 
 def main(argv):
     final = "--final" in argv
-    rest = [a for a in argv if a != "--final"]
+    show_colours = "--colours" in argv
+    rest = [a for a in argv if a not in ("--final", "--colours")]
     if len(rest) != 1:
         print(__doc__)
         return 2
@@ -202,7 +308,7 @@ def main(argv):
         print(f"{root}: no index.html")
         return 2
 
-    errors, waits, used = [], [], set()
+    errors, waits, used, ratios = [], [], set(), []
     files = sorted(p for p in root.rglob("*") if p.is_file())
     for path in files:
         rel = path.relative_to(root).as_posix()
@@ -243,6 +349,10 @@ def main(argv):
                     used.add((path.parent / unquote(urlsplit(url).path)).resolve())
             if "prefers-color-scheme: dark" not in text:
                 errors.append(f"{rel}: no prefers-color-scheme: dark block")
+            if ":root" in text:
+                colour_errors, table = check_colours(rel, text)
+                errors += colour_errors
+                ratios += [f"{rel} {row}" for row in table]
         if path.suffix == ".svg":
             check_svg(root, path, errors)
 
@@ -250,8 +360,10 @@ def main(argv):
         errors += [f"still waits: {w}" for w in waits]
 
     unused = [p.relative_to(root).as_posix() for p in files
-              if p not in used and p.name not in ("index.html", Path(__file__).name)]
+              if p not in used and p.name not in ("index.html", Path(__file__).name) and p.name not in UNLINKED_OK]
     print(f"checked {len(files)} files in {root}")
+    for row in ratios if show_colours else []:
+        print(f"contrast: {row}")
     for w in waits if not final else []:
         print(f"waits: {w}")
     for u in unused:

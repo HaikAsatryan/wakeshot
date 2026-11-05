@@ -1,35 +1,45 @@
-/* Colours from docs/brand.md. Gold is a highlight only, never text on a light page. Contrast (WCAG) of every text pair
-   is 6 or more; the numbers are in docs/tasks/p6-pages.md. */
+/* The Moss palette (docs/research/brand-directions-2.md, "Step 2: the colour"): a moss green body and a warm cream
+   light, as on the app icon. check_page.py fails the page when a pair here drops below WCAG AA in either theme. */
 :root {
   color-scheme: light dark;
-  --bg: #ffffff;
-  --text: #1a1a1a;
-  --muted: #55526a;
-  --panel: #f3f3f3;
-  --line: #dddae8;
-  --link: #5b3fd6;
-  --button-bg: #5b3fd6;
+  --bg: #fbfcf7;
+  --text: #1a1d17;
+  --muted: #525c49;
+  --panel: #f0f4e8;
+  --line: #d8e0cc;
+  --link: #33701f;
+  --button-bg: #33701f;
   --button-text: #ffffff;
-  --gold: #ffcc4d;
-  --on-gold: #1a1a1a;
-  --focus: #5b3fd6;
-  --glow: rgba(114, 80, 244, 0.1);
+  --focus: #33701f;
+  --step: #33701f;
+  --on-step: #ffea9c;
+  --glow-core: rgba(255, 234, 156, 0.45);
+  --glow: rgba(98, 140, 43, 0.08);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #14121f;
-    --text: #eceaf4;
-    --muted: #b4afcb;
-    --panel: #1f1c2e;
-    --line: #34304a;
-    --link: #a996ff;
-    --button-bg: #a996ff;
-    --button-text: #14121f;
-    --on-gold: #14121f;
-    --focus: #ffcc4d;
-    --glow: rgba(114, 80, 244, 0.3);
+    --bg: #121610;
+    --text: #eef2e8;
+    --muted: #b3bca8;
+    --panel: #1a2017;
+    --line: #2e3829;
+    --link: #b6e05a;
+    --button-bg: #b6e05a;
+    --button-text: #121610;
+    --focus: #ffea9c;
+    --glow-core: rgba(255, 234, 156, 0.1);
+    --glow: rgba(62, 124, 59, 0.26);
   }
+}
+
+/* The wordmark's face, served from this folder like everything else on the page. SIL OFL 1.1: fonts/OFL.txt. */
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("fonts/InstrumentSans-SemiBold.woff2") format("woff2");
 }
 
 *,
@@ -109,11 +119,14 @@ video {
   height: auto;
 }
 
-/* The sunrise: a soft violet glow over the top of the page, and the icon's horizon under the header. */
+/* The held light: the warm light glows round the icon (its centre is the 4rem padding plus half the 6rem icon), over a
+   faint moss haze along the top. */
 .hero {
   text-align: center;
   padding: 4rem 0 2.5rem;
-  background: radial-gradient(ellipse 60rem 22rem at 50% 0, var(--glow), transparent 70%);
+  background:
+    radial-gradient(circle 15rem at 50% 7rem, var(--glow-core), transparent),
+    radial-gradient(ellipse 60rem 22rem at 50% 0, var(--glow), transparent 70%);
 }
 
 .hero .logo {
@@ -123,7 +136,10 @@ video {
   margin: 0 auto;
 }
 
+/* Only the wordmark takes the brand face; if it does not load, the other headings' system face stands in. */
 .hero h1 {
+  font-family: "Instrument Sans", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "Helvetica Neue",
+    Arial, sans-serif;
   font-size: 2.75rem;
   letter-spacing: -0.01em;
   margin: 0.75rem 0 0.75rem;
@@ -136,16 +152,6 @@ video {
   margin-left: auto;
   margin-right: auto;
   text-wrap: balance;
-}
-
-.hero::after {
-  content: "";
-  display: block;
-  width: 8rem;
-  height: 3px;
-  margin: 2.5rem auto 0;
-  border-radius: 2px;
-  background: var(--gold);
 }
 
 .actions {
@@ -200,7 +206,7 @@ section {
   margin: 0;
 }
 
-/* The steps of a night, numbered on small gold suns. */
+/* The steps of a night: each number is the cream light on a moss disc, a small echo of the icon. */
 .steps {
   list-style: none;
   counter-reset: step;
@@ -222,8 +228,8 @@ section {
   width: 2rem;
   height: 2rem;
   border-radius: 50%;
-  background: var(--gold);
-  color: var(--on-gold);
+  background: var(--step);
+  color: var(--on-step);
   font-weight: 600;
   line-height: 2rem;
   text-align: center;
