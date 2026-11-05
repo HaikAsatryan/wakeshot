@@ -2584,6 +2584,16 @@ screen. Code: `crates/wakeshot-windows/src/tray/menu_paint.rs`.
     ellipsis. The status line of two hold groups fits.
   - The width asked is the width wanted less what Windows adds (above), so the menu is as wide as designed.
   - Sizes are scaled from their epx sums per edge, so rounding never adds up across columns.
+- **Menu text in grey** (2026-11-05, `p6-menu-text-look`). Text and glyphs draw with `CLEARTYPE_QUALITY`, then each
+  pixel a text changed gets one blend by the mean of its three subpixel coverages. Largest R, G, B spread in the
+  light and dark renders: 158 and 147 before, 0 after (stdlib Python over every pixel; tests
+  `text_and_glyphs_draw_grayscale`, `high_contrast_text_has_no_fringes`). Ink of "Open" at 120 dpi (sum of
+  coverage): Explorer's XAML menu 155, our ClearType 152, folded 152, GDI's own grayscale (`ANTIALIASED_QUALITY`) 120,
+  visibly thin, so not used. Width: WinUI's `MenuFlyoutPresenter` sets `MinWidth` 96 and no `MaxWidth`, and
+  `FlyoutBase::UpdateTargetPosition` caps it only at the monitor or window; only the plain `FlyoutPresenter` has
+  `MaxWidth` 456 (`gh api`, microsoft-ui-xaml main: `MenuFlyout_themeresources.xaml` last commit 2026-05-30, its
+  `_perf2026` copy, `FlyoutPresenter_themeresources.xaml`, `FlyoutBase_partial.cpp`, `themes/generic.xaml`). Not
+  verified: what `CLEARTYPE_QUALITY` draws when the user turns font smoothing off.
 
 ## Watch thread checks
 

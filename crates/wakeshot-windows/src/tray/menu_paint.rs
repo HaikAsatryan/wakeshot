@@ -16,8 +16,8 @@ use windows::Win32::Foundation::{
     COLORREF, ERROR_NOT_ENOUGH_MEMORY, ERROR_NOT_FOUND, GetLastError, RECT, SIZE, WIN32_ERROR,
 };
 use windows::Win32::Graphics::Gdi::{
-    BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, CreateCompatibleDC, CreateDIBSection,
-    CreateFontIndirectW, DEFAULT_CHARSET, DEFAULT_QUALITY, DIB_RGB_COLORS, DRAW_TEXT_FORMAT,
+    BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, CLEARTYPE_QUALITY, CreateCompatibleDC,
+    CreateDIBSection, CreateFontIndirectW, DEFAULT_CHARSET, DIB_RGB_COLORS, DRAW_TEXT_FORMAT,
     DT_CALCRECT, DT_CENTER, DT_END_ELLIPSIS, DT_HIDEPREFIX, DT_LEFT, DT_NOCLIP, DT_NOPREFIX,
     DT_SINGLELINE, DT_VCENTER, DeleteDC, DeleteObject, DrawTextW, FW_NORMAL,
     GGI_MARK_NONEXISTING_GLYPHS, GdiFlush, GetGlyphIndicesW, GetTextExtentPoint32W, GetTextFaceW,
@@ -51,8 +51,9 @@ const SEPARATOR_PAD: i32 = 1;
 const SEPARATOR_LINE: i32 = 1;
 const RADIUS: i32 = 4;
 const FONT: i32 = 14;
-/// The widest text an item asks room for: two hold groups fit, more end in an ellipsis. WinUI sets no limit; ours
-/// keeps a long hold reason from stretching the menu across the screen.
+/// The widest text an item asks room for: two hold groups fit, more end in an ellipsis. WinUI sets no limit (its
+/// `MenuFlyoutPresenter` has a minimum width only and stops at the monitor's edge; 456 epx is the plain `Flyout`'s);
+/// ours keeps a long hold reason from stretching the menu across the screen.
 const TEXT_MAX: i32 = 480;
 
 const GLYPH_CHECK: u16 = 0xE73E;
@@ -587,8 +588,11 @@ fn create_font(face: &str, px: i32) -> Result<HFONT, WinError> {
         lfHeight: -px,
         lfWeight: FW_NORMAL.0 as i32,
         lfCharSet: DEFAULT_CHARSET,
-        // Follows the user's font smoothing setting, as Windows' own menus do.
-        lfQuality: DEFAULT_QUALITY,
+        // ClearType whatever the user's smoothing setting, so `draw` gets three coverages per pixel to fold into one
+        // grey and the text weighs the same on every PC; where GDI cannot ("when possible", says LOGFONT), the text
+        // comes grey or plain and the fold leaves it so. GDI's own grayscale (`ANTIALIASED_QUALITY`) drew text about a
+        // fifth lighter than Explorer's (`docs/research.md`, "Menu text in grey").
+        lfQuality: CLEARTYPE_QUALITY,
         ..Default::default()
     };
     for (slot, unit) in lf.lfFaceName.iter_mut().zip(face.encode_utf16()) {
@@ -711,9 +715,8 @@ pub fn paint_item(
             right,
             bottom: layout.line_top + layout.line,
         };
-        let dib = canvas.dc;
         // SAFETY: the canvas DC lives until `canvas` drops.
-        unsafe { SetBkMode(dib, TRANSPARENT) };
+        unsafe { SetBkMode(canvas.dc, TRANSPARENT) };
 
         if let MenuItem::Action {
             command,
@@ -724,7 +727,7 @@ pub fn paint_item(
         {
             let left = layout.mark_left;
             draw(
-                dib,
+                &mut canvas,
                 fonts.marks,
                 &[mark.glyph()],
                 line(left, left + layout.mark),
@@ -737,7 +740,7 @@ pub fn paint_item(
         {
             let left = layout.icon_left;
             draw(
-                dib,
+                &mut canvas,
                 fonts.icons,
                 &[icon],
                 line(left, left + layout.icon),
@@ -753,7 +756,7 @@ pub fn paint_item(
         };
         let wide: Vec<u16> = t.encode_utf16().collect();
         draw(
-            dib,
+            &mut canvas,
             fonts.font_for(&visible(t)),
             &wide,
             line(layout.text_left, right.max(layout.text_left)),
@@ -763,7 +766,7 @@ pub fn paint_item(
         if submenu {
             let right = w - layout.right;
             draw(
-                dib,
+                &mut canvas,
                 fonts.marks,
                 &[GLYPH_CHEVRON],
                 line(right - layout.chevron, right),
@@ -848,20 +851,61 @@ fn coverage(px: i32, py: i32, r: (i32, i32, i32, i32), radius: f32) -> f32 {
     (radius - d + 0.5).clamp(0.0, 1.0)
 }
 
-fn draw(dc: HDC, font: HFONT, text: &[u16], mut r: RECT, colour: Rgb, format: DRAW_TEXT_FORMAT) {
+/// Draws `text` in `colour`, then turns the ClearType pixels it made grey, as Windows' own XAML menus draw: no colour
+/// fringes, which turned the grey check red-brown (brand review M1).
+fn draw(
+    canvas: &mut Canvas,
+    font: HFONT,
+    text: &[u16],
+    mut r: RECT,
+    colour: Rgb,
+    format: DRAW_TEXT_FORMAT,
+) {
+    let under = canvas.pixels().to_vec();
     let mut buf = text.to_vec();
     // SAFETY: the DC and font live for the call; the old font is put back.
     unsafe {
-        let old = SelectObject(dc, font.into());
-        SetTextColor(dc, COLORREF(colour.colorref()));
+        let old = SelectObject(canvas.dc, font.into());
+        SetTextColor(canvas.dc, COLORREF(colour.colorref()));
         DrawTextW(
-            dc,
+            canvas.dc,
             &mut buf,
             &raw mut r,
             format | DT_SINGLELINE | DT_VCENTER | DT_NOCLIP,
         );
-        SelectObject(dc, old);
+        SelectObject(canvas.dc, old);
     }
+    // Only the pixels this text changed, each against what was under it, so a neighbour's ink is never refolded.
+    for (p, &u) in canvas.pixels().iter_mut().zip(&under) {
+        if (*p ^ u) & 0x00ff_ffff != 0 {
+            *p = pixel(fold(rgb_of(*p), rgb_of(u), colour));
+        }
+    }
+}
+
+fn rgb_of(p: u32) -> Rgb {
+    Rgb::new((p >> 16) as u8, (p >> 8) as u8, p as u8)
+}
+
+/// One grey for a ClearType pixel. GDI moved each channel of `under` toward `ink` by the coverage of its own subpixel;
+/// one blend by their mean keeps ClearType's weight and shape, since Explorer's grayscale text is as heavy (research
+/// "Menu text in grey"). Each channel counts by how far `ink` is from `under` in it: a channel where the two are
+/// equal says nothing, and in light and dark, all greys, every channel counts the same.
+fn fold(drawn: Rgb, under: Rgb, ink: Rgb) -> Rgb {
+    let (mut moved, mut span) = (0i32, 0i32);
+    for (d, u, i) in [
+        (drawn.r, under.r, ink.r),
+        (drawn.g, under.g, ink.g),
+        (drawn.b, under.b, ink.b),
+    ] {
+        let (d, u, i) = (i32::from(d), i32::from(u), i32::from(i));
+        moved += (d - u) * (i - u).signum();
+        span += (i - u).abs();
+    }
+    if span == 0 {
+        return drawn;
+    }
+    lerp(under, ink, (moved as f32 / span as f32).clamp(0.0, 1.0))
 }
 
 /// A 32-bit top-down DIB selected into a memory DC.
@@ -1021,18 +1065,21 @@ mod tests {
 
     /// The product menu as `present` builds it: holding for two Claude Code sessions and Keep awake 1 hour.
     fn product_menu() -> Vec<MenuItem> {
+        product_menu_holding(&[
+            text::hold_group(HoldKind::Agent, "Claude Code", 2),
+            text::keep_awake_group(KeepAwake::Minutes(25)),
+        ])
+    }
+
+    fn product_menu_holding(groups: &[String]) -> Vec<MenuItem> {
         let status = Status {
             icon: IconState::Holding,
             stepped_back: false,
             requests_only: false,
             screen_on: false,
         };
-        let groups = [
-            text::hold_group(HoldKind::Agent, "Claude Code", 2),
-            text::keep_awake_group(KeepAwake::Minutes(25)),
-        ];
         vec![
-            MenuItem::Label(text::status_line(&status, &groups)),
+            MenuItem::Label(text::status_line(&status, groups)),
             MenuItem::Separator,
             action(MenuCommand::Automatic(false), true, true),
             MenuItem::Submenu {
@@ -1088,10 +1135,13 @@ mod tests {
 
     impl Painted {
         fn new(item: &MenuItem, state: ItemState, dpi: u32, theme: &Theme) -> Self {
+            Self::sized(item, state, dpi, theme, scale(320, dpi))
+        }
+
+        fn sized(item: &MenuItem, state: ItemState, dpi: u32, theme: &Theme, w: i32) -> Self {
             let fonts = Fonts::new(dpi).expect("fonts");
             let layout = Layout::new(dpi, BOTH);
             let palette = Palette::for_theme(theme);
-            let w = scale(320, dpi);
             let h = if matches!(item, MenuItem::Separator) {
                 layout.separator
             } else {
@@ -1556,6 +1606,187 @@ mod tests {
         assert_eq!(at(202, 5 + layout.row - 1), pixel(palette.background));
     }
 
+    /// Every kind of item the menus have, so the text, both marks, every icon and the chevron are drawn, plus a
+    /// disabled item with its mark.
+    fn every_kind() -> Vec<MenuItem> {
+        let mut items = product_menu();
+        items.extend(keep_awake());
+        items.push(action(MenuCommand::KeepScreenOn(true), true, false));
+        items
+    }
+
+    fn spread(c: Rgb) -> u8 {
+        c.r.max(c.g).max(c.b) - c.r.min(c.g).min(c.b)
+    }
+
+    #[test]
+    fn fold_takes_the_mean_coverage() {
+        let (light, text) = (Rgb::new(249, 249, 249), Rgb::new(26, 26, 26));
+        // A fringe pixel, its subpixels covered 149, 129 and 109 of 223: the mean is 129 of 223.
+        assert_eq!(
+            fold(Rgb::new(100, 120, 140), light, text),
+            Rgb::new(120, 120, 120)
+        );
+        // Untouched and fully covered stay as they are.
+        assert_eq!(fold(light, light, text), light);
+        assert_eq!(fold(text, light, text), text);
+        // Light on dark the same way round.
+        let (dark, white) = (Rgb::new(44, 44, 44), Rgb::new(255, 255, 255));
+        assert_eq!(
+            fold(Rgb::new(44, 150, 255), dark, white),
+            Rgb::new(150, 150, 150)
+        );
+        // Yellow on black: blue never moves, so only red and green count.
+        let (black, yellow) = (Rgb::new(0, 0, 0), Rgb::new(255, 255, 0));
+        assert_eq!(
+            fold(Rgb::new(200, 100, 0), black, yellow),
+            Rgb::new(150, 150, 0)
+        );
+        // Ink the colour of the fill draws nothing to fold.
+        assert_eq!(fold(Rgb::new(1, 2, 3), black, black), Rgb::new(1, 2, 3));
+        // Past the ink is the ink.
+        assert_eq!(fold(Rgb::new(0, 0, 0), light, text), text);
+    }
+
+    #[test]
+    fn text_and_glyphs_draw_grayscale() {
+        // Windows' own XAML menus draw grayscale (chroma 0 in Explorer's menu text, brand review M1); ClearType's
+        // fringes turned the grey check red-brown. Light and dark are greys only, so any spread between R, G and B
+        // is a fringe.
+        for dpi in [96, 120, 144] {
+            for theme in [LIGHT, DARK] {
+                for item in every_kind() {
+                    for state in [MOUSE, HOT] {
+                        let p = Painted::new(&item, state, dpi, &theme);
+                        let worst = (0..p.px.len() as i32)
+                            .map(|i| spread(p.at(i % p.w, i / p.w)))
+                            .max()
+                            .unwrap_or(0);
+                        assert!(
+                            worst <= 2,
+                            "chroma {worst} at {dpi} dpi, light {}: {item:?}",
+                            theme.light
+                        );
+                    }
+                }
+                // Smoothed, not aliased: an aliased text would also have no chroma, but only two colours.
+                let quit = action(MenuCommand::Quit, false, true);
+                let p = Painted::new(&quit, MOUSE, dpi, &theme);
+                let l = p.layout;
+                let mut greys: Vec<u8> = (l.line_top..l.line_top + l.line)
+                    .flat_map(|y| (l.text_left..l.text_left + l.font * 2).map(move |x| (x, y)))
+                    .map(|(x, y)| p.at(x, y).g)
+                    .collect();
+                greys.sort_unstable();
+                greys.dedup();
+                assert!(greys.len() > 4, "{} greys at {dpi} dpi", greys.len());
+            }
+        }
+    }
+
+    /// How far `c` is from the nearest blend of `from` and `to`, in its worst channel.
+    fn off_blend(c: Rgb, from: Rgb, to: Rgb) -> u8 {
+        let d = |a: u8, b: u8| f32::from(b) - f32::from(a);
+        let (dr, dg, db) = (d(from.r, to.r), d(from.g, to.g), d(from.b, to.b));
+        let along = d(from.r, c.r) * dr + d(from.g, c.g) * dg + d(from.b, c.b) * db;
+        let t = (along / (dr * dr + dg * dg + db * db)).clamp(0.0, 1.0);
+        let q = lerp(from, to, t);
+        [(c.r, q.r), (c.g, q.g), (c.b, q.b)]
+            .into_iter()
+            .map(|(a, b)| a.abs_diff(b))
+            .max()
+            .unwrap_or(0)
+    }
+
+    #[test]
+    fn high_contrast_text_has_no_fringes() {
+        // Coloured system colours, so a fringe shows as R apart from G; each one blends with black, so a gamma-correct
+        // blend stays on the line between the two as well.
+        let c = Contrast {
+            window: Rgb::new(0, 0, 0),
+            window_text: Rgb::new(0xff, 0xff, 0xff),
+            highlight: Rgb::new(0x1a, 0xeb, 0xff),
+            highlight_text: Rgb::new(0, 0, 0),
+            gray_text: Rgb::new(0x3f, 0xf2, 0x3f),
+            button_face: Rgb::new(0, 0, 0),
+            button_text: Rgb::new(0xff, 0xff, 0),
+            hot_light: Rgb::new(0xff, 0xff, 0),
+        };
+        let theme = Theme {
+            light: false,
+            contrast: Some(c),
+        };
+        for dpi in [96, 144] {
+            for item in every_kind() {
+                if matches!(item, MenuItem::Separator) {
+                    continue;
+                }
+                let enabled = !matches!(item, MenuItem::Action { enabled: false, .. });
+                for state in [MOUSE, HOT] {
+                    let hot = state.selected && enabled && !matches!(item, MenuItem::Label(_));
+                    // In high contrast every ink of an item is one colour.
+                    let (fill, ink) = if hot {
+                        (c.highlight, c.highlight_text)
+                    } else if enabled {
+                        (c.window, c.button_text)
+                    } else {
+                        (c.window, c.gray_text)
+                    };
+                    let p = Painted::new(&item, state, dpi, &theme);
+                    let l = p.layout;
+                    // Inside the hover shape, clear of its round corners.
+                    let (x0, x1) = (l.inset_x + l.radius, p.w - l.inset_x - l.radius);
+                    let worst = (l.line_top..l.line_top + l.line)
+                        .flat_map(|y| (x0..x1).map(move |x| (x, y)))
+                        .map(|(x, y)| off_blend(p.at(x, y), fill, ink))
+                        .max()
+                        .unwrap_or(0);
+                    assert!(worst <= 2, "{worst} off the blend at {dpi} dpi: {item:?}");
+                    assert!(p.ink(x0, x1, fill) > 0, "drawn at {dpi} dpi: {item:?}");
+                }
+            }
+        }
+    }
+
+    /// Three hold groups and Keep awake: wider than the text cap.
+    fn long_menu() -> Vec<MenuItem> {
+        product_menu_holding(&[
+            text::hold_group(HoldKind::Agent, "Claude Code", 2),
+            text::hold_group(HoldKind::Agent, "Codex", 1),
+            text::hold_group(HoldKind::Run, "cargo build --release", 1),
+            text::keep_awake_group(KeepAwake::Minutes(85)),
+        ])
+    }
+
+    #[test]
+    fn a_long_status_line_ends_in_its_column() {
+        // "Holding awake" in Armenian, which draws with a fallback face, made long.
+        let armenian = "\u{54a}\u{561}\u{570}\u{578}\u{582}\u{574} \u{567} \u{561}\u{580}\u{569}\u{578}\u{582}\u{576}, "
+            .repeat(8);
+        let english = long_menu().swap_remove(0);
+        for label in [english, MenuItem::Label(armenian)] {
+            for dpi in [96, 120, 144] {
+                let fonts = Fonts::new(dpi).expect("fonts");
+                let layout = Layout::new(dpi, BOTH);
+                // What Windows draws: the width asked plus what it adds.
+                let w = measure(&label, &fonts, &layout).0 as i32 + fonts.windows_adds();
+                assert_eq!(
+                    w,
+                    layout.width_for(scale(TEXT_MAX, dpi), false),
+                    "capped at {dpi} dpi"
+                );
+                let p = Painted::sized(&label, MOUSE, dpi, &DARK, w);
+                let end = w - layout.right;
+                let bg = p.palette.background;
+                assert_eq!(p.ink(end, w, bg), 0, "nothing past the text at {dpi} dpi");
+                assert!(
+                    p.ink(end - layout.font, end, bg) > 0,
+                    "the ellipsis reaches the end at {dpi} dpi"
+                );
+            }
+        }
+    }
+
     #[test]
     fn non_latin_labels_get_a_font_that_has_them() {
         let fonts = Fonts::new(96).expect("fonts");
@@ -1626,10 +1857,10 @@ mod tests {
         assert_eq!(i64::from(w), i64::from(cap));
     }
 
-    /// Writes the review renders as BMP into `WAKESHOT_RENDER_DIR` (a PNG writer is `p5-icon-art`'s): the product
-    /// menu and its Keep awake submenu side by side, at 96, 120 and 144 dpi, light, dark and high contrast (this PC's
-    /// system colours, as Phase 1's forced render did). Run: `cargo test -p wakeshot-windows renders_for_review --
-    /// --ignored`.
+    /// Writes the review renders as PNG into `WAKESHOT_RENDER_DIR`: the product menu and its Keep awake submenu side
+    /// by side, at 96, 120 and 144 dpi, light, dark and high contrast (this PC's system colours, as Phase 1's forced
+    /// render did), and the menu with a long status line at 144 dpi, light. Run: `cargo test -p wakeshot-windows
+    /// renders_for_review -- --ignored`.
     #[test]
     #[ignore = "writes pictures for review"]
     fn renders_for_review() {
@@ -1647,7 +1878,7 @@ mod tests {
         for dpi in [96u32, 120, 144] {
             for (name, theme) in [("light", LIGHT), ("dark", DARK), ("contrast", contrast)] {
                 // The main menu with Keep awake open, and in the submenu "2 hours" under the mouse.
-                let file = dir.join(format!("menu-render-{dpi}-{name}.bmp"));
+                let file = dir.join(format!("menu-render-{dpi}-{name}.png"));
                 render(
                     &[(&main, Some(3)), (&sub, Some(3))],
                     dpi,
@@ -1655,7 +1886,6 @@ mod tests {
                     MOUSE.keyboard_cues,
                     &file,
                 );
-                println!("wrote {}", file.display());
             }
             // Scratch check: an Armenian status line and keyboard cues.
             let armenian = vec![
@@ -1666,9 +1896,12 @@ mod tests {
                 action(MenuCommand::Automatic(false), true, true),
                 action(MenuCommand::Quit, false, true),
             ];
-            let file = dir.join(format!("menu-check-armenian-{dpi}.bmp"));
+            let file = dir.join(format!("menu-check-armenian-{dpi}.png"));
             render(&[(&armenian, Some(2))], dpi, &DARK, true, &file);
         }
+        // 144 dpi, as the review's screen pictures (150%), where a long line made the menu 853 px wide.
+        let file = dir.join("menu-render-long-144-light.png");
+        render(&[(&long_menu(), None)], 144, &LIGHT, false, &file);
     }
 
     fn render(
@@ -1722,8 +1955,16 @@ mod tests {
             }
             x += width + gap;
         }
-        let px = canvas.pixels().to_vec();
-        std::fs::write(file, bmp(w, h, &px)).expect("write");
+        let image = crate::tray::art::Rgba {
+            width: w.unsigned_abs(),
+            height: h.unsigned_abs(),
+            pixels: canvas
+                .pixels()
+                .iter()
+                .flat_map(|&p| [(p >> 16) as u8, (p >> 8) as u8, p as u8, 0xff])
+                .collect(),
+        };
+        std::fs::write(file, crate::tray::art::png(&image)).expect("write");
         println!(
             "{}: {w} x {h}, row {} px, font {} px, glyphs {} px, faces {:?} {:?}",
             file.display(),
@@ -1733,25 +1974,5 @@ mod tests {
             fonts.text_face(),
             fonts.glyph_face()
         );
-    }
-
-    /// A 32-bit top-down BMP.
-    fn bmp(w: i32, h: i32, px: &[u32]) -> Vec<u8> {
-        let data = px.len() * 4;
-        let mut out = Vec::with_capacity(54 + data);
-        out.extend_from_slice(b"BM");
-        out.extend_from_slice(&((54 + data) as u32).to_le_bytes());
-        out.extend_from_slice(&0u32.to_le_bytes());
-        out.extend_from_slice(&54u32.to_le_bytes());
-        out.extend_from_slice(&40u32.to_le_bytes());
-        out.extend_from_slice(&w.to_le_bytes());
-        out.extend_from_slice(&(-h).to_le_bytes());
-        out.extend_from_slice(&1u16.to_le_bytes());
-        out.extend_from_slice(&32u16.to_le_bytes());
-        out.extend_from_slice(&[0; 24]);
-        for p in px {
-            out.extend_from_slice(&(p | 0xff00_0000).to_le_bytes());
-        }
-        out
     }
 }
