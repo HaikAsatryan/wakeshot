@@ -450,3 +450,10 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   Sky removed from `art.rs`; assets byte-equal) and `p6-menu-text-look` (menu text and glyphs grey, chroma 0; WinUI sets
   no menu max width). Board for Haik: private artifact "Wakeshot brand review". Waits for Haik's 8 decisions (default:
   the held light, Moss, plated, brand colour while holding); then one apply card, the screen session, then `p6-media`.
+- 2026-11-05 ~15:00: Haik's brand decisions, all eight defaults ("I have reviewed and fully agree with you"): the held
+  light (filled while holding, outline when idle, outline struck through when off); Moss (`brand-directions-2.md` palette
+  numbers); plated Windows icon; brand colour in the tray only while holding, high contrast one colour; Haik does the
+  2 to 3 person check at 16 px himself (the lamp is the fallback if it fails; the build does not wait); menu text cap
+  stays 480 epx; Instrument Sans SemiBold for the wordmark outside the Windows app; after the build, the GitHub repo gets
+  a description, website link, topics and the social card. Also Haik: no legacy left anywhere; old brand assets are
+  deleted, not kept.

@@ -125,3 +125,10 @@ Questions for Haik (defaults): 1. mark: held light; 2. colour: Moss; 3. plated; 
 holding; 5. a five-minute 16 px check with two or three people first: yes.
 
 Open items: no live screen test (offline renders only); the Mac looks are a page mockup, not Icon Composer.
+- 2026-11-05 ~15:00: Haik's brand decisions, all eight defaults ("I have reviewed and fully agree with you"): the held
+  light (filled while holding, outline when idle, outline struck through when off); Moss (`brand-directions-2.md` palette
+  numbers); plated Windows icon; brand colour in the tray only while holding, high contrast one colour; Haik does the
+  2 to 3 person check at 16 px himself (the lamp is the fallback if it fails; the build does not wait); menu text cap
+  stays 480 epx; Instrument Sans SemiBold for the wordmark outside the Windows app; after the build, the GitHub repo gets
+  a description, website link, topics and the social card. Also Haik: no legacy left anywhere; old brand assets are
+  deleted, not kept.
