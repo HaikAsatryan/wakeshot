@@ -193,8 +193,15 @@ impl Core {
     /// that has lasted the 30 s settle, so a dock's short AC drop does not lock a docked user (review minor 7). The
     /// copy may still show the values from before the reset or restore, so a Do nothing waits for the next read, as
     /// the countdown wants do; with the user's own Do nothing the laptop would run without Wakeshot too, and gets no
-    /// lock (decision 18). A lock out already is watched first ([`Core::check_lock`]). Gives when the settle ends.
-    fn settle_window_lock(&mut self, now: Now, out: &mut Vec<Command>) -> Option<Deadline> {
+    /// lock (decision 18). A lock out already is watched first ([`Core::check_lock`]). `chime` as in
+    /// [`Core::closed_lid_lock`]: an unplug under the floor makes this lock and the step back due in one pass, and the
+    /// step back's sound goes with it then (`p2-6-sound-overlap-smoke-key`). Gives when the settle ends.
+    fn settle_window_lock(
+        &mut self,
+        now: Now,
+        chime: bool,
+        out: &mut Vec<Command>,
+    ) -> Option<Deadline> {
         let state = &self.state;
         // After a lock and its retry failed, the step back is the answer until the session locks or the lid opens. A
         // session locked already needs no lock, and a `Lock` into one is not watched, so it would be sent again at
@@ -222,14 +229,17 @@ impl Core {
         if let Some(at) = settled {
             return Some(Deadline::Mono(at));
         }
-        out.push(Command::Log(
+        let line = if chime {
             "Wakeshot keeps the closed laptop running since a lid close in the unknown journal window, which it could \
              not lock: lock"
-                .to_owned(),
-        ));
+        } else {
+            "Wakeshot keeps the closed laptop running since a lid close in the unknown journal window, which it could \
+             not lock, and the battery floor's step back starts now: lock, with the step back's sound and no chime"
+        };
+        out.push(Command::Log(line.to_owned()));
         // One lock for the one closed laptop: the source lock would only send a second.
         self.state.source_lock = None;
-        self.lock_and_chime(now, out);
+        self.closed_lid_lock(now, chime, out);
         None
     }
 
@@ -803,6 +813,9 @@ impl Core {
     ) -> Option<Deadline> {
         // A plan read tells the user's own lid actions: the countdown wants that wait for one decide at each pass once
         // one worked, before the cancels below.
+        // Once per step back, at the first moment a hold counts in it: a step back with nothing held changes nothing.
+        let step_back_shows =
+            self.state.stepped_back && self.state.episode.is_some() && !self.state.step_back_shown;
         let mut window_due = None;
         if self.state.plan.is_some() {
             if let Some(sources) = self.state.lock.work_end_waits.take() {
@@ -811,15 +824,12 @@ impl Core {
             if std::mem::take(&mut self.state.lock.floor_waits) && self.state.stepped_back {
                 self.floor_countdown_waited();
             }
-            window_due = self.settle_window_lock(now, out);
+            window_due = self.settle_window_lock(now, !step_back_shows, out);
         }
-        // Once per step back, at the first moment a hold counts in it: a step back with nothing held changes nothing.
-        let step_back_shows =
-            self.state.stepped_back && self.state.episode.is_some() && !self.state.step_back_shown;
-        // Before the step back's actions: an unplug with the lid closed under the floor makes both due in one pass, at
-        // the grace's end, and the step back's restore can make Windows sleep the closed laptop at once (Haik's block
-        // 4, 2026-11-05), so the `Lock` goes out ahead of the `Restore` and never waits for it. The step back's sound
-        // and notice go with that lock.
+        // Both locks before the step back's actions: an unplug with the lid closed under the floor makes them due in
+        // one pass, at the grace's end, and the step back's restore can make Windows sleep the closed laptop at once
+        // (Haik's block 4, 2026-11-05), so the `Lock` goes out ahead of the `Restore` and never waits for it. The step
+        // back's sound and notice go with that lock.
         let source_due = self.settle_source_lock(now, !step_back_shows, out);
         if step_back_shows {
             self.state.step_back_shown = true;

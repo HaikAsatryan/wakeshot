@@ -1,6 +1,6 @@
 # Add velopack and connect it to the hooks and the update thread
 
-Phase: 6. Status: done (open: Haik's clang install, step 0; ARM64 tray checks CI only until then). Needs Haik: yes, once, for an elevated install (step 0). His answer to Question 4 of
+Phase: 6. Status: done. Needs Haik: yes, once, for an elevated install (step 0; done). His answer to Question 4 of
 `p6-plan-ship` (clang on this laptop) is yes: add the Build Tools clang component (`docs/phases/02-06-signoff.md`
 item 8, default, Haik 2026-11-03 18:09). Agent: `wakeshot-worker`. Size: about 110K tokens.
 Real laptop: no. It builds only; it never runs a hook (a hook writes the real Run value and Path).
@@ -183,8 +183,8 @@ Problems seen but not fixed.
 
 ## Result
 
-Done 2026-11-04 03:31, with one open item: Haik's clang install (step 0). Until then ARM64 builds of `wakeshot-tray`
-are **ARM64: CI only**.
+Done 2026-11-04 03:31; the ARM64 items after Haik's clang install (step 0) done 2026-11-05 by
+`p2-6-sound-overlap-smoke-key` ("ARM64 with clang" below). ARM64 builds of `wakeshot-tray` now run here too.
 
 **Built**
 
@@ -251,12 +251,23 @@ not there; nothing here keeps the PC awake)
 6. `feed()` carries `#[cfg_attr(not(test), expect(dead_code, ...))]`: a plain `expect` would be unfulfilled in the test
    build, which calls it.
 
+**ARM64 with clang** (2026-11-05, `p2-6-sound-overlap-smoke-key` Part C, alone on the laptop, research "Sound
+overlap, smoke test key and ARM64 checks")
+
+- Step 0 checks: `Get-Command clang`: not found (decision 5, no user Path change). `vswhere -all -products * -find
+  'VC\Tools\Llvm\**\clang.exe'`: exit 0, `...\BuildTools\VC\Tools\Llvm\ARM64\bin\clang.exe` and
+  `...\Llvm\x64\bin\clang.exe`. `clang --version` (x64): 22.1.3, target `x86_64-pc-windows-msvc`.
+- With `...\Llvm\x64\bin` first on that cargo command's PATH only: `cargo clippy --workspace --all-targets --locked
+  --target aarch64-pc-windows-msvc -- -D warnings` and the same without `--all-targets`: exit 0, no warning.
+  `cargo build --release --workspace --locked --target aarch64-pc-windows-msvc`: exit 0, 68 s.
+- ARM64 sizes (bytes) from the 2026-11-05 tree: tray 2,404,352, CLI 532,480 (the tree has grown since 2026-11-04, so
+  these do not measure `velopack` alone).
+- CRT check (`ci.yml`'s dumpbin step) on both ARM64 exes: passed, no Visual C++ runtime import; the tray's header says
+  ARM64.
+
 **Open items**
 
-- Haik: the clang install, steps under "Questions for Haik". Then a worker (alone, no other cargo command): the two
-  checks and `clang --version` into `docs/research.md`, then ARM64 workspace clippy (both forms) and release build with
-  the LLVM folder on the command's PATH, the ARM64 tray size, and the CRT check on the ARM64 exes.
-- "Needs another card" and "Found outside scope" above.
+- "Needs another card" and "Found outside scope" above. The clang install is done.
 
 Files changed: `Cargo.toml`, `Cargo.lock`, `crates/wakeshot-tray/Cargo.toml`, `crates/wakeshot-tray/src/velo.rs`,
 `docs/research.md` (new section), this card.

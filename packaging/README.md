@@ -38,9 +38,9 @@ cargo build --release --locked --target x86_64-pc-windows-msvc -p wakeshot-tray 
 - Never set `RUSTFLAGS` for the build: it drops the static CRT.
 
 Do not run `smoke-test.ps1` on a PC where Wakeshot is or was installed. It refuses when it finds any trace (the
-install folder, the data folder, the uninstall key, the Run or RunOnce value, the Path entry, the shortcut): the
-uninstall deletes the data folder, and a journal in it would make the hooks restore power settings. CI runners are
-clean; `p6-install-e2e` covers this laptop.
+install folder, the data folder, the uninstall key, the Run or RunOnce value, the Path entry, the notice app id key,
+the shortcut): the uninstall deletes the data folder, and a journal in it would make the hooks restore power settings.
+CI runners are clean; `p6-install-e2e` covers this laptop.
 
 ## Cut a release
 
@@ -78,12 +78,18 @@ After `Setup.exe --silent` (what winget runs): exit 0; `Update.exe`, `Wakeshot.e
 `current\wakeshot.exe`, `current\sq.version`; the Start menu shortcut points at `current\wakeshot-tray.exe`; the
 uninstall key has `DisplayName` `Wakeshot`, `Publisher` `Haik Asatryan`, `DisplayVersion` equal to the version's three
 numbers (winget compares it with the manifest), and a `QuietUninstallString`; the Run value `Wakeshot` is the quoted
-tray exe; the user Path has the `current` folder; the install hook's start line is in `%LocalAppData%\Wakeshot\logs\wakeshot.log`;
-`wakeshot.exe` with no arguments exits 0 (the winget pipeline runs installed exes that way).
+tray exe; the user Path has the `current` folder; the notice app id key
+`HKCU\Software\Classes\AppUserModelId\velopack.HaikAsatryan.Wakeshot` has `DisplayName` `Wakeshot` and `IconUri`
+naming `current\wakeshot-notice.png`, both `REG_EXPAND_SZ`, and that file is `assets/wakeshot-notice.png`; the install
+hook's start line is in `%LocalAppData%\Wakeshot\logs\wakeshot.log`; `wakeshot.exe` with no arguments exits 0 (the
+winget pipeline runs installed exes that way).
 
 After the `QuietUninstallString` (what Apps and Features and winget run): exit 0; the install folder, the uninstall
-key, the Run and RunOnce values, the Path entry, the shortcut and the data folder are gone, and the user Path has its
-old type and bytes.
+key, the Run and RunOnce values, the notice app id key, the Path entry, the shortcut and the data folder are gone, and
+the user Path has its old type and bytes.
+
+The notice app id checks catch an installed package whose hook no longer writes that key, which nothing else would
+show: every notice still comes, with a plain white square in its header (`docs/tasks/p6-notice-app-icon.md`).
 
 The install hook's log line is the only proof that the tray runs Velopack's hooks: `vpk pack` does not check it. So a
 dry run fails until the tray calls `VelopackApp` (`p6-velopack-dependency`).

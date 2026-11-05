@@ -2057,6 +2057,60 @@ fn a_docked_unplug_with_the_lid_closed_under_the_floor_locks_and_steps_back_at_3
     assert_eq!(count(&out, &SYSTEM), 0, "{trace}");
 }
 
+#[test]
+fn a_window_lock_due_with_a_floor_step_back_plays_only_the_floor_sound() {
+    // `p2-6-floor-grace` Found outside scope 4: docked, the lid closed in the unknown journal window, and a hold after
+    // the window writes Do nothing on battery. On AC the user's own Do nothing owes no lock; the unplug under the floor
+    // makes the window lock and the step back due in one pass, 30 s later. The lid chime and the floor sound overlapped
+    // there.
+    let mut sim = Sim::new();
+    sim.send(unread_start());
+    sim.send(power(true, 19));
+    sim.send(read(docked()));
+    sim.send(lid(false));
+    let out = sim.send(lid(true));
+    assert_eq!(count(&out, &LOCK), 0, "{}", sim.trace());
+    sim.run(MINUTE);
+    sim.send(read_after_all());
+    sim.send(read(docked()));
+    let mut out = sim.send(working(1));
+    out.extend(sim.send(applied(BALANCED, Ok(()), entries(BALANCED, &DOCKED_KEYS))));
+    out.extend(sim.run(MINUTE));
+    assert_eq!(
+        count(&out, &LOCK),
+        0,
+        "the user's own Do nothing on AC\n{}",
+        sim.trace()
+    );
+
+    // Off the 10 s plan reads, so only the core's own deadlines can make the pass come at 30 s.
+    sim.run(3 * SECOND);
+    let at = sim.now();
+    let mut out = sim.send(power(false, 19));
+    out.extend(sim.run(SOURCE_SETTLE_MS - 1));
+    nothing_of_a_step_back(&sim, &out);
+
+    let out = sim.run(1);
+    let trace = sim.trace();
+    steps_back(&sim, &out);
+    assert_eq!(count(&out, &LOCK), 1, "{trace}");
+    assert_eq!(plays(&out), 1, "one sound, the floor's\n{trace}");
+    assert!(
+        position(&out, &LOCK) < position(&out, &FLOOR_RESTORE),
+        "the lock never waits for the restore\n{trace}"
+    );
+    assert_eq!(
+        lock_times(&sim, at),
+        [i128::from(SOURCE_SETTLE_MS)],
+        "{trace}"
+    );
+    assert_eq!(
+        notices(&out),
+        [&Notice::StepBack { floor_pct: 20 }],
+        "{trace}"
+    );
+}
+
 // Item 4: the countdown.
 
 #[test]

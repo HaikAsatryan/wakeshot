@@ -217,8 +217,9 @@ impl Model {
         locks.saturating_sub(usize::from(self.lock_retry_due(step)))
     }
 
-    /// A lid-close or source lock in this step: a `Lock` with the lid chime, or a new one with the floor chime, as a
-    /// source lock that comes with a step back's first sound and notice goes without the chime (`p2-6-floor-grace`).
+    /// A lid-close, source or window lock in this step: a `Lock` with the lid chime, or a new one with the floor chime,
+    /// as a source lock (`p2-6-floor-grace`) or the lock a lid close in the unknown journal window did not get
+    /// (`p2-6-sound-overlap-smoke-key`) that comes with a step back's first sound and notice goes without the chime.
     fn lid_lock_sent(&self, step: &sim::Step) -> bool {
         let sent = |c: &Command| step.commands.contains(c);
         (sent(&Command::Lock) && sent(&Command::Play(Cue::LidClosedHolding)))
@@ -1113,6 +1114,26 @@ fn step_back_at_the_grace_end(world: &World) -> Result<(), String> {
                 ));
             }
             due = None;
+        }
+    }
+    Ok(())
+}
+
+/// One sound at a time (`p2-6-sound-overlap-smoke-key`): sounds never wait (product), so two in one core step play over
+/// each other, as the lid chime and the floor sound did when the lock a lid close in the unknown journal window did not
+/// get came with a floor step back.
+fn one_sound_per_step(world: &World) -> Result<(), String> {
+    for seen in replay(world) {
+        let Some(step) = seen.step else {
+            continue;
+        };
+        let plays: Vec<&Command> = step
+            .commands
+            .iter()
+            .filter(|c| matches!(c, Command::Play(_)))
+            .collect();
+        if plays.len() > 1 {
+            return Err(format!("{plays:?} in one step, {}", seen.where_()));
         }
     }
     Ok(())
@@ -2425,6 +2446,12 @@ proptest! {
     ) {
         let world = play(&case);
         verdict(&world, step_back_at_the_grace_end(&world))?;
+    }
+
+    #[test]
+    fn no_step_plays_two_sounds(case in prop_oneof![case(), lid_case()]) {
+        let world = play(&case);
+        verdict(&world, one_sound_per_step(&world))?;
     }
 
     #[test]

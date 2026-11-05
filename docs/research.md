@@ -4611,3 +4611,45 @@ velopack 1.2.161 source. What the header shows after the change: Part B of the c
   `velopack.HaikAsatryan.Wakeshot`. After `Update.exe --uninstall --silent` the key was gone; no install trace, the
   real plan's values and hash as before (lid 1 and 1, sleep 18000 and 18000, `C64AFDB1CFDD13CF`). The 0.1.0 to 0.1.1
   delta was 6,934 bytes. **Verified** (the run's log in the card's scratch folder).
+
+## Sound overlap, smoke test key and ARM64 checks
+
+Checked 2026-11-05 from 11:20 for card `docs/tasks/p2-6-sound-overlap-smoke-key.md`, on this laptop, in the card's own
+build folder, with no other card running.
+
+- **clang is in the Build Tools now.** `Get-Command clang`: not found (as planned, no user Path change).
+  `vswhere -all -products * -find 'VC\Tools\Llvm\**\clang.exe'`, exit 0, two hits:
+  `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\Llvm\ARM64\bin\clang.exe` and
+  `...\Llvm\x64\bin\clang.exe`. The x64 one with `--version`: `clang version 22.1.3`, target `x86_64-pc-windows-msvc`,
+  `InstalledDir` that `x64\bin` folder. So the installed clang is 22.1.3, not the 20.1.8 the component list named on
+  2026-11-04. `vswhere -include packages` lists `Microsoft.VisualStudio.Component.VC.Llvm.Clang`,
+  `Microsoft.VisualStudio.VC.Llvm.Clang` and `Microsoft.VisualStudio.VC.Llvm.Base`; the instance shows display
+  version 18.11.2. **Verified** (runs).
+- **ARM64 of the whole workspace builds with that folder on the cargo command's PATH.** With
+  `...\Llvm\x64\bin` put first on the PATH of that one PowerShell command only (no `RUSTFLAGS`, no `CC_*`):
+  `cargo clippy --workspace --all-targets --locked --target aarch64-pc-windows-msvc -- -D warnings` exit 0 in 80 s
+  (`ring` 0.17.14 compiled), the same without `--all-targets` exit 0, and `cargo build --release --workspace --locked
+  --target aarch64-pc-windows-msvc` exit 0 in 68 s, no warning. ARM64 release sizes: `wakeshot-tray.exe` 2,404,352
+  bytes, `wakeshot.exe` 532,480 (x64 from the same tree: 2,743,808 and 558,080). **Verified** (runs).
+- **The ARM64 exes still need no Visual C++ runtime.** `ci.yml`'s dumpbin step, run by hand with
+  `...\MSVC\14.51.36231\bin\Hostx64\arm64\dumpbin.exe /dependents`: neither exe imports `vcruntime`, `msvcp`,
+  `ucrtbase` or `api-ms-win-crt-*`; both import Windows system DLLs and API sets only (20 import lines for the tray,
+  11 for the CLI, `advapi32` and `kernel32` twice in different case). `/headers` of the
+  tray: `AA64 machine (ARM64)`. **Verified** (run).
+- **The smoke test with the notice app id checks passes on a local pack.** Read-only first: none of the eight traces the
+  script refuses on (install folder, data folder, uninstall key, Run, RunOnce, Path entry, notice app id key, shortcut)
+  was there, and no Wakeshot process ran, so the script allowed the run. x64 release build of the tree, `pack.ps1
+  -Version 0.1.0 -Cpu x64` into the card's scratch folder, then `smoke-test.ps1` in this elevated shell (as on a CI
+  runner), 11:56:31 to 11:56:42: 28 checks passed, 0 failed, exit 0, among them `DisplayName` "Wakeshot" and `IconUri`
+  naming `current\wakeshot-notice.png`, both `REG_EXPAND_SZ`, the file byte-equal to `assets/wakeshot-notice.png`, and
+  the key gone after the uninstall. Afterwards all eight traces were gone, no `HaikAsatryan.*` folder was left, and the
+  script's own check found the user Path bytes as before. **Verified** (run).
+- **The .NET registry API tells `REG_EXPAND_SZ`.** `RegistryKey.GetValueKind` gave `ExpandString` (2) for
+  `HKCU\Environment` `TEMP`, and `GetValue(..., 'DoNotExpandEnvironmentNames')` gave the stored
+  `%USERPROFILE%\AppData\Local\Temp`; a missing value or key gives `$null` for both in the script's `Get-RegText`. So
+  the smoke test needs no raw-bytes helper for the type. **Verified** (run, read-only).
+- **The core props do not reach the window lock that falls with a floor step back.** The new property
+  `no_step_plays_two_sounds` passed at 10000 cases with the fix reverted by hand, while the new scenario
+  `a_window_lock_due_with_a_floor_step_back_plays_only_the_floor_sound` failed with two plays. The chain (journal
+  unread at start, the lid closed in the window, a hold after it with Wakeshot's battery Do nothing over the user's
+  own AC Do nothing, then an unplug under the floor) is too long for the mixes. **Verified** (runs).

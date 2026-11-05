@@ -48,6 +48,12 @@ $RunName = 'Wakeshot'
 $RunOnceName = 'WakeshotRestore'
 $EnvSub = 'Environment'
 $VelopackLogs = Join-Path $LocalAppData 'velopack'
+# The app id Velopack gives the installed tray and its shortcut, and the key the install hook writes so that the header
+# of each notice filed under it names Wakeshot and shows its icon (notify.rs NoticeAppId).
+$AppId = "velopack.$PackId"
+$NoticeSub = "Software\Classes\AppUserModelId\$AppId"
+$NoticeIcon = Join-Path $Current 'wakeshot-notice.png'
+$NoticeIconSource = Join-Path $PSScriptRoot '..\assets\wakeshot-notice.png'
 # Velopack writes only major.minor.patch to DisplayVersion (`get_manifest_version_short_string`), and hooks get the
 # whole version.
 $ShortVersion = ($Version -split '-', 2)[0]
@@ -122,6 +128,17 @@ function Get-RegValue([string] $Sub, [string] $Name) {
     $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($Sub)
     if ($null -eq $key) { return $null }
     try { $key.GetValue($Name, $null, 'DoNotExpandEnvironmentNames') } finally { $key.Dispose() }
+}
+
+# The value's type (2 is REG_EXPAND_SZ) and its text as stored; both $null when it is missing.
+function Get-RegText([string] $Sub, [string] $Name) {
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($Sub)
+    if ($null -eq $key) { return [pscustomobject]@{ Type = $null; Text = $null } }
+    try {
+        $text = $key.GetValue($Name, $null, 'DoNotExpandEnvironmentNames')
+        $type = if ($null -eq $text) { $null } else { [int]$key.GetValueKind($Name) }
+        [pscustomobject]@{ Type = $type; Text = $text }
+    } finally { $key.Dispose() }
 }
 
 function Test-RegKey([string] $Sub) {
@@ -214,6 +231,7 @@ if (Test-RegKey $UninstallSub) { $traces += "uninstall key HKCU\$UninstallSub" }
 if ($null -ne (Get-RegValue $RunSub $RunName)) { $traces += "Run value $RunName" }
 if ($null -ne (Get-RegValue $RunOnceSub $RunOnceName)) { $traces += "RunOnce value $RunOnceName" }
 if (Test-PathHasCurrent) { $traces += "user Path entry $Current" }
+if (Test-RegKey $NoticeSub) { $traces += "notice app id key HKCU\$NoticeSub" }
 if (Test-Path -LiteralPath $Shortcut) { $traces += "shortcut $Shortcut" }
 if ($traces) {
     Write-Host "smoke-test: refused, Wakeshot was here before: $($traces -join '; ')."
@@ -267,6 +285,23 @@ try {
 
     Test-Check 'user Path entry' (Test-PathHasCurrent) "no entry $Current"
 
+    # Ported from e2e.ps1 (Test-NoticeKey): both values REG_EXPAND_SZ, as Microsoft's page shows them, and IconUri
+    # names the icon beside the tray exe, the one in assets\. A hook that stops writing the key goes unseen otherwise:
+    # notices still show, with a plain white square in the header (notify.rs NoticeAppId).
+    if (Test-RegKey $NoticeSub) {
+        $name = Get-RegText $NoticeSub 'DisplayName'
+        Test-Check 'notice app id DisplayName is Wakeshot (REG_EXPAND_SZ)' ($name.Text -ceq 'Wakeshot' -and $name.Type -eq 2) "type $($name.Type), '$($name.Text)'"
+        $uri = Get-RegText $NoticeSub 'IconUri'
+        $uriOk = $null -ne $uri.Text -and $uri.Type -eq 2 -and (Test-SamePath $uri.Text $NoticeIcon)
+        Test-Check 'notice app id IconUri is current\wakeshot-notice.png (REG_EXPAND_SZ)' $uriOk "type $($uri.Type), '$($uri.Text)', want '$NoticeIcon'"
+    } else {
+        Fail 'notice app id key' "HKCU\$NoticeSub not found"
+    }
+    $sameIcon = (Test-Path -LiteralPath $NoticeIcon -PathType Leaf) -and
+        (Test-Path -LiteralPath $NoticeIconSource -PathType Leaf) -and
+        ((Get-FileHash -LiteralPath $NoticeIcon).Hash -eq (Get-FileHash -LiteralPath $NoticeIconSource).Hash)
+    Test-Check 'current\wakeshot-notice.png is assets\wakeshot-notice.png' $sameIcon "$NoticeIcon or $NoticeIconSource missing, or they differ"
+
     if (Test-Path -LiteralPath $HookLog -PathType Leaf) {
         $hookLogText = Get-Content -LiteralPath $HookLog -Raw
         # A line from log.rs: `<time> [<clock>] hook    INFO  hook: install hook for version <v> started`. vpk does not
@@ -308,6 +343,7 @@ Test-Check 'install folder gone' (Wait-Gone $Root 30) "$Root still there"
 Test-Check 'uninstall key gone' (-not (Test-RegKey $UninstallSub)) "HKCU\$UninstallSub still there"
 Test-Check "Run value $RunName gone" ($null -eq (Get-RegValue $RunSub $RunName)) 'still there'
 Test-Check "RunOnce value $RunOnceName gone" ($null -eq (Get-RegValue $RunOnceSub $RunOnceName)) 'still there'
+Test-Check 'notice app id key gone' (-not (Test-RegKey $NoticeSub)) "HKCU\$NoticeSub still there"
 Test-Check 'user Path entry gone' (-not (Test-PathHasCurrent)) "$Current still in Path"
 $pathAfter = [WakeshotSmoke.Reg]::Raw($EnvSub, 'Path')
 Test-Check 'user Path has its old bytes' ($pathAfter -ceq $pathBefore) "before: $pathBefore; after: $pathAfter"
