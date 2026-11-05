@@ -421,7 +421,7 @@ Checked three ways on 2026-11-05, all **verified**:
 
 | Code | Name (Fluent list) | In Fluent list | In MDL2 list | In SegoeIcons.ttf | In segmdl2.ttf | Looks like |
 |---|---|---|---|---|---|---|
-| EC32 | Cafe | yes | yes | yes | yes | Cup (today's glyph) |
+| EC32 | Cafe | yes | yes | yes | yes | Cup (the old glyph; `E823` replaced it on 2026-11-05, `p6-brand-cleanup`) |
 | E917 | Clock | yes | **no** | yes | **no** | Clock; an empty box in MDL2 |
 | E823 | Recent | yes | yes | yes | yes | A plain clock in Fluent; a clock in MDL2 |
 | E916 | Stopwatch | yes | yes | yes | yes | Stopwatch (the timer picture) |

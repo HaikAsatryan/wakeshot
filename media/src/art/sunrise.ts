@@ -1,5 +1,5 @@
 // The Sunrise art, ported from `crates/wakeshot-windows/src/tray/art.rs` (functions `sunrise`, `horizon_and_sun`,
-// `risen_sun`, `empty_sun`, `slashed`, `concept_app_icon`, `raster`). The Rust file is the source of truth; this port
+// `risen_sun`, `empty_sun`, `slashed`, `app_icon`, `raster`). The Rust file is the source of truth; this port
 // exists because the video and the loop need the art as vectors at any size and in between two states.
 // `scripts/check-art.mjs` rasters this port the way the Rust code does and compares it with the files the Rust code
 // wrote, so a change to the art in Rust fails the check until this file follows.
@@ -233,7 +233,7 @@ export function mix(a: Rgb, b: Rgb, t: number): Rgb {
   return [one(a[0], b[0]), one(a[1], b[1]), one(a[2], b[2])];
 }
 
-/** The app icon's layout numbers at `size`, from `concept_app_icon`. */
+/** The app icon's layout numbers at `size`, from `app_icon`. */
 export function appLayout(size: number) {
   const c = size / 2;
   const margin = floor((size + 12) / 24);
@@ -245,7 +245,7 @@ export function appLayout(size: number) {
   return {centre: c, margin, half, corner, mark, at, grid: grid(at, at, mark)};
 }
 
-/** The app icon as straight RGBA, as `concept_app_icon(Sunrise, size)` draws it. */
+/** The app icon as straight RGBA, as `app_icon(size)` draws it. */
 export function appIconRgba(size: number): Uint8Array {
   const L = appLayout(size);
   const plate = raster(size, size, {

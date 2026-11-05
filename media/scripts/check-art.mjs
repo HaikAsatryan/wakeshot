@@ -9,7 +9,7 @@ import * as art from '../src/art/sunrise.ts';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const img = join(root, 'docs', 'research', 'img', 'ux');
 
-// The sheet layout from `sheet` in art.rs: the Sunrise is the first concept, rows holding, idle, off.
+// The sheet layout from `sheet` in art.rs: rows holding, idle, off.
 const SIZES = [16, 20, 24, 32, 40, 48];
 const ZOOM = 8;
 const GAP = 16;

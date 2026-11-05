@@ -60,10 +60,11 @@ const GLYPH_RADIO: u16 = 0xE915;
 const GLYPH_CHEVRON: u16 = 0xE974;
 
 // Item icons, Segoe Fluent Icons (the same code points are in Segoe MDL2 Assets): an eye for Automatic, which
-// watches agents; a cup for Keep awake (the usual stay-awake picture); the restore arrow; a page for the log; the
-// close cross for Quit, since a power button would read as shutting the PC down.
+// watches agents; a clock for Keep awake, since each of its choices is a length of time (Haik, 2026-11-05: "Recent"
+// E823, because "Clock" E917 draws the same clock but is missing from MDL2); the restore arrow; a page for the log;
+// the close cross for Quit, since a power button would read as shutting the PC down.
 const ICON_AUTOMATIC: u16 = 0xE890;
-const ICON_KEEP_AWAKE: u16 = 0xEC32;
+const ICON_KEEP_AWAKE: u16 = 0xE823;
 const ICON_RESTORE: u16 = 0xE777;
 const ICON_LOG: u16 = 0xE8A5;
 const ICON_QUIT: u16 = 0xE711;
@@ -1293,6 +1294,46 @@ mod tests {
             items: Vec::new(),
         };
         assert_eq!(icon_for(&other), None, "a new submenu needs its own pick");
+        // Haik's pick for Keep awake (2026-11-05): the clock "Recent".
+        assert_eq!(ICON_KEEP_AWAKE, 0xE823);
+    }
+
+    #[test]
+    fn item_glyphs_are_in_both_icon_fonts() {
+        // Where Segoe Fluent Icons is missing the menu draws with Segoe MDL2 Assets, and a glyph a font lacks draws as
+        // an empty box, so every glyph the menu uses must be in both.
+        const ALL: [u16; 8] = [
+            GLYPH_CHECK,
+            GLYPH_RADIO,
+            GLYPH_CHEVRON,
+            ICON_AUTOMATIC,
+            ICON_KEEP_AWAKE,
+            ICON_RESTORE,
+            ICON_LOG,
+            ICON_QUIT,
+        ];
+        let fonts = Fonts::new(96).expect("fonts");
+        for face in [GLYPH_FACE, GLYPH_FACE_OLD] {
+            let font = create_font(face, scale(ICON, 96)).expect("font");
+            let installed = fonts.is_face(font, face);
+            let missing: Vec<String> = ALL
+                .iter()
+                .filter(|&&g| fonts.missing(font, &[g]) > 0)
+                .map(|g| format!("{g:04X}"))
+                .collect();
+            // "Clock" E917 is not in MDL2 (its cmap, `docs/research/brand-windows.md`); seeing that shows the check
+            // can find a missing glyph at all.
+            let control = fonts.missing(font, &[0xE917]);
+            delete(font.into());
+            if !installed {
+                println!("{face} is not installed here: not checked");
+                continue;
+            }
+            assert!(missing.is_empty(), "{face} lacks {missing:?}");
+            if face == GLYPH_FACE_OLD {
+                assert_eq!(control, 1, "{face} has E917 now, or the check sees no gap");
+            }
+        }
     }
 
     #[test]

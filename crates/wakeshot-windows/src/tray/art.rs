@@ -1,13 +1,14 @@
 //! Icon art as code: tray glyphs, the app icon, ICO and PNG writers.
 //!
-//! Owner: `p5-icon-art`, then `p5-haik-check`.
+//! Owner: `p5-icon-art`, then `p5-haik-check`, then `p6-brand-cleanup`.
 //!
 //! No Windows API here, so the file could move to the core. Shapes use plain arithmetic and `sqrt`, never `sin` or
 //! `cos`: those may differ in the last bit between x64 and ARM64, and the golden test compares exactly.
 //!
 //! The tray icon draws `tray_mask` at the size the taskbar wants and colours it with `colorize` (`GLYPH_ON_DARK`,
-//! `GLYPH_ON_LIGHT` or the high contrast text colour). Design notes and measured colours: `docs/research.md`, "Tray
-//! UX: icon art"; the brand (the Sunrise, the colours, why): `docs/brand.md`.
+//! `GLYPH_ON_LIGHT` or the high contrast text colour). The art is the Sunrise (Haik, 2026-11-04); off is always the
+//! idle glyph struck through, as Windows marks its own off states. Design notes and measured colours:
+//! `docs/research.md`, "Tray UX: icon art"; the brand (the Sunrise, the colours, why): `docs/brand.md`.
 
 use wakeshot_core::view::IconState;
 
@@ -25,28 +26,6 @@ pub struct Rgba {
     pub height: u32,
     pub pixels: Vec<u8>,
 }
-
-/// The tray glyph designs. Haik picked the Sunrise (2026-11-04, `docs/brand.md`); the others stay drawable until
-/// `p5-haik-check`, which removes them. Off is always the idle glyph struck through, as Windows marks its own off
-/// states.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Concept {
-    /// Holding: a risen half sun with rays over the horizon. Idle: an empty half sun on the horizon.
-    Sunrise,
-    /// Holding: a full cup with steam. Idle: an empty cup.
-    Cup,
-    /// Holding: an open eye. Idle: a closed eye with lashes.
-    Eye,
-    /// Holding: a sun. Idle: a moon.
-    Sky,
-}
-
-impl Concept {
-    pub const ALL: [Concept; 4] = [Concept::Sunrise, Concept::Cup, Concept::Eye, Concept::Sky];
-}
-
-/// The concept the product draws.
-pub const PICK: Concept = Concept::Sunrise;
 
 /// The sizes Windows asks for in the tray, 100% to 400% scale.
 pub const TRAY_SIZES: [u32; 10] = [16, 20, 24, 28, 32, 36, 40, 48, 56, 64];
@@ -83,14 +62,9 @@ pub fn padding(size: u32) -> u32 {
     (size / 16).max(1)
 }
 
-/// The picked concept's tray glyph for `state`.
+/// The tray glyph for `state`.
 pub fn tray_mask(state: IconState, size: u32) -> Mask {
-    concept_mask(PICK, state, size)
-}
-
-/// Any concept's tray glyph, for the review sheets.
-pub fn concept_mask(concept: Concept, state: IconState, size: u32) -> Mask {
-    let shape = glyph(concept, state, Grid::new(0, 0, size));
+    let shape = sunrise(state, Grid::new(0, 0, size));
     Mask {
         size,
         alpha: raster(size, size, &shape),
@@ -111,14 +85,9 @@ pub fn colorize(mask: &Mask, rgb: [u8; 3]) -> Rgba {
     }
 }
 
-/// The picked concept's app icon.
+/// The app icon: the holding glyph on a violet rounded square, so it reads on light and dark backgrounds alike. The
+/// sun is gold over a white horizon.
 pub fn app_icon(size: u32) -> Rgba {
-    concept_app_icon(PICK, size)
-}
-
-/// Any concept's app icon, for the review sheet: the holding glyph on a violet rounded square, so it reads on light
-/// and dark backgrounds alike. The Sunrise's sun is gold over a white horizon; the other concepts are white.
-pub fn concept_app_icon(concept: Concept, size: u32) -> Rgba {
     let centre = size as f32 / 2.0;
     // A margin of size / 24 (2 px at 48), so the plate does not look larger than other apps' icons. A design call:
     // Microsoft's pages give no margin number.
@@ -142,20 +111,11 @@ pub fn concept_app_icon(concept: Concept, size: u32) -> Rgba {
         mark_size -= 1;
     }
     let at = (size - mark_size) / 2;
-    let g = Grid::new(at, at, mark_size);
-    let layers: Vec<(Vec<u8>, [u8; 3])> = match concept {
-        Concept::Sunrise => {
-            let (horizon, sun) = risen_sun(g);
-            vec![
-                (raster(size, size, &sun), SUN_GOLD),
-                (raster(size, size, &horizon), [0xff; 3]),
-            ]
-        }
-        _ => vec![(
-            raster(size, size, &glyph(concept, IconState::Holding, g)),
-            [0xff; 3],
-        )],
-    };
+    let (horizon, sun) = risen_sun(Grid::new(at, at, mark_size));
+    let layers = [
+        (raster(size, size, &sun), SUN_GOLD),
+        (raster(size, size, &horizon), [0xff; 3]),
+    ];
     // The light falls from the top left (Microsoft's default gradient angle, 120 degrees).
     let (dx, dy) = (3f32.sqrt() / 2.0, 0.5);
     let mut pixels = Vec::with_capacity((size * size * 4) as usize);
@@ -342,28 +302,6 @@ impl Grid {
     }
 }
 
-fn glyph(concept: Concept, state: IconState, g: Grid) -> Shape {
-    match concept {
-        Concept::Sunrise => sunrise(state, g),
-        Concept::Cup => cup(state, g),
-        Concept::Eye => eye(state, g),
-        Concept::Sky => sky(state, g),
-    }
-}
-
-/// A rounded rect's outline, `t` wide, inside its edges.
-fn frame(x0: f32, y0: f32, x1: f32, y1: f32, r: [f32; 4], t: f32) -> Shape {
-    let outer = Shape::Rect { x0, y0, x1, y1, r };
-    let inner = Shape::Rect {
-        x0: x0 + t,
-        y0: y0 + t,
-        x1: x1 - t,
-        y1: y1 - t,
-        r: r.map(|v| (v - t).max(0.0)),
-    };
-    minus(outer, inner)
-}
-
 /// The off state: the idle glyph struck through from top left to bottom right, with a stroke-wide gap on each side
 /// of the bar, as Windows draws its own off glyphs.
 fn slashed(g: Grid, base: Shape) -> Shape {
@@ -511,231 +449,6 @@ fn empty_sun(g: Grid, off: bool) -> Shape {
         horizon
     };
     Shape::Any(vec![horizon, ring])
-}
-
-/// A cup with a handle: filled with steam while holding, empty when idle, struck through when off.
-fn cup(state: IconState, g: Grid) -> Shape {
-    let t = g.t;
-    let (x0, y0, x1, y1) = (g.ex(1.0), g.ey(6.0), g.ex(12.0), g.ey(15.0));
-    let rb = g.len(3.5).round().max(t);
-    let round_bottom = [0.0, 0.0, rb, rb];
-    // The handle's left side lies on the body's right wall. Its corners stay tight: a wider round turns its few pixels
-    // grey at 16 and 20 px.
-    let rh = g.len(1.5).floor().max(t);
-    let handle = frame(
-        x1 - t,
-        g.ey(7.5),
-        g.ex(15.0),
-        g.ey(12.5),
-        [0.0, rh, rh, 0.0],
-        t,
-    );
-    let outline = || Shape::Any(vec![frame(x0, y0, x1, y1, round_bottom, t), handle.clone()]);
-    match state {
-        IconState::Holding => {
-            let body = Shape::Rect {
-                x0,
-                y0,
-                x1,
-                y1,
-                r: round_bottom,
-            };
-            Shape::Any(vec![body, handle.clone(), steam(g, x0, x1, y0)])
-        }
-        IconState::Idle => outline(),
-        IconState::Off => slashed(g, outline()),
-    }
-}
-
-/// Upright wisps over the cup, from the top of the box to a small gap above the rim: three when they fit with a
-/// stroke-wide gap between them, else two.
-fn steam(g: Grid, x0: f32, x1: f32, rim: f32) -> Shape {
-    let t = g.t;
-    let gap = g.len(1.5).round().max(t);
-    let (top, bottom) = (g.ey(1.0) + t / 2.0, rim - gap - t / 2.0);
-    let width = x1 - x0;
-    let mid = (x0 + x1) / 2.0;
-    let three = (width / 4.0).round();
-    let (n, pitch) = if three >= 2.0 * t {
-        (3, three)
-    } else {
-        (2, (width / 3.0).round())
-    };
-    let wisps = (0..n)
-        .map(|i| {
-            let x = g.centre(mid + (i as f32 - (n - 1) as f32 / 2.0) * pitch);
-            Shape::Line {
-                ax: x,
-                ay: top,
-                bx: x,
-                by: bottom.max(top),
-                w: t,
-            }
-        })
-        .collect();
-    Shape::Any(wisps)
-}
-
-/// An eye: open with a pupil while holding, closed (asleep) when idle, closed and struck through when off.
-fn eye(state: IconState, g: Grid) -> Shape {
-    let t = g.t;
-    let (left, right) = (g.ex(1.0), g.ex(15.0));
-    let mid = (left + right) / 2.0;
-    let half_width = (right - left) / 2.0;
-    match state {
-        IconState::Holding => {
-            let (top, bottom) = (g.ey(3.0), g.ey(13.0));
-            let sag = (bottom - top) / 2.0;
-            // The two lids are arcs of one radius through both corners.
-            let r = (half_width * half_width + sag * sag) / (2.0 * sag);
-            let lens = |inset: f32| {
-                Shape::All(vec![
-                    Shape::Disc {
-                        cx: mid,
-                        cy: top + r,
-                        r: r - inset,
-                    },
-                    Shape::Disc {
-                        cx: mid,
-                        cy: bottom - r,
-                        r: r - inset,
-                    },
-                ])
-            };
-            let pupil = Shape::Disc {
-                cx: mid,
-                cy: (top + bottom) / 2.0,
-                r: sag - 2.0 * t,
-            };
-            Shape::Any(vec![minus(lens(0.0), lens(t)), pupil])
-        }
-        IconState::Idle => closed_eye(g),
-        IconState::Off => slashed(g, closed_eye(g)),
-    }
-}
-
-/// The lower lid as an arc with three lashes.
-fn closed_eye(g: Grid) -> Shape {
-    let t = g.t;
-    let (left, right) = (g.ex(1.0), g.ex(15.0));
-    let mid = (left + right) / 2.0;
-    let half_width = (right - left) / 2.0 - t / 2.0;
-    let (corner, low) = (g.ey(6.5) + t / 2.0, g.ey(11.0) - t / 2.0);
-    let sag = low - corner;
-    // The stroke's centre line: a circle through both corners and the lowest point.
-    let r = (half_width * half_width + sag * sag) / (2.0 * sag);
-    let cy = low - r;
-    let arc = Shape::All(vec![
-        minus(
-            Shape::Disc {
-                cx: mid,
-                cy,
-                r: r + t / 2.0,
-            },
-            Shape::Disc {
-                cx: mid,
-                cy,
-                r: r - t / 2.0,
-            },
-        ),
-        Shape::Half {
-            nx: 0.0,
-            ny: -1.0,
-            c: -corner,
-        },
-    ]);
-    let cap = |x: f32| Shape::Disc {
-        cx: x,
-        cy: corner,
-        r: t / 2.0,
-    };
-    // The band runs past its corners at an angle; it ends at the corners.
-    let arc = Shape::All(vec![
-        arc,
-        Shape::Half {
-            nx: -1.0,
-            ny: 0.0,
-            c: -left,
-        },
-        Shape::Half {
-            nx: 1.0,
-            ny: 0.0,
-            c: right,
-        },
-    ]);
-    let lash = |x: f32, to_x: f32| {
-        let dx = x - mid;
-        Shape::Line {
-            ax: x,
-            ay: cy + (r * r - dx * dx).sqrt(),
-            bx: to_x,
-            by: g.ey(14.5) - t / 2.0,
-            w: t,
-        }
-    };
-    let centre = g.centre(mid);
-    Shape::Any(vec![
-        arc,
-        cap(mid - half_width),
-        cap(mid + half_width),
-        lash(centre, centre),
-        lash(mid - g.len(4.0), mid - g.len(5.5)),
-        lash(mid + g.len(4.0), mid + g.len(5.5)),
-    ])
-}
-
-/// A sun while holding, a moon (the PC sleeps as usual) when idle, the moon struck through when off.
-fn sky(state: IconState, g: Grid) -> Shape {
-    let t = g.t;
-    match state {
-        IconState::Holding => {
-            // Centred on a pixel centre for odd strokes, so the upright and level rays stay sharp.
-            let c = g.centre(g.x + g.len(8.0));
-            let cy = g.centre(g.y + g.len(8.0));
-            let r = (c + g.len(3.0)).round() - c;
-            let (from, to) = (r + t, g.ex(15.0) - c);
-            let d = std::f32::consts::FRAC_1_SQRT_2;
-            let mut parts = vec![Shape::Disc { cx: c, cy, r }];
-            for (ux, uy) in [
-                (1.0, 0.0),
-                (d, d),
-                (0.0, 1.0),
-                (-d, d),
-                (-1.0, 0.0),
-                (-d, -d),
-                (0.0, -1.0),
-                (d, -d),
-            ] {
-                let (a, b) = (from + t / 2.0, to - t / 2.0);
-                parts.push(Shape::Line {
-                    ax: c + ux * a,
-                    ay: cy + uy * a,
-                    bx: c + ux * b,
-                    by: cy + uy * b,
-                    w: t,
-                });
-            }
-            Shape::Any(parts)
-        }
-        IconState::Idle => moon(g),
-        IconState::Off => slashed(g, moon(g)),
-    }
-}
-
-fn moon(g: Grid) -> Shape {
-    let (c, r) = (g.x + g.len(8.0), g.len(7.0));
-    minus(
-        Shape::Disc {
-            cx: c,
-            cy: g.y + g.len(8.0),
-            r,
-        },
-        Shape::Disc {
-            cx: c + g.len(3.5),
-            cy: g.y + g.len(4.5),
-            r: g.len(5.5),
-        },
-    )
 }
 
 /// An ICO file of 32-bit frames, each with an AND mask, in the order given. Each frame is square, 1 to 256 px.
@@ -1098,8 +811,8 @@ fn blank(width: u32, height: u32, rgb: [u8; 3]) -> Rgba {
     }
 }
 
-/// Rows: each concept's holding, idle and off; a bar at the left marks the pick. Columns: 16, 20, 24, 32, 40 and 48 px
-/// at real size, then the same enlarged 8 times.
+/// Rows: holding, idle and off. Columns: 16, 20, 24, 32, 40 and 48 px at real size, then the same enlarged 8 times.
+/// `media/scripts/check-art.mjs` reads the glyphs at these places, so a layout change goes there too.
 #[cfg(test)]
 fn sheet(back: [u8; 3], ink: [u8; 3]) -> Rgba {
     const SIZES: [u32; 6] = [16, 20, 24, 32, 40, 48];
@@ -1110,36 +823,29 @@ fn sheet(back: [u8; 3], ink: [u8; 3]) -> Rgba {
     let real: u32 = SIZES.iter().map(|s| s + GAP).sum();
     let zoomed: u32 = SIZES.iter().map(|s| s * ZOOM + GAP).sum();
     let width = MARGIN + real + MARGIN + zoomed - GAP + MARGIN;
-    let height = Concept::ALL.len() as u32 * (3 * (row + GAP) + MARGIN) + MARGIN;
+    let height = MARGIN + 3 * row + 2 * GAP + MARGIN;
     let mut out = blank(width, height, back);
     let mut top = MARGIN;
-    for concept in Concept::ALL {
-        if concept == PICK {
-            let bar = blank(6, 3 * row + 2 * GAP, mix(back, ink, 0.5));
-            paint(&mut out, &bar, 10, top, 1);
+    for state in STATES {
+        let mut left = MARGIN;
+        for size in SIZES {
+            let glyph = colorize(&tray_mask(state, size), ink);
+            paint(&mut out, &glyph, left, top + (row - size) / 2, 1);
+            left += size + GAP;
         }
-        for state in STATES {
-            let mut left = MARGIN;
-            for size in SIZES {
-                let glyph = colorize(&concept_mask(concept, state, size), ink);
-                paint(&mut out, &glyph, left, top + (row - size) / 2, 1);
-                left += size + GAP;
-            }
-            left += MARGIN;
-            for size in SIZES {
-                let glyph = colorize(&concept_mask(concept, state, size), ink);
-                paint(&mut out, &glyph, left, top + (row - size * ZOOM) / 2, ZOOM);
-                left += size * ZOOM + GAP;
-            }
-            top += row + GAP;
+        left += MARGIN;
+        for size in SIZES {
+            let glyph = colorize(&tray_mask(state, size), ink);
+            paint(&mut out, &glyph, left, top + (row - size * ZOOM) / 2, ZOOM);
+            left += size * ZOOM + GAP;
         }
-        top += MARGIN;
+        top += row + GAP;
     }
     out
 }
 
-/// Rows: each concept's app icon on a light and on a dark background. Columns: every frame size at real size, then
-/// enlarged 4 times.
+/// Rows: the app icon on a light and on a dark background. Columns: every frame size at real size, then enlarged 4
+/// times.
 #[cfg(test)]
 fn app_sheet() -> Rgba {
     const ZOOM: u32 = 4;
@@ -1149,29 +855,21 @@ fn app_sheet() -> Rgba {
     let real: u32 = APP_ICON_SIZES.iter().map(|s| s + GAP).sum();
     let zoomed: u32 = APP_ICON_SIZES.iter().map(|s| s * ZOOM + GAP).sum();
     let width = MARGIN + real + zoomed + MARGIN;
-    let mut out = blank(width, 2 * Concept::ALL.len() as u32 * row, [0; 3]);
+    let mut out = blank(width, 2 * row, [0; 3]);
     let mut top = 0;
-    for concept in Concept::ALL {
-        for back in [[0xf3; 3], [0x20; 3]] {
-            paint(&mut out, &blank(width, row, back), 0, top, 1);
-            let mut left = MARGIN;
-            for size in APP_ICON_SIZES {
-                paint(
-                    &mut out,
-                    &concept_app_icon(concept, size),
-                    left,
-                    top + (row - size) / 2,
-                    1,
-                );
-                left += size + GAP;
-            }
-            for size in APP_ICON_SIZES {
-                let icon = concept_app_icon(concept, size);
-                paint(&mut out, &icon, left, top + (row - size * ZOOM) / 2, ZOOM);
-                left += size * ZOOM + GAP;
-            }
-            top += row;
+    for back in [[0xf3; 3], [0x20; 3]] {
+        paint(&mut out, &blank(width, row, back), 0, top, 1);
+        let mut left = MARGIN;
+        for size in APP_ICON_SIZES {
+            paint(&mut out, &app_icon(size), left, top + (row - size) / 2, 1);
+            left += size + GAP;
         }
+        for size in APP_ICON_SIZES {
+            let icon = app_icon(size);
+            paint(&mut out, &icon, left, top + (row - size * ZOOM) / 2, ZOOM);
+            left += size * ZOOM + GAP;
+        }
+        top += row;
     }
     out
 }
@@ -1217,19 +915,17 @@ mod tests {
 
     #[test]
     fn every_state_draws_at_every_size() {
-        for concept in Concept::ALL {
-            for state in STATES {
-                for size in TRAY_SIZES {
-                    let mask = concept_mask(concept, state, size);
-                    assert_eq!(mask.size, size);
-                    assert_eq!(mask.alpha.len(), (size * size) as usize);
-                    // A glyph, not an empty box or a filled one.
-                    let share = ink(&mask) as f32 / (size * size) as f32;
-                    assert!(
-                        (0.08..0.6).contains(&share),
-                        "{concept:?} {state:?} {size}: ink {share:.2}"
-                    );
-                }
+        for state in STATES {
+            for size in TRAY_SIZES {
+                let mask = tray_mask(state, size);
+                assert_eq!(mask.size, size);
+                assert_eq!(mask.alpha.len(), (size * size) as usize);
+                // A glyph, not an empty box or a filled one.
+                let share = ink(&mask) as f32 / (size * size) as f32;
+                assert!(
+                    (0.08..0.6).contains(&share),
+                    "{state:?} {size}: ink {share:.2}"
+                );
             }
         }
     }
@@ -1237,23 +933,19 @@ mod tests {
     #[test]
     fn states_differ_in_shape() {
         // Shape, not colour: at least a quarter of the ink of two states sits in different pixels.
-        for concept in Concept::ALL {
-            for size in [16, 24] {
-                for (i, a) in STATES.iter().enumerate() {
-                    for b in &STATES[i + 1..] {
-                        let (ma, mb) = (
-                            concept_mask(concept, *a, size),
-                            concept_mask(concept, *b, size),
-                        );
-                        let (mut differ, mut union) = (0, 0);
-                        for (pa, pb) in ma.alpha.iter().zip(&mb.alpha) {
-                            let (ia, ib) = (*pa >= 128, *pb >= 128);
-                            union += usize::from(ia || ib);
-                            differ += usize::from(ia != ib);
-                        }
-                        let share = differ as f32 / union as f32;
-                        assert!(share >= 0.25, "{concept:?} {a:?} {b:?} {size}: {share:.2}");
+        for size in [16, 24] {
+            for (i, a) in STATES.iter().enumerate() {
+                for b in &STATES[i + 1..] {
+                    let (ma, mb) = (tray_mask(*a, size), tray_mask(*b, size));
+                    let (mut differ, mut union) = (0, 0);
+                    for (pa, pb) in ma.alpha.iter().zip(&mb.alpha) {
+                        let (ia, ib) = (*pa >= 128, *pb >= 128);
+                        union += usize::from(ia || ib);
+                        differ += usize::from(ia != ib);
                     }
+                    let share = differ as f32 / union as f32;
+                    println!("{a:?} {b:?} {size}: {share:.2}");
+                    assert!(share >= 0.25, "{a:?} {b:?} {size}: {share:.2}");
                 }
             }
         }
@@ -1275,21 +967,14 @@ mod tests {
 
     #[test]
     fn strokes_are_crisp_at_small_sizes() {
-        for concept in Concept::ALL {
-            // Straight strokes sit on whole pixels, so only curves and diagonals leave grey pixels: the cup has 13% at
-            // most (its round bottom and the off bar). One stroke off the grid would leave 50% or more. The sunrise's
-            // empty sun is a 1 px curve at 16 and 20 px (up to SUNRISE_GREY there); its rays are whole pixels. Eye and
-            // Sky are mostly curves (up to 42%) and stay only until `p5-haik-check`.
-            let bound = match concept {
-                Concept::Sunrise => SUNRISE_GREY,
-                Concept::Cup => 0.15,
-                Concept::Eye | Concept::Sky => 0.45,
-            };
-            for state in STATES {
-                for size in [16, 20, 24, 32] {
-                    let share = half_covered(&concept_mask(concept, state, size));
-                    assert!(share <= bound, "{concept:?} {state:?} {size}: {share:.2}");
-                }
+        // Straight strokes sit on whole pixels, so only curves and diagonals leave grey pixels; one stroke off the
+        // grid would leave 50% or more. The empty sun is a 1 px curve at 16 and 20 px (up to SUNRISE_GREY there); the
+        // rays are whole pixels.
+        for state in STATES {
+            for size in [16, 20, 24, 32] {
+                let share = half_covered(&tray_mask(state, size));
+                println!("{state:?} {size}: {share:.2}");
+                assert!(share <= SUNRISE_GREY, "{state:?} {size}: {share:.2}");
             }
         }
     }
@@ -1335,35 +1020,30 @@ mod tests {
 
     #[test]
     fn glyph_stays_inside_its_box() {
-        for concept in Concept::ALL {
-            for state in STATES {
-                for size in TRAY_SIZES {
-                    let mask = concept_mask(concept, state, size);
-                    let pad = padding(size);
-                    let (mut left, mut top, mut right, mut bottom) = (size, size, 0, 0);
-                    for y in 0..size {
-                        for x in 0..size {
-                            if mask.alpha[(y * size + x) as usize] == 0 {
-                                continue;
-                            }
-                            let inside =
-                                (pad..size - pad).contains(&x) && (pad..size - pad).contains(&y);
-                            assert!(
-                                inside,
-                                "{concept:?} {state:?} {size}: ink at {x},{y}, pad {pad}"
-                            );
-                            (left, top) = (left.min(x), top.min(y));
-                            (right, bottom) = (right.max(x + 1), bottom.max(y + 1));
+        for state in STATES {
+            for size in TRAY_SIZES {
+                let mask = tray_mask(state, size);
+                let pad = padding(size);
+                let (mut left, mut top, mut right, mut bottom) = (size, size, 0, 0);
+                for y in 0..size {
+                    for x in 0..size {
+                        if mask.alpha[(y * size + x) as usize] == 0 {
+                            continue;
                         }
+                        let inside =
+                            (pad..size - pad).contains(&x) && (pad..size - pad).contains(&y);
+                        assert!(inside, "{state:?} {size}: ink at {x},{y}, pad {pad}");
+                        (left, top) = (left.min(x), top.min(y));
+                        (right, bottom) = (right.max(x + 1), bottom.max(y + 1));
                     }
-                    // And it uses its box: no tiny glyph in a large slot.
-                    let live = size - 2 * pad;
-                    let span = (right - left).max(bottom - top);
-                    assert!(
-                        span * 10 >= live * 8,
-                        "{concept:?} {state:?} {size}: spans {span} of {live}"
-                    );
                 }
+                // And it uses its box: no tiny glyph in a large slot.
+                let live = size - 2 * pad;
+                let span = (right - left).max(bottom - top);
+                assert!(
+                    span * 10 >= live * 8,
+                    "{state:?} {size}: spans {span} of {live}"
+                );
             }
         }
     }
@@ -1380,24 +1060,19 @@ mod tests {
 
     #[test]
     fn app_icon_draws_at_every_frame_size() {
-        for concept in Concept::ALL {
-            for size in APP_ICON_SIZES {
-                let icon = concept_app_icon(concept, size);
-                assert_eq!((icon.width, icon.height), (size, size));
-                assert_eq!(icon.pixels.len(), (size * size * 4) as usize);
-                let opaque = icon.pixels.chunks(4).filter(|p| p[3] == 255).count();
-                // The plate's green stays at 0x57 or below; the gold and white mark lifts it.
-                let mark = icon
-                    .pixels
-                    .chunks(4)
-                    .filter(|p| p[3] == 255 && p[1] > 0xa0)
-                    .count();
-                assert!(
-                    opaque * 5 > (size * size * 2) as usize,
-                    "{concept:?} {size}: plate"
-                );
-                assert!(mark * 12 > opaque, "{concept:?} {size}: mark");
-            }
+        for size in APP_ICON_SIZES {
+            let icon = app_icon(size);
+            assert_eq!((icon.width, icon.height), (size, size));
+            assert_eq!(icon.pixels.len(), (size * size * 4) as usize);
+            let opaque = icon.pixels.chunks(4).filter(|p| p[3] == 255).count();
+            // The plate's green stays at 0x57 or below; the gold and white mark lifts it.
+            let mark = icon
+                .pixels
+                .chunks(4)
+                .filter(|p| p[3] == 255 && p[1] > 0xa0)
+                .count();
+            assert!(opaque * 5 > (size * size * 2) as usize, "{size}: plate");
+            assert!(mark * 12 > opaque, "{size}: mark");
         }
     }
 

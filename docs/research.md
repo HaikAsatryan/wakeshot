@@ -2568,10 +2568,13 @@ screen. Code: `crates/wakeshot-windows/src/tray/menu_paint.rs`.
   counts with a stdlib script). The contrast render uses this PC's system colours, as Phase 1's did (`ffffff`,
   `0078d7`, `000000`).
 - **What changed from the spike, and why:**
-  - Icons on Automatic (eye `E890`), Keep awake (cup `EC32`), Restore (`E777`), Open log (`E8A5`) and Quit (cross
-    `E711`), Haik's ask (2026-11-03 17:32). The Keep awake lengths and Keep screen on get none (Microsoft's rule
-    above); the status line gets none. With a mark and an icon column, the main menu's text starts at 71 epx instead
-    of 43.
+  - Icons on Automatic (eye `E890`), Keep awake (clock `E823` "Recent" since 2026-11-05, Haik's pick,
+    `p6-brand-cleanup`; a cup `EC32` before), Restore (`E777`), Open log (`E8A5`) and Quit (cross `E711`), Haik's ask
+    (2026-11-03 17:32). Test `item_glyphs_are_in_both_icon_fonts` finds all eight menu glyphs in Segoe Fluent Icons and
+    Segoe MDL2 Assets on this laptop, and `E917` "Clock" missing from MDL2. The renders were redone then (BMP made PNG
+    by a Node script); against the old ones only the Keep awake icon cell changed. The Keep awake lengths and Keep
+    screen on get none (Microsoft's rule above); the status line gets none. With a mark and an icon column, the main
+    menu's text starts at 71 epx instead of 43.
   - Marks and the chevron in the secondary text colour, as WinUI draws them; the spike drew them in the text colour.
   - The status line in the secondary text colour (about 6:1 in light, 9:1 in dark) instead of the disabled grey
     (2.5 to 2.7:1, research "Dark menus"), and never highlighted; a disabled item is never highlighted either.
@@ -2879,6 +2882,13 @@ Microsoft's guidance, the padding and stroke rules and the ICO and PNG writers a
   frames; in each, the corner is transparent, the plate reads 7957f4 near the top left and 6b49f3 near the bottom
   right, gold and white pixels are there and no orange. The .NET load and the exes' icon resource were not checked
   again. The sheets now hold four concepts: 1892 by 4960 px, 139 KB each; the app sheet 1508 by 2304 px, 288 KB.
+- **Now (2026-11-05, `p6-brand-cleanup`): only the Sunrise is left in the code.** Cup, Eye and Sky are gone from
+  `art.rs`, with `Concept`, `PICK` and `concept_mask`; `concept_app_icon` is now `app_icon`. The points above that name
+  them are history. The tests check the Sunrise alone, and print its shares: states differ by 45% (idle to off, 16 px)
+  to 99%; half-covered pixels at 16 to 32 px reach 32% (idle, 16 px; the bound is 35%). The sheets show only the
+  Sunrise: 1892 by 1248 px, 31 KB each, its rows pixel-equal to the old sheets' (a Node compare); the app sheet 1508 by
+  576 px, 69 KB. `assets/wakeshot.ico` and `assets/wakeshot-notice.png` came out byte-equal (same sha256 before and
+  after), and `media/scripts/check-art.mjs` still passes with no change to its layout.
 - **Same bytes on x64 and ARM64:** the shapes use `+`, `-`, `*`, `/`, `sqrt` and `round` only, all exact in IEEE 754,
   and Rust does not fuse a multiply and an add on its own. So the golden test compares exactly. Tests ran on x64 only;
   ARM64 got clippy and builds, not a test run.
