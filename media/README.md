@@ -35,7 +35,7 @@ takes about a minute on the test laptop.
 
 | Check | Command |
 |---|---|
-| The art port draws exactly what `art.rs` draws, no tolerance: every pixel of the three review sheets (tray glyphs at 16 to 48 px in four rows, dark, light and high contrast), the 14 frames of `assets/wakeshot.ico` and the notice picture | `node scripts/check-art.mjs` |
+| The art port draws exactly what `art.rs` draws, no tolerance: every pixel of the three review sheets (tray glyphs at 16 to 48 px in four rows, dark, light and high contrast), the 14 frames of `assets/wakeshot.ico` and the notice picture | `node scripts/check-art.mjs`; CI runs it on every push (job `art-port`, Node 26, no `npm ci`: it needs only `node:` modules and the `.ts` port) |
 | No em dash, en dash or emoji in the text files; every asset credited; every text colour pair in `src/theme.ts` at 4.5:1 or more and every graphic pair at 3:1 | `npm run check` |
 | Video: H.264 and AAC, 1920 x 1080, 30 fps, 30 s plus or minus 2, under 10 MB; loops, read frame by frame: GIF, 480 x 240, 4 to 6 s, forever, under 1 MB, last frame equal to the first, a 40 px border of every frame exactly GitHub's page colour, the first frame the port's idle glyph and a held stretch its holding glyph, every pixel | `npm run check-video` (add `-- --draft` for the draft) |
 | A clean checkout rebuilds the same bytes | `npm run check-rebuild` (add `-- --final` once the final video exists) |
@@ -44,9 +44,9 @@ takes about a minute on the test laptop.
 ## When something changes
 
 - **The icon** (`crates/wakeshot-windows/src/tray/art.rs`): run its `write_art_files` test to refresh the sheets,
-  `assets/wakeshot.ico` and the notice picture, then `node scripts/check-art.mjs`. It fails until
-  `src/art/heldLight.ts` draws the same bytes: port the change step by step, each f32 operation wrapped in `F` in
-  Rust's order (the file's head says why). Then `npm run loop` and `npm run video`.
+  `assets/wakeshot.ico` and the notice picture, then `node scripts/check-art.mjs`. It fails, and CI with it, until
+  `src/art/heldLight.ts` draws the same bytes: port the change in the same change, step by step, each f32 operation
+  wrapped in `F` in Rust's order (the file's head says why). Then `npm run loop` and `npm run video`.
 - **The chimes** (`crates/wakeshot-windows/src/sound/chime.rs`): nothing to port; `make-sounds.mjs` reads the numbers
   from that file. If the file changes shape, the script stops with the name of what it could not find.
 - **The menu or tooltip words**: new captures into `public/shots/`, then update `data/shots.json` (file, size, and
@@ -127,6 +127,12 @@ PowerShell window with no Claude Code session working.
    and a hard edge between the two parts left a seam. Change it when Haik wants the title to open on the lit icon.
 9. **H.264 at CRF 16**, not 20: at 20 the plate's edge broke into blocks while the light came on (the whole plate
    changes at once). The draft is 2.5 MB. Change it when the final video with its captures passes about 8 MB.
+10. **The title and the outro are one stacked lockup** (`docs/brand.md`), the icon over the name, sized by the
+    plate's side (`STACKED` in `src/promo/scenes.tsx`): the name's cap height 0.36 of it (the name at half the side,
+    117 px under the 256 px icon, 88 px under 192), 0.26 of it from the plate's bottom to the cap line, the name's ink
+    centred under the plate, tracking -0.01em as the wordmark. Each line is placed by its cap line and baseline (CSS
+    `text-box`), baselines on whole pixels. Why: a 16:9 title wants the stacked form, and with the sizes set by hand
+    the title and the outro were two lockups. Change it when a scene needs the name larger than the icon allows.
 
 ## Where the video lives
 

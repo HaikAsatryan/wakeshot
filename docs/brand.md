@@ -132,6 +132,12 @@ for the page's colour-blind column (`docs/research.md`).
   `-dark.svg` (304 x 80 px) carry the letters as outlines, so any viewer draws them. The README header is the lockup
   in a centred `<h1>`, one `<picture>` with alt "Wakeshot"; the page hero is the same lockup in live text, a row, not
   the icon over the name. Change it when the lockup sits beside other apps' lockups and looks small.
+- **The stacked lockup**: the app icon over "Wakeshot", for 16:9 frames, where a row leaves the frame empty above and
+  below; the video's title, outro and poster use it. The word's cap height 0.36 of the plate (the word set at half the
+  plate's side), 0.26 of the plate from the plate's bottom to the word's cap line (the row lockup's gap), the word's
+  ink centred under the plate, the same word colours. Lines under it keep the plate as their unit: 0.2 of it from a
+  baseline to the next cap line. Set in `media/src/promo/scenes.tsx` (`STACKED`); the drawn frames match within a pixel.
+  Change it when a frame needs the name larger than the icon allows, or the page wants a stacked form too.
 - **The social card** `site/social-card.png`: 1280 x 640, 285,193 bytes, on `#121610` with the warm light round the
   icon; the lockup and the README's first line, every part at least 108 px from each edge. It is the page's
   `og:image` and the repo's social preview. Why dark: a light left on at night, and it stands out in a white feed.

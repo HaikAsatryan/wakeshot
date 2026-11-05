@@ -1,7 +1,8 @@
 // Checks that the port of the art (src/art/heldLight.ts) draws exactly what the Rust art code draws, with no
 // tolerance: every pixel of the three review sheets (tray glyphs at 16 to 48 px, four rows, real size and enlarged),
 // every frame of assets/wakeshot.ico (the 256 frame is a PNG) and the notice picture, all written by art.rs
-// (`write_art_files`). Run after any change to the art: `node scripts/check-art.mjs`.
+// (`write_art_files`). Run after any change to the art: `node scripts/check-art.mjs`. CI runs it too (job `art-port`)
+// with no `npm ci`, so it imports only `node:` modules, `lib/png.mjs` and the port.
 import {fileURLToPath} from 'node:url';
 import {dirname, join} from 'node:path';
 import {readPng, readIco} from './lib/png.mjs';

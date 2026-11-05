@@ -201,7 +201,7 @@ export function trayMask(state: IconState, size: number): Mask {
     alpha = raster(size, size, heldLine(h));
     light = raster(size, size, heldDisc(h, size, 0));
   } else if (state === 'off' && h.t >= 2) {
-    alpha = raster(size, size, struck(h, outline));
+    alpha = raster(size, size, struck(h, size, outline));
   } else {
     alpha = raster(size, size, outline);
   }
@@ -222,16 +222,20 @@ export function trayMask(state: IconState, size: number): Mask {
   return {size, alpha, light};
 }
 
-/** The square the off slash crosses (`strike_box`): left, top, right, bottom. */
-function strikeBox(h: Held): [number, number, number, number] {
-  const bottom = h.lineY + h.t;
-  return [h.x1 - (bottom - h.top), h.top, h.x1, bottom];
+/**
+ * The square the off slash crosses (`strike_box`): left, top, right, bottom. From the light's top left corner through
+ * its centre, down to a stroke above the line, so the line stays whole.
+ */
+function strikeBox(h: Held, size: number): [number, number, number, number] {
+  const left = div(size - h.d, 2);
+  const bottom = h.lineY - h.t;
+  return [left, h.top, left + (bottom - h.top), bottom];
 }
 
 /** Off at 2 px strokes and up: the outline struck through with a stroke-wide gap each side (`struck`). */
-function struck(h: Held, base: Shape): Shape {
+function struck(h: Held, size: number, base: Shape): Shape {
   const t = h.t;
-  const [x0, y0, x1, y1] = strikeBox(h);
+  const [x0, y0, x1, y1] = strikeBox(h, size);
   const half = F(t / 2);
   const slash = (w: number): Shape => ({
     k: 'line',
@@ -246,7 +250,7 @@ function struck(h: Held, base: Shape): Shape {
 
 /** Off at 1 px strokes: whole pixels down the diagonal, every neighbour cleared (`strike_pixels`). */
 function strikePixels(alpha: Uint8Array, h: Held, size: number) {
-  const [x0, y0, , y1] = strikeBox(h);
+  const [x0, y0, , y1] = strikeBox(h, size);
   const steps = y1 - y0;
   const set = (x: number, y: number, v: number) => {
     if (x >= 0 && x < size && y >= 0 && y < size) alpha[y * size + x] = v;
@@ -366,7 +370,11 @@ function distance(p: Plated, x: number, y: number): number {
 
 const SQRT3_HALF = F(F(Math.sqrt(3)) / 2);
 
-/** The plate's colour at a point: the ramp, then when lit the glow (with `glow`) and the shade (`plate_colour`). */
+/**
+ * The plate's colour at a point, without the bloom: the ramp, then when lit the glow and the shade (`plate_colour`).
+ * art.rs always adds the glow to a lit plate; `glow` false is the media's own, for the title's unlit icon
+ * (`motion.ts`, `appIconUnlit`).
+ */
 export function plateColour(p: Plated, x: number, y: number, glow: boolean): Rgbf {
   const [m, w] = [p.margin, p.side];
   const [dx, dy] = [SQRT3_HALF, 0.5];
@@ -410,18 +418,20 @@ export function lightColour(p: Plated, x: number, y: number): Rgbf {
   return mixf(f(LIGHT_CORE), f(LIGHT_EDGE), clamp(F(F(t - F(0.6)) / F(0.4)), 0, 1));
 }
 
+/** Where the bloom ends, in light radii (`BLOOM_END`). */
+const BLOOM_END = F(1.6);
+
+/** The bloom's alpha by distance from the light's centre, in light radii (`BLOOM`). */
+const BLOOM: [number, number][] = [
+  [0, F(0.8)],
+  [1, F(0.44)],
+  [F(1.28), F(0.144)],
+  [BLOOM_END, 0],
+];
+
 /** The light's soft bloom round its edge, as an alpha (`bloom`). */
 export function bloom(p: Plated, x: number, y: number): number {
-  const t = F(distance(p, x, y) / F(F(1.9) * p.r));
-  return stops(
-    [
-      [0, F(0.8)],
-      [F(0.53), F(0.44)],
-      [F(0.75), F(0.144)],
-      [1, 0],
-    ],
-    t,
-  );
+  return stops(BLOOM, F(distance(p, x, y) / p.r));
 }
 
 /** One box blur pass across, then one down, `width` pixels wide; outside the image counts as clear (`box_blur`). */

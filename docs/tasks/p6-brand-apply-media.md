@@ -1,6 +1,6 @@
 # Apply the new brand to media/: colours, font, the art port, the icon loop, the poster
 
-Phase: 6 (brand apply). Status: done (Parts A and B, 2026-11-05). Needs Haik: no (his 8
+Phase: 6 (brand apply). Status: done (Parts A and B, and the review fixes, 2026-11-05). Needs Haik: no (his 8
 brand decisions, 2026-11-05 ~15:00, all defaults).
 Agent: `wakeshot-worker`. Size: about 150K tokens. Written by the orchestrator of Haik's brand session, 2026-11-05.
 Runs after: Part A: Haik's brand decisions. Part B: `p6-brand-apply-art` done (the orchestrator resumes you, or a new
@@ -123,6 +123,16 @@ Made by the worker as principal designer; reasons and "change it when" triggers 
     to open on the lit icon.
 12. **(Part B) H.264 at CRF 16**, not 20: at 20 the plate's edge broke into blocks while the light came on; the draft
     is 2.5 MB of the 10 MB limit. Change it when the final video with captures passes about 8 MB.
+13. **(Review fixes) One stacked lockup in sides of the plate** (finding 6, the orchestrator kept the stacked form):
+    the name's cap height 0.36 (the name at half the plate's side), 0.26 from the plate's bottom to the cap line, the
+    same gap as the row lockup, so both lockups share one spacing rule; the name's ink centred under the plate. 0.36
+    keeps the title as approved within 3% (it was 0.372) and makes whole font sizes (117 and 88 px). Change it when a
+    scene needs the name larger than the icon allows, or the page wants a stacked form.
+14. **(Review fixes) Lines placed by cap line and baseline** (CSS `text-box: trim-both cap alphabetic`), not by line
+    boxes and hand-summed heights: the layout reads as the brand rule, and the gaps hold at any font size. Change it
+    when Remotion's Chrome drops `text-box` (then the 970/250 metrics in code).
+15. **(Review fixes) The video's name takes the wordmark's -0.01em tracking**, as `docs/brand.md` sets it and the
+    page and the SVG lockups use; the video had none. Change it with the wordmark.
 
 ## Found outside scope
 
@@ -136,6 +146,14 @@ Made by the worker as principal designer; reasons and "change it when" triggers 
 - `check-art` has no `npm run` script (`node scripts/check-art.mjs`, as before). Adding one changes `package.json`,
   which this card may touch only for a font package; for whoever next owns it.
 - Nothing wrong found in `art.rs` or `assets/`: the port matches every file it writes.
+- (Review fixes) `docs/tasks/p6-pages.md` still has two lines from before `art.rs` wrote the SVGs: decision 5 ("ported
+  layer by layer from `art.rs`" and "Change it when `art.rs` gains an SVG writer", which it now has) and the Result's
+  file list ("`site/wakeshot.svg` (the app icon as shapes, ported from `art.rs`)"). Only the redo item was this
+  round's to fix.
+- (Review fixes) Nothing wrong found in `art.rs`, `assets/`, `site/` or `ci.yml` for the media: the port matches all
+  files again, and `check-art` passes as the `art-port` job runs it. The job itself has not run on GitHub yet.
+- (Review fixes) Still open from the review's "Outside the brief": the page's loop alt text differs from the
+  README's, and `media/` makes no still PNG for `prefers-reduced-motion` yet (`p6-media` Part B or `p6-pages`).
 
 ## Log
 
@@ -268,6 +286,61 @@ Made by the worker as principal designer; reasons and "change it when" triggers 
   art rows, checks, "When something changes", decisions 7 to 9. Pictures kept: `apply-media-loop.png`,
   `apply-media-title.png`, `apply-media-poster.png`. `docs/research.md`: section "Media: the art port in f32, and
   the loop and title drawn from it". Final `check-rebuild`: all 5 outputs the same bytes. **Part B done.**
+- 2026-11-05: review fixes started (a new worker). Brief: review `docs/reviews/p6-brand-apply.md` findings 2 (media
+  side) and 6; the art card's "Review fixes". Steps: port the bloom and strike box, `check-art` as CI runs it,
+  re-render, the stacked lockup in `docs/brand.md`, `media/README.md`, the `p6-pages` line.
+- 2026-11-05: before the port `check-art` failed as the art card said: the three sheets (59,800 pixels each, the off
+  row) and app icon 30 to 256 px (bloom, up to 17 levels). Read `art.rs` against `heldLight.ts` line by line: only
+  `bloom` and `strike_box` change a pixel; `plate_colour` lost its `glow` switch, `SHADE`, `SHADE_FROM`, `LIT_RAMP`
+  and the rim's `/ 0.14` give the f32 values the port already uses (`F(0.45)`, `F(0.36)`, `F(0.14)`); `raster`,
+  `stops`, `box_blur`, `shadow_blur`, `Paint`, `tray_mask`, `struck`, `strike_pixels` and the test-side `mix`, `paint`,
+  `sheet` unchanged.
+- 2026-11-05: ported. `bloom`: `BLOOM` and `BLOOM_END` as named constants, `t = F(distance / r)`. `strikeBox(h, size)`:
+  `left = div(size - d, 2)`, `bottom = lineY - t`, box `(left, top, left + bottom - top, bottom)`; `struck` takes
+  `size`. `plateColour` keeps its `glow` switch, now documented as the media's own (the title's unlit icon); art.rs
+  always adds the glow. `check-art`: 9,458,740 pixels, 0 differ.
+- 2026-11-05: `check-art` as CI runs it (scratch `ci-check.ps1`): a copy of `media/` (package.json, `src/`,
+  `scripts/`), `assets/` and `docs/research/img/ux/` in a case-sensitive NTFS folder (`fsutil setCaseSensitiveInfo`,
+  inherited by the subfolders), no `node_modules` in it or above it, `node media/scripts/check-art.mjs` from the copy's
+  root, Node 26.13.0: 0 differ, exit 0, no warning printed. Not run on Linux itself: the WSL Ubuntu has no Node and
+  this card installs nothing.
+- 2026-11-05: rendered from the port. `npm run loop` (18 s): both GIFs byte-identical to before (the loop shows idle
+  and holding at 128 px; neither change reaches them). `npm run draft` (56 s): video 2,482,935 bytes, poster changed.
+  `check-video --draft`: 25 of 25 ok. The poster's icon is `app_icon(256)`, 0 of 52,952 opaque pixels differ
+  (scratch `tools\iconexact.mjs`). Looked at before and after at 2 and 6 times (scratch `look\poster-icon-*.png`):
+  the halo is tighter and the bar cleaner, as in the art card's `apply-fixes.png`.
+- 2026-11-05: finding 6, the stacked lockup as drawn (scratch `tools\measure.mjs`, the `h` stem's flat ends in the
+  poster and outro frame 870; Chrome snaps both to whole pixels). Title: plate 234, name 120 px, cap height 87 px
+  (0.372 of the plate), plate bottom to cap line 65 px (0.278). Outro: plate 176, name 96 px, cap 69 (0.392), gap 53
+  (0.301). Ink centre 1 and 0.5 px right of the plate's centre. Not clean: title and outro are two lockups. Also the
+  name had no tracking; `docs/brand.md` sets the wordmark at -0.01em. Instrument Sans SemiBold metrics (fontTools on
+  the TTF of the same commit): 1000 units per em, cap height 720, ascender 970, descender 250 (typo metrics flag set);
+  the render matches them (baseline at line top + half-leading + 0.97 em, to the pixel).
+- 2026-11-05: set clean ratios, one lockup in sides of the plate (`STACKED` in `scenes.tsx`): the name's cap height
+  0.36 (so the name is set at half the plate's side: 117 px at 256, 88 px at 192), 0.26 from the plate's bottom to
+  the cap line (the row lockup's own gap, one spacing rule for both), the ink centred under the plate, tracking
+  -0.01em. Lines under it by the same unit: a line's cap line 0.2 below the baseline above (the title's tagline was
+  0.199 already), the outro's install box 0.3 below. Each line placed by its cap line and baseline with CSS
+  `text-box: trim-both cap alphabetic` (Chrome 133 and up; Remotion's Chrome Headless Shell is 158.0.8127.2), baselines
+  on whole pixels, the whole group centred from the plate's top to the last part's bottom. `Lockup` and its hand-summed
+  heights replaced by `stack`, `Line`, `Name`. Typecheck ok.
+- 2026-11-05: measured the new frames: title plate bottom 545, cap line 606, baseline 690 (gap 61, cap 84; design
+  60.84 and 84.24); outro 474, 519, 583 (gap 45, cap 64; design 45.76 and 63.36; the font's hinting snaps the cap to
+  whole pixels, so within 1 px). Ink centre 960.15 and 960.23 against the plate's 960 (was 960.88): the 0.011 em shift
+  from the side bearings of "W" and "t" works. Looked at the title and outro beside the old ones and at 100%, and at
+  the light coming on (frames 21 to 28, 2 times): one lockup at two sizes; the light still fills as one light.
+- 2026-11-05: `npm run draft` again (57 s): video 2,472,189 bytes, poster equal to the measured still 75.
+  `check-video --draft`: 25 of 25 ok. Poster icon and outro icon: 0 of 52,952 and 29,920 opaque pixels differ from
+  `app_icon(256)` and `(192)`.
+- 2026-11-05: pictures. `apply-media-loop.png` kept (both GIFs byte-identical). `apply-media-title.png` rebuilt in its
+  layout (frames 20, 21, 22, 23, 25, 28, 33 at 1:1) and `apply-media-poster.png` (960 x 600 of the poster); looked at
+  both. `docs/brand.md`: "The stacked lockup" paragraph after the row lockup. `media/README.md`: line 62 true again;
+  the check-art row and "When something changes" now say CI runs it; decision 10 (the stacked lockup).
+  `check-art.mjs` head names the CI job. `docs/tasks/p6-pages.md`: the redo item for an icon change now says
+  `write_art_files` writes the SVGs and lockups (test `site_svgs_match_the_art` exists, line 3014).
+- 2026-11-05: final checks (table in Result, "Review fixes"): all pass; `check-rebuild` 96 s, 5 of 5 the same bytes.
+  `docs/research.md`: new section "Media review fixes: the port as CI runs it, and the stacked lockup". A comment-only
+  edit in `scenes.tsx` after `check-rebuild`; typecheck and `npm run check` again, ok. Status done.
 
 ## Result
 
@@ -315,3 +388,43 @@ the files themselves: `media/out/icon-loop-dark.gif`, `icon-loop-light.gif`, `me
 `wakeshot-promo-poster-draft.png`.
 
 Open items: `p6-media` Part B (captures, speed numbers, final video); the root README's media alt texts (docs sweep).
+
+### Review fixes (2026-11-05)
+
+Review `docs/reviews/p6-brand-apply.md`, findings 2 (media side) and 6; the art card's "Review fixes".
+
+- **Finding 2, media side, done.** `heldLight.ts` ports `art.rs`'s two changes exactly: `bloom` (distance over r,
+  `BLOOM` stops ending at `BLOOM_END` 1.6) and `strike_box` (from the light's left, down to a stroke above the line).
+  Nothing else in `art.rs` changes a pixel (read side by side). `check-art` 0 of 9,458,740 pixels differ again, also
+  in a clean case-sensitive copy with no `node_modules`, as the CI job `art-port` runs it. `plateColour`'s `glow`
+  switch is documented as the media's own (art.rs always adds the glow).
+- **Re-rendered.** Loop GIFs byte-identical (idle and holding at 128 px did not change). Draft video and poster with
+  the new bloom and the new lockup; icons are the port's pixels exactly.
+- **Finding 6, done** (the orchestrator kept the stacked form): one stacked lockup in sides of the plate, name cap
+  height 0.36, gap 0.26, ink centred, tracking -0.01em; title and outro were two lockups before (0.372 / 0.278 and
+  0.392 / 0.301 as drawn). Paragraph in `docs/brand.md` after the row lockup; `media/README.md` decision 10.
+- **Docs.** `media/README.md` line 62 true again; CI named in the checks row and "When something changes".
+  `docs/tasks/p6-pages.md` redo item 2: `write_art_files` now writes the SVGs and lockups.
+
+Files: `media/src/art/heldLight.ts`, `media/src/promo/scenes.tsx`, `media/scripts/check-art.mjs` (head comment),
+`media/README.md`, `media/out/draft/*` (not in git); `docs/brand.md` (one paragraph), `docs/tasks/p6-pages.md` (one
+item), `docs/research.md` (one section), `docs/research/img/brand/apply-media-title.png` and `apply-media-poster.png`
+(rebuilt; `apply-media-loop.png` unchanged), this card.
+
+| Check | Outcome |
+|---|---|
+| `node media/scripts/check-art.mjs` (repo, and a clean case-sensitive copy, Node 26.13.0, no `npm ci`) | pass, 0 of 9,458,740 differ; exit 0 both. Not run on Linux |
+| `npm run typecheck` | pass |
+| `npm run check` | pass: 40 files, 6 assets credited, 18 colour pairs |
+| `npm run check-video -- --draft` | pass, 25 of 25 (2.47 MB draft; loops 20,343 and 21,561 bytes, unchanged) |
+| `npm run check-rebuild` | pass: clean `npm ci` copy, all 5 outputs the same bytes |
+| Final render refuses placeholders | pass: `build.mjs video` and `poster` exit 1 |
+| Legacy grep (old colours, sunrise, Inter, `EC32`, the old bloom) in `media/` | no hits |
+| Icons in the frames | poster `app_icon(256)` and outro `app_icon(192)`: 0 of 52,952 and 29,920 opaque pixels differ |
+| Lockup as drawn | title gap 61 px, cap 84 (design 60.84, 84.24); outro 45, 64 (45.76, 63.36); ink centre 960.15 and 960.23 against 960 |
+
+Pictures to look at: `docs/research/img/brand/apply-media-poster.png` (the stacked lockup), `apply-media-title.png`
+(the light coming on, new bloom); scratch `<scratchpad>\p6-brand-media-fixes\look\title-old-new.png`,
+`outro-old-new.png` (before and after), `poster-icon-before-after.png`.
+
+Open items: the `art-port` job's first run on GitHub; the two stale lines in `p6-pages.md` (Found outside scope).

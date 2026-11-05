@@ -5077,3 +5077,32 @@ Checked 2026-11-05 by the review fix round of `p6-brand-apply-art` (review `docs
   job `art-port` runs it on ubuntu-latest with `actions/setup-node@v7` (v7.1.0, 2026-10-08) and Node 26 (26.13.0 LTS
   in setup-node's manifest); actionlint 1.7.12 found nothing. Read from the files and `gh api`; **not verified** on a
   CI run.
+
+## Media review fixes: the port as CI runs it, and the stacked lockup
+
+Checked 2026-11-05 by the review fix round of `p6-brand-apply-media` (review `docs/reviews/p6-brand-apply.md`,
+findings 2 and 6; scripts in the card's scratch folder `p6-brand-media-fixes\`). Offline renders only.
+
+- **The port follows the bloom and the off slash.** After porting `bloom` (distance over r, stops ending at 1.6
+  radii) and `strike_box`, `node media/scripts/check-art.mjs` gives 9,458,740 pixels, 0 differ. Before, the three
+  sheets differed in 59,800 pixels each (the off row) and app icon frames 30 to 256 px by up to 17 levels. Nothing
+  else in `art.rs` changed a pixel: read side by side with the port. **Verified.**
+- **The check passes as CI runs it, with no `npm ci`**: a copy of `media/` (`package.json`, `src/`, `scripts/`),
+  `assets/` and `docs/research/img/ux/` in a case-sensitive NTFS folder (`fsutil file setCaseSensitiveInfo`, which new
+  subfolders inherit, so a wrong case in an import or a file name fails as on Linux), no `node_modules` in it or
+  above it, `node media/scripts/check-art.mjs` from the copy's root on Node 26.13.0: 0 differ, exit 0, no warning.
+  **Verified** on Windows; **not verified** on Linux (WSL's Ubuntu has no Node, and nothing was installed).
+- **Instrument Sans SemiBold 1.000** (fontTools on the TTF of commit `7fa2230`): 1000 units per em, cap height 720,
+  x-height 510, hhea and typo ascender 970 and descender -250 with the USE_TYPO_METRICS flag set, win 986 and 350.
+  "W" starts 39 units into its advance; "t" ends 27 units before its own. **Verified** (script).
+- **How Remotion's Chrome Headless Shell 158.0.8127.2 sets the name** (measured from the frames, the `h` stem's flat
+  ends): the baseline sits at the line box's top plus half-leading plus 0.97 em, so the 970/250 metrics are used; the
+  baseline and the cap line land on whole pixels (cap 86.4 px drawn 87, 84.24 drawn 84, 63.36 drawn 64), so a set
+  cap height or gap is met within 1 px, not exactly. CSS `text-box: trim-both cap alphabetic` (Chrome 133 and up)
+  puts a line's box top on its cap line. **Verified** (frames 75 and 870). Letter-spacing seems to be added after the
+  last letter too: the measured ink centres (960.15, 960.23) are nearer the prediction with a trailing -0.01 em
+  (960.0) than without (959.4 and 959.6); **not verified** directly.
+- **The stacked lockup before the fix, as drawn**: title (plate 234) cap height 0.372 of the plate, plate bottom to
+  cap line 0.278; outro (plate 176) 0.392 and 0.301; ink centre 0.9 and 0.5 px right of the plate's. After (cap 0.36,
+  gap 0.26, ink centred): title gap 61 px and cap 84 (design 60.84, 84.24), outro 45 and 64 (45.76, 63.36), ink
+  centre 960.15 and 960.23 against 960. **Verified** (`measure.mjs`, `inkx.mjs`).

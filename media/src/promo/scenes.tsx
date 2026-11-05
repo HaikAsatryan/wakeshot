@@ -3,6 +3,7 @@ import {AbsoluteFill, Easing, interpolate, useCurrentFrame} from 'remotion';
 import settingsData from '../../data/settings.json';
 import speedData from '../../data/speed.json';
 import {AppIcon} from '../art/Glyph.tsx';
+import {plated} from '../art/heldLight.ts';
 import {COPY} from '../copy.ts';
 import {MONO, SANS} from '../fonts.ts';
 import {DARK} from '../theme.ts';
@@ -27,37 +28,100 @@ const lightOn = (f: number, from: number) =>
 const center: React.CSSProperties = {alignItems: 'center', justifyContent: 'center'};
 
 /**
- * The app icon over lines of text, centred as a group. The icon is drawn from the port's pixels, so it sits on whole
- * pixels at rest: its top is set, not left to the text's line heights, which are fractional.
+ * The stacked lockup, the app icon over the name (`docs/brand.md`), in sides of the plate, so the title and the outro
+ * are one lockup at two sizes: the name's cap height 0.36 (the name set at half the plate's side), 0.26 from the
+ * plate's bottom to the name's cap line (the row lockup's gap), the name's ink centred under the plate.
  */
-const Lockup: React.FC<{icon: number; height: number; iconStyle?: React.CSSProperties; on?: number; children: React.ReactNode}> = ({
-  icon,
-  height,
-  iconStyle,
-  on,
-  children,
-}) => {
-  const top = Math.round((VIDEO.height - height) / 2);
-  return (
-    <AbsoluteFill style={{fontFamily: SANS, color: DARK.text}}>
-      <AppIcon size={icon} on={on} style={{position: 'absolute', left: (VIDEO.width - icon) / 2, top, ...iconStyle}} />
-      <div style={{position: 'absolute', left: 0, right: 0, top: top + icon, display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
-        {children}
-      </div>
-    </AbsoluteFill>
-  );
-};
+const STACKED = {cap: 0.36, gap: 0.26};
+
+/** What follows the lockup, in sides of the plate: a line's cap line under the baseline above it, a box's top. */
+const BELOW = {line: 0.2, box: 0.3};
+
+/** Instrument Sans: cap height 720 of 1000 units per em (OS/2 `sCapHeight`). */
+const CAP_EM = 0.72;
+
+/**
+ * How far right of its box's centre the name's ink sits, in em: "W" starts 0.039 em into its advance and "t" ends
+ * 0.017 em before the box's end (0.027 em of its own, less the -0.01 em tracking the browser adds after it).
+ * Measured in the frames: the ink's centre within a quarter of a pixel of the plate's (it was 0.9 px right).
+ */
+const NAME_INK_RIGHT = 0.011;
+
+/** A part under the icon, top to bottom: a text line (its cap height tall) or a box, and the space above it. */
+type Part = {gap: number; height: number; text: boolean};
+
+/**
+ * Where the icon and each part go: centred in the frame from the plate's top to the last part's bottom. The icon's
+ * top is a whole pixel, since the icon is the port's pixels drawn 1:1; a text line's baseline is a whole pixel, where
+ * the browser draws it anyway, so the spaces stay as set.
+ */
+function stack(icon: number, parts: Part[]): {iconTop: number; tops: number[]} {
+  const p = plated(icon, true);
+  const total = p.side + parts.reduce((sum, q) => sum + q.gap + q.height, 0);
+  const iconTop = Math.round((VIDEO.height - total) / 2 - p.margin);
+  let y = iconTop + p.margin + p.side;
+  const tops = parts.map((q) => {
+    const top = q.text ? Math.round(y + q.gap + q.height) - q.height : Math.round(y + q.gap);
+    y = top + q.height;
+    return top;
+  });
+  return {iconTop, tops};
+}
+
+/** The name's place under a plate of `side` px: the stacked lockup's one part below the icon. */
+const nameOf = (side: number): Part => ({gap: STACKED.gap * side, height: STACKED.cap * side, text: true});
+
+/** A text line by its cap line and baseline: `text-box` trims the line box to them, so `top` is the cap line. */
+const Line: React.FC<{top: number; size: number; style?: React.CSSProperties; children: React.ReactNode}> = ({top, size, style, children}) => (
+  <div
+    style={{
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      top,
+      fontSize: size,
+      textAlign: 'center',
+      whiteSpace: 'nowrap',
+      textBox: 'trim-both cap alphabetic',
+      ...style,
+    }}
+  >
+    {children}
+  </div>
+);
+
+/** The name in the stacked lockup: the wordmark (SemiBold, -0.01 em), its ink centred. */
+const Name: React.FC<{top: number; side: number; style?: React.CSSProperties}> = ({top, side, style}) => (
+  <Line
+    top={top}
+    size={(STACKED.cap * side) / CAP_EM}
+    style={{fontWeight: 600, letterSpacing: '-0.01em', left: `${-NAME_INK_RIGHT}em`, right: `${NAME_INK_RIGHT}em`, ...style}}
+  >
+    {COPY.name}
+  </Line>
+);
+
+const TAGLINE = 44;
 
 export const Title: React.FC = () => {
   const f = useCurrentFrame();
   const b = BEATS.title;
-  // Icon 256, then 28 + 140 (name) + 8 + 56 (tagline).
+  const icon = 256;
+  const side = plated(icon, true).side;
+  const {iconTop, tops} = stack(icon, [nameOf(side), {gap: BELOW.line * side, height: CAP_EM * TAGLINE, text: true}]);
   return (
     <SceneFade len={SCENES.title.len}>
-      <Lockup icon={256} height={256 + 28 + 140 + 8 + 56} on={lightOn(f, b.lightOn)} iconStyle={{transform: `translateY(${ease(f, 0, 18, [30, 0])}px)`}}>
-        <div style={{fontSize: 120, lineHeight: '140px', fontWeight: 600, marginTop: 28, opacity: ease(f, 30, 44)}}>{COPY.name}</div>
-        <div style={{fontSize: 44, lineHeight: '56px', color: DARK.dim, marginTop: 8, opacity: ease(f, 42, 56)}}>{COPY.tagline}</div>
-      </Lockup>
+      <AbsoluteFill style={{fontFamily: SANS, color: DARK.text}}>
+        <AppIcon
+          size={icon}
+          on={lightOn(f, b.lightOn)}
+          style={{position: 'absolute', left: (VIDEO.width - icon) / 2, top: iconTop, transform: `translateY(${ease(f, 0, 18, [30, 0])}px)`}}
+        />
+        <Name top={tops[0]} side={side} style={{opacity: ease(f, 30, 44)}} />
+        <Line top={tops[1]} size={TAGLINE} style={{color: DARK.dim, opacity: ease(f, 42, 56)}}>
+          {COPY.tagline}
+        </Line>
+      </AbsoluteFill>
     </SceneFade>
   );
 };
@@ -262,20 +326,32 @@ export const Speed: React.FC = () => {
   );
 };
 
+const OUTRO_LINE = 38;
+/** The install box's height: a 48 px line, 16 px padding and a 2 px border above and below. */
+const INSTALL_BOX = 48 + 2 * 16 + 2 * 2;
+
 export const Outro: React.FC = () => {
   const f = useCurrentFrame();
-  // Icon 192, then 24 + 112 (name) + 8 + 48 (line) + 44 + 84 (the install box: 48 + 2 x 16 padding + 2 x 2 border).
+  const icon = 192;
+  const side = plated(icon, true).side;
+  const {iconTop, tops} = stack(icon, [
+    nameOf(side),
+    {gap: BELOW.line * side, height: CAP_EM * OUTRO_LINE, text: true},
+    {gap: BELOW.box * side, height: INSTALL_BOX, text: false},
+  ]);
   return (
-    <AbsoluteFill style={{opacity: ease(f, 0, 10)}}>
-      <Lockup icon={192} height={192 + 24 + 112 + 8 + 48 + 44 + 84}>
-        <div style={{fontSize: 96, lineHeight: '112px', fontWeight: 600, marginTop: 24}}>{COPY.name}</div>
-        <div style={{fontSize: 38, lineHeight: '48px', color: DARK.dim, marginTop: 8}}>{COPY.outroLine}</div>
+    <AbsoluteFill style={{opacity: ease(f, 0, 10), fontFamily: SANS, color: DARK.text}}>
+      <AppIcon size={icon} style={{position: 'absolute', left: (VIDEO.width - icon) / 2, top: iconTop}} />
+      <Name top={tops[0]} side={side} />
+      <Line top={tops[1]} size={OUTRO_LINE} style={{color: DARK.dim}}>
+        {COPY.outroLine}
+      </Line>
+      <div style={{position: 'absolute', left: 0, right: 0, top: tops[2], display: 'flex', justifyContent: 'center'}}>
         <div
           style={{
             fontFamily: MONO,
             fontSize: 36,
             lineHeight: '48px',
-            marginTop: 44,
             padding: '16px 32px',
             background: DARK.panel,
             border: `2px solid ${DARK.panelLine}`,
@@ -285,7 +361,7 @@ export const Outro: React.FC = () => {
         >
           {COPY.install}
         </div>
-      </Lockup>
+      </div>
     </AbsoluteFill>
   );
 };

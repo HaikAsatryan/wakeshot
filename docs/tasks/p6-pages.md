@@ -192,9 +192,9 @@ reason and when to change it.
    pictures of the three icon states and of the menu, and the 30 second video; files go into `site/media/`, never
    another host.
 2. `p5-haik-check`: the menu words (two spots: Keep awake, Keep screen on, Automatic, Restore my power settings) and
-   the tooltip line. If the icon art changes: `art.rs`'s writer test rewrites `site/favicon.ico`; port
-   `site/wakeshot.svg` and the two lockups again from `art.rs`'s numbers and check them against the ICO's 256 frame
-   (`p6-brand-apply-web` Result; its port scripts are not in the repo), then `python site/social_card.py`.
+   the tooltip line. If the icon art changes: `art.rs`'s writer test (`write_art_files`) rewrites
+   `site/favicon.ico`, `site/wakeshot.svg` and both lockups (golden test `site_svgs_match_the_art`), then
+   `python site/social_card.py`.
 3. `p2-6-sleep-route`: the story's steps 3 and 5 say "goes to sleep"; check them against the built behaviour.
 4. The README rework (`p6-readme`): the comparison spot, a short feature side by side from the reworked README.
 5. The first public pre-release (`v0.1.0-rc.1`): the exact SmartScreen words and steps.
