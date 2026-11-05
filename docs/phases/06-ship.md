@@ -168,9 +168,9 @@ those one at a time across all tracks.
 | `p6-uninstall-startup-approval` | no (orchestrator decision for his review) | `p6-startup-switch-check` | done (06:45: 1287 workspace tests; `e2e.ps1` 88 of 88) |
 | `p6-small-fixes` | no | `p6-tray-size` | done (07:08) |
 | `p6-real-install-guard` | no | `p2-6-runonce-keep` | done (2026-11-05 ~03:00, 03415b6; promoted from later): real-settings tests refuse to run beside an installed Wakeshot; worker decisions for Haik's review in the card |
-| `p6-brand-apply-art` | no (Haik's 8 brand decisions, 2026-11-05 ~15:00) | Haik's brand decisions | in progress (2026-11-05 ~15:30) |
-| `p6-brand-apply-web` | no | Part A: Haik's brand decisions; Part B: `p6-brand-apply-art` | in progress (Part A, 2026-11-05 ~15:30) |
-| `p6-brand-apply-media` | no | Part A: Haik's brand decisions; Part B: `p6-brand-apply-art` | in progress (Part A, 2026-11-05 ~15:30) |
+| `p6-brand-apply-art` | no (Haik's 8 brand decisions, 2026-11-05 ~15:00) | Haik's brand decisions | done (8cd0301): the held light in Moss in `art.rs`; 14-frame ICO, 256 as PNG; x64 and ARM64 checks pass; 7 designer decisions for Haik's review in the card |
+| `p6-brand-apply-web` | no | Part A: Haik's brand decisions; Part B: `p6-brand-apply-art` | in progress: Part A done; Part B running (new worker) |
+| `p6-brand-apply-media` | no | Part A: Haik's brand decisions; Part B: `p6-brand-apply-art` | in progress: Part A done; Part B running (new worker) |
 | `p6-brand-docs-sweep` | no | the three apply cards | ready |
 | `p6-brand-screen-session` | yes, Part B: about 30 to 40 min at the laptop | Part A: the three apply cards; Part B: the brand review fixes and Haik | ready (Part A) |
 
@@ -474,3 +474,6 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   and stay under a worker's context; (2) the research history list goes into a new `docs/tasks/p8-cleanup.md`
   (Status: later), not into `p8-store.md`, which is about the Store; (3) the screen-session checklist is written after
   the apply cards, so its steps name the real files and states.
+- 2026-11-05 ~16:20: `p6-brand-apply-art` done and committed (8cd0301; 535K tokens); Part A of the web (19f7bda) and media
+  (b4d4864) cards committed. Velopack 1.2.161 shows its own install window, so no splash (I1 closed). Part B of both
+  runs with new workers (the Part A workers used 260K and 314K tokens).
