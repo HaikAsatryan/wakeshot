@@ -444,3 +444,9 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   The update check stays rustls with `ring` and ureq's bundled roots. Change it when a user reports a failed update
   behind a company network: velopack's `UpdateSource` trait is public (1.2.161 and 1.3.39), so our own source on
   WinHTTP would trust the Windows store and use the system proxy (not built, not tested).
+- 2026-11-05 14:20 (Haik's brand session, a second orchestrator): brand review done and committed. Research
+  `p6-brand-research-windows`, `-macos`, `-identity`; `brand-review.md` (every screen of today's app); two drawing rounds
+  `p6-brand-directions` and `p6-brand-directions-2`. Code: `p6-brand-cleanup` (clock `E823` instead of the cup; Cup, Eye,
+  Sky removed from `art.rs`; assets byte-equal) and `p6-menu-text-look` (menu text and glyphs grey, chroma 0; WinUI sets
+  no menu max width). Board for Haik: private artifact "Wakeshot brand review". Waits for Haik's 8 decisions (default:
+  the held light, Moss, plated, brand colour while holding); then one apply card, the screen session, then `p6-media`.

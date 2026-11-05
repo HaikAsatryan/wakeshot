@@ -278,3 +278,6 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   decisions (06-integration work log, the cards' worker decisions) and `p2-6-runonce-keep` Decisions and finding 6.
   Known minors: a rare two-sound case at the grace's end (`p2-6-sound-overlap-smoke-key` Found outside scope 2); the
   smoke test skips the shortcut's app id (same card, 4).
+- 2026-11-05 14:20 (Haik's brand session): brand review done (`docs/phases/06-ship.md` work log, same time). The cup
+  is gone from the menu, the menu text is grey. Next: Haik's 8 brand decisions (board "Wakeshot brand review"), then
+  a brand apply card (about 150K to 200K tokens), the screen session, `p6-media` Part B, README and Pages.
