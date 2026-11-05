@@ -1,14 +1,18 @@
-# Screen session with Haik: the new brand on real Windows screens
+# Screen session: the new brand on real Windows screens
 
-Phase: 6 (brand apply). Status: ready (Part A). Needs Haik: yes, Part B: about 30 to 40 minutes at the unlocked
-laptop, hands on (theme switches, a real install from a double click, scale changes). Agent: `wakeshot-worker`. Size:
-Part A about 50K tokens; Part B about 80K tokens. Written by the orchestrator of Haik's brand session, 2026-11-05.
-Runs after: Part A: `p6-brand-apply-art`, `p6-brand-apply-web`, `p6-brand-apply-media` (so the steps name the real
-files and states). Part B: Part A, the brand review fixes, and Haik at the laptop.
-Parallel with: `p6-brand-docs-sweep` (Part A writes only this card). Part B runs alone: screen, installs.
-Real laptop: Part A nothing. Part B: the screen, a real install and uninstall of a local build, theme and high
-contrast switches, display scale changes (Haik's own settings: each one put back and checked).
-Owns: this card. Part B also its own pictures folder `docs/research/img/brand/screen-*.png`.
+Phase: 6 (brand apply). Status: in progress. Needs Haik: no for this run: Haik (2026-11-05 15:40, away at least an
+hour): "Do the screen session as well". The worker does every step itself; a step that truly needs his hands is
+marked "not shown" with the reason and listed for him. Agent: `wakeshot-worker`. Size: Part A about 50K tokens; Part
+B about 80K tokens. Written by the orchestrator of Haik's brand session, 2026-11-05.
+Runs after: `p6-brand-apply-art` (done). The page and README block runs last, after `p6-brand-apply-web` is done.
+Parallel with: `p6-brand-apply-web` Part B and `p6-brand-apply-media` Part B (offscreen only, no screen use).
+Real laptop: the screen, a real install and uninstall of a local build, theme and high contrast switches, display
+scale changes (Haik's own settings: each one read before, put back and read again after).
+Display: the orchestrator holds the display on with a display-only power request (a hidden `pwsh` running
+`<scratchpad>\display-hold.ps1`, PID in `<scratchpad>\display-hold.pid`), so the session does not lock while Haik is
+away. Do not stop it; the orchestrator ends it after this card. It shows in `powercfg /requests` under DISPLAY.
+Owns: this card; its pictures `docs/research/img/brand/screen-*.png`; its scratch folder
+`<scratchpad>\p6-brand-screen-session\` (build folder `target` inside it, deleted when done).
 
 ## Goal
 
@@ -69,8 +73,8 @@ git.
 
 ## Questions for Haik
 
-1. After the session, uninstall the local build or keep it for the field test? Default: uninstall; the field test
-   installs the first real release.
+1. After the session, uninstall the local build or keep it for the field test? Default (taken, orchestrator decision
+   for Haik's review): uninstall; the field test installs the first real release.
 
 ## Found outside scope
 

@@ -172,7 +172,7 @@ those one at a time across all tracks.
 | `p6-brand-apply-web` | no | Part A: Haik's brand decisions; Part B: `p6-brand-apply-art` | in progress: Part A done; Part B running (new worker) |
 | `p6-brand-apply-media` | no | Part A: Haik's brand decisions; Part B: `p6-brand-apply-art` | in progress: Part A done; Part B running (new worker) |
 | `p6-brand-docs-sweep` | no | the three apply cards | ready |
-| `p6-brand-screen-session` | yes, Part B: about 30 to 40 min at the laptop | Part A: the three apply cards; Part B: the brand review fixes and Haik | ready (Part A) |
+| `p6-brand-screen-session` | no for this run (Haik 15:40: "Do the screen session as well") | `p6-brand-apply-art`; its page block after `p6-brand-apply-web` | in progress (15:52) |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
 dependency 110K, pack and release 110K, install e2e 130K, winget 60K, README 70K, Pages 60K. About 880K in all.
@@ -478,3 +478,4 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   (b4d4864) cards committed. Velopack 1.2.161 shows its own install window, so no splash (I1 closed). Part B of both
   runs with new workers (the Part A workers used 260K and 314K tokens).
 - 2026-11-05 15:35: Haik approved the 7 designer decisions of `p6-brand-apply-art` ("all 7 decisions ok").
+- 2026-11-05 15:52: Haik (15:40, away at least an hour): "Do the screen session as well. Feel free to finalize your work." `p6-brand-screen-session` started (Part A checklist, then Part B by the worker alone; the page block after the web card). Orchestrator decisions, for Haik's review: (1) a display-only power request (hidden `pwsh`, PID 2728, ends by itself after 4 h, ended by PID after the session) keeps the screen on so the session does not lock while he is away; no power setting changed; (2) the screen session runs before the final review, beside the offscreen Part B cards, and its captures are redone only if the review changes the art; (3) the local build is uninstalled after the session (the card's default).
