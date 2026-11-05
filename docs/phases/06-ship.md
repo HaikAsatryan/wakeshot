@@ -168,6 +168,11 @@ those one at a time across all tracks.
 | `p6-uninstall-startup-approval` | no (orchestrator decision for his review) | `p6-startup-switch-check` | done (06:45: 1287 workspace tests; `e2e.ps1` 88 of 88) |
 | `p6-small-fixes` | no | `p6-tray-size` | done (07:08) |
 | `p6-real-install-guard` | no | `p2-6-runonce-keep` | done (2026-11-05 ~03:00, 03415b6; promoted from later): real-settings tests refuse to run beside an installed Wakeshot; worker decisions for Haik's review in the card |
+| `p6-brand-apply-art` | no (Haik's 8 brand decisions, 2026-11-05 ~15:00) | Haik's brand decisions | in progress (2026-11-05 ~15:30) |
+| `p6-brand-apply-web` | no | Part A: Haik's brand decisions; Part B: `p6-brand-apply-art` | in progress (Part A, 2026-11-05 ~15:30) |
+| `p6-brand-apply-media` | no | Part A: Haik's brand decisions; Part B: `p6-brand-apply-art` | in progress (Part A, 2026-11-05 ~15:30) |
+| `p6-brand-docs-sweep` | no | the three apply cards | ready |
+| `p6-brand-screen-session` | yes, Part B: about 30 to 40 min at the laptop | Part A: the three apply cards; Part B: the brand review fixes and Haik | ready (Part A) |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
 dependency 110K, pack and release 110K, install e2e 130K, winget 60K, README 70K, Pages 60K. About 880K in all.
@@ -197,6 +202,11 @@ Every code file below exists after the contracts card (module lines, the `velo::
 | `p6-readme` | `README.md` |
 | `p6-media` | `media/` (outside the Cargo workspace); additions to `docs/research.md` |
 | `p6-pages` | `site/`, `.github/workflows/pages.yml` |
+| `p6-brand-apply-art` | `tray/art.rs`, `tray/icon.rs`, `tray/theme.rs`, `notify.rs` (notice icon only), `assets/wakeshot.ico`, `assets/wakeshot-notice.png`, `site/favicon.ico`, the review sheets and menu renders in `docs/research/img/ux/` |
+| `p6-brand-apply-web` | `site/` except `favicon.ico`, the README heading block, `packaging/pack.ps1` and `packaging/README.md` (splash), `assets/wakeshot-splash.png` if needed |
+| `p6-brand-apply-media` | `media/` |
+| `p6-brand-docs-sweep` | `docs/brand.md` and the docs that describe the old brand, `docs/tasks/p8-cleanup.md` (new) |
+| `p6-brand-screen-session` | its own card; Part B its pictures `docs/research/img/brand/screen-*.png` |
 
 ### Order inside the track
 
@@ -457,3 +467,10 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   stays 480 epx; Instrument Sans SemiBold for the wordmark outside the Windows app; after the build, the GitHub repo gets
   a description, website link, topics and the social card. Also Haik: no legacy left anywhere; old brand assets are
   deleted, not kept.
+- 2026-11-05 ~15:30 (brand session orchestrator, Haik away about an hour): five cards written: `p6-brand-apply-art`,
+  `p6-brand-apply-web`, `p6-brand-apply-media`, `p6-brand-docs-sweep`, `p6-brand-screen-session`. Running:
+  `p6-brand-apply-art` and Part A of the web and media cards (Part B of both waits for the art). Orchestrator
+  decisions, for Haik's review: (1) the web and media apply work is two cards, not one, so they run beside the art card
+  and stay under a worker's context; (2) the research history list goes into a new `docs/tasks/p8-cleanup.md`
+  (Status: later), not into `p8-store.md`, which is about the Store; (3) the screen-session checklist is written after
+  the apply cards, so its steps name the real files and states.
