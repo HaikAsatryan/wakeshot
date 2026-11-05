@@ -1,16 +1,50 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- The app icon from crates/wakeshot-windows/src/tray/art.rs at 64 px, as shapes, so it stays sharp on high DPI
-       screens; the largest frame of assets/wakeshot.ico is 64 px. Ported numbers match that frame pixel for pixel. -->
-  <linearGradient id="plate" gradientUnits="userSpaceOnUse" x1="6.885" y1="17.5" x2="57.115" y2="46.5">
-    <stop offset="0" stop-color="#7957F4"/>
-    <stop offset="1" stop-color="#6B49F3"/>
-  </linearGradient>
-  <rect x="3" y="3" width="58" height="58" rx="12" fill="url(#plate)"/>
-  <path d="M21 43A11.5 11.5 0 0 1 44 43Z" fill="#FFCC4D"/>
-  <g stroke="#FFCC4D" stroke-width="3" stroke-linecap="round">
-    <line x1="32.5" y1="25.5" x2="32.5" y2="19.5"/>
-    <line x1="20.479" y1="30.979" x2="16.237" y2="26.737"/>
-    <line x1="44.521" y1="30.979" x2="48.763" y2="26.737"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- The Wakeshot app icon, the held light in Moss: the 256 px frame of assets/wakeshot.ico as shapes, so it stays
+     sharp at any size. Every number is art.rs's at 256 px (crates/wakeshot-windows/src/tray/art.rs, Plated::at and
+     the colour functions after it); change the art there first, then port it here. -->
+  <defs>
+    <linearGradient id="i-ramp" gradientUnits="userSpaceOnUse" x1="11" y1="11" x2="287.825" y2="170.825">
+      <stop offset="0" stop-color="#628C2B"/>
+      <stop offset="1" stop-color="#3E7C3B"/>
+    </linearGradient>
+    <radialGradient id="i-glow" gradientUnits="userSpaceOnUse" cx="128" cy="106" r="145.08">
+      <stop offset="0" stop-color="#FFEA9C" stop-opacity="0.6"/>
+      <stop offset="0.45" stop-color="#FFEA9C" stop-opacity="0.21"/>
+      <stop offset="1" stop-color="#FFEA9C" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="i-shade" gradientUnits="userSpaceOnUse" x1="0" y1="139.7" x2="0" y2="245">
+      <stop offset="0" stop-color="#2C5A26" stop-opacity="0"/>
+      <stop offset="1" stop-color="#2C5A26" stop-opacity="0.35"/>
+    </linearGradient>
+    <linearGradient id="i-bar" gradientUnits="userSpaceOnUse" x1="58" y1="0" x2="198" y2="0">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#FFFBE8"/>
+    </linearGradient>
+    <radialGradient id="i-bloom" gradientUnits="userSpaceOnUse" cx="128" cy="106" r="91.2">
+      <stop offset="0" stop-color="#FFEA9C" stop-opacity="0.8"/>
+      <stop offset="0.53" stop-color="#FFEA9C" stop-opacity="0.44"/>
+      <stop offset="0.75" stop-color="#FFEA9C" stop-opacity="0.144"/>
+      <stop offset="1" stop-color="#FFEA9C" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="i-light" gradientUnits="userSpaceOnUse" cx="128" cy="106" r="48" fx="117.44" fy="92.56">
+      <stop offset="0.5" stop-color="#FFFBE8"/>
+      <stop offset="0.86" stop-color="#FFEA9C"/>
+      <stop offset="1" stop-color="#F7DC7F"/>
+    </radialGradient>
+    <filter id="i-soft" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="4.472"/>
+    </filter>
+    <mask id="i-plate" maskUnits="userSpaceOnUse" x="0" y="0" width="256" height="256">
+      <rect x="11" y="11" width="234" height="234" rx="43.875" fill="#FFF"/>
+    </mask>
+  </defs>
+  <rect x="11" y="13.667" width="234" height="234" rx="43.875" fill="#000" fill-opacity="0.3" filter="url(#i-soft)"/>
+  <g mask="url(#i-plate)">
+    <rect width="256" height="256" fill="url(#i-ramp)"/>
+    <rect width="256" height="256" fill="url(#i-glow)"/>
+    <rect width="256" height="256" fill="url(#i-shade)"/>
   </g>
-  <rect x="12" y="46" width="40" height="3" rx="1" fill="#FFFFFF"/>
+  <rect x="58" y="175" width="140" height="16" rx="8" fill="url(#i-bar)"/>
+  <circle cx="128" cy="106" r="91.2" fill="url(#i-bloom)"/>
+  <circle cx="128" cy="106" r="48" fill="url(#i-light)"/>
 </svg>

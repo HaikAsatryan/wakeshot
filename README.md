@@ -1,4 +1,9 @@
-# Wakeshot
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="site/wakeshot-lockup-dark.svg">
+    <img src="site/wakeshot-lockup-light.svg" alt="Wakeshot" width="304" height="80">
+  </picture>
+</h1>
 
 <!-- media: icon loop. One centered <picture> block here: a dark and a light GIF (prefers-color-scheme), 4 to 6 s, under 1 MB, the tray icon going idle to holding to idle: the sun rises over the horizon when an agent starts and sets when it is done (docs/brand.md, "The idea"), alt text "Wakeshot's tray icon: the sun rises while an agent works and sets when it is done". Files under media/ from p6-media; the art is the Sunrise in crates/wakeshot-windows/src/tray/art.rs. Takes 1 line here. -->
 

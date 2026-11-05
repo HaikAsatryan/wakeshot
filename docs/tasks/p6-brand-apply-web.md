@@ -1,6 +1,6 @@
 # Apply the new brand to the page, the README header, the social card and the installer splash
 
-Phase: 6 (brand apply). Status: in progress (Part A done; Part B waits for p6-brand-apply-art). Needs Haik: no (his 8 brand decisions, 2026-11-05 ~15:00, all defaults).
+Phase: 6 (brand apply). Status: done (Part A and Part B). Needs Haik: no (his 8 brand decisions, 2026-11-05 ~15:00, all defaults).
 Agent: `wakeshot-worker`. Size: about 150K tokens. Written by the orchestrator of Haik's brand session, 2026-11-05.
 Runs after: Part A: Haik's brand decisions. Part B: `p6-brand-apply-art` done (the orchestrator resumes you, or a new
 worker reads this card's Log).
@@ -124,6 +124,35 @@ Part A (each with its reason and when to change it):
    install takes. Change it when the screen session (`brand-review.md`, "Next screen session", item 8) shows that
    window blank, broken or confusing.
 
+Part B:
+
+8. **The page hero is the lockup row** (icon beside the name), not the icon stacked over the name: the same lockup as
+   the README and the social card (X1), and it drops the "centred icon over a big name" template W2 called generic.
+   The glow moved to the icon. Change it when `p6-media`'s pictures need a taller hero or a larger icon: the stacked
+   form is one CSS rule.
+9. **Lockup proportions**: the word's cap height 0.46 of the plate, centred on it; 0.26 of the plate between plate
+   and word; tracking -0.01em; the word in the page's text colours (`#1A1D17`, `#EEF2E8`). 0.38 looked timid, 0.56
+   heavy. Change it when the lockup sits next to other apps' lockups and looks small.
+10. **README lockup 304 x 80 px**: the word comes out at 44.6 px, the page's 44. Change it when the loop GIF lands
+    right under it and the two compete: then 64 px tall.
+11. **Social card dark**, the line in Instrument Sans Regular (the video's face for words that are not the name), the
+    warm glow at 0.16. Dark carries "a light left on" and stands out in a white feed. Change it when a dark feed shows
+    it as a dark block: the light version is a few colour values in `social-card.html`.
+12. **Full share tag set**: `og:type`, `og:url`, `og:title` and `og:description` (the page's own title and
+    description, so no new copy; `check_page.py` fails if they drift), `og:image` with size and alt,
+    `twitter:card` `summary_large_image`, `twitter:image` with alt. The card asked for the two image tags; without
+    the others the Open Graph set is incomplete, and X shows a small card without `twitter:card`. Change it when a
+    platform's card checker asks for more.
+13. **The social card's source is HTML with live text**, not outlines: `p6-readme` will rework the README's first
+    line, and then the card is one edit and `python site/social_card.py`. It adds
+    `site/fonts/InstrumentSans-Regular.woff2` (35 KB, never loaded by the page). Change it when the page's folder must
+    hold only what the page loads: move the source and script out with a `pages.yml` change.
+14. **README picture by `<picture>`**, as the card asks. GitHub wraps it in its `themed-picture` element; a community
+    report (not verified) says it follows the system's theme now, which would show the light-text lockup on white for
+    a reader whose GitHub and Windows themes differ. Change it when Haik's check (Result, open items) shows that:
+    then two `<img>` with the `#gh-light-mode-only` and `#gh-dark-mode-only` fragments, which GitHub's own CSS hides by
+    GitHub's theme.
+
 ## Found outside scope
 
 - `site/index.html` copy still describes the old sun: line 58 ("the sun is up while something holds, an empty sun
@@ -135,7 +164,21 @@ Part A (each with its reason and when to change it):
 - `.gitattributes` has no `*.woff2 binary` line. Git's own test (a NUL byte in the first 8,000 bytes) already treats
   the WOFF2 as binary (its header has NUL bytes), so nothing breaks; the line would make it explicit.
 - W5 stays: on a phone the two hero buttons stack at different widths (a layout change, not in this card).
-- `site/favicon.ico` and `site/wakeshot.svg` are still violet and gold until `p6-brand-apply-art` and Part B.
+- `site/favicon.ico` and `site/wakeshot.svg` are still violet and gold until `p6-brand-apply-art` and Part B. (Part B:
+  both are Moss now.)
+- Part B: `.github/workflows/pages.yml` removes only `site/check_page.py` before upload, so `site/social_card.py` and
+  `site/social-card.html` (marked noindex) go live too. Harmless; to keep the site to what it serves, make that step
+  `rm site/check_page.py site/social_card.py` (and keep or drop the HTML source the same way). The workflow is not
+  this card's.
+- Part B: three headless Edge browsers started by Part A's `crop.ps1` at 14:53 still run (PIDs 33032, 2596, 12196,
+  each with child processes), holding scratch `edge\c2ea62dca`, `ca2b8c95c`, `c3270d87b`. I did not start them, so
+  I did not end them; the orchestrator may end them by PID tree.
+- Part B, stale docs for `p6-brand-docs-sweep`: `docs/phases/06-ship.md` line 430 lists `site/` without the lockups,
+  the social card, its source and script, and the second font; `docs/brand.md` should carry the lockup rules (cap
+  0.46, gap 0.26, tracking -0.01em, colours), the stacked versus row hero, and the social card.
+- Part B, for the orchestrator (GitHub settings, R2): upload `site/social-card.png` as the repo's social preview, and
+  set the description and website link.
+- Part B: `README.md` line 8 (was line 3) still has the Sunrise media comment (Part A's note above).
 
 ## Log
 
@@ -210,4 +253,155 @@ Notes for Part B (scratch `<scratchpad>\p6-brand-apply-web\`):
   `glyf` table can be read with the standard library, and kerning sits in `GPOS`).
 - Deliverable 9: no splash (decision 7 above); `pack.ps1` stays unchanged, so its acceptance check does not apply.
 
+- 2026-11-05: started Part B (deliverables 5 to 10); `p6-brand-apply-art` is done. Orchestrator adds: pack a local x64
+  release build with `pack.ps1` into scratch (no install) and check that `Setup.exe` carries every frame of the new
+  ICO; fix the favicon `sizes=` in `index.html` (now 16, 32, 48).
+- 2026-11-05: tools. Scratch `venv\` with fontTools 4.68.0, uharfbuzz 0.57.0, Pillow, numpy (outlines, shaping,
+  picture maths; nothing installed outside scratch). Instrument Sans Regular TTF downloaded from the same commit
+  `7fa22308` (`fonts/ttf/`, 86,232 bytes, name "Version 1.000", weight 400, fsType 0); the SemiBold TTF downloaded
+  again equals Part A's. GitHub's page colours from Primer primitives 11.10.0 (`@primer/primitives` on unpkg,
+  `dist/css/functional/themes/{light,dark}.css`): `--bgColor-default` `#ffffff` and `#0d1117`, the same as
+  `p6-brand-apply-media` read from github.com's own CSS.
+- 2026-11-05: deliverable 5 done. `site/wakeshot.svg` written by scratch `gen_icon.py`, which computes
+  `Plated::at(256)` with Rust's rounding (margin 11, side 234, corner 43.875, light at 128,106 r 48, bar 58..198 x
+  175..191, pill) and ports every layer: shadow (plate moved down 2.667, blurred to the box blurs' deviation 4.472,
+  30% black), the 120 degree ramp as a userSpace gradient from the plate's top left to (287.825, 170.825), glow
+  (r 145.08, 0.6 / 0.21 / 0), bottom shade (35% `#2C5A26` from y 139.7 to 245), all three in one masked group so the
+  edge is drawn once as in `art.rs`; the bar's white to core ramp; bloom (r 91.2, never reaches the plate's edge, so
+  no clip); the light's focal gradient (focus 117.44, 92.56; stops 0.5 core, 0.86 edge, 1 rim `#F7DC7F`). Against
+  the ICO's 256 frame (scratch `compare_icon.py`, Edge at scale 1, transparent): over white mean 0.64, max 41; over
+  `#121610` mean 0.47, max 29; alpha mean 0.23, max 52. Inside the shapes at most 3 (Chrome dithers gradients);
+  the larger ones are single edge pixels where Chrome's anti-aliasing of a curve near its tangent differs (plate
+  corners up to 41, bar ends 29, light edge 14). `art.rs` matches the exact coverage there (checked by sampling).
+  Clip-path, mask and three separate plates give the same numbers. Looked at 100% on white and GitHub dark and at 6x:
+  no difference a person sees at 100%; at 6x only Chrome's gradient dither and the edge pixels.
+- 2026-11-05: deliverable 6 done. Scratch `textpath.py` shapes with HarfBuzz as Chrome does (default features; with
+  letter spacing, spacing after each glyph and no optional ligatures) and draws fontTools outlines of the TTF; checked
+  against Edge drawing the WOFF2 at 200 px: same ink box to the pixel, every glyph in the same place (kerning
+  matches); only Chrome's vertical hinting moves some x-height edges by a pixel. Scratch `gen_lockup.py` writes
+  `site/wakeshot-lockup-light.svg` and `-dark.svg` (304 x 80 px, 6.2 KB each): icon as in `wakeshot.svg`, the word's
+  cap height 0.46 of the plate, centred on it, ink 0.26 of the plate after it, word `#1A1D17` light and `#EEF2E8` dark
+  (the page's text colours). Compared cap 0.38 to 0.56 and gap 0.24 to 0.30 on GitHub's two colours at scale 1 and 2:
+  0.38 looks timid, 0.56 heavy; kept 0.46 and 0.26. At 80 px the word is 44.6 px, the page's 44.
+- 2026-11-05: the page hero now uses the same lockup in live text: `<h1 class="brand">` holds the icon (alt "") and
+  the word in a centred flex row, icon 1.712em, gap 0.294em, line height 1 (with this font's 970/-250 metrics that
+  centres the cap height on the icon). Compared with the stacked hero (icon over the name) in both themes: the row
+  is the same lockup as the README and the social card, and drops the "centred icon over a big name" template W2
+  called generic. The warm glow moved with the icon (circle 12rem at `calc(50% - 6.85rem) 6.35rem`). Fits a 390 px
+  phone (295 px wide). Favicon `sizes` now "16x16 32x32 48x48".
+- 2026-11-05: deliverable 7 done. `README.md` line 1 `# Wakeshot` is now `<h1 align="center">` around one
+  `<picture>` (dark source by `prefers-color-scheme`, light `<img>` with alt "Wakeshot", 304 x 80); nothing else
+  changed. GitHub's own Markdown API (`gh api markdown`, mode gfm) keeps the `h1`, its `align`, the `picture`, `source`
+  and the img's alt, width and height, and wraps the picture in GitHub's `<themed-picture>` element (which picks the
+  source by GitHub's theme). Drawn with that HTML in github-markdown-css 5.9.0 on `#ffffff` and `#0d1117`, each theme's
+  source pinned: reads well at scale 1 and 2. A first render without pinning showed the dark lockup on white (Edge
+  followed the system's dark theme): what a reader would see if `themed-picture` failed. A GitHub discussion
+  (community #210983, 2026-10-22) reports exactly that; not verified, noted in the Result.
+- 2026-11-05: deliverable 8 done. GitHub's docs ("Customizing your repository's social media preview", read
+  2026-11-05): "PNG, JPG, or GIF file under 1 MB", "at least 640 by 320 pixels (1280 by 640 pixels for best
+  display)". Drafts in scratch `sc\` (dark and light; tagline Regular or SemiBold, muted or text colour; glow 0.1,
+  0.16, 0.16 wider): picked dark (the light left on at night, and it stands out in a white feed), the lockup 700 px
+  wide, the README's first line in two lines of Instrument Sans Regular 40 px in the text colour (muted read faint at
+  400 px wide; SemiBold heavy), warm glow 0.16 round the icon (0.1 was too faint, a wider one turned muddy). Source
+  `site/social-card.html` (noindex, uses `wakeshot-lockup-dark.svg` and the new `site/fonts/InstrumentSans-Regular.woff2`,
+  byte-equal to `media/public/fonts/`, SHA-256 `f28af62f...`), drawn by `site/social_card.py` (standard library;
+  finds Edge or Chrome, retries, kills only its own tree, re-deflates at level 9, fails unless 1280 x 640 and under
+  1 MB): `site/social-card.png` 285,642 bytes. Content box x 108 to 1169, y 164 to 482: at least 108 px from every
+  edge. `index.html` has `og:type`, `og:url`, `og:title` and `og:description` (the page's own title and description),
+  `og:image` with width, height and alt, `twitter:card` `summary_large_image`, `twitter:image` and alt; the Pages
+  address `https://haikasatryan.github.io/wakeshot/` is GitHub's project site pattern (Pages is off until v1:
+  `gh api repos/HaikAsatryan/wakeshot/pages` gives 404, so not verified live). `check_page.py` now checks share tags
+  (under the Pages address, file exists, alt present, title and description equal the page's) and `url()` inside
+  `<style>`; five negative tests on copies fail with exit 1 as they should.
+- 2026-11-05: deliverable 9: no splash, as Part A found (decision 7); `pack.ps1` and `packaging/README.md` unchanged.
+- 2026-11-05: deliverable 10. Rendered the whole page light and dark at 1280 px and in a 390 px frame, the hero
+  enlarged 1.5x, the README top (GitHub's API HTML in GitHub's CSS) at scale 1 and 2, the social card at 1280 and
+  400 px wide, the icon against the ICO at 100% and 6x. Changed after looking: the hero from the stacked icon and name
+  to the lockup row; the README lockup from cap 0.50 / gap 0.28 drafts to 0.46 / 0.26; the card's tagline from muted
+  to the text colour and Regular 38 to 40 px; the card's glow from 0.1 to 0.16. Kept four pictures:
+  `docs/research/img/brand/apply-web-hero.png`, `apply-web-readme.png`, `apply-web-social.png`, `apply-web-icon.png`.
+  Acceptance so far: `check_page.py` 0 errors, 8 waits, no "not linked" note; `--final` fails only on the 8 waits;
+  colour scan of `site/` 0 flagged and no old hex anywhere in `site/` or `README.md`; network check (page served on
+  127.0.0.1, Edge net log): the page started 3 requests (CSS, font, icon), all local, 0 elsewhere; no `http` in
+  `style.css`. Local x64 release build for the Setup.exe icon check started (`CARGO_TARGET_DIR` in scratch).
+- 2026-11-05: Setup.exe icon check (orchestrator's item). Release x64 build (2m 17s; tray 2,907,648 bytes, CLI
+  701,440, as the art card measured), then `pwsh -NoProfile -File packaging/pack.ps1 -Version 0.1.0 -Cpu x64 -ExeDir
+  <scratch target> -OutDir <scratch>\pack-x64 -Icon assets/wakeshot.ico`: exit 0, Setup.exe 12,327,360 bytes.
+  Scratch `exe_icons.py` (ctypes): one icon group, 14 frames, each byte-equal to the ICO's (256 as PNG), each loads
+  at its size with `CreateIconFromResourceEx`, and `PrivateExtractIconsW` gives 16 to 256 px. The portable zip's
+  `Update.exe` and `Wakeshot.exe` the same. Build folder and pack output deleted. Nothing installed.
+- 2026-11-05: on a 320 px phone the lockup (6.7em) pushed into the side padding (12 px left); the word's size is now
+  `min(2.75rem, calc((100vw - 2.5rem) / 6.8))`, so it shrinks only below 340 px (320 px: 25 and 22 px margins; 390
+  px and up unchanged). Second `social_card.py` run: byte-equal PNG. Facts added to `docs/research.md`, "Brand apply:
+  the page, the README header and the social card". Final checks below; Part B done.
+
 ## Result
+
+Done 2026-11-05 (Part A and Part B). The page, the README header and the social card are on the held light in Moss,
+from the same numbers as `art.rs`, with one wordmark (Instrument Sans SemiBold, -0.01em) everywhere.
+
+What was done:
+
+- **Page** (Part A): Moss colours in both themes, gold bar gone, step numbers as the cream light on a moss disc, the
+  wordmark font self-hosted. Part B: the hero is the lockup row (icon beside the live-text name, the same proportions
+  as the SVG lockup), the glow centred on the icon; favicon `sizes` 16, 32, 48; full share tags.
+- **`site/wakeshot.svg`**: the 256 px app icon ported layer by layer from `art.rs` (shadow, 120 degree ramp, glow,
+  shade, bar, bloom, light with its focal gradient). Against the ICO's 256 frame: over white mean 0.64, max 41 of 255
+  (edge pixels only; inside the shapes 3 at most); no difference a person sees at 100%.
+- **Lockups** `site/wakeshot-lockup-light.svg` and `-dark.svg`: icon plus "Wakeshot" as outlines (HarfBuzz shaping,
+  checked against Edge's own text), 304 x 80 px.
+- **README**: line 1 is a centred `<h1>` with one `<picture>` (dark source, light `<img>`, alt "Wakeshot"). Nothing
+  else changed.
+- **Social card** `site/social-card.png`, 1280 x 640, 285,642 bytes, dark, the lockup and the README's first line;
+  source `site/social-card.html`, drawn by `site/social_card.py` (byte-equal on a second run).
+- **Installer splash**: none. Velopack 1.2.161 shows its own progress window with words, a title bar and a progress
+  bar when no `--splashImage` is given (source chain in `docs/research.md`); a splash would replace it with a
+  wordless picture. `pack.ps1` and `packaging/README.md` unchanged.
+- **Setup.exe icon** (orchestrator's item): packed locally, Setup.exe holds all 14 ICO frames byte-equal, the 256 PNG
+  included, and Windows loads each.
+
+Files: `site/index.html`, `site/style.css`, `site/check_page.py`, `site/wakeshot.svg`; new `site/wakeshot-lockup-light.svg`,
+`site/wakeshot-lockup-dark.svg`, `site/social-card.html`, `site/social_card.py`, `site/social-card.png`,
+`site/fonts/InstrumentSans-SemiBold.woff2`, `site/fonts/InstrumentSans-Regular.woff2`, `site/fonts/OFL.txt`;
+`README.md` (heading only); `docs/research.md` (two sections added); pictures
+`docs/research/img/brand/apply-web-hero.png`, `apply-web-readme.png`, `apply-web-social.png`, `apply-web-icon.png`.
+Not changed: `packaging/`, `site/favicon.ico`, `assets/`, `art.rs`, `media/`.
+
+Checks:
+
+| Check | Outcome |
+|---|---|
+| `python site/check_page.py site` | pass: 0 errors, 8 spots wait, no "not linked" note |
+| `python site/check_page.py --final site` | fails only on those 8 spots (exit 1), as before |
+| New `check_page.py` checks, negative tests on copies | missing og:image file, og:title drift, missing alt, wrong og:url, missing `<style>` font: each exit 1 |
+| No violet or gold in `site/` | scratch `colour_scan.py`: 0 flagged; no `#7250F4`, `#7957F4`, `#6B49F3`, `#5B3FD6`, `#A996FF`, `#FFCC4D`, `#14121F` in `site/` or `README.md` |
+| No request leaves the page | Edge net log, page on 127.0.0.1: 4 requests by the page (CSS, font, icon, favicon), all local, 0 elsewhere; no `http` in `style.css` |
+| `wakeshot.svg` against the ICO's 256 frame | numbers above; no visible difference at 100% (looked on white and GitHub dark, and at 6x) |
+| `pack.ps1` | unchanged, so its check does not apply; still ran it on a local x64 release into scratch for the icon check: exit 0 |
+| Social card | 1280 x 640, 285,642 bytes (under 1 MB), content at least 108 px from every edge |
+| Look | page light and dark at 1280, 390 and 320 px; README top in GitHub's CSS at scale 1 and 2; card at 1280 and 400 px; icon at 100% and 6x |
+
+WCAG 2.2 contrast (page pairs from `check_page.py --colours`, unchanged since Part A; "hero" is the worst of the bare
+page, under each glow and under both):
+
+| Pair | Needs | Light | Dark |
+|---|---|---|---|
+| text on page / panel / hero | 4.5 | 16.53 / 15.27 / 14.67 | 16.12 / 14.65 / 9.34 |
+| muted on page / panel / hero | 4.5 | 6.82 / 6.30 / 6.05 | 9.30 / 8.45 / 5.39 |
+| link on page / panel / hero | 4.5 | 5.86 / 5.41 / 5.20 | 12.02 / 10.93 / 6.96 |
+| button text on button | 4.5 | 6.04 | 12.02 |
+| step number on step disc | 4.5 | 5.03 | 5.03 |
+| button edge on page / hero | 3.0 | 5.86 / 5.20 | 12.02 / 6.96 |
+| focus ring on page / panel / hero | 3.0 | 5.86 / 5.41 / 5.20 | 15.25 / 13.86 / 8.83 |
+| lockup word on GitHub `#ffffff` / `#0d1117` | 4.5 | 17.04 | 16.67 |
+| card line `#EEF2E8` on card, haze, glow, both | 4.5 | none | 16.12 / 12.33 / 10.51 / 7.82 |
+| plate ends on GitHub's page (non-text) | 3.0 | 3.96 to 5.06 | 3.74 to 4.78 |
+
+Open items:
+
+- Haik's check after the push: on github.com set the theme opposite to Windows' (Settings > Appearance), open the
+  repo and see whether the header follows GitHub's theme (decision 14).
+- The orchestrator: upload `site/social-card.png` as the social preview; the `pages.yml` step and the stale docs
+  under "Found outside scope".
+- Not verified: the Pages address live (Pages is off until v1); how Velopack's progress window shows the icon (a real
+  install, screen session).

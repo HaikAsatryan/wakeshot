@@ -4902,3 +4902,70 @@ offline (headless Edge at device scale 1); no live taskbar, Start or notice was 
   icons from both x64 exes with a clear corner and the light's fffbe8 (`exeicon.ps1`). **Verified.**
 - **Same bytes on x64 and ARM64**: the art uses `+`, `-`, `*`, `/` and `sqrt` in f32 and integer box blurs, so the
   golden tests compare exactly; ARM64 got clippy and a release build, not a test run.
+
+## Brand apply: the page, the README header and the social card
+
+Checked 2026-11-05 by `p6-brand-apply-web` Part B (files in `site/` and the top of `README.md`; pictures
+`docs/research/img/brand/apply-web-*.png`; scripts in the card's scratch folder `p6-brand-apply-web\`). Renders are
+headless Edge at device scale 1 or 2, offscreen.
+
+- **`site/wakeshot.svg` against the ICO's 256 frame**: the SVG ports `Plated::at(256)` and every layer of `art.rs`
+  (`gen_icon.py`). Rendered at 256 px with a clear background and compared pixel by pixel (`compare_icon.py`): over
+  white mean 0.64 and max 41 of 255; over `#121610` mean 0.47, max 29; alpha mean 0.23, max 52. Inside the shapes the
+  difference is 3 at most (Chrome dithers gradients). The larger values are single edge pixels where Chrome's
+  anti-aliasing of a curve close to its tangent covers less than the true area (plate corners 41, bar ends 29, light
+  edge 14); `art.rs` matches the true area there (checked by sampling each pixel 64 x 64 times). A mask, a clip path
+  and three separate plates give the same numbers. **Verified.**
+- **Wordmark outlines equal Chrome's text**: "Wakeshot" shaped with HarfBuzz (uharfbuzz 0.57.0, the font's default
+  features; with letter spacing, spacing after each glyph and no optional ligatures, as Chrome does) and drawn from
+  the TTF's outlines (fontTools 4.68.0) lands on the same ink box, to the pixel, as Edge drawing the WOFF2 with
+  `letter-spacing: -0.01em` at 200 px; every glyph sits in the same place, so kerning matches. Only Chrome's vertical
+  hinting moves some x-height edges by one pixel. **Verified.** With line height 1, Instrument Sans (typo ascender
+  970, descender -250, `USE_TYPO_METRICS` set) centres its cap height (720) in the line box, so a flex row with
+  `align-items: center` centres the cap height on the icon. Computed from the font's tables; the render agrees.
+- **What GitHub keeps of the README header**: GitHub's Markdown API (`gh api markdown`, mode gfm, context
+  `HaikAsatryan/wakeshot`, 2026-11-05) returns the `<h1 align="center">`, the `<picture>` with its `<source
+  media="(prefers-color-scheme: dark)">` and the img's alt, width and height, and wraps the picture in GitHub's own
+  `<themed-picture>` element. **Verified** (API output). That element exists so the picture follows GitHub's theme
+  rather than the system's. A GitHub community discussion (#210983, 2026-10-22) reports README pictures following the
+  system's theme instead; no GitHub staff answer. **Not verified**: if it is true, a reader with a dark system and
+  GitHub set to light sees the light-text lockup on white. A first render without the theme pinned showed exactly
+  that look.
+- **GitHub's social preview**: "Your image should be a PNG, JPG, or GIF file under 1 MB in size", "at least 640 by
+  320 pixels (1280 by 640 pixels for best display)", transparency allowed but a solid background advised
+  (docs.github.com, "Customizing your repository's social media preview", read 2026-11-05). **Verified.**
+  `site/social-card.png` is 1280 x 640, 285,642 bytes, solid background, all content at least 108 px from each edge.
+- **The page's Pages address** in the share tags, `https://haikasatryan.github.io/wakeshot/`, follows GitHub's project
+  site pattern `https://<owner>.github.io/<repository>/`. **Not verified** live: Pages is off until v1
+  (`gh api repos/HaikAsatryan/wakeshot/pages` gives 404). `check_page.py` fails the page if a share tag leaves that
+  address or names a file the folder lacks.
+- **Setup.exe carries the new ICO whole**: `packaging/pack.ps1` with vpk 1.2.161 on a local x64 release build of the
+  current code (`-Icon assets/wakeshot.ico`, into scratch, nothing installed) gives a Setup.exe with one icon group
+  of 14 frames, each byte-equal to the ICO's frame (13 bitmaps and the 256 PNG), and `CreateIconFromResourceEx` loads
+  each at its size; `PrivateExtractIconsW` gives 16 to 256 px icons from it (`exe_icons.py`, ctypes). The portable
+  zip's `Update.exe` and `Wakeshot.exe` carry the same 14 frames. **Verified.** Not verified: how Velopack's progress
+  window shows the icon (that needs a real install; screen session).
+- **No request leaves the page**: served from `127.0.0.1` and loaded in headless Edge with a network log, the page
+  started three requests (`style.css`, the SemiBold font, `wakeshot.svg`), all local. **Verified.**
+
+## Media: the art port in f32, and the loop and title drawn from it
+
+Checked 2026-11-05 for `p6-brand-apply-media` Part B.
+
+- **A JavaScript port can draw `art.rs`'s bytes exactly** if every f32 operation is rounded with `Math.fround` one
+  step at a time, in Rust's order. A double rounded to f32 after a single +, -, *, / or sqrt of two f32 values is the
+  f32 result, since a double has more than 2 x 24 + 2 bits (the known bound for double rounding of these operations;
+  not proved here, shown by the checks). `media/scripts/check-art.mjs` compares `media/src/art/heldLight.ts` with all
+  three review sheets, the 14 ICO frames and the notice picture: 9,458,740 pixels, 0 differ. Control: the same port
+  with `F` as a no-op (plain f64) differs by 1 level in 4 to 186 pixels of 11 app icon frames (the shadow's edge and
+  the plate's ramp), so the rounding is needed and the check sees a 1-level slip. **Verified** (both runs).
+- **Pixels drawn on a canvas reach Remotion's frames unchanged**: the loop's GIFs, rendered through Chrome Headless
+  Shell from a `<canvas>` filled with `putImageData` at whole-pixel places, hold the port's idle and holding glyphs
+  (`tray_mask` at 128 px over GitHub's page colour) in every pixel of the 480 x 240 frame (`check-video.mjs`), and the
+  title and outro stills hold `app_icon(256)` and `app_icon(192)` in all 52,952 and 29,920 opaque pixels. **Verified.**
+  The icon's half-covered edge pixels go through the browser's premultiplied blend over the video background; not
+  compared.
+- **H.264 at CRF 20 breaks the plate's edge into blocks while the title's light comes on** (the whole plate changes
+  colour at once); CRF 16 keeps it clean, at 1.5 times the bytes (title alone: 121 KB to 181 KB; whole draft 1.9 to
+  2.5 MB). Seen by eye at 5 times, frame 22 of both encodes, yuv420p (`docs/research/img/brand/apply-media-title.png`
+  shows the stills). **Verified** by looking; no metric.

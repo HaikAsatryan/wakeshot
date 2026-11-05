@@ -119,30 +119,39 @@ video {
   height: auto;
 }
 
-/* The held light: the warm light glows round the icon (its centre is the 4rem padding plus half the 6rem icon), over a
-   faint moss haze along the top. */
+/* The held light: the warm light glows round the icon, over a faint moss haze along the top. The glow's centre is the
+   icon's: 4rem padding plus half the icon down, and left of the middle by half the lockup's width less half the icon
+   (6.85rem with the brand face; move it with the lockup). */
 .hero {
   text-align: center;
   padding: 4rem 0 2.5rem;
   background:
-    radial-gradient(circle 15rem at 50% 7rem, var(--glow-core), transparent),
+    radial-gradient(circle 12rem at calc(50% - 6.85rem) 6.35rem, var(--glow-core), transparent),
     radial-gradient(ellipse 60rem 22rem at 50% 0, var(--glow), transparent 70%);
 }
 
-.hero .logo {
-  display: block;
-  width: 6rem;
-  height: 6rem;
-  margin: 0 auto;
-}
-
-/* Only the wordmark takes the brand face; if it does not load, the other headings' system face stands in. */
-.hero h1 {
+/* The lockup, drawn as wakeshot-lockup-*.svg draws it: the word's cap height is 0.46 of the plate (so the icon is
+   1.712em), and the ink starts 0.26 of the plate after it (0.294em, less the icon's margin and the W's side bearing).
+   With a line height of 1 the brand face's cap height sits centred on the icon. Only the wordmark takes the brand
+   face; if it does not load, the other headings' system face stands in. The lockup is 6.7em wide, so on a phone
+   narrower than 340 px it shrinks to keep the page's side padding. */
+.hero .brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.294em;
   font-family: "Instrument Sans", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "Helvetica Neue",
     Arial, sans-serif;
-  font-size: 2.75rem;
+  font-size: min(2.75rem, calc((100vw - 2.5rem) / 6.8));
   letter-spacing: -0.01em;
-  margin: 0.75rem 0 0.75rem;
+  line-height: 1;
+  margin: 0 0 1.5rem;
+}
+
+.hero .logo {
+  flex: none;
+  width: 1.712em;
+  height: 1.712em;
 }
 
 .lead {

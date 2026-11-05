@@ -3,8 +3,10 @@
 Fails when: an HTML file does not parse into balanced tags; a local link, image or CSS url() does not resolve inside
 the folder; a src or href leaves https://github.com/HaikAsatryan/wakeshot and the page itself; the page has a script,
 an event handler attribute or an embedded frame; any text file holds an em dash or an emoji; a colour pair of
-style.css drops below WCAG 2.2 AA in the light or the dark theme (text 4.5, focus ring and button edge 3.0). With
---final it also fails while a spot still waits for another card (an HTML comment that starts with "waits for").
+style.css drops below WCAG 2.2 AA in the light or the dark theme (text 4.5, focus ring and button edge 3.0); a share
+tag (og:, twitter:) points outside the page's Pages address or to a missing file, has an image without alt text, or
+says a title or description other than the page's own. With --final it also fails while a spot still waits for
+another card (an HTML comment that starts with "waits for").
 
 Run: python site/check_page.py [--final] [--colours] site (--colours prints every contrast ratio)
 Python 3.8 or later, standard library only.
@@ -19,6 +21,9 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 REPO = "https://github.com/HaikAsatryan/wakeshot"
+# Where pages.yml publishes this folder: a project site's address, https://<owner>.github.io/<repository>/. A share
+# tag must use the full address, so it names files by it.
+PAGES = "https://haikasatryan.github.io/wakeshot/"
 VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
 URL_ATTRS = {"href", "src", "poster", "action", "formaction", "cite", "data"}
 BANNED_TAGS = {"script", "iframe", "frame", "object", "embed", "applet", "base"}
@@ -34,8 +39,9 @@ EMOJI_RANGES = [
 ]
 EMOJI = re.compile("[" + "".join(f"{chr(a)}-{chr(b)}" for a, b in EMOJI_RANGES) + "]")
 WAITS = re.compile(r"^\s*waits for\b", re.IGNORECASE)
-# A font's licence travels beside it; no page links it.
-UNLINKED_OK = {"OFL.txt"}
+# Files no page links: a font's licence travels beside it; the README draws the light lockup from here (the dark one
+# is the social card's too); social-card.html is the source of social-card.png and social_card.py draws it.
+UNLINKED_OK = {"OFL.txt", "wakeshot-lockup-light.svg", "social-card.html", "social_card.py"}
 
 # The colour pairs style.css must keep, by custom property name: (front, back, least WCAG ratio). "hero" is the page
 # under the hero's two see-through glows, bottom layer first: a pair must hold on the bare page, under each glow alone
@@ -64,6 +70,10 @@ class Page(HTMLParser):
         self.charset = False
         self.title = ""
         self.in_title = False
+        self.description = None
+        self.share = {}
+        self.style = ""
+        self.in_style = False
 
     def where(self):
         return f"line {self.getpos()[0]}"
@@ -78,6 +88,8 @@ class Page(HTMLParser):
             self.stack.append((tag, self.where()))
         if tag == "title":
             self.in_title = True
+        if tag == "style":
+            self.in_style = True
 
     def handle_startendtag(self, tag, attrs):
         self.check_tag(tag, attrs)
@@ -112,6 +124,12 @@ class Page(HTMLParser):
             self.charset = True
         if tag == "meta" and (names.get("http-equiv") or "").lower() == "refresh":
             self.errors.append(f"{self.where()}: a meta refresh is not allowed")
+        if tag == "meta":
+            key = names.get("property") or names.get("name") or ""
+            if key == "description":
+                self.description = names.get("content")
+            if key.startswith(("og:", "twitter:")):
+                self.share[key] = names.get("content") or ""
 
     def handle_endtag(self, tag):
         if tag in VOID:
@@ -125,10 +143,14 @@ class Page(HTMLParser):
             self.errors.append(f"{self.where()}: </{tag}> closes <{open_tag}> opened at {opened}")
         if tag == "title":
             self.in_title = False
+        if tag == "style":
+            self.in_style = False
 
     def handle_data(self, data):
         if self.in_title:
             self.title += data
+        if self.in_style:
+            self.style += data
 
     def handle_comment(self, data):
         if WAITS.match(data):
@@ -169,6 +191,33 @@ def check_url(root, base_file, url, ids):
     if not target.is_file():
         return f"{url}: file not found"
     return None
+
+
+def check_share(root, page):
+    """Errors for the page's share tags, and the files they name (which count as linked)."""
+    errors, used = [], set()
+    tags = page.share
+    for key in ("og:image", "twitter:image"):
+        if key not in tags:
+            continue
+        url = tags[key]
+        if not url.startswith(PAGES):
+            errors.append(f"{key} {url}: not under {PAGES}")
+        else:
+            target = (root / unquote(urlsplit(url[len(PAGES):]).path)).resolve()
+            if not target.is_file():
+                errors.append(f"{key} {url}: file not found in the folder")
+            else:
+                used.add(target)
+        if not tags.get(key + ":alt", "").strip():
+            errors.append(f"{key} has no {key}:alt")
+    if "og:url" in tags and tags["og:url"] != PAGES:
+        errors.append(f"og:url {tags['og:url']}: not {PAGES}")
+    if "og:title" in tags and tags["og:title"] != page.title.strip():
+        errors.append("og:title differs from <title>")
+    if "og:description" in tags and tags["og:description"] != page.description:
+        errors.append("og:description differs from the description meta tag")
+    return errors, used
 
 
 def check_text(path, text):
@@ -339,6 +388,15 @@ def main(argv):
                     errors.append(f"{rel} {at}: <{tag}> {problem}")
                 elif not urlsplit(url).scheme and urlsplit(url).path:
                     used.add((path.parent / unquote(urlsplit(url).path)).resolve())
+            for url in css_urls(page.style):
+                problem = check_url(root, path, url, set())
+                if problem:
+                    errors.append(f"{rel}: <style> url() {problem}")
+                elif not urlsplit(url).scheme:
+                    used.add((path.parent / unquote(urlsplit(url).path)).resolve())
+            share_errors, share_used = check_share(root, page)
+            errors += [f"{rel}: {e}" for e in share_errors]
+            used |= share_used
             waits += [f"{rel} {w}" for w in page.waits]
         if path.suffix == ".css":
             for url in css_urls(text):
