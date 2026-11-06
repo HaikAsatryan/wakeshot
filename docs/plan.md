@@ -332,7 +332,11 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   passed on the bigger v1 and Haik's install is the final build (Setup 12,481,433 bytes; checks green x64 and ARM64,
   1782 tests). Video: Haik's new scenario in three rounds (a typed prompt with only keyboard sounds, the agent
   loading, the laptop sleeping, music from the Wakeshot reveal; 38 s, his music kept). Pushed up to e3588bf.
-- Next (orchestrator): `p6-agents-video-readme` Part B last round (README and site on the final list, speed numbers
-  on the final install, the two-agent tooltip capture with Haik's hands off, final render), Haik's look at README and
-  video, push and CI, `p4-live-uninstall` last (Haik confirms the list first); then ask Haik about the video upload,
-  Pages, Phase 7, Phase 8.
+- 2026-11-07 03:41 (session wakeshot-f5, handing over to wakeshot-4e): done and pushed since 23:56: `p4-cursor-off`,
+  the README and site on the final list, the video approved by Haik (38 s), `p4-idle-cpu` (idle CPU back to 109 ms
+  per 10 min), Claude Desktop installed and Haik signed in. Haik's install is the latest build (Setup 12,491,601
+  bytes). CI green through e3588bf. Haik's go for the night and his yes for the history squash: `06-ship.md` work log,
+  2026-11-07.
+- Next (orchestrator): the end card's idle numbers (now 109 ms), `p4-live-claude-desktop`, `p6-logs-diagnostics`, a
+  short winget-upgrade fix check, the video upload, Pages, the repo polish (`p8-cleanup.md`), `p4-live-uninstall`,
+  then the history squash and CI; a structured report of the night for Haik.
