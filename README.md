@@ -81,9 +81,9 @@ The icon tells you what is going on, and the tooltip names what holds the PC awa
 
 | Icon | State | The tooltip says | What it means |
 |---|---|---|---|
-| <!-- media: holding icon, light and dark, the held light (crates/wakeshot-windows/src/tray/art.rs), alt text "A filled light over a line" --> | Holding | `Holding awake: Claude Code (1 session)` | Something needs the PC. It stays awake, and closing the lid does not stop it. |
-| <!-- media: idle icon, light and dark, the held light (crates/wakeshot-windows/src/tray/art.rs), alt text "An outlined light over a line" --> | Idle | `Not holding, the PC sleeps as usual` | Automatic is on, and nothing needs the PC right now. |
-| <!-- media: off icon, light and dark, the held light (crates/wakeshot-windows/src/tray/art.rs), alt text "An outlined light over a line, struck through" --> | Off | `Automatic is off, the PC sleeps as usual` | Wakeshot watches nothing. Keep awake still works. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/out/state-holding-dark.png"><img src="media/out/state-holding-light.png" alt="A filled light over a line" width="16" height="16"></picture> | Holding | `Holding awake: Claude Code (1 session)` | Something needs the PC. It stays awake, and closing the lid does not stop it. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/out/state-idle-dark.png"><img src="media/out/state-idle-light.png" alt="An outlined light over a line" width="16" height="16"></picture> | Idle | `Not holding, the PC sleeps as usual` | Automatic is on, and nothing needs the PC right now. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/out/state-off-dark.png"><img src="media/out/state-off-light.png" alt="An outlined light over a line, struck through" width="16" height="16"></picture> | Off | `Automatic is off, the PC sleeps as usual` | Wakeshot watches nothing. Keep awake still works. |
 
 ### A night with Wakeshot
 

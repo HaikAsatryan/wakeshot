@@ -256,7 +256,7 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   his values same). README: Haik's trim (dd72a4d), the gap bullet, the flat contents list under Details. Haik:
   `p6-media` Part B waits until his design review of the final software. Pushed 0c7bc26: CI green on all three jobs.
 - 2026-11-05 ~02:30: `p6-int-haik-checks` done (decfd5a): blocks 1, 2, 3, 5, 7, 8 pass; 4 safe with findings; 6
-  step 3 not shown. Haik: a 30 s grace on battery before the floor step back (`product.md`). Haik's Nightcrew
+  step 3 not shown. Haik: a 30 s grace on battery before the floor step back (`product.md`). Haik's own
   cleanup committed (a47d03f). Running: `p2-6-floor-grace`, `p6-real-install-guard` (promoted from later). Haik is
   asleep (dock in, lid open): orchestrator decisions go to the `06-integration.md` work log for his review.
 - 2026-11-05 ~05:00: done and pushed (5f1b1db): `p6-real-install-guard`, `p2-6-floor-grace` (30 s grace; its narrow

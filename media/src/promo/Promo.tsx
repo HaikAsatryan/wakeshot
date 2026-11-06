@@ -20,8 +20,8 @@ import {Capture, SETS, StandInTag} from './Capture.tsx';
 import {DraftContext} from './draft.ts';
 import {LaptopTilt} from './LaptopTilt.tsx';
 import {SettingsCard} from './SettingsCard.tsx';
-import {Terminal} from './Terminal.tsx';
-import {ABOVE_LAPTOP, CARD_AT, HERO, HOOK_TERMINAL, LAPTOP_AT, LAPTOP_SCALE, SET_AT, TRAY_TERMINAL, cardRow, setBox} from './world.ts';
+import {Check, Spinner, Terminal} from './Terminal.tsx';
+import {ABOVE_LAPTOP, CARD_AT, HERO, HOOK_TERMINAL, LAPTOP_AT, LAPTOP_SCALE, LID_ROW, SET_AT, TRAY_TERMINAL, WORK_CHIP, cardRow, setBox} from './world.ts';
 
 export type PromoProps = {draft: boolean};
 
@@ -33,7 +33,7 @@ const centre = (b: Rect) => ({x: b.x + b.w / 2, y: b.y + b.h / 2});
 function liftAt(f: number): {x: number; y: number} {
   if (f < SCENES.tray.from) return f < SCENES.light.from ? {x: HOOK_TERMINAL.x, y: HOOK_TERMINAL.y} : HERO.light;
   if (f < SCENES.lid.from) return {x: PLACES.tray.x + 120, y: PLACES.tray.y};
-  if (f < SCENES.menu.from) return f >= T.settings.move && f < T.sleeps.move ? {x: CARD_AT.x + 430, y: PLACES.card.y} : {x: PLACES.lid.x, y: -60};
+  if (f < SCENES.menu.from) return f >= T.settings.move && f < T.sleeps.cut ? {x: CARD_AT.x + 430, y: PLACES.card.y} : {x: PLACES.lid.x, y: -60};
   if (f < SCENES.end.from) return centre(setBox('menu', 'menu'));
   return {x: PLACES.end.x, y: -80};
 }
@@ -244,21 +244,46 @@ const lidShut = (f: number) => {
   return close - bounce;
 };
 
+/**
+ * The work behind the shut lid: a chip with the agent's next step, one a beat, under a turning spinner; at `done` it
+ * says the work is done, with the terminal's own done line. The video's drawing, not a copy of any app's screen.
+ */
+const WorkChip: React.FC<{f: number}> = ({f}) => {
+  const steps = COPY.terminal.behindLid;
+  const done = f >= T.lid.done;
+  const step = steps[Math.min(steps.length - 1, Math.max(0, Math.floor((f - T.lid.work) / T.lid.workEvery)))];
+  return (
+    <Chip style={{width: WORK_CHIP.w, height: WORK_CHIP.h, boxSizing: 'border-box', gap: 18, fontFamily: MONO, fontSize: 32}}>
+      <span style={{width: 56, display: 'inline-flex', justifyContent: 'center', fontSize: 40}}>
+        {done ? <Check size={34} colour={DARK.accent} /> : <Spinner f={f} colour={DARK.accent} turning />}
+      </span>
+      {done ? (
+        <span style={{color: DARK.accent}}>{COPY.terminal.done}</span>
+      ) : (
+        <span style={{color: DARK.terminalText}}>
+          <span style={{color: DARK.dim, display: 'inline-block', width: '5.5ch'}}>{step[0]}</span>
+          {step[1]}
+        </span>
+      )}
+    </Chip>
+  );
+};
+
 const LidPlace: React.FC<{f: number}> = ({f}) => {
   const breathe = 0.72 + 0.28 * Math.cos((2 * Math.PI * (f - T.lid.shut)) / 60);
-  const edge = f < T.lid.shut ? progress(f, T.lid.close, T.lid.shut - T.lid.close) : breathe * (1 - progress(f, T.settings.off, LIGHT_OFF_FRAMES, LAMP_OFF));
+  // The edge light is the hold: it goes off at the frame the work is done.
+  const edge = f < T.lid.shut ? progress(f, T.lid.close, T.lid.shut - T.lid.close) : breathe * (1 - progress(f, T.lid.done, LIGHT_OFF_FRAMES, LAMP_OFF));
   const led = 1 - progress(f, T.sleeps.sleep, LIGHT_OFF_FRAMES, LAMP_OFF);
   const yaw = -30 + 6 * Math.min(1, Math.max(0, (f - T.lid.orbit) / (SCENES.menu.from - T.lid.orbit)));
   const moon = progress(f, T.sleeps.moon, 15, SETTLE);
-  const total = 300;
-  const left = Math.max(0, total * (1 - Math.min(1, Math.max(0, (f - T.sleeps.chip) / T.sleeps.countLen))));
-  const clock = `${Math.floor(Math.ceil(left) / 60)}:${String(Math.ceil(left) % 60).padStart(2, '0')}`;
+  // After the time cut the badge sits alone, centred; it goes as the laptop sleeps and the moon takes its place.
+  const lock = f < T.sleeps.cut ? LID_ROW.lock : ABOVE_LAPTOP;
   return (
     <>
       <div style={{position: 'absolute', left: LAPTOP_AT.x, top: LAPTOP_AT.y, transform: `scale(${LAPTOP_SCALE})`}}>
         <LaptopTilt f={f} shut={lidShut(f)} yaw={yaw} edge={edge} led={led} streamFrom={T.lid.cut} />
       </div>
-      <At x={ABOVE_LAPTOP.x} y={ABOVE_LAPTOP.y}>
+      <At x={lock.x} y={lock.y}>
         <Pop at={T.lid.lock} out={T.sleeps.sleep}>
           <Badge>
             <Lock size={46} colour={DARK.text} />
@@ -270,21 +295,20 @@ const LidPlace: React.FC<{f: number}> = ({f}) => {
           <Moon size={104} colour={DARK.dim} />
         </At>
       ) : null}
-      <At x={ABOVE_LAPTOP.x + 330} y={ABOVE_LAPTOP.y + 20}>
-        <Pop at={T.sleeps.chip} out={SCENES.menu.from}>
-          <Chip>
-            <span style={{fontFamily: MONO, fontSize: 38, color: DARK.accent, width: '4ch', display: 'inline-block', textAlign: 'right'}}>{clock}</span>
-            <span style={{color: DARK.dim}}>{COPY.idleChip}</span>
-          </Chip>
-        </Pop>
-      </At>
+      {within(f, T.lid.work, T.sleeps.cut) ? (
+        <div style={{position: 'absolute', left: LID_ROW.chip.x, top: LID_ROW.chip.y}}>
+          <Pop at={T.lid.work} origin="50% 100%">
+            <WorkChip f={f} />
+          </Pop>
+        </div>
+      ) : null}
     </>
   );
 };
 
 const CardPlace: React.FC<{f: number}> = ({f}) => (
   <div style={{position: 'absolute', left: CARD_AT.x, top: CARD_AT.y}}>
-    <Pop at={T.settings.card} out={T.sleeps.move} origin="0% 50%">
+    <Pop at={T.settings.card} origin="0% 50%">
       <SettingsCard f={f} rolls={[T.settings.row1, T.settings.row2]} />
     </Pop>
   </div>
@@ -431,7 +455,7 @@ const EndPlace: React.FC<{f: number}> = ({f}) => (
 /** The speed numbers for the end card: measured, or tagged stand-ins in a draft (the final render refuses them). */
 const SPEED_STAND_IN = {ram: '88.8', cpu: '888'};
 function speedFill(draft: boolean): {fill: Record<string, string>; measured: boolean; note: string} {
-  const s = speedData as Record<string, number | string | boolean | null>;
+  const s = speedData as {measured: boolean; build: string | null; date: string | null; idleRamMb: number | null; idleCpuMsPer10Min: number | null};
   if (s.measured === true) {
     return {
       fill: {ram: String(s.idleRamMb), cpu: String(s.idleCpuMsPer10Min)},
@@ -505,6 +529,9 @@ export const Promo: React.FC<PromoProps> = ({draft}) => {
   };
   const focus = focusAt(FOCUS, f, resolve);
   const dim = within(f, T.hook.sleep, SCENES.light.from) ? 0.9 * progress(f, T.hook.sleep, T.hook.dimLen, (t) => t) : 0;
+  // The time cut before the sleep: the frame dips dark into the cut and comes back after it.
+  const cut = T.sleeps.cut;
+  const dip = within(f, cut - T.sleeps.dipOut, cut) ? 0.85 * ((f - cut + T.sleeps.dipOut + 1) / T.sleeps.dipOut) : within(f, cut, cut + T.sleeps.dipIn) ? 0.85 * (1 - (f - cut) / T.sleeps.dipIn) : 0;
   const stageLift = f < SCENES.light.from ? 1 - dim : f < SCENES.tray.from ? progress(f, T.light.on, 18, SETTLE) : 1;
   const inTray = within(f, T.tray.whip + T.tray.whipLen, SCENES.lid.from);
   const inMenu = within(f, SCENES.menu.from, SCENES.end.from);
@@ -512,14 +539,20 @@ export const Promo: React.FC<PromoProps> = ({draft}) => {
   const speed = f >= SCENES.end.from ? speedFill(draft) : null;
   return (
     <DraftContext.Provider value={draft}>
-      <AbsoluteFill>
+      {/*
+        A new tree every frame (keyed by the frame), so Chrome paints each frame from nothing. Kept, it repaints only
+        what changed since the frame the render tab drew before, and which frame that was depends on how the tabs
+        share the work: soft shadows and gradients then kept a level of the old frame at their edges, and two renders
+        of the same source differed (round 4).
+      */}
+      <AbsoluteFill key={f}>
         <Stage focus={liftScreen} lift={stageLift} width={VIDEO.width} height={VIDEO.height} />
         <World view={view} velocity={velocity} size={SIZE}>
           {f < T.tray.whip + T.tray.whipLen ? <HookTerminal f={f} /> : null}
           {within(f, SCENES.light.from, T.tray.whip + T.tray.whipLen) ? <HeroGlyph f={f} /> : null}
           {within(f, T.tray.whip, SCENES.lid.from) ? <TrayShot f={f} /> : null}
           {within(f, SCENES.lid.from, SCENES.menu.from) ? <LidPlace f={f} /> : null}
-          {within(f, T.settings.card, SCENES.menu.from) ? <CardPlace f={f} /> : null}
+          {within(f, T.settings.card, T.sleeps.cut) ? <CardPlace f={f} /> : null}
           {inMenu ? <MenuShot f={f} /> : null}
           {within(f, T.menu.ring, SCENES.end.from) ? <Lens f={f} /> : null}
           {f >= SCENES.end.from ? <EndPlace f={f} /> : null}
@@ -568,9 +601,10 @@ export const Promo: React.FC<PromoProps> = ({draft}) => {
             <span style={speed.measured ? undefined : {background: DARK.draft, padding: '3px 10px', borderRadius: 4, fontWeight: 600}}>{speed.note}</span>
           </div>
         ) : null}
-        <Audio src={staticFile('sound/soundtrack.wav')} />
+        {dip > 0 ? <AbsoluteFill style={{background: '#000', opacity: dip}} /> : null}
         {draft ? <DraftBanner f={f} /> : null}
       </AbsoluteFill>
+      <Audio src={staticFile('sound/soundtrack.wav')} />
     </DraftContext.Provider>
   );
 };

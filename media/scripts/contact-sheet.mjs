@@ -2,7 +2,8 @@
 // composition at full size, shrinks each to a quarter, and tiles them in rows into one PNG, so a scene is checked in
 // one look against its storyboard row. Prints which frame each tile is. Full size, then shrunk here: Chrome's
 // backdrop filter (the focus dimming) draws mirrored copies when Remotion renders at `--scale=0.25`.
-//   node scripts/contact-sheet.mjs <composition> <from> <to> <out.png> [--every 7.5] [--cols 6] [--shrink 4]
+//   node scripts/contact-sheet.mjs <composition> <from> <to> <out.png> [--every 7.5] [--cols 6] [--shrink 4] [--final]
+// `--final` renders the frames as the final video draws them, without the DRAFT mark (it refuses stand-ins).
 import {spawnSync} from 'node:child_process';
 import {mkdtempSync, readdirSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -19,7 +20,7 @@ const flag = (name, fallback) => {
 };
 const [comp, fromText, toText, out] = args;
 if (!comp || !out) {
-  console.error('usage: node scripts/contact-sheet.mjs <composition> <from> <to> <out.png> [--every 7.5] [--cols 6] [--shrink 4]');
+  console.error('usage: node scripts/contact-sheet.mjs <composition> <from> <to> <out.png> [--every 7.5] [--cols 6] [--shrink 4] [--final]');
   process.exit(2);
 }
 const from = Number(fromText);
@@ -62,7 +63,7 @@ try {
       `--frames=${picks.join(',')}`,
       '--image-format=png',
       `--concurrency=${process.env.MEDIA_CONCURRENCY ?? '4'}`,
-      '--props={"draft":true}',
+      `--props={"draft":${!args.includes('--final')}}`,
       '--log=error',
     ],
     {cwd: media, stdio: 'inherit'},

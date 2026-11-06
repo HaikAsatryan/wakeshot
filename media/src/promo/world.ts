@@ -42,9 +42,23 @@ export const LAPTOP_AT = {x: PLACES.lid.x - 420, y: PLACES.lid.y - 256};
 export const LAPTOP_SCALE = 1;
 /** Above the laptop, where the lock badge and then the moon appear. */
 export const ABOVE_LAPTOP = {x: PLACES.lid.x - 10, y: PLACES.lid.y - 215};
+/**
+ * While the lid is shut and the work goes on, the lock badge and the work chip sit in one row above the laptop,
+ * centred on it: the badge's centre and the chip's top left. After the time cut the badge is alone, at `ABOVE_LAPTOP`.
+ */
+export const WORK_CHIP = {w: 680, h: 76};
+export const LID_ROW = (() => {
+  const badge = 108;
+  const gap = 24;
+  const left = ABOVE_LAPTOP.x - (badge + gap + WORK_CHIP.w) / 2;
+  return {lock: {x: left + badge / 2, y: ABOVE_LAPTOP.y}, chip: {x: left + badge + gap, y: ABOVE_LAPTOP.y - WORK_CHIP.h / 2}};
+})();
 
-/** The settings card's top left: right of the laptop, so the camera slides to it. */
-export const CARD_AT = {x: PLACES.card.x + 250 - CARD.w / 2, y: PLACES.card.y - 160};
+/**
+ * The settings card's top left: right of the laptop, so the camera slides to it, and clear of the work chip, which
+ * stays in view at the frame's left with the work's done line.
+ */
+export const CARD_AT = {x: PLACES.card.x + 400 - CARD.w / 2, y: PLACES.card.y - 160};
 export function cardRow(i: number): Box {
   const r = rowBox(i);
   return {x: CARD_AT.x + r.x, y: CARD_AT.y + r.y, w: r.w, h: r.h};

@@ -12,7 +12,7 @@
     -Mode compare  -Before before.json -After after.json
     -Mode size     -Setup <path to Setup.exe>
     -Mode idle     -Minutes 10         nothing may hold during it
-    -Mode hold     -Minutes 10         starts `wakeshot run -- ping -n 600 127.0.0.1` and samples tray and guard
+    -Mode hold     -Minutes 10         starts `wakeshot run -- ping -n 660 127.0.0.1` and samples tray and guard
     -Mode delays   -Minutes 30         then start and finish 5 short Claude Code turns by hand while it runs
 
   It changes no power setting itself; the hold mode makes Wakeshot write and restore its two settings, as in normal
@@ -175,8 +175,11 @@ switch ($Mode) {
         $tray = Wakeshot-Processes | Where-Object { -not $_.Guard }
         if (-not $tray) { throw 'Wakeshot is not running' }
         $cli = Join-Path (Split-Path $build.path) 'wakeshot.exe'
-        # A fixed load: the same command every run (launch.md part 1).
-        $run = Start-Process -FilePath $cli -ArgumentList 'run', '--', 'ping', '-n', '600', '127.0.0.1' -WindowStyle Hidden -PassThru
+        # A fixed load: the same command every run (launch.md part 1). It outlasts the 15 s wait and the sampling by
+        # half a minute, so the guard still runs at the last sample and its CPU time can be read (2026-11-06: with
+        # `-n 600` it had exited before the end and the guard's CPU went unrecorded).
+        $pings = [string]($Minutes * 60 + 60)
+        $run = Start-Process -FilePath $cli -ArgumentList 'run', '--', 'ping', '-n', $pings, '127.0.0.1' -WindowStyle Hidden -PassThru
         Start-Sleep -Seconds 15
         $guard = Wakeshot-Processes | Where-Object { $_.Guard }
         $ids = @($tray.Id) + @($guard | ForEach-Object { $_.Id })

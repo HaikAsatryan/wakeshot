@@ -10,7 +10,8 @@ export const COPY = {
   tray: ['Claude Code starts: it turns *green*.', 'Done: it lets *go*.'],
   lid: ['Close the *lid*.', 'Work goes *on*, locked.'],
   settings: 'Work done. Your settings, *back*.',
-  sleeps: 'Then it sleeps, as *usual*.',
+  /** After a time cut: no clock, no countdown, no claim that it sleeps at once (Haik, 2026-11-06 00:56). */
+  sleeps: 'Later, it sleeps as *usual*.',
   menu: ['Keep awake on *demand*.', 'No second *tool*.'],
   endLine: 'Free and open source. Windows 11, x64 and ARM64.',
   /** The end card's speed line: `{ram}` and `{cpu}` come from `data/speed.json`. */
@@ -20,7 +21,6 @@ export const COPY = {
 
   /** Drawn parts that are the video's own, not the app's. */
   sleepingChip: 'Sleeping',
-  idleChip: 'with no input',
   measured: (build: string, date: string) => `Measured on Wakeshot ${build}, ${date}, x64.`,
 
   /** The illustrated terminal: not a copy of Claude Code's screen. */
@@ -31,6 +31,13 @@ export const COPY = {
     prompt: 'migrate billing to API v2 and run all tests',
     working: 'Working',
     done: 'Done. All 128 tests pass.',
+    /** The steps the work chip shows while the lid is shut, one a beat, then `done`. */
+    behindLid: [
+      ['edit', 'src/billing/tax.ts'],
+      ['read', 'src/billing/currency.ts'],
+      ['run', 'npm run lint'],
+      ['run', 'npm test'],
+    ] as string[][],
     lines: [
       ['read', 'src/billing/client.ts'],
       ['read', 'src/billing/invoice.ts'],

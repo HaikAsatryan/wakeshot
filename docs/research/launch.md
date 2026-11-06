@@ -614,6 +614,10 @@ loop from Freesound for the bed, all committed under `media/` with their source 
 not required for CC0; we list it anyway). Fallback for the bed: a soft pad made in code. Decided by the worker, for
 Haik's review.
 
+Built differently (2026-11-05, `p6-media` Part C): every effect is made in code, so no Kenney file is used, and the
+music is "A Chill Fever (Loopable)" by Pro Sensory (CC0, from OpenGameArt; Freesound needs a login to download), Haik's
+pick from three candidates. Sources and licences: `media/CREDITS.md`; how it is fitted: `promo-video.md`.
+
 ### Specs
 
 | Output | Spec |

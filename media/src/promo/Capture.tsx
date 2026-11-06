@@ -60,7 +60,9 @@ export const Capture: React.FC<{set: SetName; shot: string; zoom: number; clip?:
   return (
     <div style={{position: 'absolute', left: 0, top: 0, width: s.w * zoom, height: s.h * zoom, clipPath, ...style}}>
       {info.file ? (
-        <Img src={staticFile(info.file)} style={{width: s.w * zoom, height: s.h * zoom, imageRendering: 'pixelated', display: 'block'}} />
+        // Keyed by the file, so a swap from one shot to the next mounts a new image instead of changing the source of
+        // the one on screen: a changed source let a render now and then show the shot before (round 3, frame 165).
+        <Img key={info.file} src={staticFile(info.file)} style={{width: s.w * zoom, height: s.h * zoom, imageRendering: 'pixelated', display: 'block'}} />
       ) : (
         <Sketch set={set} shot={shot} zoom={zoom} />
       )}

@@ -11,6 +11,11 @@ export const VIDEO = {width: 1920, height: 1080, fps: 30, frames: 900};
  * the README shows the loop at half size, so the glyph reads at 64 px and stays sharp on a HiDPI screen.
  */
 export const LOOP = {width: 480, height: 240, fps: 25, frames: 125, art: 128};
+/**
+ * The README state table's icons: `tray_mask` drawn at 32 px, the tray at 200%. The README shows them at 16 px, the
+ * tray's size at 100%, so they stay sharp on a HiDPI screen.
+ */
+export const STATE_ICON = 32;
 
 /** How long the light takes to come on: 0.44 s, as in the README loop (11 frames at 25 fps). */
 export const LIGHT_ON_FRAMES = 13;
@@ -46,9 +51,19 @@ export const T = {
   light: {on: beat(4), name: beat(5), faintLines: beat(4) + 6},
   /** Claude Code starts and the icon turns holding; the tooltip under the cursor; the work ends and the icon lets go. */
   tray: {whip: beat(10), whipLen: 12, start: beat(11), lineEvery: 6, hover: beat(13), drift: beat(14), done: beat(16)},
-  lid: {cut: beat(20), settle: 15, close: beat(21), shut: beat(22), lock: beat(24), orbit: beat(24)},
-  settings: {move: beat(28), off: beat(28), card: beat(29), row1: beat(31), row2: beat(32)},
-  sleeps: {move: beat(34), chip: beat(35), countLen: beat(2), sleep: beat(37), moon: beat(38)},
+  /**
+   * The lid shuts and the work goes on behind it: from `work` a chip rises above the shut laptop and shows the agent's
+   * next step every `workEvery` frames; at `done` it shows the work done and, at that same frame, the edge light goes
+   * off: the hold ends (Haik, 2026-11-06 00:56: the work going on, then clearly done, then the sleep).
+   */
+  lid: {cut: beat(20), settle: 15, close: beat(21), shut: beat(22), work: beat(23), workEvery: beat(1), lock: beat(24), orbit: beat(24), done: beat(27)},
+  settings: {move: beat(28), card: beat(29), row1: beat(31), row2: beat(32)},
+  /**
+   * A time cut: the frame dips dark over `dipOut` frames into the cut and comes back over `dipIn`, the words say
+   * "Later", and the laptop goes to sleep. No clock and no countdown on screen: Wakeshot sleeps a closed laptop once
+   * nothing has happened for 5 minutes (`docs/product.md`), and the video claims no time it does not keep.
+   */
+  sleeps: {cut: beat(34), dipOut: 6, dipIn: 12, line: beat(35), sleep: beat(36), moon: beat(37)},
   menu: {
     cut: beat(40),
     click1: beat(41),
@@ -75,7 +90,8 @@ export const PLACES = {
   trayDrift: {x: 90, y: 1620, zoom: 1},
   lid: {x: 6000, y: 0, zoom: 1},
   lidNear: {x: 6000, y: 0, zoom: 1.06},
-  card: {x: 6650, y: 0, zoom: 1},
+  lidPush: {x: 6000, y: -20, zoom: 1.03},
+  card: {x: 6500, y: 0, zoom: 1},
   menu: {x: 12000, y: 1600, zoom: 1},
   menuSub: {x: 11850, y: 1600, zoom: 1},
   end: {x: 20000, y: 0, zoom: 1},
@@ -95,7 +111,9 @@ export const CAMERA: CameraKey[] = [
   {at: T.lid.cut, to: 'lidNear', kind: 'cut', len: 0},
   {at: T.lid.cut, to: 'lid', kind: 'settle', len: T.lid.settle},
   {at: T.settings.move, to: 'card', kind: 'move', len: MOVE_LEN},
-  {at: T.sleeps.move, to: 'lid', kind: 'move', len: MOVE_LEN},
+  {at: T.sleeps.cut, to: 'lid', kind: 'cut', len: 0},
+  // The slow push of a hold on drawn parts (`promo-video.md`, "Motion"): no capture is in view here.
+  {at: T.sleeps.cut, to: 'lidPush', kind: 'settle', len: SCENES.sleeps.len},
   {at: T.menu.cut, to: 'menu', kind: 'cut', len: 0},
   {at: T.menu.pan, to: 'menuSub', kind: 'move', len: PAN_LEN},
   {at: T.end.cut, to: 'end', kind: 'cut', len: 0},
@@ -113,7 +131,7 @@ export const FOCUS: FocusKey[] = [
   {at: T.lid.cut, target: null, cut: true},
   {at: T.settings.row1, target: 'row1'},
   {at: T.settings.row2, target: 'row2'},
-  {at: T.sleeps.move, target: null},
+  {at: T.sleeps.cut, target: null, cut: true},
   {at: T.menu.ring, target: 'menuIcon', dim: false},
   {at: T.end.cut, target: null, cut: true},
 ];
@@ -160,12 +178,12 @@ export const CAPTIONS: CaptionBlock[] = [
   {
     id: 'settings',
     lines: [{text: COPY.settings, at: T.settings.card, style: 'caption'}],
-    until: T.sleeps.move,
-    leave: 'fade',
+    until: T.sleeps.cut,
+    leave: 'cut',
   },
   {
     id: 'sleeps',
-    lines: [{text: COPY.sleeps, at: T.sleeps.chip, style: 'caption'}],
+    lines: [{text: COPY.sleeps, at: T.sleeps.line, style: 'caption'}],
     until: T.menu.cut,
     leave: 'cut',
   },
@@ -245,14 +263,14 @@ export const EVENTS: PaceEvent[] = [
   {at: T.tray.done, kind: 'light', what: 'the work ends: the icon lets go, the idle tooltip'},
   {at: T.lid.close, kind: 'move', what: 'the lid closes'},
   {at: T.lid.shut, kind: 'light', what: 'lid shut, the edge light breathes'},
+  {at: T.lid.work, kind: 'pop', what: 'the work chip rises: the agent goes on behind the lid'},
+  ...range(T.lid.work + T.lid.workEvery, T.lid.done, T.lid.workEvery).map((at) => ({at, kind: 'stream' as const, what: 'the next step in the work chip'})),
   {at: T.lid.lock, kind: 'pop', what: 'lock badge'},
-  {at: T.settings.off, kind: 'light', what: 'the edge light goes off'},
+  {at: T.lid.done, kind: 'light', what: 'the work is done: the chip says so and the edge light goes off'},
   {at: T.settings.card, kind: 'pop', what: 'settings card'},
   {at: T.settings.row1, kind: 'count', what: 'first value rolls back'},
   {at: T.settings.row2, kind: 'count', what: 'second value rolls back'},
-  {at: T.sleeps.chip, kind: 'pop', what: 'idle chip'},
-  ...range(T.sleeps.chip, T.sleeps.chip + T.sleeps.countLen, 6).map((at) => ({at, kind: 'stream' as const, what: 'idle count'})),
-  {at: T.sleeps.sleep, kind: 'light', what: 'the last glow fades'},
+  {at: T.sleeps.sleep, kind: 'light', what: 'the power light fades: the laptop sleeps'},
   {at: T.sleeps.moon, kind: 'pop', what: 'moon'},
   {at: T.menu.cut + 1, kind: 'stream', what: 'cursor glides in'},
   {at: T.menu.click1, kind: 'click', what: 'click on the icon'},
@@ -288,7 +306,6 @@ export type SoundName =
   | 'settle'
   | 'glow';
 export type Cue = {at: number; sound: SoundName; gain?: number; pan?: number};
-const counterTicks = (from: number, len: number) => range(from, from + len, 4).map((at) => ({at, sound: 'tick' as const, gain: 0.18}));
 
 export const SOUNDS: Cue[] = [
   {at: 0, sound: 'enter', gain: 0.5},
@@ -306,15 +323,16 @@ export const SOUNDS: Cue[] = [
   {at: T.lid.cut, sound: 'whoosh', gain: 0.35},
   {at: T.lid.shut, sound: 'thud', gain: 0.5},
   {at: T.lid.shut + 2, sound: 'lidChime', gain: 1},
+  {at: T.lid.work, sound: 'pop', gain: 0.22, pan: 0.55},
+  ...range(T.lid.work + T.lid.workEvery, T.lid.done, T.lid.workEvery).map((at) => ({at, sound: 'tick' as const, gain: 0.07, pan: 0.55})),
   {at: T.lid.lock, sound: 'lock', gain: 0.4},
+  {at: T.lid.done, sound: 'lightOff', gain: 0.35},
   {at: T.settings.move, sound: 'whoosh', gain: 0.3, pan: 0.65},
-  {at: T.settings.off, sound: 'lightOff', gain: 0.35},
   {at: T.settings.card, sound: 'pop', gain: 0.3, pan: 0.6},
   {at: T.settings.row1, sound: 'tick', gain: 0.3},
   {at: T.settings.row2, sound: 'tick', gain: 0.3},
-  {at: T.sleeps.move, sound: 'whoosh', gain: 0.3, pan: 0.35},
-  {at: T.sleeps.chip, sound: 'pop', gain: 0.25},
-  ...counterTicks(T.sleeps.chip, T.sleeps.countLen),
+  // The time cut: a soft whoosh into it, no more.
+  {at: T.sleeps.cut, sound: 'whoosh', gain: 0.2, pan: 0.4},
   {at: T.sleeps.sleep, sound: 'sleepChime', gain: 1},
   {at: T.menu.cut, sound: 'whoosh', gain: 0.35},
   {at: T.menu.click1, sound: 'click', gain: 0.5, pan: 0.6},

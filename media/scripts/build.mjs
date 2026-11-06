@@ -4,15 +4,18 @@
 //   node scripts/build.mjs draft    out/draft/wakeshot-promo-draft.mp4 and its poster (stand-ins allowed, marked)
 //   node scripts/build.mjs video    out/wakeshot-promo.mp4 and out/wakeshot-promo-poster.png (refuses stand-ins)
 //   node scripts/build.mjs poster   out/wakeshot-promo-poster.png only (refuses stand-ins)
+//   node scripts/build.mjs states   out/state-<holding|idle|off>-<light|dark>.png: the tray glyph per state for the
+//                                   README's state table, from the art port (no Remotion)
 // MEDIA_CONCURRENCY sets how many frames render at once (default 4, so other work on the laptop keeps its cores).
 import {spawnSync} from 'node:child_process';
-import {existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync} from 'node:fs';
+import {existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {LOOP} from '../src/timeline.ts';
+import {ON_DARK, ON_LIGHT, colorize, trayMask} from '../src/art/heldLight.ts';
+import {LOOP, STATE_ICON} from '../src/timeline.ts';
 import {writeGif} from './lib/gif.mjs';
-import {readPng} from './lib/png.mjs';
+import {encodePng, readPng} from './lib/png.mjs';
 
 const media = join(dirname(fileURLToPath(import.meta.url)), '..');
 const cli = join(media, 'node_modules', '@remotion', 'cli', 'remotion-cli.js');
@@ -47,6 +50,21 @@ function loop(theme) {
     );
   } finally {
     rmSync(frames, {recursive: true, force: true});
+  }
+}
+
+/**
+ * The README's state table: the tray glyph in each state for the light and the dark taskbar, see-through, at
+ * `STATE_ICON` px, the port's own pixels (`check-video` holds them to art.rs's review sheets).
+ */
+function states() {
+  for (const state of ['holding', 'idle', 'off']) {
+    for (const [theme, colours] of [['light', ON_LIGHT], ['dark', ON_DARK]]) {
+      const img = colorize(trayMask(state, STATE_ICON), colours);
+      const out = join(media, 'out', `state-${state}-${theme}.png`);
+      writeFileSync(out, encodePng(img.width, img.height, img.pixels));
+      console.log(`${out}: ${img.width} x ${img.height}`);
+    }
   }
 }
 
@@ -107,11 +125,14 @@ switch (mode) {
     remotion('render', 'src/index.ts', 'Promo', 'out/wakeshot-promo.mp4', '--props={"draft":false}', ...VIDEO_FLAGS);
     remotion('still', 'src/index.ts', 'Promo', 'out/wakeshot-promo-poster.png', `--frame=${POSTER_FRAME}`, '--props={"draft":false}');
     break;
+  case 'states':
+    states();
+    break;
   case 'poster':
     assertFinal();
     remotion('still', 'src/index.ts', 'Promo', 'out/wakeshot-promo-poster.png', `--frame=${POSTER_FRAME}`, '--props={"draft":false}');
     break;
   default:
-    console.error('usage: node scripts/build.mjs loop|draft|video|poster');
+    console.error('usage: node scripts/build.mjs loop|draft|video|poster|states');
     process.exit(2);
 }

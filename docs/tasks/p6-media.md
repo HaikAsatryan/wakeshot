@@ -1,6 +1,6 @@
 # Speed numbers, pictures, the icon loop and the 30 second video
 
-Phase: 6. Status: Part A done (2026-11-04: the loop, the video pipeline with stand-ins, the media docs, the speed script); Part C round 3 done (2026-11-05 23:30: real captures in, `draft-3.mp4` ready for Haik's look; `check-rebuild` on the video still open); Part B after Part C: the installed build, the screen slot with a real Claude Code session, 10 idle minutes and Haik's look. Needs Haik: yes: he watches the video and the loop and says yes or what to change; he stays
+Phase: 6. Status: Part A done (2026-11-04: the loop, the video pipeline with stand-ins, the media docs, the speed script); Part C round 3 done (2026-11-05 23:30: real captures in, `draft-3.mp4` ready for Haik's look); round 4 (the final) see its own status below; Part B after Part C: the installed build, the screen slot with a real Claude Code session, 10 idle minutes and Haik's look. Needs Haik: yes: he watches the video and the loop and says yes or what to change; he stays
 off the PC for about 10 minutes while the captures run. Agent: `wakeshot-worker`. Size: about 120K tokens.
 Real laptop: yes: screen captures of the real tray during one real Claude Code test session, light and dark; the real
 app holds and restores the power settings during it. One card at a time on the laptop.
@@ -73,6 +73,9 @@ Problems seen but not fixed.
    may not edit `research.md` before its speed numbers).
 3. `p5-haik-check` may change the menu words or the icon after Part A: the loop then needs `npm run loop` again (and
    `check-art.mjs` first if the art changed).
+4. Round 4 (2026-11-06): a repo grep finds the name of another product Haik does not want in any Wakeshot file in
+   `docs/plan.md` line 259 and `docs/tasks/p6-repo-files.md` lines 47 and 129 (the latter two as a "no mention" rule
+   and its check). Not this card's files; for their owners.
 
 ## Log
 
@@ -189,8 +192,7 @@ questions were answered with their defaults as orchestrator decisions for Haik's
 ... even without question"). Part C builds the cut with stand-in captures and stand-in numbers; Part B then swaps in
 the real captures and the measured numbers and renders the final.
 
-Status: round 3 done 2026-11-05 23:30 (round 1 21:58, round 2 22:40). Needs Haik: a look at `draft-3.mp4`. Open:
-`check-rebuild` on the draft video (Log 23:25). Agent: `wakeshot-worker`. Size: about 200K tokens.
+Status: round 3 done 2026-11-05 23:30 (round 1 21:58, round 2 22:40); round 4, the final, below. Agent: `wakeshot-worker`. Size: about 200K tokens.
 Real laptop: no screen, no power settings, no Claude Code test session. Renders only, one at a time (concurrency 4).
 Owns: `media/` and `docs/research/launch.md` part 4 (the storyboard and shot list there become a pointer to
 `promo-video.md`). `docs/research/promo-video.md` only to keep it true to what was built (say so in the Log).
@@ -465,7 +467,7 @@ Output: `<scratchpad>\p6-media-c\draft-3.mp4` (7.17 MB), `draft-3-sheet.png`, `d
 
 ## Round 4: the final (2026-11-06)
 
-Written by the orchestrator (overnight run, Haik asleep). Status: ready. Agent: `wakeshot-worker`. Owns what Part C
+Written by the orchestrator (overnight run, Haik asleep). Status: done 2026-11-06 04:29 (waits for Haik's look and the review). Agent: `wakeshot-worker`. Owns what Part C
 owns, plus a new `## Speed numbers` section at the end of `docs/research.md` (additions only; re-read right before
 the edit; the README links to `docs/research.md#speed-numbers`, so keep that heading). Real laptop: no screen, no
 power settings, no Claude Code test session. Build folder: `<scratchpad>\p6-media-final\`. Round 3's files are in
@@ -508,4 +510,140 @@ the old scratchpad: `C:\Users\haika\AppData\Local\Temp\claude\f7c2c08a8f04f07b\d
 
 ### Log (round 4)
 
+- 2026-11-06 04:00 (UTC+4, as all round 4 times; times from the files' write times): round 4 started (worker).
+  Read the card (Part C Log and Result), `promo-video.md`, `media/README.md`. Build folder
+  `<scratchpad>\p6-media-final\`.
+- 04:03 (item 1, speed): `data/speed.json` filled from the raw files (shown: 4.3 MB private memory, 109 ms CPU in 10
+  minutes; start median 0.114 s; every raw value under `raw`); `docs/research.md` "Speed numbers" appended (method,
+  where the wrapper differs from launch.md, every value, build, date). Installed exe sizes, version and the install
+  folder sum read again: the same as the raw file.
+- 04:09 (item 2, Haik's 00:56 note): 10 to 20 s rebuilt. Lid shuts at 11 s; at 11.5 s a work chip rises above the
+  shut laptop (the terminal's spinner and the agent's next step, one a beat: edit, read, lint, test), the lock badge
+  beside it at 12 s; at 13.5 s the chip says "Done. All 128 tests pass." and at that frame the edge light (the hold)
+  goes off; the settings card as before (the chip stays in view at the left with its done line; camera and card moved
+  so neither is cut). At 17 s a time cut (the frame dips dark into the cut and back), "Later, it sleeps as usual.",
+  the power light fades at 18 s with the going-to-sleep chime, the moon at 18.5 s. The 5:00 countdown chip and its
+  ticks are gone. Pace check ok (119 new things, longest gap 1.8 s). Full-size frames 390, 405, 450, 485, 570 looked
+  at.
+- 04:17 (item 3, `check-rebuild`): ranges rendered twice and compared by decoded pixels (`<build>\tools\det.sh`,
+  `pixdiff.mjs`). Before any fix: 150 to 299 differed in 9 frames by 1 to 3 levels in the tray terminal's title bar
+  (its gradient, not only the tab border); 300 to 599 in 40 frames by 1 level: the laptop's floor shadow (a radial
+  gradient), the card's soft shadow at its lower edge (a 3 px band at y 870), and the floor shadow again under the
+  slow push. All are soft paints in parts of the frame that did not change since the render tab's previous frame.
+  Cause (found by test, the mechanism inside Chrome not verified): Chrome repaints only what changed since the frame
+  that tab drew before, and which frame that was depends on how the 4 tabs share the work, so a soft edge keeps a
+  level of a different old frame. Test 1: the stage repainted in full every frame (its lift moved 1/64 px on odd
+  frames): the floor shadow then equal in 380 to 419, the card band still differed in 13 frames. Test 2: a new tree
+  every frame (`key={f}` on the frame's root), so every frame is painted from nothing.
+- 04:15 (the S1 to S2 swap): `Capture` keys its image by the file, so a swap mounts a new image instead of changing
+  the source of the one on screen (the frames that showed the shot before were all at a source change; the mounts at
+  195 and 240 never did).
+- 04:12 (Haik's add-on, via the orchestrator): the README state table's icons: `npm run states` writes
+  `out/state-<holding|idle|off>-<light|dark>.png`, 32 x 32, see-through, `tray_mask` at 32 px from the port;
+  `check-video` lays each on its taskbar colour and compares it with art.rs's own review sheet cell: all 6 equal
+  (a negative test, the idle icon on the holding row, differs in 672 channels). Credited; in `check-rebuild`.
+- 04:19: test 2 passed: frames 150 to 299, 380 to 470 and 570 to 599 (271 frames) rendered twice, all equal by
+  pixels. Test 1's stage change dropped (one mechanism, the new tree, covers it). `media/README.md` decision 11 and
+  `promo-video.md` (storyboard rows 4 to 6 and 8, a time cut row in "Motion", counts) follow; `launch.md` part 4
+  notes the sound sources as built.
+- 04:20: `npm run draft`: 7.33 MB, `check-video --draft` ok; -15.39 LUFS, -1.23 dBTP.
+- 04:22: `npm run video` (the final: no DRAFT mark, CRF 18): `out/wakeshot-promo.mp4` 7,096,189 bytes and
+  `out/wakeshot-promo-poster.png`; `check-video` ok (all lines, state icons included); -15.39 LUFS, -1.23 dBTP. 24
+  full-size frames taken from the MP4 and looked at (hook, light, tray at 170 and 200, lid, chip, done, card, dip,
+  sleep, menu, end card), and the whole cut on a 121-tile sheet rendered with the final props
+  (`contact-sheet.mjs` takes `--final` now). Copies and the sheet in the build folder.
+- 04:25: `measure-speed.ps1` hold mode: the load is now `ping -n <minutes x 60 + 60>` (660 for 10 minutes), so the
+  guard still runs at the last sample and its CPU time is read; parse checked, not run (no power settings this
+  round). The 2026-11-06 numbers stay as measured with `-n 600`.
+- 04:26: a slip: one `git status --short` ran inside a listing command (read only, its output thrown away). No other
+  git command this round.
+- 04:28: `npm run check-rebuild -- --final`: ok, a clean copy rebuilds all 15 outputs to the same bytes, the draft
+  and the final video included (the open item since round 1 is closed). `npm run check` ok after the last doc edits.
+  Result written.
+
 ### Result (round 4)
+
+**Done (2026-11-06 04:29): the final video is built and every check passes.** Waits for Haik's look and yes, and the
+fresh review (item 6).
+
+#### Outputs
+
+- `C:\Users\haika\code\wakeshot\media\out\wakeshot-promo.mp4`: the final, 7,096,189 bytes (7.10 MB), H.264 CRF 18
+  and AAC, 1920 x 1080, 30 fps, 30.02 s, no DRAFT mark, -15.39 LUFS, true peak -1.23 dBTP. `out/` is not
+  git-ignored, so it goes into the repo with the commit; GitHub plays it only as an uploaded attachment (not
+  uploaded).
+- `C:\Users\haika\code\wakeshot\media\out\wakeshot-promo-poster.png`: frame 120, 2,539,288 bytes.
+- Copies and the review sheet in the build folder:
+  `C:\Users\haika\AppData\Local\Temp\claude\f7c2c08a8f04f07b\de37e39e-ac9f-4f08-8aa0-3d773dd2f757\scratchpad\p6-media-final\`
+  `wakeshot-promo.mp4`, `wakeshot-promo-poster.png`, `wakeshot-promo-sheet.png` (121 tiles, every 7.5 frames, final
+  props), `final-frames\` (24 full-size frames from the MP4).
+- The README state table's icons, 32 x 32 PNG, see-through, `tray_mask` drawn at 32 px (the tray at 200%); show them
+  at 16 px: `C:\Users\haika\code\wakeshot\media\out\state-holding-light.png`, `...\state-holding-dark.png`,
+  `...\state-idle-light.png`, `...\state-idle-dark.png`, `...\state-off-light.png`, `...\state-off-dark.png` (221
+  to 341 bytes each). "light" and "dark" are the taskbar the glyph is drawn for (dark ink on light, white ink on dark).
+- `media/out/draft/wakeshot-promo-draft.mp4` (7.33 MB) and its poster, git-ignored, built for `check-rebuild`.
+- `media/data/speed.json` (measured, every raw value under `raw`) and `docs/research.md` "Speed numbers" (method, where
+  the run differs from launch.md, every value, build 0.1.0, date 2026-11-06).
+
+#### What changed
+
+1. **Speed numbers** in (item 1). The end card reads "Light: 4.3 MB of memory idle, 109 ms of CPU in 10 minutes." and
+   "Measured on Wakeshot 0.1.0, 2026-11-06, x64." No start or end delay on screen.
+2. **Haik's 00:56 note** (item 2): 10 to 20 s rebuilt. The lid shuts; a work chip above the shut laptop shows the
+   agent's next step every beat (the work goes on behind the lid), with the lock badge beside it; at 13.5 s the chip
+   says "Done. All 128 tests pass." and the edge light (the hold) goes off at that frame; the settings card; then a
+   time cut (a dip to dark) and "Later, it sleeps as usual.", the power light out, the going-to-sleep chime, the moon.
+   No countdown, no clock, no claim that it sleeps at once.
+3. **`check-rebuild`** (item 3): cause found by test (Chrome's inner workings not verified): soft edges (gradients,
+   soft shadows) kept a level of whichever frame a render tab drew before, which differs from run to run. Fix: a new
+   tree every frame (`key={f}` on the frame's root), and each capture's image keyed by its file (the S1 to S2 swap
+   mounts a new image). 271 frames rendered twice: equal by pixels; then the clean rebuild below.
+4. **Final render** (item 4): `build.mjs video`; DRAFT off; CRF 18; 7.10 MB.
+5. **Add-on (orchestrator, for the README):** `npm run states` and its check in `check-video` against art.rs's own
+   review sheets; credited; in `check-rebuild`.
+6. Small: `contact-sheet.mjs --final`; `measure-speed.ps1` hold load outlasts the sampling (guard CPU next time).
+   Docs: `media/README.md` (state row, speed source, decisions 6 and 11), `media/CREDITS.md` (final video, poster,
+   state icons), `promo-video.md` (rows 4 to 6 and 8, a time cut row, counts, final size), `launch.md` part 4 (sound
+   as built).
+
+#### Checks
+
+| Check | Outcome |
+|---|---|
+| `npm run check` (dashes, emoji, credits, colour pairs; pace) | ok: 87 files, 31 assets credited, 18 colour pairs; 49 starts on the beat, 10 framings of 2 to 4 s, 119 new things, longest gap 1.80 s, 15 lines of words |
+| `npm run typecheck` | ok |
+| `node scripts/check-art.mjs` | ok, all 9,458,740 pixels |
+| `npm run check-video` (final) | ok: h264, 1920 x 1080, 30 fps, yuv420p, aac, 30.02 s, 7.10 MB; both loops ok; the 6 state icons equal art.rs's sheet cells, every pixel |
+| Loudness (ffmpeg `loudnorm`, Remotion's ffmpeg) | -15.39 LUFS integrated, -1.23 dBTP true peak (target -14 to -16, -1 or lower) |
+| `npm run check-rebuild -- --final` (clean copy, `npm ci`, every build command) | ok: all 15 outputs the same bytes: both loops, the 6 state icons, the soundtrack (twice), the draft video and poster, the final video and poster |
+| Every speed number has its method, build and date | ok (`docs/research.md`, "Speed numbers") |
+| Power settings the same before and after | ok for the speed run (`compare`: SAME); this round touched none |
+| No banned product name, no style reference in the repo files of this round | ok (grep) |
+| Haik's yes on the video and the loop | waits |
+
+#### Open items
+
+1. Haik's look and yes on `wakeshot-promo.mp4` (and the loop, unchanged since round 1).
+2. The fresh review against `promo-video.md` (item 6).
+3. Upload: `gh issue comment <n> --attach out/wakeshot-promo.mp4` on a pinned "Media" issue, the URL into
+   `media/README.md` and the README; and the same MP4 and poster into `site/` for Pages (the page's owner).
+4. Guard CPU during a hold: not measured (the script is fixed; one more `-Mode hold` run gives it). End delay: no
+   number (launch.md's method not run).
+5. The new tree each frame costs a little more per frame (images decoded again each frame); the final still
+   rendered in about 2 minutes at concurrency 4 (from the draft's and the final's write times, 04:20:39 and
+   04:22:27).
+
+#### Decisions for Haik's review (principal designer)
+
+1. **The work behind the lid is a chip, not a terminal.** One line in 32 px mono reads at README size; a small
+   terminal's lines would not. Change it when Haik wants to see the whole terminal there.
+2. **"Later, it sleeps as usual." with a dip to dark** as the time cut, not "5 minutes later": the 5 minutes count
+   from the last input, which the video cannot show, and Haik asked for no timing claim. Change it when Haik wants
+   the 5 minutes named.
+3. **The settings framing moved**: the camera rests 150 px further left (the card stays where it was in the world,
+   so it sits 150 px further right on screen), so the badge, the work chip with its done line and the card all fit
+   without a cut edge.
+4. **A new tree every frame** for same-bytes renders, over rendering at concurrency 1 (4 times slower). Change it when
+   a render gets too slow.
+5. **State icons at 32 px shown at 16 px**, see-through, so they sit on GitHub's page in both themes; light and dark
+   follow the taskbar the glyph is drawn for. Change it to 48 px (shown at 24) if the table looks too small.

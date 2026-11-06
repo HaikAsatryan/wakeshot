@@ -61,8 +61,14 @@ pictures and video; the font files are not shipped in any output, only drawn int
 |---|---|---|
 | `out/icon-loop-light.gif` | `src/loop/IconLoop.tsx` and the tray glyph, the held light (`src/art/`), written by `scripts/lib/gif.mjs` | MIT, ours |
 | `out/icon-loop-dark.gif` | Same | MIT, ours |
-| `out/wakeshot-promo.mp4` | `src/promo/`, the pictures, the sound and the fonts above. Not built yet: waits for the real captures and the speed numbers | MIT, ours |
-| `out/wakeshot-promo-poster.png` | A still of the video (frame 75). Not built yet | MIT, ours |
+| `out/wakeshot-promo.mp4` | `src/promo/`, the pictures, the sound and the fonts above, the speed numbers of `data/speed.json` | MIT, ours, over the CC0 music and the OFL fonts |
+| `out/wakeshot-promo-poster.png` | A still of the video (frame 120) | MIT, ours |
+| `out/state-holding-light.png` | The tray glyph, holding, for the light taskbar: `tray_mask` at 32 px from the art port (`src/art/heldLight.ts`), written by `npm run states` | MIT, ours |
+| `out/state-holding-dark.png` | Same, for the dark taskbar | MIT, ours |
+| `out/state-idle-light.png` | Same, idle, light taskbar | MIT, ours |
+| `out/state-idle-dark.png` | Same, idle, dark taskbar | MIT, ours |
+| `out/state-off-light.png` | Same, off, light taskbar | MIT, ours |
+| `out/state-off-dark.png` | Same, off, dark taskbar | MIT, ours |
 
 The drafts in `out/draft/` are not kept in git and carry a DRAFT mark on every frame.
 

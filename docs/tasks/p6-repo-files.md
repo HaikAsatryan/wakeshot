@@ -44,7 +44,7 @@ problem or send a PR, and GitHub's community profile shows them.
 
 - Every file renders on GitHub as intended (issue forms: valid YAML, checked with a parser; field ids unique).
 - Every command in `CONTRIBUTING.md` is the same as in `CLAUDE.md`.
-- No personal data beyond what Haik already shows publicly; no AI mention; no Nightcrew mention.
+- No personal data beyond what Haik already shows publicly; no AI mention; no mention of the product Haik keeps out of the repo.
 - Lines ASCII only.
 
 ## Out of scope
@@ -126,7 +126,7 @@ Checks:
 | Issue forms valid YAML, ids unique | Pass. PyYAML parses all three; SchemaStore schemas pass; a script checks GitHub's documented rules (required keys, id characters, unique ids, unique and not too similar labels, a non-markdown field, no `None` option, string options, no `---`). Bug form ids: `version windows cpu holds saw expected log`; feature form: `problem idea`. |
 | Renders on GitHub | Markdown: pass, through GitHub's own renderer (`gh api markdown`, gfm, repo context): headings, lists, the code block, 6 task list checkboxes, links as meant; outside links answer 200. Issue forms: GitHub has no render API, so the forms show for real only after the push (Haik's step 3). |
 | Commands the same as `CLAUDE.md` | Pass. Every `cargo` command in `CONTRIBUTING.md` and the PR template matches `CLAUDE.md` character for character; the second clippy is its "same without `--all-targets`". Two setup commands are not in `CLAUDE.md`: `rustup toolchain install` (from `ci.yml`) and `powercfg /qh` (to note values before a real test). |
-| No personal data, no AI or Nightcrew mention | Pass. Only "Haik" and the repo name; no email. A word scan finds no AI, tool or Nightcrew name. |
+| No personal data, no AI or banned product mention | Pass. Only "Haik" and the repo name; no email. A word scan finds no AI, tool or banned product name. |
 | ASCII only | Pass, every line of all seven files; also LF only, one final newline, no trailing spaces, no em dash. |
 
 Decisions (mine, for Haik's review):

@@ -1,8 +1,16 @@
 {
-  "measured": false,
-  "build": null,
-  "date": null,
-  "idleRamMb": null,
-  "idleCpuMsPer10Min": null,
-  "startDelayS": null
+  "note": "Measured 2026-11-06 02:09 to 02:32 (UTC+4) on Haik's installed build 0.1.0 (a local x64 release), by media/scripts/measure-speed.ps1 under a wrapper that ran its modes unattended; method and every raw value in docs/research.md, 'Speed numbers'. The video shows idleRamMb (the tray's private memory, median of 60 samples in 10 idle minutes, rounded to 0.1 MB) and idleCpuMsPer10Min (its CPU time in the same 10 minutes, rounded to whole ms).",
+  "measured": true,
+  "build": "0.1.0",
+  "date": "2026-11-06",
+  "idleRamMb": 4.3,
+  "idleCpuMsPer10Min": 109,
+  "startDelayS": 0.114,
+  "raw": {
+    "idle": {"minutes": 10, "holds": 0, "trayPrivateMedianMb": 4.27, "trayPrivateMaxMb": 4.3, "trayWorkingSetMedianMb": 17.14, "trayWorkingSetMaxMb": 17.14, "trayCpuMs": 109.375, "trayCpuPercentOfOneCore": 0.0182},
+    "hold": {"minutes": 10, "load": "wakeshot run -- ping -n 600 127.0.0.1", "trayPrivateMedianMb": 4.24, "trayWorkingSetMedianMb": 17.15, "trayCpuMs": 109.375, "guardPrivateMedianMb": 1.67, "guardPrivateMaxMb": 1.76, "guardWorkingSetMedianMb": 11.66, "guardCpuMs": null},
+    "startDelayMs": {"runs": [298, 114, 155, 104, 108], "median": 114, "max": 298},
+    "endDelayMs": null,
+    "bytes": {"Setup.exe": 12310500, "wakeshot-tray.exe": 2907648, "wakeshot.exe": 700416, "installFolder": 14269755}
+  }
 }

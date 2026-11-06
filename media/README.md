@@ -25,6 +25,7 @@ sends no usage event (`@remotion/renderer` 4.0.540, `render-media.js`: the event
 | `out/wakeshot-promo.mp4`, `out/wakeshot-promo-poster.png` | `npm run video` | Refuses while any picture is missing or a stand-in, or a speed number is missing |
 | `out/draft/wakeshot-promo-draft.mp4` and its poster | `npm run draft` | A missing capture shows as a plain sketch of its set with a stand-in tag, missing speed numbers as tagged stand-ins (88.8, 888, 8.8); DRAFT, the second and the frame on every frame; not kept in git |
 | `out/wakeshot-promo-poster.png` alone | `npm run poster` | Frame 120 of the video (the light on, the name and its line in), for the Pages `<video poster>` |
+| `out/state-<holding\|idle\|off>-<light\|dark>.png` | `npm run states` | The README's state table: the tray glyph per state for the light and the dark taskbar, see-through, 32 x 32 (`tray_mask` drawn at 32 px, the tray at 200%); show at 16 px, the tray's size at 100%, so it stays sharp on a HiDPI screen. No Remotion |
 | `public/sound/soundtrack.wav` | `npm run sounds` | Also run by `draft` and `video`; not kept in git. `-- --music <file.wav>` puts a fitted found track in place of the code bed, `-- --out <file.wav>` writes elsewhere |
 | A found track fitted to the video | `node scripts/music-candidate.mjs <track> --out <file.wav> [--bpm N] [--lift s]` | Finds the tempo and the lift, conforms to 120 BPM with `atempo`, cuts 30 s on the storyboard; prints the numbers to rebuild it with |
 | A contact sheet for review | `npm run sheet -- <composition> <from> <to> <out.png>` | About 4 frames a second, rendered at full size and shrunk to a quarter, tiled |
@@ -42,7 +43,7 @@ takes about 2 minutes on the test laptop. The motion parts each have a small com
 | The art port draws exactly what `art.rs` draws, no tolerance: every pixel of the three review sheets (tray glyphs at 16 to 48 px in four rows, dark, light and high contrast), the 14 frames of `assets/wakeshot.ico` and the notice picture | `node scripts/check-art.mjs`; CI runs it on every push (job `art-port`, Node 26, no `npm ci`: it needs only `node:` modules and the `.ts` port) |
 | No em dash, en dash or emoji in the text files; every asset credited; every text colour pair in `src/theme.ts` at 4.5:1 or more and every graphic pair at 3:1; and the pace check | `npm run check` |
 | Pace (`scripts/check-pace.mjs`, from the timeline data): every cut, move, pop, click and caption start on the 120 BPM grid within 1 frame; something new at least every 2 s before the end card; framings 2 to 4 s; captions hold 1.4 s after their last word (big words of 1 to 3 words 0.5 s); 2 to 6 words a caption line; at most two lines on screen; the name by 3 s; the end card the last 4 s; frame 0 not empty | `npm run check-pace` |
-| Video: H.264 and AAC, 1920 x 1080, 30 fps, 30 s plus or minus 2, under 10 MB; loops, read frame by frame: GIF, 480 x 240, 4 to 6 s, forever, under 1 MB, last frame equal to the first, a 40 px border of every frame exactly GitHub's page colour, the first frame the port's idle glyph and a held stretch its holding glyph, every pixel | `npm run check-video` (add `-- --draft` for the draft) |
+| Video: H.264 and AAC, 1920 x 1080, 30 fps, 30 s plus or minus 2, under 10 MB; loops, read frame by frame: GIF, 480 x 240, 4 to 6 s, forever, under 1 MB, last frame equal to the first, a 40 px border of every frame exactly GitHub's page colour, the first frame the port's idle glyph and a held stretch its holding glyph, every pixel; the six state icons, each laid on its taskbar colour, equal to the cell of art.rs's own review sheet for that state at 32 px, every pixel, and see-through around the glyph | `npm run check-video` (add `-- --draft` for the draft) |
 | A clean checkout rebuilds the same bytes | `npm run check-rebuild` (add `-- --final` once the final video exists) |
 | Types | `npm run typecheck` |
 
@@ -68,7 +69,7 @@ takes about 2 minutes on the test laptop. The motion parts each have a small com
 | Icon art | `src/art/heldLight.ts`, a port of the held light in `art.rs` (tray glyph, app icon, the sheets' composition), equal to every file `art.rs` writes (`check-art.mjs`, 0 of 9,458,740 pixels differ, 2026-11-05). The states in between (the light coming on) are the media's own: `src/art/motion.ts` |
 | Screen pictures | `public/shots/`, real captures of `p6-media-captures` (2026-11-05, the DELL at 200%), listed in `data/shots.json`: two sets for the video (`tray`: S1 to S4 in one rectangle; `menu`: S1, S5a to S5d), each one screen rectangle at one scale with its boxes and rows from the capture's manifest, and the README stills (menu, holding and idle tooltip, light and dark; the build tooltip) |
 | Settings values in the video | `data/settings.json`, from the capture session's log (S9): lid close Do nothing while holding, Sleep before and after; battery sleep Never while holding, 5 hours before and after. The plugged-in timer is not written by Wakeshot, so it is not shown |
-| Speed numbers | `data/speed.json` (empty until measured) |
+| Speed numbers | `data/speed.json`: measured 2026-11-06 on Wakeshot 0.1.0, x64 (`docs/research.md`, "Speed numbers", has the method and every raw value). The end card shows the tray's private memory idle (4.3 MB) and its CPU time in 10 idle minutes (109 ms) |
 | Sound | `scripts/make-sounds.mjs`: the music Haik picked (`public/music/`, named with its fit in `data/music.json`, fitted on every build by `scripts/lib/fit-music.mjs`), the effects made in code, the chimes from `chime.rs`. The code bed (a 120 BPM sequencer) when `data/music.json` names no file |
 | Fonts | Instrument Sans in `public/fonts/` with its `OFL.txt` (from the designer's repo); JetBrains Mono from npm; loaded in `src/fonts.ts` |
 | Colours | `src/theme.ts`: Moss (`docs/research/brand-directions-2.md`), GitHub's page colours for the loop |
@@ -82,10 +83,14 @@ Licences: `CREDITS.md`.
 1. `-Mode snapshot -Out before.json` (power settings, read only).
 2. `-Mode size -Setup <Setup.exe>`: exe sizes and the install folder.
 3. `-Mode idle`: 10 minutes, nothing holding; tray working set and private bytes every 10 s, CPU time.
-4. `-Mode hold`: 10 minutes of `wakeshot run -- ping -n 600 127.0.0.1`; tray and guard.
+4. `-Mode hold`: 10 minutes of `wakeshot run -- ping -n 660 127.0.0.1` (it outlasts the sampling, so the guard's
+   CPU time can be read; the 2026-11-06 run used `-n 600` and has no guard CPU); tray and guard.
 5. `-Mode delays -Minutes 30`: start and finish 5 short Claude Code turns; pairs `statusUpdatedAt` with Wakeshot's
    `Holding starts` and `Holding ends` log lines.
 6. `-Mode compare -Before before.json`: the settings equal the snapshot.
+
+Measured 2026-11-06 on 0.1.0 (x64): the values, and where that run's wrapper differed (the delays from five headless
+`claude -p` runs, by the status file appearing and going), are in `docs/research.md`, "Speed numbers".
 
 Idle and hold refuse to start while `cargo`, `rustc`, `claude`, `node` or another build runs. That includes the
 Claude Code session of an agent: its own busy session makes Wakeshot hold, so these two modes run from a plain
@@ -124,8 +129,11 @@ PowerShell window with no Claude Code session working.
 5. **The final render refuses stand-ins and missing numbers** (`build.mjs`, and `Capture` and the speed shot throw),
    and every draft frame says DRAFT with its second and frame, so a draft cannot be mistaken for the real video and
    a note on it can name the moment.
-6. **After the lid beat, the video says the closed laptop sleeps** once nothing has happened for 5 minutes (the
-   2026-11-04 behaviour in `docs/product.md`), with Wakeshot's own going-to-sleep chime.
+6. **After the closed-lid work, a time cut, then "Later, it sleeps as usual"**, with Wakeshot's own going-to-sleep
+   chime. No clock and no countdown on screen (Haik, 2026-11-06 00:56: the 5:00 count read as confusing); the app
+   sleeps a closed laptop once nothing has happened for 5 minutes (`docs/product.md`), so the words say "Later" and
+   claim no time. Before it, the work goes on behind the shut lid (a chip with the agent's next step) and is clearly
+   done (the chip's done line, the edge light off at that frame). Change it when Haik wants the 5 minutes named.
 7. **The art is drawn from the port's pixels, never redrawn as vectors.** `src/art/Glyph.tsx` puts them on a canvas
    1:1 at whole-pixel places, so the title and outro icons are `app_icon(256)` and `app_icon(192)` and the loop's
    ends are `tray_mask(128)`, byte for byte. The port rounds to f32 at every step, as `art.rs` computes, so it draws
@@ -149,8 +157,8 @@ PowerShell window with no Claude Code session working.
     the title and the outro were two lockups. Change it when a scene needs the name larger than the icon allows.
 
 11. **The dynamic cut (Part C) follows `docs/research/promo-video.md`**, with these choices of the worker:
-    - **Ten framings, not nine.** The settings slide starts on the beat the work ends (12 s), so the lid framing is
-      4 s; the menu shot (5 s) is two framings with a short pan to the submenu at 20.5 s. Every framing is 2 to 4 s.
+    - **Ten framings, not nine.** The settings slide starts a beat after the work ends (14 s), so the lid framing is
+      4 s; the menu shot (6 s) is two framings with a short pan to the submenu at 23 s. Every framing is 2 to 4 s.
       Change it when Haik wants fewer camera moves.
     - **A capture pops by rising, not by scaling.** Tooltip, menu and submenu fade in over 4 frames and rise 16 px on
       whole pixels, so a capture is never shown at a zoom between whole numbers. Drawn things (chips, badges, the
@@ -167,8 +175,9 @@ PowerShell window with no Claude Code session working.
     - **Stand-in captures are plain sketches of each set** (dark taskbar, menu and tooltip boxes, gray bars where words
       go, the port's real tray glyph), tagged in red, not empty boxes, so the cursor, the pops and the ring can be
       judged before the captures exist. The words never appear: UI words come only from the captures.
-    - **A "still working" chip in the lid shot (11 s)**: the pace check found 2.1 s with nothing new there; the chip
-      says what the shot says, with the terminal's spinner.
+    - **Round 4: a work chip above the shut laptop (11.5 to 17 s)** with the terminal's spinner and the agent's next
+      step, one a beat, then its done line; the lock badge beside it. Round 2 had dropped a "still working" chip for
+      pace; Haik's note of 2026-11-06 asks to see the work go on behind the lid, so the chip is back with real steps.
     - **The end card's icon is 256 px** (the name 117 px), larger than Part A's 192, so the end card fills the frame.
     - **Round 2, Haik's notes (2026-11-05).** The speed numbers fold into the end card as one line ("Light: ... MB of
       memory idle, ... ms of CPU in 10 minutes.") with the build and date in small print; their 3 s go to a 6 s menu
@@ -188,6 +197,15 @@ PowerShell window with no Claude Code session working.
       tilt its SVG spinner, check and window marks came out up to 4 levels apart; its spinner is now three text
       dots and its marks plain boxes and text. Compare renders by decoded pixels, not file bytes: Chrome's PNG files
       of equal pixels differ. Change it when Chrome renders filters and SVG the same on every run.
+    - **Round 4: a new tree every frame.** The video's root is keyed by the frame, so Chrome paints each frame from
+      nothing. Kept from frame to frame, Chrome repainted only what had changed since the frame that render tab drew
+      before, and which frame that was depends on how the four tabs share the work: soft shadows and gradients (the
+      laptop's floor shadow, the card's shadow, the terminal's title bar) kept a level of the old frame at their edges,
+      and two renders differed in 49 of 450 frames tested (that reading of Chrome is ours, not verified; the fix is
+      tested). With the key, 271 frames rendered twice were equal. A
+      capture's image is keyed by its file, so a swap of shots mounts a new image: a changed source let a render now
+      and then show the shot before (round 3, frame 165). Change it when a render gets slow: the remount costs each
+      frame its images' decode and the stage's dither again.
 
 ## Where the video lives
 

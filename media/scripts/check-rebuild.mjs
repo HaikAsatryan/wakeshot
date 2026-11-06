@@ -1,7 +1,7 @@
 // Proves the rebuild commands work from a clean checkout and give the same files: copies media/ without anything
 // built or installed, plus the few repo files media reads, into a temp folder; runs `npm ci` and each build command
 // there; then compares every output with the one in this media/ folder, byte for byte.
-//   node scripts/check-rebuild.mjs           loop and draft (works before the captures exist)
+//   node scripts/check-rebuild.mjs           loop, state icons and draft (works before the captures exist)
 //   node scripts/check-rebuild.mjs --final   also the final video and poster (after the captures and speed numbers)
 // Build the same outputs here first. The Chrome copy Remotion downloads on first use is copied over, not fetched
 // again: it is not in the lock file anyway, and Remotion's version pins it.
@@ -29,10 +29,11 @@ const REPO_INPUTS = [
 /** What each build mode writes, relative to media/. */
 const OUTPUTS = {
   loop: ['out/icon-loop-light.gif', 'out/icon-loop-dark.gif'],
+  states: ['holding', 'idle', 'off'].flatMap((s) => [`out/state-${s}-light.png`, `out/state-${s}-dark.png`]),
   draft: ['public/sound/soundtrack.wav', 'out/draft/wakeshot-promo-draft.mp4', 'out/draft/wakeshot-promo-poster-draft.png'],
   video: ['public/sound/soundtrack.wav', 'out/wakeshot-promo.mp4', 'out/wakeshot-promo-poster.png'],
 };
-const modes = final ? ['loop', 'draft', 'video'] : ['loop', 'draft'];
+const modes = final ? ['loop', 'states', 'draft', 'video'] : ['loop', 'states', 'draft'];
 
 const root = join(tmpdir(), `wakeshot-media-rebuild-${process.pid}`);
 const copy = join(root, 'media');

@@ -17,7 +17,7 @@ const DOT = String.fromCodePoint(0x2022);
  * Three dots, the bright one stepping along every four frames: text, so it renders the same on every run (drawn dots
  * under the hook's 3D tilt came out a level apart from run to run).
  */
-const Spinner: React.FC<{f: number; colour: string; turning: boolean}> = ({f, colour, turning}) => {
+export const Spinner: React.FC<{f: number; colour: string; turning: boolean}> = ({f, colour, turning}) => {
   const lead = turning ? Math.floor(f / 4) % 3 : -1;
   return (
     <span style={{letterSpacing: '-0.15em'}}>
@@ -31,7 +31,7 @@ const Spinner: React.FC<{f: number; colour: string; turning: boolean}> = ({f, co
 };
 
 /** A filled disc with a short bar in it, for the done line: a plain mark that needs no check glyph. */
-const Check: React.FC<{size: number; colour: string}> = ({size, colour}) => (
+export const Check: React.FC<{size: number; colour: string}> = ({size, colour}) => (
   <div style={{width: size, height: size, borderRadius: size / 2, background: colour, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
     <div style={{width: size * 0.42, height: size * 0.22, borderLeft: `${Math.max(2, size * 0.09)}px solid ${DARK.terminal}`, borderBottom: `${Math.max(2, size * 0.09)}px solid ${DARK.terminal}`, transform: 'translateY(-15%) rotate(-45deg)'}} />
   </div>

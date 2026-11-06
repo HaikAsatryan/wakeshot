@@ -4,17 +4,20 @@
 // 4 to 6 s that loops forever, under 1 MB, its last frame equal to its first (no jump), a 40 px border of every
 // frame exactly GitHub's page colour for its theme (no visible box on the README), and its idle and holding frames
 // exactly the art port's tray glyph (`tray_mask` at `LOOP.art` px, composed on the page as the review sheets are).
+// The README's state icons (`out/state-*.png`) are each laid on their taskbar colour and compared with the cell of
+// art.rs's own review sheet that draws that state at that size, every pixel.
 //   node scripts/check-video.mjs           the final video
 //   node scripts/check-video.mjs --draft   the draft video
 import {spawnSync} from 'node:child_process';
 import {existsSync, readFileSync, statSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {ON_DARK, ON_LIGHT} from '../src/art/heldLight.ts';
+import {ON_DARK, ON_LIGHT, TASKBAR_DARK, TASKBAR_LIGHT, blank, paint} from '../src/art/heldLight.ts';
 import {rgbOf, trayFade, trayPlace} from '../src/art/motion.ts';
 import {GITHUB} from '../src/theme.ts';
-import {LOOP} from '../src/timeline.ts';
+import {LOOP, STATE_ICON} from '../src/timeline.ts';
 import {readGif} from './lib/gif.mjs';
+import {readPng} from './lib/png.mjs';
 
 const media = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ffprobe = join(media, 'node_modules', '@remotion', 'compositor-win32-x64-msvc', 'ffprobe.exe');
@@ -103,6 +106,41 @@ for (const theme of ['light', 'dark']) {
   check(Buffer.from(first).equals(idle), `${theme} loop starts on the port's idle glyph, every pixel`);
   const held = g.frames.filter((f) => Buffer.from(f.rgba).equals(holding)).reduce((sum, f) => sum + f.delay, 0);
   check(held > 0, `${theme} loop shows the port's holding glyph, every pixel (for ${held / 100} s)`);
+}
+
+// The state icons against art.rs's review sheets (`docs/research/img/ux/icon-sheet-<theme>.png`, written by
+// `write_art_files`): the sheet's layout as `sheet` in art.rs's tests and `src/art/heldLight.ts` draw it, rows
+// holding in one colour, holding, idle, off; each size at real size first, left to right.
+const SHEET = {sizes: [16, 20, 24, 32, 40, 48], zoom: 8, gap: 16, margin: 32, rows: {holding: 1, idle: 2, off: 3}};
+const sheetRow = 48 * SHEET.zoom;
+for (const [theme, back] of [['light', TASKBAR_LIGHT], ['dark', TASKBAR_DARK]]) {
+  const sheet = readPng(join(media, '..', 'docs', 'research', 'img', 'ux', `icon-sheet-${theme}.png`));
+  for (const [state, row] of Object.entries(SHEET.rows)) {
+    const file = join(media, 'out', `state-${state}-${theme}.png`);
+    if (!existsSync(file)) {
+      check(false, `${file} exists (build it with the states command)`);
+      continue;
+    }
+    const icon = readPng(file);
+    if (icon.width !== STATE_ICON || icon.height !== STATE_ICON) {
+      check(false, `state-${state}-${theme}.png is ${STATE_ICON} x ${STATE_ICON} (${icon.width} x ${icon.height})`);
+      continue;
+    }
+    const laid = blank(STATE_ICON, STATE_ICON, back);
+    paint(laid, {width: icon.width, height: icon.height, pixels: icon.rgba}, 0, 0, 1);
+    const left = SHEET.margin + SHEET.sizes.filter((s) => s < STATE_ICON).reduce((sum, s) => sum + s + SHEET.gap, 0);
+    const top = SHEET.margin + row * (sheetRow + SHEET.gap) + Math.floor((sheetRow - STATE_ICON) / 2);
+    let off = 0;
+    for (let y = 0; y < STATE_ICON; y++) {
+      for (let x = 0; x < STATE_ICON; x++) {
+        const i = (y * STATE_ICON + x) * 4;
+        const j = ((top + y) * sheet.width + left + x) * 4;
+        for (let c = 0; c < 3; c++) if (laid.pixels[i + c] !== sheet.rgba[j + c]) off++;
+      }
+    }
+    const corner = icon.rgba[3] === 0;
+    check(off === 0 && corner, `state-${state}-${theme}.png, ${STATE_ICON} px, on the ${theme} taskbar equals art.rs's sheet, every pixel${off ? ` (${off} channels differ)` : ''}; see-through outside the glyph${corner ? '' : ' (its corner is not)'}`);
+  }
 }
 
 process.exit(failed ? 1 : 0);
