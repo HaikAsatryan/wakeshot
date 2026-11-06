@@ -38,7 +38,12 @@
         Per user, no admin. Free and open source (MIT). macOS is planned for later.
       </p>
       <!-- waits for p6-media: icon loop. One <picture> here: the tray icon going idle to working to idle, a dark and a light GIF (<source media="(prefers-color-scheme: dark)">), plus a still PNG for <source media="(prefers-reduced-motion: reduce)">, copied into site/media/ (no other host). Alt text: "Wakeshot's tray icon wakes while an agent works and rests when it is done". Spec: docs/research/launch.md, "Specs". -->
-      <!-- waits for p6-media: speed numbers. One line here: idle RAM (working set, median), idle CPU (ms per 10 minutes and % of one core) and the delay from Claude Code starting work to the hold starting (median of 5 runs), each linked to its method in docs/research.md on github.com/HaikAsatryan/wakeshot, with the build version and the date. The same numbers as the README. -->
+      <p class="fine">
+        Small and quiet: <a href="https://github.com/HaikAsatryan/wakeshot/blob/main/docs/research.md#speed-numbers">4.3 MB of private memory</a> and
+        <a href="https://github.com/HaikAsatryan/wakeshot/blob/main/docs/research.md#speed-numbers">109 ms of CPU in 10 idle minutes</a> (0.018% of one core).
+        It starts holding the PC awake <a href="https://github.com/HaikAsatryan/wakeshot/blob/main/docs/research.md#speed-numbers">about 0.1 s</a> after Claude Code starts work.
+        Measured on 0.1.0, x64, 2026-11-06.
+      </p>
     </div>
   </header>
 

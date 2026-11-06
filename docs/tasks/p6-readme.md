@@ -509,7 +509,7 @@ Help block not checked again: not touched.
 
 ## Round 4: the story, the media and the numbers (Haik, 2026-11-06)
 
-Written by the orchestrator (overnight run, Haik asleep). Status: ready. Agent: `wakeshot-worker`. Owns `README.md`;
+Written by the orchestrator (overnight run, Haik asleep). Status: done. Agent: `wakeshot-worker`. Owns `README.md`;
 the copy in `site/` only where it repeats the README (keep the two in line; `site/check_page.py` must still pass);
 additions to `docs/research.md` for the rival facts (re-read right before each edit). Runs beside `p6-media` round 4
 (it owns `media/` and writes `docs/research.md#speed-numbers`) and `p6-repo-files` (it writes `CONTRIBUTING.md`,
@@ -572,4 +572,112 @@ Haik's words (2026-11-06, voice input, as pasted):
 
 ### Log (round 4)
 
+- 2026-11-06: started by `wakeshot-worker`. Read the card top, Results of rounds 2 and 3, `README.md` (506 lines) and
+  `site/index.html`.
+- 2026-11-06 04:00: rival facts checked in raw pages and source (details and links go to `docs/research.md`, "Story
+  checks: PowerToys Awake and Claude's own keep awake"):
+  1. PowerToys latest release is still `v0.102.3001` (published 2026-10-27); `PowerToysUserSetup-0.102.3001.0-x64.exe`
+     is 323,884,640 bytes, so the table's 323.9 MB stands.
+  2. Longer periods: yes. Settings take any hours (NumberBox, minimum 0, no maximum) and minutes; the docs add
+     "until expiration" and `--time-limit` in seconds; `customTrayTimes` in `settings.json` adds tray entries. The
+     tray's own list is 30 min, 1 h, 2 h (`GetDefaultTrayOptions`).
+  3. Time left: at `v0.102.3001` the tray tooltip shows "<time> remaining" in timed mode, updated each second
+     (`Manager.cs` 404 to 417); an older form was in the source by 2025-09-24. Extend: the tray's time items are
+     always enabled, and picking one again cancels the timer and starts it again from now (source read, not run).
+     So Haik's "you do not see how much left and cant refresh it" does not hold for the current release: left out.
+  4. "Claude's built-in tool": Anthropic's docs name a desktop app setting, **Keep computer awake** (Settings > Desktop
+     app or Settings > This computer > System), "To prevent idle-sleep", and add "Closing the laptop lid still puts it
+     to sleep." Claude Code CLI 2.1.318 on this laptop: the sleep inhibitor returns `caffeinate` on macOS and `null`
+     on every other system; no Windows power API name in the binary.
+- 2026-11-06 04:05: media on disk: `media/out/icon-loop-{dark,light}.gif` (480 x 240), `media/public/shots/readme-*`
+  (menu 700 x 550; holding and idle tooltip 564 x 240; all at 200%). No state icon file of the held light exists:
+  `docs/research/img/ux/taskbar-*` and `int-icon-*` show the old sunrise glyph, and the `icon-sheet-*` files are
+  review sheets. The three icon cells stay media spots. The menu still shows the main menu, not the Keep awake
+  submenu, so its alt text says what it shows.
+- 2026-11-06 04:15: `docs/research.md`: new section "Story checks: PowerToys Awake and Claude's own keep awake" before
+  "CLI run checks" (away from the end, where `p6-media` appends). `## Speed numbers` is in place (p6-media).
+- 2026-11-06 04:30: README edited: icon loop, speed line, Download cell 12.3 MB, exes 3.6 MB and 14.3 MB installed
+  (both from "Speed numbers"), the video spot as one "Haik: paste the video URL here" comment, menu and both tooltip
+  pictures, "Why I built it" and "What comes next". `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md` do not
+  exist yet (`p6-repo-files` runs beside); linked by those names.
+- 2026-11-06 04:35: `site/index.html`: the speed spot filled with the README's line (links to the research section on
+  github.com). Other site spots left: they need files copied into `site/media/` or new copy, not a README repeat.
+- 2026-11-06 04:08 to 04:40: checks run (Result). All three community files exist by 04:40. `softwareok.com` answers
+  503 for every page, its home page too (IIS "Service Unavailable"), at 04:07 and 04:08: the site is down, the Don't
+  Sleep links are unchanged since round 3.
+
 ### Result (round 4)
+
+Status: done. The card as a whole stays blocked on the video URL (Haik's upload), the three state icon files and
+`p5-haik-check`, plus the SmartScreen `todo:`, the `winget:` and `release:` comments as before.
+
+**Done.** In `README.md`: the icon loop (`<picture>`, dark and light GIF, 240 px) under the header; the speed line at
+the top, each number linked to `docs/research.md#speed-numbers`; the Download cell (12.3 MB `Setup.exe`); the size
+line under the table (3.6 MB exes, 14.3 MB installed, from "Speed numbers"; was "about 3 MB" from "Tray size"); the
+caption says PowerToys was read again on 2026-11-06; one HTML comment "Haik: paste the video URL here" in "See it
+work"; the menu picture and both tooltip pictures (holding and idle), each a `<picture>`, light and dark; a new "Why I
+built it" with "What comes next", which links `CONTRIBUTING.md`, `SECURITY.md` and `CODE_OF_CONDUCT.md`. In
+`site/index.html`: the speed line, the same words and numbers. In `docs/research.md`: a new section "Story checks:
+PowerToys Awake and Claude's own keep awake" (before "CLI run checks").
+
+Files changed: `README.md` (506 to 562 lines), `site/index.html` (hero), `docs/research.md` (new section), this card.
+
+| Check | Outcome |
+|---|---|
+| Relative links and anchors (`check_readme.py`, round 2 script plus a top count and alt check) | pass: 42 of 42 |
+| No em or en dash, no emoji or other non-ASCII; UTF-8, LF, no BOM (same script) | pass |
+| Top at most 15 lines, image tags and comments not counted | pass: 12 before the table rows, 7 before the heading |
+| Every `<img>` has alt text; 5 `<picture>`, 5 `<source>`, 5 `<img>` | pass |
+| External links (`--web`, one GET each, 04:08) | 38 of 41 gave 200; 3 `softwareok.com` links 503: site down (Log) |
+| Help block equals `USAGE` in `args.rs` (`check_help.py`) | pass |
+| `site/check_page.py site` | pass: 0 errors, 7 spots wait (was 8) |
+| GitHub render (`gh api markdown`, gfm) | 4 tables, 9 `<details>`, 5 `<picture>`; no comment shows |
+| Story and speed claims against their sources | pass: list below |
+| Round 4 lines in this card at most 120 characters, ASCII only (the brief excepted) | pass |
+
+**Each number and its source** (`docs/research.md`, "Speed numbers"): 4.3 MB private memory (median 4.27); 109 ms of
+CPU in 10 idle minutes, 0.018% of one core; about 0.1 s to start holding (median 114 ms); `Setup.exe` 12.3 MB
+(12,310,500 bytes); exes 3.6 MB (2,907,648 + 700,416); 14.3 MB installed (14,269,755). No end delay. 0.1.0, x64,
+2026-11-06.
+
+**Facts verified for the story** (all in research.md, "Story checks", read 2026-11-06):
+
+1. PowerToys `v0.102.3001` is still the latest; user setup x64 323.9 MB:
+   https://github.com/microsoft/PowerToys/releases/tag/v0.102.3001
+2. Awake allows longer times in Settings (hours, no maximum) and `settings.json`; the tray list is 30 min, 1 h, 2 h:
+   https://learn.microsoft.com/en-us/windows/powertoys/awake and the source at the tag.
+3. Awake shows the time left in its tooltip and re-picking a time starts it over (source; not run).
+4. Claude's desktop app: **Keep computer awake**; "Closing the laptop lid still puts it to sleep":
+   https://code.claude.com/docs/en/desktop-scheduled-tasks
+5. Claude Code 2.1.318 on Windows holds nothing (binary grep; anthropics/claude-code#96679 still open).
+
+**Decisions for Haik's review.**
+
+1. Left out "you do not see how much is left and can't refresh it": the current Awake shows the time left in its
+   tooltip, and picking a time again starts it over (fact 3). Change it when you see it fail on the current version.
+2. Kept "Now and then I also ran into its bugs" and "Other tools I tried had gaps of their own" as your experience.
+   PR #44795 fixed two real Awake bugs this year. Change it when you want no line against PowerToys.
+3. Linux: kept the many desktops, distributions and package managers; dropped "very few people use it" (not checked).
+4. "Claude's built-in tool" is the desktop app's Keep computer awake; the story names it with its docs' lid line, and
+   adds that the terminal CLI holds nothing on Windows.
+5. Both tooltip pictures, holding and idle, side by side under the menu picture: they show the icon states that the
+   table's empty icon cells cannot yet.
+6. The menu picture shows the main menu, not the Keep awake submenu the old spot asked for; the alt text says what it
+   shows. Change it when a light and dark submenu still exists.
+7. The speed line's lead-in is "Small and quiet:" (not "Light", which reads as the icon's light).
+
+**Left.**
+
+- Haik: upload the video and paste its URL at the "Haik: paste the video URL here" comment in "See it work".
+- The three icon cells of the state table stay `media:` spots: no PNG or SVG of the held light per state exists
+  (`docs/research/img/ux/taskbar-*` and `int-icon-*` show the old sunrise glyph; `icon-sheet-*` are review sheets).
+- `site/`: the icon loop, pictures, video and comparison spots still wait (they need files in `site/media/`).
+- Check the `softwareok.com` links again once the site is back.
+
+**Found outside scope (round 4).**
+
+1. The README's PowerToys timer cell is a plain "yes", not the longer text round 3's Result records; changed after
+   round 3 by someone else. Not touched.
+2. `docs/research.md` "Tray size" (2,706,432 bytes) is an earlier build; "Speed numbers" has 0.1.0's sizes.
+3. `docs/research/img/ux/taskbar-*.png` and `int-icon-*.png` still show the old sunrise glyph, with another app's tray
+   icon beside it. Fine as history; not for the README.

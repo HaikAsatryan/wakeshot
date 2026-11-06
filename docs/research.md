@@ -2792,6 +2792,47 @@ Checked 2026-11-04 for card `docs/tasks/p6-launch-research.md`; details, quotes 
 - **Video tool**: Remotion 4.0.540; its license is free for "an individual" and companies "with up to 3 employees"
   (`LICENSE.md`). Node v26.13.0 is on this laptop; `ffmpeg` is not on the PATH (Remotion bundles its own).
 
+## Story checks: PowerToys Awake and Claude's own keep awake
+
+Checked 2026-11-06 about 04:00 (UTC+4) for card `docs/tasks/p6-readme.md` (round 4), so the README's story says
+nothing about another tool that its own docs or source do not back. Raw pages with `curl`, source with `gh api` at the
+release tag; no fetch summary. Nothing installed or run.
+
+- **PowerToys download size**: the latest release is still `v0.102.3001` (published 2026-10-27);
+  `PowerToysUserSetup-0.102.3001.0-x64.exe` is 323,884,640 bytes (323.9 MB), the machine-wide x64 setup 323,913,184,
+  the ARM64 user setup 311,603,808. **Verified** (`gh api repos/microsoft/PowerToys/releases/latest`):
+  https://github.com/microsoft/PowerToys/releases/tag/v0.102.3001
+- **Longer periods in Awake**: yes, but not in the tray's default list. The docs (page updated 2026-10-21) list "Keep
+  awake for a time interval" set in "the hours or minutes", "Keep awake until expiration" ("a defined date and time"),
+  `--time-limit` in seconds and `--expire-at`, and `customTrayTimes` in `settings.json` to change the tray's entries.
+  In the source at `v0.102.3001` the Settings page's hours box has `Minimum="0"` and no maximum
+  (`src/settings-ui/Settings.UI/SettingsXAML/Views/AwakePage.xaml` lines 73 to 92), and the tray's default list is 30
+  minutes, 1 hour and 2 hours (`src/modules/awake/Awake/Core/Manager.cs`, `GetDefaultTrayOptions`, lines 508 to
+  517). **Verified** (docs page and source): https://learn.microsoft.com/en-us/windows/powertoys/awake
+- **Time left in Awake**: shown. In timed mode the tray tooltip reads "<time> remaining", updated every second
+  (`Manager.cs` lines 404 to 417, string `AWAKE_TRAY_REMAINING` = "remaining" in `Properties/Resources.resx`); the
+  docs say only that the tooltip gives "a hint about the currently active PowerToys Awake mode". An older form of the
+  same tooltip was in the source by 2025-09-24 (commit `5cbebad63f`). **Verified** (source); not seen on a screen.
+- **Extending a running Awake timer**: the tray's time items are always enabled (`TrayHelper.cs`,
+  `CreateAwakeTimeSubMenu`, plain `MF_STRING`), and `SetTimedKeepAwake` first cancels the running timer, then starts
+  a new one from now. So picking the same time again starts it over. **Verified in source; not run.**
+- **Bugs Awake fixed this year**: PR #44795 (merged 2026-01-21) fixed Awake settings that stopped working after the
+  PC woke from sleep (#32544) and Awake not keeping the PC awake once AC power was connected (#36150). **Verified**
+  (`gh api repos/microsoft/PowerToys/pulls/44795`).
+- **Claude's own keep-awake setting**: Anthropic's docs name one in the desktop app. "To prevent idle-sleep, turn on
+  **Keep computer awake** in **Settings > Desktop app** or **Settings > This computer > System**. Closing the laptop
+  lid still puts it to sleep." (Schedule recurring tasks in Claude Code Desktop, "How scheduled tasks run".) A
+  second one is for Remote Control: "Keep this computer awake for Remote Control" in **Settings > Code** or
+  **Settings > Claude Code** (Projects page). The docs do not say whether the first holds only while Claude works.
+  **Verified**
+  (raw `.md` pages): https://code.claude.com/docs/en/desktop-scheduled-tasks and
+  https://code.claude.com/docs/en/claude-projects
+- **Claude Code CLI on Windows holds nothing, still**: in the installed `claude.exe` 2.1.318 (the newest here),
+  `getSpawnArgs()` returns `["caffeinate",["-i","-t",e]]` when the platform is `macos` and `null` otherwise; the
+  binary holds no `PowerSetRequest`, `PowerCreateRequest`, `SetThreadExecutionState` or `ES_CONTINUOUS` (0 each;
+  `caffeinate` 10, `systemd-inhibit` 2). anthropics/claude-code#96679 is still open. **Verified** (`grep -a` on the
+  binary), as "Claude Code today" above found for 2.1.316.
+
 ## CLI run checks
 
 Checked 2026-11-04 between 01:00 and 01:11 for card `docs/tasks/p4-cli-run.md` (Windows 11 Pro 10.0.26300, Rust
@@ -5139,3 +5180,94 @@ Checked 2026-11-05 by `p6-menu-status-glyph`, offscreen renders through `menu_pa
   the fully covered drawn pixels at 96, 120 and 144 dpi: dark menu `#2C2C2C`: ink `#FFFFFF` 13.97 (colour-blind
   13.97), light `#B6E05A` 9.18 (9.03); light menu `#F9F9F9`: ink `#1A1A1A` 16.53 (16.53), light `#3B7A2A` 4.98 (4.76).
   All over 3:1. **Verified** (test `status_glyph_keeps_3_to_1`, printed).
+
+## Speed numbers
+
+Measured 2026-11-06 from 02:09 to 02:32 (UTC+4) for card `docs/tasks/p6-media.md` (round 4), on the test laptop
+(x64), Haik's own Wakeshot install. Written up by the round 4 worker from the run's raw files; the run itself was
+started by the orchestrator.
+
+- **Build**: Wakeshot 0.1.0 (`ProductVersion` of the installed `wakeshot-tray.exe`, read by the script and again by
+  this worker on 2026-11-06 04:01), installed by its x64 `Setup.exe`: a local release build, of commit `c9da3dd` by
+  the orchestrator's note, which lacks only the high contrast menu fix (that fix does not touch speed). The commit is
+  not verified by this worker. **ARM64: not measured** (no device at hand).
+- **Method**: `media/scripts/measure-speed.ps1`, the method of `docs/research/launch.md` part 1 ("Speed numbers: how
+  `p6-media` measures each"), run unattended at Medium by a wrapper script of the orchestrator (`speed-run.ps1` in
+  the session's scratch folder, not kept; every value it wrote is below). Where the run differs from launch.md:
+  1. Before any number it waited until no guard process had run for 60 s (nothing held): quiet at 02:09:07. One
+     Claude Code session was open and idle the whole time (status `idle`), as on a user's PC.
+  2. Idle: Wakeshot's log has no `Holding starts` line in the 10 idle minutes (0 holds).
+  3. Hold: the guard's CPU time is not recorded. `ping -n 600` ends about 600 s after it starts and the sampling began
+     15 s after it, so the guard had exited before the last sample (59 samples, not 60), and its CPU time needs a
+     live process at the end.
+  4. Delays: not by the `statusUpdatedAt` of the status file writes, as launch.md says, but by the status file
+     appearing and going (polled every 50 ms), for five headless `claude -p --model haiku "Reply with the single word
+     ok."` runs in a throwaway folder, paired with Wakeshot's log lines `core: Holding starts` and `core: Holding
+     ends`.
+  5. Size: the install folder of Haik's install, not of a fresh silent install. Its sum read again by this worker on
+     2026-11-06 04:01: the same bytes.
+
+| Number | Value | Notes |
+|---|---|---|
+| Tray, idle, private memory | median 4.27 MB, max 4.30 MB | `PrivateMemorySize64`, 60 samples 10 s apart, MB = 2^20 bytes. The video shows 4.3 MB |
+| Tray, idle, working set | median 17.14 MB, max 17.14 MB | `WorkingSet64`; it also counts pages of shared Windows DLLs |
+| Tray, idle, CPU | 109 ms in 10 minutes (109.375 ms), 0.018% of one core | `TotalProcessorTime` at start and end. 109.375 ms is exactly 7 times 15.625 ms, the default Windows clock tick, so the figure likely moves in steps of about 16 ms (not verified) |
+| Tray, during a hold | private median 4.24 MB (max 4.27), working set median 17.15 MB (max 17.17), CPU 109.375 ms in 10 minutes | load `wakeshot run -- ping -n 600 127.0.0.1` |
+| Guard, during a hold | private median 1.67 MB (max 1.76), working set median 11.66 MB (max 11.68) | CPU not recorded (point 3) |
+| Start delay | 298, 114, 155, 104, 108 ms: median 114 ms, max 298 ms | status file seen to `Holding starts`; each includes up to 50 ms of polling |
+| End delay | no number | in 4 of 5 runs `Holding ends` was logged 732 to 782 ms before the status file was removed, in run 3 2 ms after it. Likely because `claude -p` writes the `idle` status before it exits and removes the file (not verified); launch.md's method (the `idle` write's `statusUpdatedAt`) was not run |
+| `Setup.exe` (x64) | 12,310,500 bytes (12.3 MB of 10^6 bytes, 11.7 MB of 2^20) | file length |
+| `wakeshot-tray.exe` | 2,907,648 bytes | in `%LocalAppData%\HaikAsatryan.Wakeshot\current` |
+| `wakeshot.exe` | 700,416 bytes | the same folder |
+| Install folder | 14,269,755 bytes | all files under `%LocalAppData%\HaikAsatryan.Wakeshot`, Velopack's own files included |
+| Power settings, before and after | the same | `measure-speed.ps1 -Mode compare`: `SAME`. Active plan Balanced; lid action 1 (Sleep) on AC and DC; sleep after 18000 s on AC and DC; screen off 300 and 180 s; energy saver at 30% on battery; no `RunOnce` entry |
+
+- **Task Manager**: the orchestrator read the tray at 3.4 MB in Task Manager's default Memory column (private working
+  set) at 03:55. Not read by this worker.
+- **Which numbers the video and the README use** (orchestrator decision, for Haik's review): memory is the private
+  memory, 4.3 MB, the kind of figure Task Manager's Memory column comes close to and the PowerToys PR quotes (14.3 MB
+  private memory in its own test harness, launch.md part 1); the working set (17.1 MB) also counts shared Windows
+  files. CPU: 109 ms in 10 minutes. Start: "about 0.1 s" or the median, 114 ms; never "instant". No end delay.
+
+## Community files: GitHub's rules and the repo's state
+
+From `p6-repo-files`, 2026-11-06 04:00 to 04:30.
+
+- **Haik's public profile has no contact.** `gh api users/HaikAsatryan`: `email` null, `blog` empty,
+  `twitter_username` null; name "Haik", company "PandaTech LLC", location "Yerevan". So the community files name no
+  email. **Verified** (API read).
+- **Repo state.** `gh api repos/HaikAsatryan/wakeshot/private-vulnerability-reporting`: `{"enabled":false}`.
+  `has_discussions` false, 0 releases, community profile 42% (only README and LICENSE). Labels include `bug` and
+  `enhancement`. **Verified** (API reads).
+- **The house way.** No community files in PandaTechAM's public repos (community profile API on six of them; no
+  `PandaTechAM/.github` repo). Haik's own repos have some: `armenian-bank-financials` (CONTRIBUTING, a YAML issue
+  form with a markdown intro, `config.yml` with `blank_issues_enabled: true`), `go-vs-dotnet-benchmark` and
+  `java-vs-dotnet-benchmark` (CONTRIBUTING, a PR template with a checkbox list), `ResultCrafter` (a short code of
+  conduct that names the Contributor Covenant). **Verified** (`gh api .../contents`, read only).
+- **Contributor Covenant 3.0 is current.** contributor-covenant.org home page names 3.0 as the latest; its markdown
+  (`/version/3/0/code_of_conduct/code_of_conduct.md`, 8,778 bytes, sha256 `ed3f8089...8422`) has two placeholders,
+  `[NOTE: describe your means of reporting here.]` and a note on the enforcement section, two curly apostrophes, no em
+  dash, and is under CC BY-SA 4.0. **Verified** (fetched 2026-11-06).
+- **Issue forms rules** (GitHub docs "Syntax for issue forms", "Syntax for GitHub's form schema", "Common validation
+  errors when creating issue forms", read 2026-11-06): `name`, `description`, `body` required; `id` only letters,
+  digits, `-` and `_`, unique in the form; labels unique and not too similar once made into slugs; at least one
+  non-markdown field; `None` is reserved in dropdowns; `validations.required` works only in public repos; forms live
+  in `.github/ISSUE_TEMPLATE/*.yml`, listed alphanumerically, YAML before Markdown; issue forms are "in public
+  preview and subject to change". A `labels` entry that does not exist in the repo is not added.
+- **Private vulnerability reporting** (GitHub docs, read 2026-11-06): owners and admins of a public repo turn it on in
+  Settings > "Advanced Security" (sidebar section "Security and quality") > "Enable" next to "Private vulnerability
+  reporting". Reporters use the "Security and quality" tab > "Report a vulnerability". Draft advisories are private
+  until published. The repo's tab reads "Security and quality" on the public page (`curl`, logged out, 2026-11-06).
+  The form link `https://github.com/<owner>/<repo>/security/advisories/new` is the one many public `SECURITY.md`
+  files use (`gh search code`); logged out it redirects to sign-in. That it opens the form here once reporting is on:
+  not verified.
+- **Reporting a comment to GitHub** (GitHub docs "Reporting abuse or spam"): the comment's three-dot menu, then
+  "Report content"; an account: "Block or Report" on the profile, then "Report abuse". Not tried.
+- **`cargo test --workspace --locked` writes no real power settings.** Every test that writes them is `#[ignore]` and
+  works on a plan copy (`e2e_real.rs`, `power/plan.rs`, `power/stop_points.rs`); the `power_check` example has
+  `required-features = ["test-support"]` and examples do not run their tests by default. **Verified** by reading the
+  code (grep for `Win32Power`, `#[ignore`), not by watching a run.
+- **The version a user can quote.** The tray logs `Wakeshot <version> starts: tray, pid <n>` at each start
+  (`app/tray_mode.rs`, `CARGO_PKG_VERSION`); `wakeshot status` does not print a version. **Verified** (code).
+- **`rustup toolchain install` with no toolchain name installs the pin.** CI runs it to read `rust-toolchain.toml`,
+  and the CI runs of 2026-11-05 passed on both runners. **Verified** (CI result), not run here.

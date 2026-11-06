@@ -5,12 +5,17 @@
   </picture>
 </h1>
 
-<!-- media: icon loop. One centered <picture> block here: the dark and the light GIF (prefers-color-scheme), media/out/icon-loop-dark.gif and icon-loop-light.gif (480 x 240, 5 s, about 21 KB each; show them 240 px wide), the tray icon going idle to holding to idle: the light comes on while an agent works and goes off when it is done (docs/brand.md, "The idea"), alt text "Wakeshot's tray icon: the light comes on while an agent works and goes off when it is done". Made in media/ (npm run loop) from the held light in crates/wakeshot-windows/src/tray/art.rs; placed by p6-media. Takes 1 line here. -->
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="media/out/icon-loop-dark.gif">
+    <img src="media/out/icon-loop-light.gif" alt="Wakeshot's tray icon: the light comes on while an agent works and goes off when it is done" width="240" height="120">
+  </picture>
+</p>
 
 **Your PC stays awake while your AI agent works. Then it sleeps as usual, with your own power settings back.**
 Keep awake on demand comes in the same menu, so you never need a second tool.
 
-<!-- media: speed numbers. One line here: idle RAM (working set, median), idle CPU (ms per 10 minutes and % of one core) and the delay from Claude Code starting work to the hold starting (median of 5 runs), each number linked to its method section in docs/research.md, with the build version and the date. Numbers from p6-media, measured as docs/research/launch.md "Speed numbers: how p6-media measures each" says. Takes 1 line here. -->
+Small and quiet: [4.3 MB of private memory](docs/research.md#speed-numbers) and [109 ms of CPU in 10 idle minutes](docs/research.md#speed-numbers) (0.018% of one core). It starts holding the PC awake [about 0.1 s](docs/research.md#speed-numbers) after Claude Code starts work. Measured on 0.1.0, x64, 2026-11-06.
 
 **Install:** download `HaikAsatryan.Wakeshot-win-x64-Setup.exe` (`-win-arm64-` for Windows on Arm) from [Releases](https://github.com/HaikAsatryan/wakeshot/releases) and run it. <!-- winget: Phase 8 adds "or: winget install HaikAsatryan.Wakeshot" to this line once the package is merged. -->
 Windows 11, x64 and ARM64. Per user, no admin. Free and open source (MIT). macOS is planned for later.
@@ -22,7 +27,8 @@ Knows Claude Code today, with no hooks and no edits to its settings. Codex CLI a
 
 PowerToys Awake, Caffeine and Don't Sleep are the most popular keep-awake tools for Windows that we could count.
 They keep the PC awake while you tell them to, and so does Wakeshot. The three rows in bold are what only Wakeshot
-does. Each rival cell links to the tool's own page or repo; all were read on 2026-11-04.
+does. Each rival cell links to the tool's own page or repo; all were read on 2026-11-04, and PowerToys again on
+2026-11-06.
 
 | | Wakeshot | PowerToys Awake | Caffeine | Don't Sleep |
 |---|---|---|---|---|
@@ -35,11 +41,11 @@ does. Each rival cell links to the tool's own page or repo; all were read on 202
 | Step back when the battery runs low? | yes, at Windows' own energy saver level | [not listed](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [can work only while plugged in (`-onac`)](https://www.zhornsoftware.co.uk/caffeine/) | [can quit or sleep the PC at a battery level you set](https://www.softwareok.com/?seite=Microsoft/DontSleep/History) |
 | Updates itself? | yes, only while nothing needs the PC awake | [checks, then shows a notice](https://learn.microsoft.com/en-us/windows/powertoys/install) | [not listed](https://www.zhornsoftware.co.uk/caffeine/) | [an optional auto update](https://www.softwareok.com/?seite=Microsoft/DontSleep/History) |
 | Runs on | Windows 11, x64 and ARM64; macOS later | [Windows 10 and 11, x64 and ARM64](https://learn.microsoft.com/en-us/windows/powertoys/install) | [Windows, x86 and x64](https://www.zhornsoftware.co.uk/caffeine/) | [Windows 7 to 11, x86 and x64](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
-| Download | <!-- media: Wakeshot's x64 Setup.exe size in MB from p6-media, linked to its method in docs/research.md --> | [323.9 MB, all of PowerToys](https://github.com/microsoft/PowerToys/releases/tag/v0.102.3001) | [306 KB zip](https://www.zhornsoftware.co.uk/caffeine/) | [267 KB](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
+| Download | [12.3 MB Setup.exe](docs/research.md#speed-numbers) | [323.9 MB, all of PowerToys](https://github.com/microsoft/PowerToys/releases/tag/v0.102.3001) | [306 KB zip](https://www.zhornsoftware.co.uk/caffeine/) | [267 KB](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
 | Price | free, open source (MIT) | [free, open source (MIT)](https://github.com/microsoft/PowerToys) | [free (freeware)](https://www.zhornsoftware.co.uk/) | [free (freeware)](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
 
-A small native app: Wakeshot's two exes come to [about 3 MB on x64](docs/research.md#tray-size) and need no .NET or
-other runtime. Velopack's updater (about 5 MB) comes with them.
+A small native app: Wakeshot's two exes come to [3.6 MB on x64](docs/research.md#speed-numbers) and need no .NET or
+other runtime. Velopack's updater (about 5 MB) comes with them: 14.3 MB installed in all.
 
 Why no rival keeps a closed laptop working: Windows takes a lid close as you asking for sleep, and no keep-awake
 request can stop that; only the lid setting can ([Windows power facts](docs/research.md#windows-power-facts)).
@@ -51,13 +57,27 @@ PC down on a schedule. Wakeshot is new, runs on Windows 11 only and knows only C
 
 ## See it work
 
-<!-- media: video. The bare https://github.com/user-attachments/assets/<id> URL of the 30 second promo on its own line, so GitHub shows a player (muted, with controls): MP4, H.264 and AAC, 1920 x 1080, under 10 MB, uploaded with `gh issue comment <n> --attach` to the pinned "Media" issue, its URL recorded in media/README.md. From p6-media. -->
+<!-- Haik: paste the video URL here. Upload the final 30 second promo MP4 (where it is: media/README.md) to GitHub, by dragging it into a comment box on github.com or with `gh issue comment <n> --attach`. Then replace this whole comment with the bare https://github.com/user-attachments/assets/<id> URL on its own line, with a blank line above and below, so GitHub shows a player. Link nothing else for the video. -->
 
-<!-- media: menu picture. One <picture> block: a dark and a light PNG (prefers-color-scheme) of the real menu with the Keep awake submenu open (shot S5), cropped to the tray area, alt text "Wakeshot's menu with the Keep awake choices open". Files under media/ from p6-media. -->
-
-<!-- media: tooltip picture. One <picture> block: a dark and a light PNG of the real tooltip while holding for Claude Code, "Wakeshot" over "Holding awake: Claude Code (1 session)" (shot S3), alt text "Wakeshot's tooltip naming what holds the PC awake". Files under media/ from p6-media. -->
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="media/public/shots/readme-menu-dark.png">
+    <img src="media/public/shots/readme-menu-light.png" alt="Wakeshot's menu: Automatic, Keep awake, Restore my power settings, Open log and Quit" width="350" height="275">
+  </picture>
+</p>
 
 The icon tells you what is going on, and the tooltip names what holds the PC awake:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="media/public/shots/readme-holding-tooltip-dark.png">
+    <img src="media/public/shots/readme-holding-tooltip-light.png" alt="Wakeshot's tooltip while Claude Code works: Holding awake: Claude Code (1 session), over the filled tray icon" width="282" height="120">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="media/public/shots/readme-idle-tooltip-dark.png">
+    <img src="media/public/shots/readme-idle-tooltip-light.png" alt="Wakeshot's tooltip with nothing to hold: Not holding, the PC sleeps as usual, over the outlined tray icon" width="282" height="120">
+  </picture>
+</p>
 
 | Icon | State | The tooltip says | What it means |
 |---|---|---|---|
@@ -79,6 +99,42 @@ The icon tells you what is going on, and the tooltip names what holds the PC awa
    back and puts the closed laptop to sleep after 5 minutes with no input.
 
 No window, no settings page, nothing to learn: a tray icon, one menu, a few notices and a small command line.
+
+## Why I built it
+
+Before Wakeshot, I used PowerToys Awake when an agent worked for hours or a big download ran. I installed all of
+PowerToys, a [323.9 MB download](https://github.com/microsoft/PowerToys/releases/tag/v0.102.3001) today, for that one
+feature. In its tray menu the longest set time is 2 hours. Longer ones are there too, but in PowerToys Settings or a
+JSON file ([its docs](https://learn.microsoft.com/en-us/windows/powertoys/awake)), and for me that was a step too
+many. Now and then I also ran into its bugs. Other tools I tried had gaps of their own.
+
+So I ended up changing my laptop's power settings by hand for long sessions. When I had to close the lid, that meant
+more settings to change. Small stresses, again and again, but nothing critical. The critical part came when I forgot
+to change them back: a laptop running hot in my bag, or a dead battery right when I needed it.
+
+Claude's desktop app has a
+[Keep computer awake](https://code.claude.com/docs/en/desktop-scheduled-tasks#how-scheduled-tasks-run) setting, but
+its docs say closing the lid still puts the laptop to sleep. And Claude Code in a Windows terminal does not keep the
+PC awake at all
+([checked in its 2.1.318 binary](docs/research.md#story-checks-powertoys-awake-and-claudes-own-keep-awake)).
+
+That is why I built the tool I wanted, first of all for myself. It keeps the PC awake only while something needs it,
+keeps working with the lid closed, and puts my settings back when the work is done. It does a simple, almost trivial
+thing. Under the hood it is not simple: the lid, the battery, a dock, the lock, sleep, a crash, sign-out and updates
+each bring their own cases. I tried to get each one right, down to every notice and every sound. I hope it helps you
+too.
+
+### What comes next
+
+Wakeshot runs on Windows only, because I built it for myself and I use Windows. Its design is ready for other systems:
+the part that decides when to hold has no Windows code, so a port adds only the parts that talk to the system. A macOS
+version will come if Wakeshot gets popular or gets donations. It is a long job for a Windows person, since so much
+leans on each system's own power rules, and I would need a Mac to build and test on. Linux is not planned now: with
+its many desktops (GNOME, KDE and more), distributions and package managers, it would be a project of its own.
+
+If you want to build something yourself, pull requests are welcome; I review each one's architecture. Start with
+[CONTRIBUTING.md](CONTRIBUTING.md). Security problems: [SECURITY.md](SECURITY.md). How we treat each other:
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ## Details
 
