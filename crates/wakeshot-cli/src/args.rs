@@ -33,6 +33,8 @@ Test aid:
 
 const DRY_RUN: &str = "--dry-run";
 const RUN: &str = "run";
+const HOOK: &str = "hook";
+const CHECKED: &str = "--checked";
 /// After a command as well as in its place, so `wakeshot status --help` helps instead of failing.
 const HELP_FLAGS: [&str; 3] = ["--help", "-h", "/?"];
 const LENGTHS: &str = "30m, 1h, 2h, 4h, on or off";
@@ -57,6 +59,10 @@ pub fn parse(args: &[OsString]) -> (Global, Command) {
 }
 
 fn command(word: &OsStr, rest: &[OsString]) -> Command {
+    // Before every help and error form: an agent runs it, and `Bad` exits 2, which blocks the agent's prompt.
+    if is(word, HOOK) {
+        return hook(rest);
+    }
     if is(word, "help") || is_help_flag(word) {
         return Command::Help;
     }
@@ -144,6 +150,32 @@ fn automatic(rest: &[OsString]) -> Command {
             shown(word)
         )),
         _ => wrong("'automatic' needs on or off"),
+    }
+}
+
+/// `hook <agent> <event> [--checked <value>...]`, the frozen form (`Command::Hook`). The agent and event are kept as
+/// given, case and all: they are the agent's own names. A word that is not Unicode is kept as best it can be, so it
+/// matches no table and no value check.
+fn hook(rest: &[OsString]) -> Command {
+    let text = |word: &OsString| word.to_string_lossy().into_owned();
+    let word = |at: usize| rest.get(at).map(text).unwrap_or_default();
+    let values = match rest.get(2..) {
+        None | Some([]) => Vec::new(),
+        Some([flag, values @ ..]) if is(flag, CHECKED) && !values.is_empty() => {
+            values.iter().map(text).collect()
+        }
+        Some(_) => {
+            return Command::Hook {
+                agent: String::new(),
+                event: String::new(),
+                values: Vec::new(),
+            };
+        }
+    };
+    Command::Hook {
+        agent: word(0),
+        event: word(1),
+        values,
     }
 }
 
@@ -514,6 +546,91 @@ mod tests {
         );
     }
 
+    fn hook(agent: &str, event: &str, values: &[&str]) -> Command {
+        Command::Hook {
+            agent: agent.into(),
+            event: event.into(),
+            values: values.iter().map(|v| (*v).to_owned()).collect(),
+        }
+    }
+
+    #[test]
+    fn the_hook_form_and_its_checked_values() {
+        assert_eq!(
+            parsed(&["hook", "cursor", "beforeSubmitPrompt"]),
+            hook("cursor", "beforeSubmitPrompt", &[])
+        );
+        assert_eq!(
+            parsed(&["HOOK", "Cursor", "STOP"]),
+            hook("Cursor", "STOP", &[])
+        );
+        assert_eq!(
+            parse(&args(&["--dry-run", "hook", "cursor", "remove"])),
+            (DRY, hook("cursor", "remove", &[]))
+        );
+        let checked = [
+            "4f1c0a2e-0000-4000-8000-000000000001",
+            "gen_1",
+            "23816",
+            "134381211391959336",
+            "Cursor",
+            "working",
+            "134381211411959336",
+        ];
+        let mut list = vec!["hook", "cursor", "beforeSubmitPrompt", "--checked"];
+        list.extend(checked);
+        assert_eq!(
+            parsed(&list),
+            hook("cursor", "beforeSubmitPrompt", &checked)
+        );
+        // Values are the copy's to check, so any text passes the parse, `--help` and `..` too.
+        assert_eq!(
+            parsed(&[
+                "hook",
+                "cursor",
+                "stop",
+                "--Checked",
+                r"..\..\x",
+                "--help",
+                ""
+            ]),
+            hook("cursor", "stop", &[r"..\..\x", "--help", ""])
+        );
+    }
+
+    /// An agent runs it, so no shape may give `Help` or `Bad` (exit 2 blocks Cursor's prompt): a missing word is empty,
+    /// any other shape gives empty words, which no agent table knows.
+    #[test]
+    fn every_hook_shape_is_a_hook_never_help_or_an_error() {
+        assert_eq!(parsed(&["hook"]), hook("", "", &[]));
+        assert_eq!(parsed(&["hook", "cursor"]), hook("cursor", "", &[]));
+        for list in [
+            &["hook", "--help"][..],
+            &["hook", "-h", "x"],
+            &["hook", "/?", "x", "y"],
+            &["hook", "--dry-run"],
+        ] {
+            let Command::Hook { values, .. } = parsed(list) else {
+                panic!("{list:?}: {:?}", parsed(list));
+            };
+            assert!(values.is_empty(), "{list:?}");
+        }
+        for list in [
+            &["hook", "cursor", "stop", "extra"][..],
+            &["hook", "cursor", "stop", "--dry-run"],
+            &["hook", "cursor", "stop", "--help"],
+            &["hook", "cursor", "stop", "--checked"],
+            &["hook", "cursor", "stop", "x", "--checked", "y"],
+        ] {
+            assert_eq!(parsed(list), hook("", "", &[]), "{list:?}");
+        }
+        let odd = OsString::from_wide(&[b'x' as u16, 0xD800]);
+        assert_eq!(
+            parse(&[OsString::from("hook"), odd, OsString::from("stop")]).1,
+            hook("x\u{FFFD}", "stop", &[])
+        );
+    }
+
     #[test]
     fn help_names_every_command_and_the_test_aid() {
         for word in [
@@ -528,6 +645,8 @@ mod tests {
             assert!(USAGE.contains(word), "{word}");
         }
         assert!(USAGE.lines().all(|line| line.chars().count() <= 80));
+        // An agent's command, not the user's.
+        assert!(!USAGE.contains(HOOK) && !USAGE.contains(CHECKED));
     }
 
     #[test]

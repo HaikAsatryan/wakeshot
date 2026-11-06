@@ -425,9 +425,28 @@ Beyond `p4-contracts-r2` (which made `SourceId::Cursor` and `Antigravity`, the s
    until they get the same Medium rule as the hooks (verify review). The hooks do not depend on it: they run at
    Medium.
 
-No new `WantedFile`, `Liveness`, data file enum, mutex in `store::Names`, `Cargo` change or `windows` feature:
-`Win32_System_Threading`, `Win32_System_LibraryLoader` (for `SetDefaultDllDirectories`) and `Win32_UI_Shell` are on
-in `crates/wakeshot-windows/Cargo.toml` (checked 2026-11-06).
+No new `WantedFile`, `Liveness`, data file enum or mutex in `store::Names`. `Win32_System_Threading`,
+`Win32_System_LibraryLoader` (for `SetDefaultDllDirectories`) and `Win32_UI_Shell` are on in
+`crates/wakeshot-windows/Cargo.toml` (checked 2026-11-06); `NtQueryInformationProcess` needed one more `windows`
+feature, `Wdk_System_Threading` (added by `p4-contracts-r3`; a feature is not in `Cargo.lock`).
+
+**Built** (`p4-contracts-r3`, 2026-11-06). All six items, with these shapes where they differ from the list above:
+
+- `image_path(process: ProcessRef) -> Result<Option<PathBuf>, WinError>` and `command_line_contains(process:
+  ProcessRef, needle: &str) -> Result<bool, WinError>`: a `ProcessRef`, not a pid, so a pid reused since the list was
+  read never answers for another process; `None` and `false` when that process no longer runs. The walk has each
+  parent's start from the list.
+- `HookEnv::remove_agent_hooks(&mut self)` returns nothing: it logs one line per agent itself, through the hook's
+  log, and never fails the hook. Its `RealHookEnv` body is an empty stub for `p4-agent-hooks-install`.
+- The `hook` parse: a missing word is empty; any shape but `hook <agent> <event>` and `hook <agent> <event>
+  --checked <value>...` (one value at least) gives empty words; `--checked` and `hook` in any case. Never `Help` or
+  `Bad`.
+- `write_atomic`'s temp name is `<name>.<pid>.<n>.<16 hex>.tmp`; `store::temp_target(name)` gives `<name>` for that
+  shape only, for the prune. Three names in all, then `ERROR_FILE_EXISTS`.
+- Added beyond the list: `store::local_app_data()` (the known folder, for `%LocalAppData%\cursor-agent\`, since the
+  CLI calls Windows only through `wakeshot-windows`), and `tests/hook.rs` in the CLI (owner `p4-cursor-source`).
+- The CLI has no JSON crate of its own, so the input parse and the state file text go in `sources::hooked` (core,
+  which has `serde`), as its module doc says; a `serde_json` line in `wakeshot-cli` would change `Cargo.lock`.
 
 ## Live test (for the live card)
 

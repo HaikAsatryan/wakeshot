@@ -93,7 +93,8 @@ pub enum MenuCommand {
 /// be read, so the keys in `reset` were set to Windows' default (product "User settings safety" 7); `failed`: a call of
 /// that reset failed, so a value of Wakeshot's may be left. `IdleLocked`: Keep screen on locked the PC after the
 /// user's idle time. `Updated`: Wakeshot updated itself to `version` (ship Question 3, Haik 2026-11-03: yes); the
-/// answer to `Event::Updated`.
+/// answer to `Event::Updated`. `HooksAdded`: Wakeshot added its hook folder to `agent` (a label from Wakeshot's own
+/// table, never file text), the answer to `Event::HooksAdded` (`docs/agent-hooks.md`, "Adding").
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Notice {
     FirstRun,
@@ -121,6 +122,9 @@ pub enum Notice {
     IdleLocked,
     Updated {
         version: String,
+    },
+    HooksAdded {
+        agent: &'static str,
     },
 }
 

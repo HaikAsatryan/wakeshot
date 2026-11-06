@@ -4,19 +4,20 @@
 //! Owner: power track (`p3-store`). The signatures are contract: the sources and ship tracks use them.
 
 use std::ffi::{OsStr, OsString};
+use std::hash::{BuildHasher, RandomState};
 use std::mem::offset_of;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use windows::Win32::Foundation::{
-    DUPLICATE_SAME_ACCESS, DuplicateHandle, ERROR_ACCESS_DENIED, ERROR_FILE_NOT_FOUND,
-    ERROR_INVALID_DATA, ERROR_INVALID_PARAMETER, ERROR_MORE_DATA, ERROR_PATH_NOT_FOUND,
-    ERROR_SUCCESS, ERROR_WRITE_FAULT, GENERIC_READ, GENERIC_WRITE, GetLastError, HANDLE,
-    WAIT_ABANDONED, WAIT_OBJECT_0, WAIT_TIMEOUT, WIN32_ERROR,
+    DUPLICATE_SAME_ACCESS, DuplicateHandle, ERROR_ACCESS_DENIED, ERROR_FILE_EXISTS,
+    ERROR_FILE_NOT_FOUND, ERROR_INVALID_DATA, ERROR_INVALID_PARAMETER, ERROR_MORE_DATA,
+    ERROR_PATH_NOT_FOUND, ERROR_SUCCESS, ERROR_WRITE_FAULT, GENERIC_READ, GENERIC_WRITE,
+    GetLastError, HANDLE, WAIT_ABANDONED, WAIT_OBJECT_0, WAIT_TIMEOUT, WIN32_ERROR,
 };
 use windows::Win32::Storage::FileSystem::{
-    CREATE_ALWAYS, CreateFileW, DELETE, DeleteFileW, FILE_ATTRIBUTE_NORMAL, FILE_RENAME_INFO,
+    CREATE_NEW, CreateFileW, DELETE, DeleteFileW, FILE_ATTRIBUTE_NORMAL, FILE_RENAME_INFO,
     FILE_RENAME_INFO_0, FILE_SHARE_DELETE, FILE_SHARE_NONE, FILE_SHARE_READ, FILE_SHARE_WRITE,
     FileRenameInfoEx, FlushFileBuffers, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
     MoveFileExW, OPEN_EXISTING, ReadFile, SetFileInformationByHandle, WriteFile,
@@ -115,7 +116,9 @@ fn real_root(over: Option<OsString>) -> Result<PathBuf, WinError> {
     }
 }
 
-fn local_app_data() -> Result<PathBuf, WinError> {
+/// `%LocalAppData%` from its known folder id (`FOLDERID_LocalAppData`), never from the environment, which the
+/// process that started this one sets. The hook command finds an agent's install folder under it.
+pub fn local_app_data() -> Result<PathBuf, WinError> {
     // SAFETY: the folder id is a static; no token means the calling user.
     let path = unsafe { SHGetKnownFolderPath(&FOLDERID_LocalAppData, KF_FLAG_DEFAULT, None) }
         .map_err(|e| core_error("SHGetKnownFolderPath", &e))?;
@@ -128,12 +131,50 @@ fn local_app_data() -> Result<PathBuf, WinError> {
 /// Makes each temp name unique inside one process; the pid in the name makes it unique across processes.
 static TEMP_COUNT: AtomicU64 = AtomicU64::new(0);
 
+/// How many temp names one write tries, each new, when the name it picked exists already.
+const TEMP_TRIES: usize = 3;
+
 /// Writes `bytes` to a temp file beside `path` and moves it over `path`, write-through. The temp name is
-/// `<name>.<pid>.<n>.tmp`, never ending in `.json`, so the watch thread never reads it as a hold. A missing folder is
-/// made first. On failure the temp file is removed and `path` is as it was.
+/// `<name>.<pid>.<n>.<16 hex digits>.tmp` ([`temp_target`]), never ending in `.json`, so the watch thread never reads
+/// it as a hold. A missing folder is made first. On failure the temp file is removed and `path` is as it was.
+///
+/// The temp file is made with `CREATE_NEW`, so a name that exists is never opened: a hard link another process of the
+/// user planted there cannot steer the write into its target (`docs/agent-hooks.md`, contract change 6). The next try
+/// takes a new name; after [`TEMP_TRIES`] the error is `ERROR_FILE_EXISTS`. Nothing is deleted to free a name, so a
+/// temp file a crash left stays. A junction over the folder still redirects the write: only the hooks' Medium rule
+/// closes that.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), WinError> {
     let target = wide("MoveFileExW", path.as_os_str())?;
     write_temp(path, bytes)?.replace(&target)
+}
+
+/// The target's file name when `name` is a temp file name of [`write_atomic`], `<target>.<pid>.<n>.<16 hex>.tmp`;
+/// `None` for any other name. For a cleanup that may delete only those (`docs/agent-hooks.md`, step 5).
+pub fn temp_target(name: &str) -> Option<&str> {
+    let mut parts = name.strip_suffix(".tmp")?.rsplitn(4, '.');
+    let random = parts.next()?;
+    let n = parts.next()?;
+    let pid = parts.next()?;
+    let target = parts.next().filter(|t| !t.is_empty())?;
+    let digits = |s: &str| (1..=20).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_digit());
+    let hex = random.len() == 16
+        && random
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+    (hex && digits(n) && digits(pid)).then_some(target)
+}
+
+/// A fresh temp name for the file `name`. The random part keeps another process from guessing the next name to block
+/// it; `CREATE_NEW` already makes a guessed name harmless. `RandomState` takes its keys from the system's random
+/// source, so no crate or `windows` feature is needed (change it when a stronger source is wanted:
+/// `BCryptGenRandom`, feature `Win32_Security_Cryptography`).
+fn temp_name(name: &OsStr) -> OsString {
+    let n = TEMP_COUNT.fetch_add(1, Ordering::Relaxed);
+    let pid = std::process::id();
+    let random = RandomState::new().hash_one((pid, n));
+    let mut temp = name.to_os_string();
+    temp.push(format!(".{pid}.{n}.{random:016x}.tmp"));
+    temp
 }
 
 /// A flushed temp file beside its target, not yet moved over it.
@@ -215,38 +256,58 @@ fn rename_posix(temp: &[u16], target: &[u16]) -> Result<(), WinError> {
 
 /// Step one of `write_atomic`. A stop after it leaves `path` as it was.
 fn write_temp(path: &Path, bytes: &[u8]) -> Result<TempFile, WinError> {
-    let mut temp = path
+    let name = path
         .file_name()
-        .ok_or_else(|| win32("CreateFileW", ERROR_INVALID_PARAMETER))?
-        .to_os_string();
-    let n = TEMP_COUNT.fetch_add(1, Ordering::Relaxed);
-    temp.push(format!(".{}.{n}.tmp", std::process::id()));
-    let temp = TempFile {
-        name: wide("CreateFileW", path.with_file_name(temp).as_os_str())?,
-    };
-    let file = match create_temp(&temp.name) {
-        // The first write of a fresh install, or the CLI before any tray ran, finds no folder yet.
-        Err(e) if e.code == ERROR_PATH_NOT_FOUND.0 => {
-            if let Some(folder) = path.parent() {
-                std::fs::create_dir_all(folder).map_err(|e| io_error("CreateDirectoryW", &e))?;
-            }
-            create_temp(&temp.name)?
-        }
-        other => other?,
-    };
-    let written = write_all(*file, bytes).and_then(|()| flush(*file));
-    // Closed before the move: the temp file is open with no sharing, so the move would fail on it.
-    drop(file);
-    match written {
-        Ok(()) => Ok(temp),
-        Err(e) => {
-            temp.discard();
-            Err(e)
-        }
-    }
+        .ok_or_else(|| win32("CreateFileW", ERROR_INVALID_PARAMETER))?;
+    write_temp_named(path, bytes, || path.with_file_name(temp_name(name)))
 }
 
-/// `CREATE_ALWAYS`: a temp file left by a stopped process whose pid came back is overwritten, not an error.
+/// [`write_temp`] with the temp names from `next`, so a test can plant a file at the names it will try.
+fn write_temp_named(
+    path: &Path,
+    bytes: &[u8],
+    mut next: impl FnMut() -> PathBuf,
+) -> Result<TempFile, WinError> {
+    let mut taken = win32("CreateFileW", ERROR_FILE_EXISTS);
+    for _ in 0..TEMP_TRIES {
+        let temp = TempFile {
+            name: wide("CreateFileW", next().as_os_str())?,
+        };
+        let created = match create_temp(&temp.name) {
+            // The first write of a fresh install, or the CLI before any tray ran, finds no folder yet.
+            Err(e) if e.code == ERROR_PATH_NOT_FOUND.0 => {
+                if let Some(folder) = path.parent() {
+                    std::fs::create_dir_all(folder)
+                        .map_err(|e| io_error("CreateDirectoryW", &e))?;
+                }
+                create_temp(&temp.name)
+            }
+            other => other,
+        };
+        let file = match created {
+            Ok(file) => file,
+            Err(e) if e.code == ERROR_FILE_EXISTS.0 => {
+                taken = e;
+                continue;
+            }
+            Err(e) => return Err(e),
+        };
+        let written = write_all(*file, bytes).and_then(|()| flush(*file));
+        // Closed before the move: the temp file is open with no sharing, so the move would fail on it.
+        drop(file);
+        return match written {
+            Ok(()) => Ok(temp),
+            Err(e) => {
+                temp.discard();
+                Err(e)
+            }
+        };
+    }
+    Err(taken)
+}
+
+/// `CREATE_NEW`: see [`write_atomic`]. A temp file left by a stopped process is never overwritten, nor the file a
+/// link at that name points to.
 fn create_temp(name: &[u16]) -> Result<Owned<HANDLE>, WinError> {
     // SAFETY: `name` is NUL-terminated and lives for the call.
     let file = unsafe {
@@ -255,7 +316,7 @@ fn create_temp(name: &[u16]) -> Result<Owned<HANDLE>, WinError> {
             GENERIC_WRITE.0,
             FILE_SHARE_NONE,
             None,
-            CREATE_ALWAYS,
+            CREATE_NEW,
             FILE_ATTRIBUTE_NORMAL,
             None,
         )
@@ -1379,7 +1440,101 @@ mod tests {
             "{temp}"
         );
         assert!(temp.ends_with(".tmp") && !temp.ends_with(".json"), "{temp}");
+        assert_eq!(temp_target(temp), Some("journal.json"), "{temp}");
         assert_eq!(fs::read(dir.0.join(temp)).unwrap(), b"new");
+    }
+
+    #[test]
+    fn temp_names_have_one_shape_and_a_random_part() {
+        let a = temp_name(OsStr::new("4f1c.json")).into_string().unwrap();
+        let b = temp_name(OsStr::new("4f1c.json")).into_string().unwrap();
+        assert_eq!(temp_target(&a), Some("4f1c.json"), "{a}");
+        assert_eq!(temp_target(&b), Some("4f1c.json"), "{b}");
+        let random = |name: &str| name.rsplit('.').nth(1).unwrap().to_owned();
+        assert_ne!(random(&a), random(&b));
+
+        let pid = std::process::id();
+        for (name, target) in [
+            (
+                format!("x.json.{pid}.0.0123456789abcdef.tmp"),
+                Some("x.json"),
+            ),
+            ("a.b.c.1.2.ffffffffffffffff.tmp".to_owned(), Some("a.b.c")),
+            // The old shape, upper case, a short or long random part, a missing part, other ends.
+            (format!("x.json.{pid}.0.tmp"), None),
+            ("x.json.1.2.0123456789ABCDEF.tmp".to_owned(), None),
+            ("x.json.1.2.0123456789abcde.tmp".to_owned(), None),
+            ("x.json.1.2.0123456789abcdef0.tmp".to_owned(), None),
+            (".1.2.0123456789abcdef.tmp".to_owned(), None),
+            ("1.2.0123456789abcdef.tmp".to_owned(), None),
+            ("x.json.a.2.0123456789abcdef.tmp".to_owned(), None),
+            ("x.json.1..0123456789abcdef.tmp".to_owned(), None),
+            ("x.json.1.2.0123456789abcdef.TMP".to_owned(), None),
+            ("x.json.1.2.0123456789abcdef.tmp.json".to_owned(), None),
+            ("x.json".to_owned(), None),
+            (
+                "x.json.111111111111111111111.2.0123456789abcdef.tmp".to_owned(),
+                None,
+            ),
+        ] {
+            assert_eq!(temp_target(&name), target, "{name}");
+        }
+    }
+
+    /// Hard-link support is per file system: NTFS, which `%TEMP%` is on this laptop, has it.
+    #[test]
+    fn a_planted_hard_link_at_a_temp_name_is_never_written_through() {
+        let dir = TempDir::new("planted");
+        let victim = dir.0.join("victim.txt");
+        fs::write(&victim, b"secret").unwrap();
+        let path = dir.0.join("4f1c.json");
+        let planted = dir.0.join("4f1c.json.1.1.0000000000000001.tmp");
+        fs::hard_link(&victim, &planted).unwrap();
+        let fresh = dir.0.join("4f1c.json.1.2.0000000000000002.tmp");
+        let mut names = [planted.clone(), fresh].into_iter();
+
+        let target = wide("MoveFileExW", path.as_os_str()).unwrap();
+        write_temp_named(&path, b"new", || names.next().unwrap())
+            .unwrap()
+            .replace(&target)
+            .unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"new");
+        assert_eq!(fs::read(&victim).unwrap(), b"secret", "the link's target");
+        assert_eq!(fs::read(&planted).unwrap(), b"secret", "the link stays");
+        assert_eq!(
+            names_in(&dir.0),
+            [
+                "4f1c.json",
+                "4f1c.json.1.1.0000000000000001.tmp",
+                "victim.txt"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_write_whose_names_all_exist_fails_and_deletes_nothing() {
+        let dir = TempDir::new("taken");
+        let path = dir.0.join("4f1c.json");
+        fs::write(&path, b"old").unwrap();
+        let taken: Vec<PathBuf> = (0..TEMP_TRIES)
+            .map(|i| {
+                dir.0
+                    .join(format!("4f1c.json.1.{i}.000000000000000{i}.tmp"))
+            })
+            .collect();
+        for name in &taken {
+            fs::write(name, b"left").unwrap();
+        }
+        let mut names = taken.clone().into_iter();
+        let err = write_temp_named(&path, b"new", || names.next().unwrap())
+            .err()
+            .unwrap();
+        assert_eq!((err.call, err.code), ("CreateFileW", ERROR_FILE_EXISTS.0));
+        assert_eq!(names.next(), None, "every try took a new name");
+        assert_eq!(fs::read(&path).unwrap(), b"old");
+        for name in &taken {
+            assert_eq!(fs::read(name).unwrap(), b"left");
+        }
     }
 
     #[test]

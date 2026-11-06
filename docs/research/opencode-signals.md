@@ -216,7 +216,8 @@ Windows build turns out to lack the DLL or JSON: then `rusqlite` with `bundled`.
   connection deletes the WAL, so a missing `-wal` means no OpenCode has the file open and nothing can run. This also
   keeps Wakeshot from creating `-wal` and `-shm` in OpenCode's folder (probe above). The other way round does not
   hold: an OpenCode that was killed or crashed leaves both files, so a `-wal` that exists does not mean OpenCode runs
-  (review finding 1; the watch thread's rule for it is `p4-contracts-r3`'s).
+  (review finding 1). Each read then rebuilds the `-shm`, so since `p4-contracts-r3` only a change notice of the db
+  or its `-wal` runs a query, never one of the `-shm`.
 - Open with `SQLITE_OPEN_READONLY` (plus `SQLITE_OPEN_NOMUTEX`, one thread), `busy_timeout` 100 ms, run the fixed
   queries, finalize every statement, close. Never keep the connection or a statement open between reads: an open
   read would hold back checkpoints, and a held connection would stop OpenCode's last close from deleting its WAL.

@@ -9,6 +9,7 @@ pub mod codex;
 pub mod copilot;
 pub mod cron;
 pub mod cursor;
+pub mod hooked;
 pub mod opencode;
 pub mod vscode;
 

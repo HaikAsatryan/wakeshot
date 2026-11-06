@@ -475,6 +475,7 @@ fn notice_name(notice: &Notice) -> &'static str {
         Notice::JournalLost { .. } => "JournalLost",
         Notice::IdleLocked => "IdleLocked",
         Notice::Updated { .. } => "Updated",
+        Notice::HooksAdded { .. } => "HooksAdded",
     }
 }
 

@@ -82,6 +82,7 @@ fn name(notice: &Notice) -> &'static str {
         Notice::JournalLost { .. } => "journal-lost",
         Notice::IdleLocked => "idle-locked",
         Notice::Updated { .. } => "updated",
+        Notice::HooksAdded { .. } => "hooks-added",
     }
 }
 
@@ -112,6 +113,7 @@ fn samples() -> Vec<Notice> {
         Notice::Updated {
             version: "1.1.0".to_owned(),
         },
+        Notice::HooksAdded { agent: "Cursor" },
     ]
 }
 

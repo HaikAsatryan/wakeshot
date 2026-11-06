@@ -1514,6 +1514,41 @@ mod tests {
         );
     }
 
+    /// Review `p4-opencode-db-read` major 1, with real notices: on a database a killed agent left, each read rebuilds
+    /// the `-shm` (SQLite's first-opener rule), and that write must not run the next read.
+    #[test]
+    fn a_query_that_rewrites_the_shm_runs_once_not_in_a_loop() {
+        let mut rig = Rig::new("query-shm");
+        let db = rig.agent.path().join("opencode.db");
+        rig.agent.write("opencode.db-wal", b"");
+        rig.agent.write("opencode.db", b"");
+        let shm = rig.agent.write("opencode.db-shm", b"");
+        let want = WantedFile::Query {
+            db,
+            name: "tables",
+            sql: "SELECT 1",
+        };
+        rig.source.set(|f| f.wanted = vec![want]);
+        let runs = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&runs);
+        let io = crate::watch::agents::AgentIo {
+            query: Box::new(move |_, _| {
+                let n = seen.fetch_add(1, Ordering::SeqCst);
+                fs::write(&shm, vec![n as u8; 32_768]).unwrap();
+                crate::sqlite::Answer::Json(b"{\"rows\":[]}".to_vec())
+            }),
+            ..Default::default()
+        };
+        rig.start_with(Config::default(), io);
+        let count = || runs.load(Ordering::SeqCst);
+        until(Instant::now(), || count() >= 1, || count().to_string());
+        // Three times the limit: the loop ran a read each second.
+        std::thread::sleep(Duration::from_millis(
+            3 * crate::watch::agents::QUERY_EVERY_MS,
+        ));
+        assert_eq!(count(), 1);
+    }
+
     #[test]
     fn an_image_since_session_is_posted_gone_at_once_when_its_process_exits() {
         let mut kid = Kid::start();
@@ -1525,6 +1560,7 @@ mod tests {
             .unwrap()
             .push(crate::process::ProcessEntry {
                 pid: process.pid,
+                parent: 0,
                 start: process.start,
                 image: "kid.exe".to_owned(),
             });

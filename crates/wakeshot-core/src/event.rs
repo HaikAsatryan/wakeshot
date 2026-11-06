@@ -54,6 +54,9 @@ pub enum SessionChange {
 /// - `UpdateReady`: an update is downloaded, at most once per version per run.
 /// - `Updated`: Velopack restarted the tray after it installed `version`. At most once per run, at start, after
 ///   `Started` (and after `JournalCorrupt` when both come); the core answers with `Notify(Notice::Updated)`.
+/// - `HooksAdded`: the tray added Wakeshot's hook folder to `agent` (its label, such as "Cursor"; `p4-agent-hooks-install`
+///   posts it from `app/startup.rs`), once per folder it adds (`docs/agent-hooks.md`, "Adding"). The core answers each
+///   with `Notify(Notice::HooksAdded)`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Event {
     Started {
@@ -96,6 +99,9 @@ pub enum Event {
     },
     Updated {
         version: String,
+    },
+    HooksAdded {
+        agent: &'static str,
     },
     Done(Outcome),
 }

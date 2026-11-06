@@ -286,6 +286,18 @@ pub fn notice(notice: &Notice) -> NoticeText {
                 "The new version is running.",
             )
         },
+        // Quiet: news, not a problem, and it comes at a tray start, often at sign-in. No click: the README says how to
+        // remove the hook (`docs/agent-hooks.md`, "README lines").
+        Notice::HooksAdded { agent } => NoticeText {
+            silent: true,
+            ..info(
+                format!("Wakeshot now works with {agent}"),
+                format!(
+                    "It added a small hook to {agent}'s plugins, so the PC stays awake while {agent}'s agent works. It \
+                     works from {agent}'s next start."
+                ),
+            )
+        },
     };
     NoticeText {
         title: fit(text.title, TITLE_MAX_UTF16),
@@ -545,6 +557,7 @@ mod tests {
             Notice::Updated {
                 version: "1.1.0".to_owned(),
             },
+            Notice::HooksAdded { agent: "Cursor" },
         ]
     }
 
@@ -584,6 +597,11 @@ mod tests {
             Notice::UpdateWakeshot {
                 agent: "Claude Code",
             },
+            // The longest label the hooks table has, three times in the body.
+            Notice::HooksAdded {
+                agent: "Antigravity",
+            },
+            Notice::HooksAdded { agent: "Cursor" },
         ];
         cut.extend(
             lost_forms()
@@ -639,10 +657,11 @@ mod tests {
             Notice::JournalLost { .. } => 11,
             Notice::IdleLocked => 12,
             Notice::Updated { .. } => 13,
+            Notice::HooksAdded { .. } => 14,
         }
     }
 
-    const VARIANTS: usize = 14;
+    const VARIANTS: usize = 15;
 
     /// Leaked once per call: `UpdateWakeshot` takes a `&'static str`, and tests are short.
     fn leak(text: String) -> &'static str {
@@ -656,8 +675,8 @@ mod tests {
         assert_eq!(covered, (0..VARIANTS).collect(), "one sample per variant");
 
         // (warning, silent, click) by variant: silent where a chime plays (the step back) or nobody is there to
-        // hear (Keep screen on's idle lock) or the notice is a quiet one (`Updated`); the log for the two that leave
-        // values to set by hand; the taskbar page for the first run.
+        // hear (Keep screen on's idle lock) or the notice is a quiet one (`Updated`, `HooksAdded`); the log for the
+        // two that leave values to set by hand; the taskbar page for the first run.
         let flags = [
             (false, false, NoticeClick::OpenTaskbarSettings),
             (false, false, NoticeClick::Nothing),
@@ -671,6 +690,7 @@ mod tests {
             (false, false, NoticeClick::Nothing),
             (true, false, NoticeClick::Nothing),
             (true, false, NoticeClick::OpenLog),
+            (false, true, NoticeClick::Nothing),
             (false, true, NoticeClick::Nothing),
             (false, true, NoticeClick::Nothing),
         ];
@@ -718,6 +738,9 @@ mod tests {
             },
             Notice::Updated {
                 version: "1.10.0-beta.12+build.345".to_owned(),
+            },
+            Notice::HooksAdded {
+                agent: leak(wide.repeat(5)),
             },
         ];
         for sample in &extremes {
@@ -1060,6 +1083,7 @@ mod tests {
         let updated = text(Notice::Updated {
             version: "1.1.0".to_owned(),
         });
+        let hooks = text(Notice::HooksAdded { agent: "Cursor" });
 
         let table: Vec<(String, &str)> = vec![
             // Menu.
@@ -1300,6 +1324,12 @@ mod tests {
             ),
             (updated.title, "Wakeshot updated to 1.1.0"),
             (updated.body, "The new version is running."),
+            (hooks.title, "Wakeshot now works with Cursor"),
+            (
+                hooks.body,
+                "It added a small hook to Cursor's plugins, so the PC stays awake while Cursor's agent works. It works \
+                 from Cursor's next start.",
+            ),
         ];
         let wrong: Vec<&(String, &str)> = table.iter().filter(|(got, want)| got != want).collect();
         assert!(wrong.is_empty(), "(got, want): {wrong:#?}");

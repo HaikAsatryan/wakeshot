@@ -140,6 +140,8 @@ impl Core {
             Event::InputIdle { ms } => self.take_input_idle(ms, now, out),
             Event::UpdateReady { version } => self.take_update_ready(version, out),
             Event::Updated { version } => self.take_updated(version, out),
+            // Each event is one folder added, so each gets its notice; it waits while the user is away.
+            Event::HooksAdded { agent } => self.notify(Notice::HooksAdded { agent }, out),
         }
     }
 

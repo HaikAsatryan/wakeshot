@@ -31,6 +31,8 @@ use wakeshot_core::sources::claude::{ClaudeSource, claude_folder};
 use wakeshot_core::sources::codex::{CodexSource, codex_home};
 use wakeshot_core::sources::copilot::CopilotSource;
 use wakeshot_core::sources::cron::LocalOffset;
+use wakeshot_core::sources::opencode::{OpenCodeSource, opencode_db};
+use wakeshot_core::sources::vscode::{VsCodeSource, installs};
 use wakeshot_core::sources::{
     Activity, AgentSource, Fed, Feed, FileId, FormatHealth, Liveness as Seen, SessionFacts,
     SourceId, WantedFile,
@@ -51,15 +53,17 @@ agent-watch: runs the real watch thread and prints what it posts.
 
   agent-watch [--source <names>] [--data <folder>] [--raw <file>]
 
-  --source <names> the agents to watch, comma separated or the flag again: claude, codex, copilot;
-                   default: claude
+  --source <names> the agents to watch, comma separated or the flag again: claude, codex, copilot,
+                   vscode, opencode; default: claude
   --data <folder>  the data folder to watch (holds, config); default: the dry-run folder
                    (%LocalAppData%\\Wakeshot\\dry-run). The real data folder is refused.
   --raw <file>     also write, per fed file, the kinds of the lines it fed (never their text)
 
 Each agent is read where it writes: Claude Code in %CLAUDE_CONFIG_DIR% when set, else %USERPROFILE%\\.claude;
 Codex in %CODEX_HOME% when set, else %USERPROFILE%\\.codex; Copilot CLI in %COPILOT_HOME% when set, else
-%USERPROFILE%\\.copilot. Ctrl+C stops it.";
+%USERPROFILE%\\.copilot; VS Code chat (Stable and Insiders) in %VSCODE_APPDATA% when set, else %APPDATA%;
+OpenCode's database in %XDG_DATA_HOME%\\opencode when set, else %USERPROFILE%\\.local\\share\\opencode.
+Ctrl+C stops it.";
 
 /// How a source is built from the user's profile folder: the source, and the folder it reads for the start line.
 type Build = fn(&Path) -> (Box<dyn AgentSource + Send>, PathBuf);
@@ -84,6 +88,26 @@ const SOURCES: &[(&str, Build)] = &[
         };
         let source = CopilotSource::new(folder.clone(), Box::new(SystemZone::current()));
         (Box::new(source), folder)
+    }),
+    ("vscode", |home| {
+        // Stable and Insiders under one data folder, which the start line names.
+        let var = std::env::var_os;
+        let builds = installs(
+            home,
+            var("APPDATA").as_deref(),
+            var("VSCODE_APPDATA").as_deref(),
+        );
+        let folder = builds[0]
+            .user_dir
+            .ancestors()
+            .nth(2)
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
+        (Box::new(VsCodeSource::new(builds)), folder)
+    }),
+    ("opencode", |home| {
+        let db = opencode_db(home, std::env::var_os("XDG_DATA_HOME").as_deref());
+        (Box::new(OpenCodeSource::new(db.clone())), db)
     }),
 ];
 

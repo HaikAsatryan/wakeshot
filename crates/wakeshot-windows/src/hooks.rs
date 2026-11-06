@@ -71,6 +71,9 @@ pub trait HookEnv {
     fn register_notices(&mut self) -> Result<Registered, WinError>;
     /// `true`: there was one.
     fn remove_notices(&mut self) -> Result<bool, WinError>;
+    /// The hook folders Wakeshot added to agents (`agent_hooks`; `docs/agent-hooks.md`, "Removing"), by their fixed
+    /// names only. It never fails the hook: each agent's outcome is its own log line, written here.
+    fn remove_agent_hooks(&mut self);
     /// `true`: there was one.
     fn remove_run_once(&mut self) -> Result<bool, WinError>;
     /// One restore attempt, if a journal exists and its owner is Gone.
@@ -207,9 +210,9 @@ pub fn on_updated(env: &mut impl HookEnv, version: &str) {
     end(env, Hook::Updated, started);
 }
 
-/// `--veloapp-uninstall`: the Run value, the RunOnce value, the Path entry and the notice app id go first, since the
-/// files they name are being removed, then the restore, then the data folder step. The Run value's `StartupApproved`
-/// value goes with it, though Windows wrote it, so a later install starts as on a new PC
+/// `--veloapp-uninstall`: the Run value, the RunOnce value, the Path entry, the notice app id and the agents' hook
+/// folders go first, since the files they name are being removed, then the restore, then the data folder step. The
+/// Run value's `StartupApproved` value goes with it, though Windows wrote it, so a later install starts as on a new PC
 /// (`p6-uninstall-startup-approval`). The tray icons' `NotifyIconSettings` entries and the app id's
 /// `Notifications\Settings` key stay: Windows wrote them, not Wakeshot (`05-tray-ux.md`; change it when Haik wants a
 /// fully clean uninstall: remove the three entries by GUID and that key here, after the restore).
@@ -220,6 +223,7 @@ pub fn on_uninstall(env: &mut impl HookEnv, version: &str) {
     remove_run_once(env);
     remove_path(env);
     remove_notices(env);
+    env.remove_agent_hooks();
     let step = match restore(env, Hook::Uninstall, started) {
         Attempt::Restored | Attempt::Nothing => DataFolder::DeleteAll,
         Attempt::Unrestorable(Unrestorable::DoesNotParse) => {
@@ -689,6 +693,9 @@ impl<P: PlanIo> HookEnv for RealHookEnv<P> {
         self.notices.remove()
     }
 
+    /// A stub until `p4-agent-hooks-install` fills it: no version adds agent hooks yet, so there is nothing to remove.
+    fn remove_agent_hooks(&mut self) {}
+
     fn remove_run_once(&mut self) -> Result<bool, WinError> {
         self.auto.remove(StartKey::RunOnce, RUN_ONCE_NAME)
     }
@@ -959,6 +966,7 @@ mod tests {
         RemovePath,
         RegisterNotices,
         RemoveNotices,
+        RemoveAgentHooks,
         RemoveRunOnce,
         TryRestore(u64),
         ResetLost,
@@ -1094,6 +1102,11 @@ mod tests {
             self.step(Call::RemoveNotices, true)
         }
 
+        fn remove_agent_hooks(&mut self) {
+            self.calls.push(Call::RemoveAgentHooks);
+            self.now += self.step_ms;
+        }
+
         fn remove_run_once(&mut self) -> Result<bool, WinError> {
             self.step(Call::RemoveRunOnce, true)
         }
@@ -1200,6 +1213,7 @@ mod tests {
             Call::RemoveRunOnce,
             Call::RemovePath,
             Call::RemoveNotices,
+            Call::RemoveAgentHooks,
             TRY,
             Call::Clean(DataFolder::DeleteAll),
         ];
@@ -1308,6 +1322,7 @@ mod tests {
             Call::RemoveRunOnce,
             Call::RemovePath,
             Call::RemoveNotices,
+            Call::RemoveAgentHooks,
         ];
         want.extend(tries);
         want.push(Call::Clean(DataFolder::DeleteAll));
@@ -1337,20 +1352,21 @@ mod tests {
         assert_eq!(env.tries(), every_2s(6));
         assert_eq!(env.count("no time for another within 10 s"), 1);
 
-        // Uninstall: Run, its switch value, RunOnce, Path and the notice app id go first anyway; the journal and the
-        // logs stay.
+        // Uninstall: Run, its switch value, RunOnce, Path, the notice app id and the agent hooks go first anyway; the
+        // journal and the logs stay.
         let mut env = FakeEnv::new(&[]);
         on_uninstall(&mut env, "0.1.1");
         assert_eq!(env.tries(), every_2s(13));
         let calls = order(&env);
         assert_eq!(
-            calls[..5],
+            calls[..6],
             [
                 Call::RemoveRun,
                 Call::RemoveApproval,
                 Call::RemoveRunOnce,
                 Call::RemovePath,
-                Call::RemoveNotices
+                Call::RemoveNotices,
+                Call::RemoveAgentHooks
             ]
         );
         assert_eq!(
@@ -1385,6 +1401,7 @@ mod tests {
             Call::RemoveRunOnce,
             Call::RemovePath,
             Call::RemoveNotices,
+            Call::RemoveAgentHooks,
             TRY,
             Call::Clean(DataFolder::KeepJournalAndLogs),
         ];
@@ -1415,7 +1432,7 @@ mod tests {
             let mut env = FakeEnv::new(&[answer]);
             on_uninstall(&mut env, "0.1.1");
             assert_eq!(
-                order(&env)[5..],
+                order(&env)[6..],
                 [TRY, Call::Clean(DataFolder::KeepJournalAndLogs)],
                 "{answer:?}"
             );
@@ -1428,7 +1445,7 @@ mod tests {
         let mut env = FakeEnv::new(&[Attempt::Unrestorable(Unrestorable::NewerVersion)]);
         on_uninstall(&mut env, "0.1.1");
         assert_eq!(
-            order(&env)[5..],
+            order(&env)[6..],
             [TRY, Call::Clean(DataFolder::KeepJournalAndLogs)]
         );
         assert_eq!(env.count("no restore"), 1);
@@ -1438,7 +1455,7 @@ mod tests {
         let mut env = FakeEnv::new(&[Attempt::Unrestorable(Unrestorable::DoesNotParse)]);
         on_uninstall(&mut env, "0.1.1");
         assert_eq!(
-            order(&env)[5..],
+            order(&env)[6..],
             [
                 TRY,
                 Call::ResetLost,
@@ -1524,7 +1541,7 @@ mod tests {
         let mut env = FakeEnv::new(&[Attempt::Restored]);
         env.registry_error = Some(DENIED);
         on_uninstall(&mut env, "0.1.1");
-        assert_eq!(order(&env).len(), 7);
+        assert_eq!(order(&env).len(), 8);
         assert_eq!(env.at_level(Level::Error), 3, "{:?}", env.lines());
         assert_eq!(env.count("RegSetValueExW failed with 5"), 5);
         // The switch value names no exe and the app id only a picture, so a value left behind is a warning.

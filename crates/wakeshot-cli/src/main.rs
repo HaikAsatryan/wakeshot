@@ -6,6 +6,7 @@
 mod args;
 mod automatic;
 mod command;
+mod hook;
 mod keep_awake;
 mod open_log;
 mod restore;
@@ -26,6 +27,11 @@ fn main() -> ExitCode {
         Command::Status => status::main(&global),
         Command::Restore => restore::main(&global),
         Command::Log => open_log::main(&global),
+        Command::Hook {
+            agent,
+            event,
+            values,
+        } => hook::main(&global, &agent, &event, &values),
         Command::Help => args::help(),
         Command::Bad(why) => args::bad(&why),
     }

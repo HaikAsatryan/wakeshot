@@ -12,7 +12,8 @@
 //! opened. A `Recent` file last written more than [`RECENT_WINDOW`] ago, and before `Agents` was made, is not opened
 //! until it changes. A `Query` runs through [`AgentIo::query`] only while the database's `-wal` file exists,
 //! at most once per [`QUERY_EVERY_MS`] for each want; a run held back by the limit is due later
-//! ([`Agents::next_due`], [`Agents::run_due`]).
+//! ([`Agents::next_due`], [`Agents::run_due`]). A notice runs it only when it names the database or its `-wal`, never
+//! the `-shm`, which a read itself rewrites after the agent crashed.
 //!
 //! An `AnyProcess` session (Codex, Copilot) lives while a process running its image holds its lock file open, as
 //! Restart Manager tells ([`LockOwners`]); that process is then checked by pid and start like any other. If Restart
@@ -21,7 +22,8 @@
 //! early enough; every such process goes to [`Snapshots::live`], so its exit is waited on.
 //!
 //! Owner: `p4-watch-agents`; the `AnyProcess` check `p4-codex-source`; `FindNewest`, `Recent`, `Query` and
-//! `ImageSince` by `p4-contracts-r2`; fixes by `p4-live-claude`, `p4-live-codex`, `p4-live-copilot`.
+//! `ImageSince` by `p4-contracts-r2`; fixes by `p4-live-claude`, `p4-live-codex`, `p4-live-copilot`,
+//! `p4-contracts-r3`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -60,8 +62,8 @@ const UNITS_PER_RUN: usize = 1024;
 
 const AREA: &str = "watch";
 
-/// The least run time between two runs of one `Query` want: one database write gives several notices (the db, its
-/// `-wal`, its `-shm`), and an agent that streams may write many times a second.
+/// The least run time between two runs of one `Query` want: one database write gives several notices (the db and its
+/// `-wal`), and an agent that streams may write many times a second.
 pub const QUERY_EVERY_MS: u64 = 1_000;
 
 /// How far back a `Recent` want reads at start (VS Code rule 3): up to 400 old sessions per workspace stay unread.
@@ -652,15 +654,22 @@ impl Scope<'_> {
     }
 }
 
-/// A notice name that names one of the database's own files (`<db>`, `<db>-wal`, `<db>-shm`, `<db>-journal`), right
-/// in its folder; case ignored.
+/// A notice name that names the database or its `-wal`, right in its folder; case ignored. An agent's commit always
+/// writes the `-wal`, and a checkpoint the database. Never the `-shm`: after a crash each read rebuilds the `-shm` the
+/// agent left, so its notice would run the next read, three reads a second without end (review
+/// `p4-opencode-db-read`, major 1).
 fn names_db_file(db: &Path, name: &Path) -> bool {
     let (Some(name), Some(db_name)) = (plain_name(name), file_name(db)) else {
         return false;
     };
-    name.len() >= db_name.len()
-        && name.is_char_boundary(db_name.len())
-        && name[..db_name.len()].eq_ignore_ascii_case(db_name)
+    let Some(rest) = name
+        .get(..db_name.len())
+        .filter(|head| head.eq_ignore_ascii_case(db_name))
+        .map(|_| &name[db_name.len()..])
+    else {
+        return false;
+    };
+    rest.is_empty() || rest.eq_ignore_ascii_case("-wal")
 }
 
 /// The full path of a notice name (relative to the want's root) that names a `Recent` file of `key`:
@@ -2578,6 +2587,7 @@ mod tests {
     fn entry(process: ProcessRef, image: &str) -> ProcessEntry {
         ProcessEntry {
             pid: process.pid,
+            parent: 0,
             start: process.start,
             image: image.to_owned(),
         }
@@ -3525,7 +3535,7 @@ mod tests {
         rig.change(&["opencode.db-wal"]);
         assert_eq!(rig.runs(), 1);
         rig.later(300);
-        rig.change(&["OPENCODE.DB-SHM"]);
+        rig.change(&["OPENCODE.DB-WAL"]);
         rig.later(300);
         rig.change(&["opencode.db"]);
         assert_eq!(rig.runs(), 0, "held back by the limit");
@@ -3548,6 +3558,34 @@ mod tests {
         let dir = rig.dir.path().to_path_buf();
         rig.agents.on_change(&dir, None);
         assert_eq!(rig.runs(), 1);
+    }
+
+    /// A crashed agent leaves its `-wal` and `-shm`, and each read then rewrites the `-shm` (review
+    /// `p4-opencode-db-read`, major 1), so only the database and its `-wal` run a query.
+    #[test]
+    fn only_a_notice_of_the_database_or_its_wal_runs_a_query() {
+        let mut rig = QueryRig::new("agents-query-shm");
+        rig.open();
+        rig.agents.on_tick();
+        assert_eq!(rig.runs(), 1);
+        for name in [
+            "opencode.db-shm",
+            "OPENCODE.DB-SHM",
+            "opencode.db-journal",
+            "opencode.db-wal2",
+            "opencode.dbx",
+            r"sub\opencode.db-wal",
+        ] {
+            rig.later(2_000);
+            rig.change(&[name]);
+            assert_eq!(rig.runs(), 0, "{name}");
+            assert_eq!(rig.agents.next_due(), None, "{name}");
+        }
+        for name in ["opencode.db-wal", "OpenCode.DB", "OPENCODE.DB-WAL"] {
+            rig.later(2_000);
+            rig.change(&[name]);
+            assert_eq!(rig.runs(), 1, "{name}");
+        }
     }
 
     #[test]

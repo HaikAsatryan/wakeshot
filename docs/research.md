@@ -5539,3 +5539,33 @@ live test (2026-11-06)".
 - **The CLI's TUI did not start the app-server daemon** in these runs, although `daemon_auto_start` is on (`codex
   features list`). Why `p4-live-harness` saw two more `codex.exe` once is **not verified**. Whether the desktop app's
   own threads write the same files is **not tested live** (the app cannot be driven from the command line).
+
+## Contracts round 3 checks
+
+Card `docs/tasks/p4-contracts-r3.md`, 2026-11-06, Windows 11 build 26300, the test runner elevated (High) unless
+said. Each fact is a test in the repo.
+
+- **`NtQueryInformationProcess(ProcessCommandLineInformation)` works with `PROCESS_QUERY_LIMITED_INFORMATION`
+  alone**: a handle with only that right read a child's whole command line
+  (`process::tests::the_command_line_reads_with_query_limited_rights_alone`). **Verified** for a child of the same
+  token. A Medium caller on a High process: **not verified** (the hook reads its own parent, which has its token).
+- **The command line holds a raw here-string as typed**, quotes and non-ASCII (Armenian, Russian) included, and the
+  search finds the payload's key in it (`command_line_contains_searches_that_very_process`, the arguments put on the
+  line with `raw_arg`). **Verified**.
+- **`SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32)` keeps a DLL in the working folder out**: a copy of
+  `version.dll` under a new name in the working folder loaded by name without it and failed with it
+  (`harden_dll_search_keeps_a_dll_in_the_working_folder_out`, each case in a fresh child). **Verified**.
+- **`CreateFileW` with `CREATE_NEW` on a name that is a hard link fails with `ERROR_FILE_EXISTS` and writes nothing**;
+  with `CREATE_ALWAYS` the link's target got the new bytes
+  (`store::tests::a_planted_hard_link_at_a_temp_name_is_never_written_through`, the old flag put back on purpose for
+  one run). **Verified** on NTFS in `%TEMP%`.
+- **The `-shm` loop of review `p4-opencode-db-read` major 1, with real folder notices**: a fake read that rewrites the
+  `-shm` each time, as SQLite does on a crash leftover, ran 3 times in 3 s under the old notice rule and once under
+  the new one (`watch::thread::tests::a_query_that_rewrites_the_shm_runs_once_not_in_a_loop`). **Verified**.
+- **`current_above_medium` is false under Explorer's token**: the nested run under Explorer (`Medium (S-1-16-8192)`,
+  elevation type Limited) reported `above Medium false`; the elevated runner true
+  (`real_spawn_outside_tree_works_with_explorers_token`, run with `--ignored`). **Verified**.
+- **`Cargo.lock` lists each package's dependencies but no `windows` features**: the `wakeshot-cli` entry names
+  `embed-resource`, `proptest`, `wakeshot-core`, `wakeshot-windows`, `windows` (read); with the feature
+  `Wdk_System_Threading` added every `--locked` build passed. So a feature needs no lock change, and a new crate line
+  in `wakeshot-cli` (for example `serde_json`) would need one. **Verified**.

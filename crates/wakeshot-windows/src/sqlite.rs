@@ -1133,6 +1133,7 @@ mod tests {
         let live = FakeLiveness::default();
         live.processes.lock().unwrap().push(ProcessEntry {
             pid: 4242,
+            parent: 0,
             start: FileTime(116_444_736_000_000_000),
             image: "opencode.exe".to_owned(),
         });

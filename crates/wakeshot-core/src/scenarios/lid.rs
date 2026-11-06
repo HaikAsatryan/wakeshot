@@ -4421,6 +4421,38 @@ fn updated_before_any_sources_gives_the_notice() {
     );
 }
 
+#[test]
+fn each_hooks_added_gives_its_notice_and_nothing_else() {
+    let mut sim = started_with(plan(BALANCED), true, 80);
+    sim.send(working(1));
+    for agent in ["Cursor", "Antigravity", "Cursor"] {
+        let out = sim.send(Event::HooksAdded { agent });
+        assert_eq!(
+            out,
+            [Command::Notify(Notice::HooksAdded { agent })],
+            "{agent}\n{}",
+            sim.trace()
+        );
+    }
+}
+
+#[test]
+fn hooks_added_while_locked_waits_for_the_unlock() {
+    let mut sim = Sim::new();
+    sim.start();
+    sim.send(session(SessionChange::Locked));
+    let mut out = sim.send(Event::HooksAdded { agent: "Cursor" });
+    out.extend(sim.run(MINUTE));
+    assert!(notices(&out).is_empty(), "{}", sim.trace());
+    let out = sim.send(session(SessionChange::Unlocked));
+    assert_eq!(
+        notices(&out),
+        [&Notice::HooksAdded { agent: "Cursor" }],
+        "{}",
+        sim.trace()
+    );
+}
+
 // Any order.
 
 #[derive(Clone, Debug)]
@@ -4490,6 +4522,7 @@ fn event() -> impl Strategy<Value = Event> {
         1 => prop_oneof![Just(Ok(())), Just(Err(UPDATE_FAILED))]
             .prop_map(|r| Event::Done(Outcome::Update(r))),
         1 => Just(Event::Updated { version: "1.1.0".to_owned() }),
+        1 => Just(Event::HooksAdded { agent: "Cursor" }),
         2 => Just(Event::Tick),
     ]
 }

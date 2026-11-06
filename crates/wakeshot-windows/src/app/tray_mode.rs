@@ -34,6 +34,9 @@ use wakeshot_core::ownership::io::PlanIo;
 use wakeshot_core::sources::AgentSource;
 use wakeshot_core::sources::claude::{ClaudeSource, claude_folder};
 use wakeshot_core::sources::codex::{CodexSource, codex_home};
+use wakeshot_core::sources::copilot::CopilotSource;
+use wakeshot_core::sources::opencode::{OpenCodeSource, opencode_db};
+use wakeshot_core::sources::vscode::{VsCodeSource, installs};
 use wakeshot_core::text::NoticeClick;
 use wakeshot_core::view::{Cue, MenuCommand, Notice, TrayView};
 use windows::Win32::Foundation::{
@@ -91,6 +94,16 @@ const CLAUDE_CONFIG_DIR: &str = "CLAUDE_CONFIG_DIR";
 
 /// Codex CLI's own variable for its home folder (`sources::codex::codex_home`).
 const CODEX_HOME: &str = "CODEX_HOME";
+
+/// Copilot CLI's own variable for its home folder (`sources::copilot::CopilotSource::new`).
+const COPILOT_HOME: &str = "COPILOT_HOME";
+
+/// The variables VS Code finds its data folder by (`sources::vscode::installs`).
+const APPDATA: &str = "APPDATA";
+const VSCODE_APPDATA: &str = "VSCODE_APPDATA";
+
+/// The XDG variable OpenCode finds its data folder by (`sources::opencode::opencode_db`).
+const XDG_DATA_HOME: &str = "XDG_DATA_HOME";
 
 /// How long a lost-event reading waits for the lid on the loop thread. Its first callback came within 1 ms in every
 /// test (research, "Lid notification"), and a PC with no lid answers nothing, so the wait must stay short.
@@ -453,56 +466,104 @@ fn fatal(log: &dyn Log, what: &str, e: WinError) -> u8 {
     EXIT_FAILED
 }
 
-/// The watch thread's sources: Claude Code and Codex CLI (Codex back in v1, Haik 2026-11-06). Each folder is found the
-/// way its agent finds it, from the profile folder, which `std::env::home_dir` reads in the same order as Node's
-/// `os.homedir` (`USERPROFILE` first).
+/// The watch thread's sources: Claude Code, Codex CLI and Copilot CLI (both back in v1, Haik 2026-11-06), VS Code chat
+/// and OpenCode (in v1, Haik 2026-11-06). Each folder is found the way its agent finds it, from the profile folder,
+/// which `std::env::home_dir` reads in the same order as Node's `os.homedir` (`USERPROFILE` first), and the agent's own
+/// variables, read from the tray's environment, so a value set in one shell only is not seen.
 fn sources(log: &Arc<dyn Log>) -> Vec<Box<dyn AgentSource + Send>> {
     let Some(home) = std::env::home_dir() else {
         log.line(
             Level::Warn,
             AREA,
-            "the profile folder is unknown, so Claude Code and Codex CLI are not watched",
+            "the profile folder is unknown, so no agent is watched",
         );
         return Vec::new();
     };
-    sources_in(
-        &home,
-        std::env::var_os(CLAUDE_CONFIG_DIR),
-        std::env::var_os(CODEX_HOME),
-        log,
-    )
+    sources_in(&home, AgentEnv::read(), log)
 }
 
-/// [`sources`] for a profile folder and the two agents' variables, so a test gives them. Claude Code: `CLAUDE_CONFIG_DIR`,
-/// else `.claude`. Codex CLI: `CODEX_HOME`, else `.codex`. An empty value counts as unset for both. The zone logs its
-/// own failures: boxed into the source, nobody could ask it for them.
-fn sources_in(
-    home: &Path,
+/// The variables that move an agent's folder, as the tray's environment has them.
+#[derive(Debug, Default)]
+struct AgentEnv {
     claude_config_dir: Option<OsString>,
-    codex_home_dir: Option<OsString>,
-    log: &Arc<dyn Log>,
-) -> Vec<Box<dyn AgentSource + Send>> {
-    let config_dir = claude_config_dir.filter(|dir| !dir.is_empty());
-    let text = if config_dir.is_some() {
-        "Claude Code is watched in the folder CLAUDE_CONFIG_DIR names"
-    } else {
-        "Claude Code is watched in .claude of the profile folder"
-    };
-    log.line(Level::Info, AREA, text);
+    codex_home: Option<OsString>,
+    copilot_home: Option<OsString>,
+    appdata: Option<OsString>,
+    vscode_appdata: Option<OsString>,
+    xdg_data_home: Option<OsString>,
+}
+
+impl AgentEnv {
+    fn read() -> Self {
+        Self {
+            claude_config_dir: std::env::var_os(CLAUDE_CONFIG_DIR),
+            codex_home: std::env::var_os(CODEX_HOME),
+            copilot_home: std::env::var_os(COPILOT_HOME),
+            appdata: std::env::var_os(APPDATA),
+            vscode_appdata: std::env::var_os(VSCODE_APPDATA),
+            xdg_data_home: std::env::var_os(XDG_DATA_HOME),
+        }
+    }
+}
+
+/// [`sources`] for a profile folder and the agents' variables, so a test gives them. An empty value counts as unset
+/// for each. Claude Code: `CLAUDE_CONFIG_DIR`, else `.claude`. Codex CLI: `CODEX_HOME`, else `.codex`. Copilot CLI:
+/// `COPILOT_HOME`, else `.copilot` (its `--config-dir` is per session, so not seen). VS Code chat:
+/// `VSCODE_APPDATA`, else `APPDATA`, else `AppData\Roaming` (`sources::vscode::installs`). OpenCode: `XDG_DATA_HOME`,
+/// else `.local\share` (`sources::opencode::opencode_db`). One line per agent says which; never a path, which holds
+/// the user's name. A zone logs its own failures: boxed into the source, nobody could ask it for them.
+fn sources_in(home: &Path, env: AgentEnv, log: &Arc<dyn Log>) -> Vec<Box<dyn AgentSource + Send>> {
+    let set = |value: Option<OsString>| value.filter(|v| !v.is_empty());
+    let line = |text: &str| log.line(Level::Info, AREA, text);
+    let zone = || Box::new(SystemZone::current_logged(Arc::clone(log)));
+
+    let config_dir = set(env.claude_config_dir);
+    line(match config_dir {
+        Some(_) => "Claude Code is watched in the folder CLAUDE_CONFIG_DIR names",
+        None => "Claude Code is watched in .claude of the profile folder",
+    });
     let claude = claude_folder(home, config_dir.as_deref());
-    let codex_dir = codex_home_dir.filter(|dir| !dir.is_empty());
-    let text = if codex_dir.is_some() {
-        "Codex CLI is watched in the folder CODEX_HOME names"
-    } else {
-        "Codex CLI is watched in .codex of the profile folder"
+
+    let codex_dir = set(env.codex_home);
+    line(match codex_dir {
+        Some(_) => "Codex CLI is watched in the folder CODEX_HOME names",
+        None => "Codex CLI is watched in .codex of the profile folder",
+    });
+    let codex = codex_home(home, codex_dir.as_deref());
+
+    // What Copilot does with an empty value is not verified; Codex treats its own as unset.
+    let copilot = match set(env.copilot_home) {
+        Some(dir) => {
+            line("Copilot CLI is watched in the folder COPILOT_HOME names");
+            PathBuf::from(dir)
+        }
+        None => {
+            line("Copilot CLI is watched in .copilot of the profile folder");
+            home.join(".copilot")
+        }
     };
-    log.line(Level::Info, AREA, text);
+
+    let (vscode_appdata, appdata) = (set(env.vscode_appdata), set(env.appdata));
+    line(match (&vscode_appdata, &appdata) {
+        (Some(_), _) => "VS Code chat is watched in the folder VSCODE_APPDATA names",
+        (None, Some(_)) => "VS Code chat is watched in the folder APPDATA names",
+        (None, None) => "VS Code chat is watched in AppData\\Roaming of the profile folder",
+    });
+    let vscode = installs(home, appdata.as_deref(), vscode_appdata.as_deref());
+
+    let data_home = set(env.xdg_data_home);
+    line(match data_home {
+        Some(_) => "OpenCode is watched in the folder XDG_DATA_HOME names",
+        None => "OpenCode is watched in .local\\share of the profile folder",
+    });
+    let opencode = opencode_db(home, data_home.as_deref());
+
     vec![
-        Box::new(ClaudeSource::in_folder(
-            claude,
-            Box::new(SystemZone::current_logged(Arc::clone(log))),
-        )),
-        Box::new(CodexSource::new(codex_home(home, codex_dir.as_deref()))),
+        Box::new(ClaudeSource::in_folder(claude, zone())),
+        Box::new(CodexSource::new(codex)),
+        Box::new(CopilotSource::new(copilot, zone())),
+        Box::new(VsCodeSource::new(vscode)),
+        Box::new(OpenCodeSource::new(opencode)),
     ]
 }
 
@@ -1651,10 +1712,14 @@ mod tests {
         ] {
             let memory = Arc::new(MemoryLog::default());
             let log: Arc<dyn Log> = memory.clone();
-            let picked = sources_in(home, None, codex_env.map(OsString::from), &log);
+            let env = AgentEnv {
+                codex_home: codex_env.map(OsString::from),
+                ..AgentEnv::default()
+            };
+            let picked = sources_in(home, env, &log);
             let ids: Vec<SourceId> = picked.iter().map(|s| s.id()).collect();
             assert_eq!(
-                ids,
+                ids[..2],
                 [SourceId::ClaudeCode, SourceId::Codex],
                 "{codex_env:?}"
             );
@@ -1663,7 +1728,7 @@ mod tests {
             };
             assert_eq!(dir, Path::new(codex_dir).join("thread-writer-locks"));
             assert_eq!(
-                lines(&memory),
+                lines(&memory)[..2],
                 [
                     (
                         Level::Info,
@@ -1672,6 +1737,104 @@ mod tests {
                     (Level::Info, text.to_owned()),
                 ]
             );
+        }
+    }
+
+    /// Where a source reads first: Copilot's lock folder, VS Code's workspace folder, OpenCode's database.
+    fn first_place(source: &dyn AgentSource) -> PathBuf {
+        use wakeshot_core::sources::WantedFile;
+        match source.wanted().into_iter().next() {
+            Some(WantedFile::Names { dir, .. }) => dir,
+            Some(WantedFile::Recent { root, .. }) => root,
+            Some(WantedFile::Query { db, .. }) => db,
+            _ => panic!("{:?} starts with another want", source.id()),
+        }
+    }
+
+    #[test]
+    fn the_tray_watches_copilot_cli_vs_code_chat_and_opencode_where_each_writes() {
+        use wakeshot_core::sources::SourceId;
+
+        let home = Path::new(r"C:\Users\x");
+        let unset = AgentEnv::default();
+        let empty = AgentEnv {
+            copilot_home: Some(OsString::new()),
+            appdata: Some(OsString::new()),
+            vscode_appdata: Some(OsString::new()),
+            xdg_data_home: Some(OsString::new()),
+            ..AgentEnv::default()
+        };
+        let profile = [
+            r"C:\Users\x\.copilot\session-state",
+            r"C:\Users\x\AppData\Roaming\Code\User\workspaceStorage",
+            r"C:\Users\x\.local\share\opencode\opencode.db",
+        ];
+        let profile_lines = [
+            "Copilot CLI is watched in .copilot of the profile folder",
+            "VS Code chat is watched in AppData\\Roaming of the profile folder",
+            "OpenCode is watched in .local\\share of the profile folder",
+        ];
+        let all_set = AgentEnv {
+            copilot_home: Some(r"D:\cp".into()),
+            appdata: Some(r"C:\ad".into()),
+            vscode_appdata: Some(r"D:\va".into()),
+            xdg_data_home: Some(r"D:\xdg".into()),
+            ..AgentEnv::default()
+        };
+        let appdata = AgentEnv {
+            appdata: Some(r"C:\ad".into()),
+            ..AgentEnv::default()
+        };
+        for (env, places, texts) in [
+            (unset, profile, profile_lines),
+            (empty, profile, profile_lines),
+            (
+                all_set,
+                [
+                    r"D:\cp\session-state",
+                    r"D:\va\Code\User\workspaceStorage",
+                    r"D:\xdg\opencode\opencode.db",
+                ],
+                [
+                    "Copilot CLI is watched in the folder COPILOT_HOME names",
+                    "VS Code chat is watched in the folder VSCODE_APPDATA names",
+                    "OpenCode is watched in the folder XDG_DATA_HOME names",
+                ],
+            ),
+            (
+                appdata,
+                [profile[0], r"C:\ad\Code\User\workspaceStorage", profile[2]],
+                [
+                    profile_lines[0],
+                    "VS Code chat is watched in the folder APPDATA names",
+                    profile_lines[2],
+                ],
+            ),
+        ] {
+            let shown = format!("{env:?}");
+            let memory = Arc::new(MemoryLog::default());
+            let log: Arc<dyn Log> = memory.clone();
+            let picked = sources_in(home, env, &log);
+            let ids: Vec<SourceId> = picked.iter().map(|s| s.id()).collect();
+            assert_eq!(
+                ids,
+                [
+                    SourceId::ClaudeCode,
+                    SourceId::Codex,
+                    SourceId::Copilot,
+                    SourceId::VsCode,
+                    SourceId::OpenCode
+                ],
+                "{shown}"
+            );
+            let found: Vec<PathBuf> = picked[2..].iter().map(|s| first_place(&**s)).collect();
+            let want: Vec<PathBuf> = places.iter().map(PathBuf::from).collect();
+            assert_eq!(found, want, "{shown}");
+            let want: Vec<(Level, String)> = texts
+                .iter()
+                .map(|text| (Level::Info, (*text).to_owned()))
+                .collect();
+            assert_eq!(lines(&memory)[2..], want, "{shown}");
         }
     }
 

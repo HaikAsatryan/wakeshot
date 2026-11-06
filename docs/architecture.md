@@ -33,7 +33,7 @@ fails because it sits under the workspace root).
 | `wakeshot-core` | lib | events, state, policies, holds, settings ownership, file formats, source parsers, view models | `serde`, `serde_json` |
 | `wakeshot-windows` | lib | every Windows call: power requests and settings, OS events, processes, folder watch, files and registry, tray, notices, sounds | `wakeshot-core`, `windows`, `serde_json` (the IO thread reads and writes the files) |
 | `wakeshot-tray` | bin `wakeshot-tray.exe`, GUI subsystem | the mode dispatch (`main`, `mode`), guard mode (`guard`), restore mode (`restore`), the Velopack wiring (`velo`, the only file that names `velopack`), and the tray-mode call into `wakeshot_windows::app::tray_mode::run`; no wiring logic | both libs, `windows`; `velopack` in Phase 6 |
-| `wakeshot-cli` | bin `wakeshot.exe`, console | the `wakeshot` command: the dispatch (`main`, `command`), argument parsing (`args`), one file per command (`run`, `keep_awake`, `automatic`, `status`, `restore`, `open_log`) | both libs, `windows` |
+| `wakeshot-cli` | bin `wakeshot.exe`, console | the `wakeshot` command: the dispatch (`main`, `command`), argument parsing (`args`), one file per command (`run`, `keep_awake`, `automatic`, `status`, `restore`, `open_log`, and `hook`, which agents' hooks run and the help does not show) | both libs, `windows` |
 
 Both bins depend on both libs and on `windows` from `p1-contracts`, so no track changes `Cargo.lock`; `velopack`
 comes in Phase 6 through a card the orchestrator runs alone. The bins call Windows only through `wakeshot-windows`.
@@ -62,7 +62,7 @@ lists end up the same. macOS and Linux later add an adapter crate next to `wakes
 | `event`, `command` | `Event`, `Command`, `Outcome` and their field types (section 3); a compile-time check that both are `Send` |
 | `core` | `Core::new(Config)`, `Core::handle(&mut self, Now, Event) -> Vec<Command>`, `Core::next_deadline(&self) -> Option<Deadline>`; `state` (private) |
 | `holds` | `HoldId`, `HoldKind { Agent, Run, Script, KeepAwake }`, `HoldFacts`; `holds::file`: hold file parsing, `parse_expires`, `format_expires` (sources track) |
-| `sources` | trait `AgentSource`, `WantedFile`, `Feed`, `Fed`, `SessionFacts`, `Activity`, `Liveness`, `FormatHealth`; `claude::{status, transcript}`, `codex`, `copilot`, `cron` (Claude's cron syntax, local time) |
+| `sources` | trait `AgentSource`, `WantedFile`, `Feed`, `Fed`, `SessionFacts`, `Activity`, `Liveness`, `FormatHealth`; `claude::{status, transcript}`, `codex`, `copilot`, `opencode`, `vscode`, `cursor`, `antigravity`, `hooked` (what the two hooked sources and the `hook` command share), `cron` (Claude's cron syntax, local time) |
 | `policy` | pure rules: `requests`, `lid`, `lock`, `floor` (battery floor), `ending` (the countdown to sleep), `sessions` (agent sessions to holds), `hold_files` (hold files to holds) |
 | `ownership` | traits `PlanIo` (plan calls) and `SafetyNet` (journal file, RunOnce, guard), `JournalRead`; `apply`, `restore`, `check`: the one apply, restore routine and ownership check every process runs (section 5), generic over the two traits; `journal`: `JournalFile` split into known entries and the rest, and merged back; `fake::FakePlans` (test-support): stored and in-force values, a call log, a script of failures, stops and changes by call index |
 | `settings` | `Guid(u128)` (text lowercase `8-4-4-4-12`; the bit order of `windows::core::GUID::from_u128`), `SettingKey { LidAc, LidDc, SleepDc, SleepAc, VideoIdleAc, VideoIdleDc }` (`HOLD` the first three, `SHORT` the sleep route's four), `OwnedKey { plan, key }`, `PlanValues`, `Journal`, `JournalOwner`, `JournalEntry` |
@@ -87,10 +87,10 @@ lists end up the same. macOS and Linux later add an adapter crate next to `wakes
 | `io_queue` | `IoQueue`: the IO thread's commands in order; `push_front` and the end-of-session rule (section 4) |
 | `session` | session notifications, `lock()`; real and dry run |
 | `recovery` | guard mode, restore mode, the tray's guard control |
-| `process` | trait `Liveness` (`check`, `start_of_pid`, `list`) with `SystemLiveness` and `FakeLiveness`; `liveness(ProcessRef) -> Alive` (types from the core), `ProcessHandle`, exit waits (`ExitWait`), the system process list, spawns outside the tray's tree (`spawn_outside_tree`) |
+| `process` | trait `Liveness` (`check`, `start_of_pid`, `list`) with `SystemLiveness` and `FakeLiveness`; `liveness(ProcessRef) -> Alive` (types from the core), `ProcessHandle`, exit waits (`ExitWait`), the system process list with each process's parent, spawns outside the tray's tree (`spawn_outside_tree`); for the `hook` command `image_path`, `command_line_contains` (searched and dropped inside), `current_above_medium`, `harden_dll_search` |
 | `watch` | `dir` (folder notices), `read` (whole reads, tails, finds, names), `data` (holds, config, restore request), `agents` (sources and their liveness), `thread` |
 | `lockowner`, `localtime`, `child`, `shell` | which process holds a file open (Restart Manager); `SystemZone` for cron times; `wakeshot run`'s child and Ctrl+C handler; open a file or `ms-settings:` URI with the default app |
-| `store` | `DataDir` and `DataFile` (data folder paths), `write_atomic`, `read_whole`, `remove`, `Names` and `NamedMutex` (the three mutexes), `AutoStart` (Run and RunOnce values) |
+| `store` | `DataDir` and `DataFile` (data folder paths), `local_app_data`, `write_atomic` (temp files `CREATE_NEW`, `temp_target` names their shape), `read_whole`, `remove`, `Names` and `NamedMutex` (the three mutexes), `AutoStart` (Run and RunOnce values) |
 | `sink` | trait `EventSink`, how off-loop threads post events to the loop; `FakeEventSink`. The real sink is `app::window::WindowSink` |
 | `tray` | `Anchor`, `IconIdentity`, trait `MenuView`; `icon` (`TrayIcon`, its own hidden window), `menu` (`OwnerDrawnMenu`), `menu_paint`, `theme`, `art` (icon art as code) |
 | `notify`, `sound`, `log` | trait `Notifier` with `BalloonNotifier`; trait `SoundPlayer` with the WASAPI player; trait `Log` with `LogWriter` and `MemoryLog` |
@@ -231,6 +231,8 @@ pub enum Event {
     Updated { version: String },                // Velopack restarted the tray after this update (ship track); at
                                                 // most once, at start, after Started; the core sends
                                                 // Notify(Updated)
+    HooksAdded { agent: &'static str },         // the tray added its hook folder to this agent (section 12); the
+                                                // core sends Notify(HooksAdded) for each
     Done(Outcome),                              // result of a command
 }
 
@@ -328,7 +330,8 @@ pub enum ApplyError {
 `RequestsOnly` (settings blocked or a failed apply), `CannotHold`, `RestoreFailed`, `HibernateFailed`, `LockFailed`,
 `ClosedLidReport { ran_ms, held_by }`, `UpdateWakeshot { agent }`, `JournalLost { reset, failed }` (a lost journal's
 reset set these keys to Windows defaults, or a call of it failed), `IdleLocked` (Keep screen on locked the PC),
-`Updated { version }` (Wakeshot updated itself; Haik's yes, 2026-11-03). The tray track words each one in
+`Updated { version }` (Wakeshot updated itself; Haik's yes, 2026-11-03), `HooksAdded { agent }` (Wakeshot added its
+hook folder to an agent, quiet; section 12). The tray track words each one in
 `text::notice`. A notice raised while the session is locked or another session has the PC's screen waits, and the
 waiting ones go out in order once the session is unlocked and on the console again: a balloon shown to nobody is lost.
 The same notice twice in one absence waits once. Sounds never wait.
@@ -735,7 +738,9 @@ file kind it does not start, such as `.ps1`, or a failed start); in both cases n
 the child (the wait failed; the hold file stays, and the tray deletes it once the process is gone). From
 `wakeshot-cli/src/run.rs`. It ignores Ctrl+C itself; the child gets it from the console. Keep awake and Automatic
 write their files; `restore` is in the table above; `status` reads `state.json` and says "not running" when the tray's
-pid and start time are not alive.
+pid and start time are not alive. `hook <agent> <event>` is what agents' hooks run (section 12), not in the help:
+whatever follows `hook`, it never gives the help or exit 2 (Cursor's block code); until `p4-cursor-source` it only
+answers `{}` with exit 0.
 
 ## 5. Windows layer
 
@@ -1071,7 +1076,12 @@ Every file is UTF-8 JSON with `"version": 1`. A reader takes its own version and
 is ignored and logged, and never written over (the tray's menu then changes Automatic for this run only, and `wakeshot
 automatic` refuses with a message); the journal is the one exception (below). The reader reads `VersionProbe` first, so
 a newer file whose fields changed shape is still recognized as newer. Writes go to a temp file, flush, then
-`MoveFileExW(REPLACE_EXISTING | WRITE_THROUGH)`. That gives 5 while a reader has the target open, so
+`MoveFileExW(REPLACE_EXISTING | WRITE_THROUGH)`. The temp file, `<name>.<pid>.<n>.<16 hex>.tmp` (`store::temp_target`
+reads the shape), is made with `CREATE_NEW` under a name with a random part, so a hard link another process planted at
+that name is never written through; a name that exists is skipped for a new one, three in all, and nothing is deleted
+to free one, so a temp file a crash left stays (`p4-contracts-r3`, `agent-hooks.md` contract change 6). A junction
+over the folder can still redirect the write, so file work in a folder a Medium process can change runs at Medium
+(section 12); an elevated `wakeshot run` keeps that gap (not checked). That gives 5 while a reader has the target open, so
 `store::write_atomic` then renames by handle with POSIX semantics (`SetFileInformationByHandle(FileRenameInfoEx)`), as
 Rust's `std::fs::rename` does; that works while the reader shares delete (tested, research "Store checks"). What a power
 cut right after the move leaves: not tested.
@@ -1126,12 +1136,15 @@ Journal format:
   did. A version before them keeps their entries as keys it does not know and restores nothing of them, so a
   downgrade in those minutes leaves the 1-minute timeouts until a newer version runs.
 
-Agent files are only read, never written (section 7). Every open shares read, write and delete, and a source's name
-filter runs before any open; lock files are listed, never opened. A `Recent` file (VS Code chat sessions) last written
-more than 24 hours ago, and before the tray started, is not opened until it changes; it is read whole, up to 64 MiB
-(`watch::read::RECENT_CAP`). A `Query` (OpenCode's `opencode.db`) opens the database read only through Windows'
-`winsqlite3.dll` (`sqlite.rs`), and only while its `-wal` file exists; the queries name only the session and schedule
-tables (Haik, 2026-11-06, `docs/tasks/p4-opencode-source.md`).
+Agent files are only read, never written (section 7). Every open of `watch::read` shares read, write and delete, and
+a source's name filter runs before any open; lock files are listed, never opened. A `Recent` file (VS Code chat
+sessions) last written more than 24 hours ago, and before the tray started, is not opened until it changes; it is read
+whole, up to 64 MiB (`watch::read::RECENT_CAP`). A `Query` (OpenCode's `opencode.db`) opens the database read only
+through Windows' `winsqlite3.dll` (`sqlite.rs`), and only while the db, its `-wal` and its `-shm` exist; SQLite's own
+opens share read and write only, so an agent's delete or rename of those files fails while a read runs. A killed
+agent leaves the `-wal` and `-shm`, and each read then rebuilds the `-shm`, so only a change notice of the db or its
+`-wal` runs a query (`p4-contracts-r3`). The queries name only the session and schedule tables (Haik, 2026-11-06,
+`docs/tasks/p4-opencode-source.md`).
 
 Registry values Wakeshot writes, all under HKCU, all removed by uninstall: `...\CurrentVersion\Run\Wakeshot` (start at
 login, set by the install hook); `...\CurrentVersion\RunOnce\WakeshotRestore` (only while overriding);
@@ -1158,7 +1171,8 @@ Velopack's kill never leaves a Run value or a Path entry that names a deleted fo
 install) writes the Run value, adds the CLI folder to the user Path and writes the notice app id key; updated adds the
 Path entry and writes the key (so an update from a version without it gets it), and leaves the Run value, so one the
 user removed stays removed. Both then run the restore routine if a journal exists and its owner is dead. Uninstall
-removes the Run value, the RunOnce value, the Path entry and the notice app id key first (the files they name are being
+removes the Run value, the RunOnce value, the Path entry, the notice app id key and then the agents' hook folders
+(`HookEnv::remove_agent_hooks`, section 12; a stub until `p4-agent-hooks-install`) first (the files they name are being
 removed, so RunOnce goes even when the restore then fails), and right after the Run value its
 `Explorer\StartupApproved\Run\Wakeshot` value:
 Windows writes that one for the Settings > Apps > Startup switch, install and updated leave it, so an off switch
@@ -1223,13 +1237,16 @@ What a source can ask the watch thread for (`WantedFile`; the full rules are in 
   hash of its bytes an unchanged one, so a big file is not kept in memory. The root is watched with its subtree.
 - `Query` (`p4-contracts-r2`, OpenCode): read-only SQL on a SQLite database through `sqlite::query`, fed as JSON
   (`{"rows":[...]}` or `{"error":"<kind>"}`) under `FileId::query(db, name)`. It runs only while `<db>-wal` exists, on
-  a change of the db's files in its folder, at most once a second per want (a run held back comes when due, with no
-  tick), and on the safety tick; `Gone` once the db or its `-wal` goes; `SQLITE_BUSY` gives no feed. `sqlite.rs`
+  a change notice of `<db>` or `<db>-wal` in its folder (never `-shm`, below), at most once a second per want (a run
+  held back comes when due, with no tick), and on the safety tick; `Gone` once the db or its `-wal` goes; `SQLITE_BUSY` gives no feed. `sqlite.rs`
   (`p4-opencode-source`) loads Windows' `winsqlite3.dll` (3.22.0 or later, else `no_sqlite`) and reads through a VFS
   shim that opens the db and its `-wal` read only, never creates them and refuses every delete; it reads only while
   the db, `-wal` and `-shm` exist, skips the checkpoint on close, and finalizes and closes on every call, so it never
   blocks the agent's writes or checkpoints. A killed or crashed agent leaves its `-wal` and `-shm`; each read then
-  rebuilds the `-shm` (only that file changes), and how the watch thread stops re-reading then is `p4-contracts-r3`'s.
+  rebuilds the `-shm` (only that file changes). A `-shm` notice would so run the next read, a loop of three reads a
+  second, so the watch thread never runs a query on one (`p4-contracts-r3`; review `p4-opencode-db-read` major 1). An
+  agent's commit always writes the `-wal`, a checkpoint the db. The safety tick still reads a crash leftover once per
+  tick.
 
 `Liveness::ImageSince` (`p4-contracts-r2`): alive while the system process list (no rights needed) has a process of
 one of the images, case ignored, that started at or before `since_wall_ms` plus 2 s (`IMAGE_SINCE_SLACK_MS`), or at
@@ -1263,10 +1280,11 @@ rulings:
 
 Codex CLI and Copilot CLI (in v1, Haik 2026-11-06; built by `p4-codex-source` and `p4-copilot-source`): the same trait. Liveness
 comes from `research/other-agent-signals.md` (Codex files hold no pid: "a `codex.exe` is alive and the thread lock file
-exists"). That Codex rule can outlive its session: a crash leaves the lock file until the next Codex start, and a shared
-`codex app-server` can live for days. Phase 4 maps the lock file to the process that holds it open (for example Restart
-Manager `RmGetList`; not verified for this lock) and checks that pid and start time; until then the Codex rule is marked
-"can outlive its session". Each agent gets one live test (product). `wakeshot run` and hold files are not a source; the
+exists"). Wakeshot maps the lock file to the process that holds it open (Restart Manager `RmGetList`, `lockowner`)
+and checks that pid and start time, so the Codex rule ends with its session (live test below). Only the fallback when
+Restart Manager fails (any live `codex.exe` counts) is marked "can outlive its session": a crash leaves the lock file
+until the next Codex start, and a shared `codex app-server` or the desktop app's `codex.exe` can live for days. Each
+agent gets one live test (product). `wakeshot run` and hold files are not a source; the
 watch thread parses them into `Event::Holds`.
 
 Codex live test (`p4-live-codex`, 2026-11-06, Codex CLI 0.167.0): Restart Manager names the TUI's or `codex exec`'s own
@@ -1275,17 +1293,19 @@ read `Gone` at once, and the next Codex start deletes it. So with Restart Manage
 only the fallback for a Restart Manager failure (any `codex.exe`) still can, and the Codex desktop app keeps
 `codex.exe` processes running. While a thread is listed, the Codex source also lists `sessions\` one level deep with a
 filter that takes no name, only so the watch thread watches that tree: rollout appends then reach the source within a
-second instead of at the 30 s tick. The tray starts the Codex source beside Claude Code (`app/tray_mode.rs`).
+second instead of at the 30 s tick. The tray starts the Codex source beside Claude Code (`app/tray_mode.rs`), and
+since `p4-contracts-r3` also Copilot CLI (`COPILOT_HOME`, else `.copilot`), VS Code chat and OpenCode, each found by
+its agent's own rule (below), one log line each saying which; the live cards test them through the app.
 
-OpenCode (in v1, 2.x only, Haik 2026-11-06; built by `p4-opencode-source`, not registered in the tray until its live
-card): `OpenCodeSource` reads `<data>\opencode\opencode.db` (`XDG_DATA_HOME`, else `%USERPROFILE%\.local\share`) with
+OpenCode (in v1, 2.x only, Haik 2026-11-06; built by `p4-opencode-source`, started by the tray since
+`p4-contracts-r3`): `OpenCodeSource` reads `<data>\opencode\opencode.db` (`XDG_DATA_HOME`, else `%USERPROFILE%\.local\share`) with
 three `Query` wants: a `sqlite_master` probe for `session_v2` and `schedule`, then the sessions with `time_busy` newer
 than `time_idle` (working, `ImageSince` from `time_busy` on `opencode.exe` or `opencode-cli.exe`) and the active
 schedules (timers, due at the later of `next_due_at` and `retry_at`). No query names another table: the file also
 holds OpenCode's login tokens, and a test fails if one does. A failed or odd answer is one `Unreadable("opencode.db")`
 entry; `no_sqlite` (no usable `winsqlite3.dll`) is no signal and no notice. 1.x is not read (its state is in `message` rows, which hold prompt text). `docs/research/opencode-signals.md`.
 
-VS Code chat (in v1, Haik 2026-11-06; built by `p4-vscode-source`, not registered in the tray until its live card):
+VS Code chat (in v1, Haik 2026-11-06; built by `p4-vscode-source`, started by the tray since `p4-contracts-r3`):
 `VsCodeSource` follows `research/copilot-vscode-signals.md` rules 1 to 5 and 7, label "Copilot in VS Code".
 
 - Two `Recent` wants per build (Stable and Insiders, found from `VSCODE_APPDATA`, else `APPDATA`):
@@ -1502,3 +1522,11 @@ from `.gemini\config\plugins\wakeshot\` with `PreInvocation` and `Stop`):
   `sources::cursor` and `sources::antigravity` (core), `agent_hooks` (Windows: add, rewrite, remove), `process`
   (the list with parents, image paths, the token check), the CLI's `hook` command (one for every agent), a step in
   `hooks.rs`, a call in `app/startup.rs`, `Event::HooksAdded` and `Notice::HooksAdded`.
+- In place since `p4-contracts-r3` (2026-11-06), for the build cards: `Command::Hook { agent, event, values }` with
+  its frozen parse (any words after `hook` give `Hook`, never help or exit 2) and a stub `hook.rs` that answers `{}`
+  with exit 0; `ProcessEntry.parent`; `process::image_path` and `process::command_line_contains`, both on a
+  `ProcessRef`, so a reused pid never answers for another process (the command line is searched and dropped inside);
+  `process::current_above_medium` and `process::harden_dll_search`; `store::write_atomic` with `CREATE_NEW` temp
+  files, `store::temp_target` for the prune, `store::local_app_data`; `Event::HooksAdded` and `Notice::HooksAdded`
+  with their words; `HookEnv::remove_agent_hooks`, called right after `remove_notices`, a stub; the stubs
+  `sources/hooked.rs` (owner `p4-cursor-source`) and `agent_hooks.rs` (owner `p4-agent-hooks-install`).

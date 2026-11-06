@@ -6,27 +6,38 @@
 
 use std::ffi::{OsStr, OsString, c_void};
 use std::mem::offset_of;
-use std::os::windows::ffi::OsStrExt;
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::os::windows::io::AsRawHandle;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 #[cfg(any(test, feature = "test-support"))]
 use std::sync::Mutex;
 
 use wakeshot_core::process::{Alive, FileTime, Lookup, ProcessRef};
 use windows::Wdk::System::SystemInformation::{NtQuerySystemInformation, SystemProcessInformation};
+use windows::Wdk::System::Threading::{NtQueryInformationProcess, ProcessCommandLineInformation};
 use windows::Win32::Foundation::{
     CloseHandle, DUPLICATE_SAME_ACCESS, DuplicateHandle, E_INVALIDARG, FILETIME, HANDLE,
-    INVALID_HANDLE_VALUE, STATUS_INFO_LENGTH_MISMATCH, UNICODE_STRING, WAIT_OBJECT_0, WAIT_TIMEOUT,
+    INVALID_HANDLE_VALUE, STATUS_BUFFER_OVERFLOW, STATUS_BUFFER_TOO_SMALL,
+    STATUS_INFO_LENGTH_MISMATCH, UNICODE_STRING, WAIT_OBJECT_0, WAIT_TIMEOUT,
+};
+use windows::Win32::Security::{
+    GetSidSubAuthority, GetSidSubAuthorityCount, GetTokenInformation, TOKEN_MANDATORY_LABEL,
+    TOKEN_QUERY, TokenIntegrityLevel,
+};
+use windows::Win32::System::LibraryLoader::{
+    LOAD_LIBRARY_SEARCH_SYSTEM32, SetDefaultDllDirectories,
 };
 use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
+use windows::Win32::System::SystemServices::SECURITY_MANDATORY_MEDIUM_RID;
 use windows::Win32::System::Threading::{
     CREATE_NO_WINDOW, CreateProcessW, DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT,
     GetCurrentProcess, GetCurrentProcessId, GetProcessTimes, INFINITE,
-    InitializeProcThreadAttributeList, LPPROC_THREAD_ATTRIBUTE_LIST, OpenProcess,
+    InitializeProcThreadAttributeList, LPPROC_THREAD_ATTRIBUTE_LIST, OpenProcess, OpenProcessToken,
     PROC_THREAD_ATTRIBUTE_PARENT_PROCESS, PROCESS_ACCESS_RIGHTS, PROCESS_CREATE_PROCESS,
-    PROCESS_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
-    RegisterWaitForSingleObject, STARTUPINFOEXW, STARTUPINFOW, TerminateProcess, UnregisterWaitEx,
-    UpdateProcThreadAttribute, WT_EXECUTEONLYONCE, WaitForSingleObject,
+    PROCESS_INFORMATION, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+    PROCESS_SYNCHRONIZE, QueryFullProcessImageNameW, RegisterWaitForSingleObject, STARTUPINFOEXW,
+    STARTUPINFOW, TerminateProcess, UnregisterWaitEx, UpdateProcThreadAttribute,
+    WT_EXECUTEONLYONCE, WaitForSingleObject,
 };
 use windows::Win32::System::WindowsProgramming::SYSTEM_PROCESS_INFORMATION;
 use windows::Win32::UI::WindowsAndMessaging::{GetShellWindow, GetWindowThreadProcessId};
@@ -34,10 +45,13 @@ use windows::core::{PCWSTR, PWSTR};
 
 use crate::WinError;
 
-/// One process from the system process list. `image` is the exe file name only, never a path.
+/// One process from the system process list. `image` is the exe file name only, never a path. `parent` is the pid of
+/// the process that started it, as the list keeps it: that process may have ended since and its pid been reused, so a
+/// walk up the tree takes a parent only if it is listed and started at or before its child.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProcessEntry {
     pub pid: u32,
+    pub parent: u32,
     pub start: FileTime,
     pub image: String,
 }
@@ -82,6 +96,7 @@ impl Liveness for SystemLiveness {
             .into_iter()
             .map(|e| ProcessEntry {
                 pid: e.pid,
+                parent: e.parent,
                 start: e.start,
                 image: e.image,
             })
@@ -122,6 +137,164 @@ pub fn current_session() -> Result<u32, WinError> {
 /// The start time of a child this process started.
 pub fn start_of(child: &std::process::Child) -> Result<FileTime, WinError> {
     creation_time(HANDLE(child.as_raw_handle()))
+}
+
+/// The full path of the exe `process` runs, in Win32 form (`QueryFullProcessImageNameW`). `None`: no process with
+/// that pid and start time runs, so a reused pid never answers for another process.
+///
+/// The open asks for `SYNCHRONIZE` and `PROCESS_QUERY_LIMITED_INFORMATION` only, the rights an elevated process
+/// still grants a Medium caller (research, "Reading elevated Claude Code sessions").
+pub fn image_path(process: ProcessRef) -> Result<Option<PathBuf>, WinError> {
+    let Some(handle) = ProcessHandle::open(process)? else {
+        return Ok(None);
+    };
+    // The longest path Windows takes, so one call always fits.
+    let mut buf = vec![0u16; 32_768];
+    let mut len = buf.len() as u32;
+    // SAFETY: `buf` holds `len` units and the call writes at most that many, its NUL included.
+    unsafe {
+        QueryFullProcessImageNameW(
+            handle.raw(),
+            PROCESS_NAME_WIN32,
+            PWSTR(buf.as_mut_ptr()),
+            &mut len,
+        )
+    }
+    .map_err(|e| failed("QueryFullProcessImageNameW", &e))?;
+    buf.truncate(len as usize);
+    Ok(Some(PathBuf::from(OsString::from_wide(&buf))))
+}
+
+/// Whether `process` runs with its command line holding `needle` (case as given). `false` also when no process with
+/// that pid and start time runs.
+///
+/// The text is read (`NtQueryInformationProcess`, `ProcessCommandLineInformation`), searched and dropped here, so no
+/// caller holds or logs it: a command line can hold a prompt (`docs/agent-hooks.md`, "Privacy"). The open asks for
+/// the rights of [`image_path`] only.
+pub fn command_line_contains(process: ProcessRef, needle: &str) -> Result<bool, WinError> {
+    let Some(handle) = ProcessHandle::open(process)? else {
+        return Ok(false);
+    };
+    let needle: Vec<u16> = needle.encode_utf16().collect();
+    read_command_line(handle.raw(), |line| {
+        needle.is_empty() || line.windows(needle.len()).any(|part| part == needle)
+    })
+}
+
+/// Runs `search` on the command line of `process`, which needs `PROCESS_QUERY_LIMITED_INFORMATION`. The buffer never
+/// leaves this call.
+fn read_command_line(process: HANDLE, search: impl Fn(&[u16]) -> bool) -> Result<bool, WinError> {
+    const CALL: &str = "NtQueryInformationProcess";
+    // A `UNICODE_STRING` and its text, which is at most `u16::MAX` bytes: one call fits any command line.
+    let mut size = size_of::<UNICODE_STRING>() + usize::from(u16::MAX) + 1;
+    for _ in 0..2 {
+        // u64 items keep the header's pointer aligned.
+        let mut buf = vec![0u64; size.div_ceil(8)];
+        let bytes = buf.len() * 8;
+        let mut needed = 0u32;
+        // SAFETY: the buffer holds `bytes` bytes and the call writes at most the length it is given.
+        let status = unsafe {
+            NtQueryInformationProcess(
+                process,
+                ProcessCommandLineInformation,
+                buf.as_mut_ptr().cast(),
+                u32::try_from(bytes).unwrap_or(u32::MAX),
+                &mut needed,
+            )
+        };
+        if [
+            STATUS_INFO_LENGTH_MISMATCH,
+            STATUS_BUFFER_TOO_SMALL,
+            STATUS_BUFFER_OVERFLOW,
+        ]
+        .contains(&status)
+        {
+            size = (needed as usize).max(bytes + 1);
+            continue;
+        }
+        if status.is_err() {
+            return Err(WinError {
+                call: CALL,
+                code: status.0 as u32,
+            });
+        }
+        // SAFETY: the same buffer, viewed as bytes.
+        let view = unsafe { std::slice::from_raw_parts(buf.as_ptr().cast::<u8>(), bytes) };
+        let len = usize::from(u16::from_le_bytes(field(
+            view,
+            offset_of!(UNICODE_STRING, Length),
+        )));
+        let text_ptr = usize::from_le_bytes(field(view, offset_of!(UNICODE_STRING, Buffer)));
+        // The text sits in the same buffer; one that does not is not read.
+        let at = text_ptr.wrapping_sub(view.as_ptr() as usize);
+        let Some(raw) = at.checked_add(len).and_then(|end| view.get(at..end)) else {
+            return Err(WinError {
+                call: CALL,
+                code: hresult(E_INVALIDARG),
+            });
+        };
+        let (pairs, _) = raw.as_chunks::<2>();
+        let line: Vec<u16> = pairs.iter().map(|&c| u16::from_le_bytes(c)).collect();
+        return Ok(search(&line));
+    }
+    Err(WinError {
+        call: CALL,
+        code: STATUS_INFO_LENGTH_MISMATCH.0 as u32,
+    })
+}
+
+/// Whether this process's token is above Medium integrity (`TokenIntegrityLevel`): High, as in an admin terminal,
+/// System, or Medium Plus. File work in folders a Medium process can change runs only at Medium or lower
+/// (`docs/agent-hooks.md`, step 4).
+pub fn current_above_medium() -> Result<bool, WinError> {
+    let mut token = HANDLE::default();
+    // SAFETY: the pseudo handle needs no close; the token is closed by `Owned`.
+    unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) }
+        .map_err(|e| failed("OpenProcessToken", &e))?;
+    let token = Owned(token);
+    let rid = integrity_rid(token.0)?;
+    Ok(rid > SECURITY_MANDATORY_MEDIUM_RID as u32)
+}
+
+/// The last sub-authority of the token's mandatory label: 0x2000 Medium, 0x3000 High.
+fn integrity_rid(token: HANDLE) -> Result<u32, WinError> {
+    const CALL: &str = "GetTokenInformation";
+    let mut len = 0u32;
+    // SAFETY: a size query with no buffer; it fails by design and only sets `len`.
+    let _ = unsafe { GetTokenInformation(token, TokenIntegrityLevel, None, 0, &mut len) };
+    // u64 items: the label holds a pointer into the same buffer.
+    let mut buf = vec![0u64; (len as usize).div_ceil(8).max(1)];
+    // SAFETY: the buffer holds at least `len` bytes.
+    unsafe {
+        GetTokenInformation(
+            token,
+            TokenIntegrityLevel,
+            Some(buf.as_mut_ptr().cast()),
+            len,
+            &mut len,
+        )
+    }
+    .map_err(|e| failed(CALL, &e))?;
+    // SAFETY: the call filled `buf` with a TOKEN_MANDATORY_LABEL whose SID lives inside `buf`.
+    unsafe {
+        let sid = (*buf.as_ptr().cast::<TOKEN_MANDATORY_LABEL>()).Label.Sid;
+        match *GetSidSubAuthorityCount(sid) {
+            0 => Err(WinError {
+                call: CALL,
+                code: hresult(E_INVALIDARG),
+            }),
+            count => Ok(*GetSidSubAuthority(sid, u32::from(count) - 1)),
+        }
+    }
+}
+
+/// From here on this process loads DLLs from System32 only (`SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32)`),
+/// never from its working folder or `PATH`: an agent's hook runs with a repo the user may not trust as its working
+/// folder (review finding 13 of `p4-hooks-design-security`).
+pub fn harden_dll_search() -> Result<(), WinError> {
+    // SAFETY: plain call; it changes only this process's search path.
+    unsafe { SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32) }
+        .map_err(|e| failed("SetDefaultDllDirectories", &e))
 }
 
 /// An open process handle with the rights to wait on it and read its start time.
@@ -728,12 +901,12 @@ mod tests {
         ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
     };
     use windows::Win32::Security::{
-        CreateRestrictedToken, DISABLE_MAX_PRIVILEGE, GetSidSubAuthority, GetSidSubAuthorityCount,
-        GetTokenInformation, ImpersonateLoggedOnUser, PSECURITY_DESCRIPTOR, RevertToSelf,
-        SECURITY_ATTRIBUTES, TOKEN_DUPLICATE, TOKEN_IMPERSONATE, TOKEN_INFORMATION_CLASS,
-        TOKEN_MANDATORY_LABEL, TOKEN_QUERY, TokenElevationType, TokenIntegrityLevel,
+        CreateRestrictedToken, DISABLE_MAX_PRIVILEGE, ImpersonateLoggedOnUser,
+        PSECURITY_DESCRIPTOR, RevertToSelf, SECURITY_ATTRIBUTES, TOKEN_DUPLICATE,
+        TOKEN_IMPERSONATE, TOKEN_INFORMATION_CLASS, TokenElevationType,
     };
-    use windows::Win32::System::Threading::{GetExitCodeProcess, OpenProcessToken};
+    use windows::Win32::System::LibraryLoader::LoadLibraryW;
+    use windows::Win32::System::Threading::GetExitCodeProcess;
     use windows::Win32::UI::Shell::CommandLineToArgvW;
     use windows::core::w;
 
@@ -1230,11 +1403,186 @@ mod tests {
         let exe = this_exe();
         let image = exe.file_name().unwrap().to_string_lossy().into_owned();
         let list = SystemLiveness.list().unwrap();
-        assert!(list.contains(&ProcessEntry {
-            pid: me.pid,
-            start: me.start,
-            image,
-        }));
+        let own = list.iter().find(|e| e.pid == me.pid).expect("self listed");
+        assert_eq!((own.start, own.image.as_str()), (me.start, image.as_str()));
+    }
+
+    #[test]
+    fn the_public_list_names_a_childs_parent() {
+        let me = current().unwrap();
+        let kid = Kid::start(Some(SLEEP_MAX_MS));
+        let child = kid.process();
+        let image = this_exe()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let list = SystemLiveness.list().unwrap();
+        assert!(
+            list.contains(&ProcessEntry {
+                pid: child.pid,
+                parent: me.pid,
+                start: child.start,
+                image,
+            }),
+            "{:?}",
+            list.iter().find(|e| e.pid == child.pid)
+        );
+    }
+
+    #[test]
+    fn image_path_names_the_exe_of_that_very_process() {
+        let me = current().unwrap();
+        let exe = this_exe();
+        let same = |path: Option<PathBuf>| {
+            path.is_some_and(|p| {
+                p.to_string_lossy()
+                    .eq_ignore_ascii_case(&exe.to_string_lossy())
+            })
+        };
+        assert!(same(image_path(me).unwrap()));
+
+        let kid = Kid::start(Some(SLEEP_MAX_MS));
+        let child = kid.process();
+        assert!(same(image_path(child).unwrap()));
+        let reused = ProcessRef {
+            start: FileTime(child.start.0 + 1),
+            ..child
+        };
+        assert_eq!(
+            image_path(reused),
+            Ok(None),
+            "another start is another process"
+        );
+        let child = kid.end_and_close();
+        assert_eq!(image_path(child), Ok(None));
+    }
+
+    /// A child whose command line ends in `raw`, as typed: no quoting added, as a here-string in a PowerShell command
+    /// line would stand. The test harness takes it as one more filter.
+    fn kid_with(raw: &str) -> Kid {
+        use std::os::windows::process::CommandExt;
+        let child = Command::new(this_exe())
+            .args(role_args(Some(SLEEP_MAX_MS)))
+            .raw_arg(raw)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("start child");
+        println!("child pid {}", child.id());
+        Kid(child)
+    }
+
+    #[test]
+    fn command_line_contains_searches_that_very_process() {
+        // A payload in a here-string, as the hook looks for its key, with non-ASCII text in the same line.
+        let kid = kid_with(r#"@'{"conversation_id":"x","prompt":"բարև ёж"}'@"#);
+        let child = kid.process();
+        assert_eq!(
+            command_line_contains(child, r#""conversation_id""#),
+            Ok(true)
+        );
+        assert_eq!(command_line_contains(child, "բարև ёж"), Ok(true));
+        assert_eq!(command_line_contains(child, SLEEP_ARG), Ok(true));
+        assert_eq!(
+            command_line_contains(child, r#""conversationId""#),
+            Ok(false)
+        );
+        assert_eq!(command_line_contains(child, "CONVERSATION_ID"), Ok(false));
+        let reused = ProcessRef {
+            start: FileTime(child.start.0 + 1),
+            ..child
+        };
+        assert_eq!(command_line_contains(reused, "conversation_id"), Ok(false));
+        let child = kid.end_and_close();
+        assert_eq!(command_line_contains(child, "conversation_id"), Ok(false));
+
+        // This test's own line holds the test filter it was started with, if any; it never holds the needle above.
+        let me = current().unwrap();
+        assert_eq!(command_line_contains(me, "բարև ёж"), Ok(false));
+    }
+
+    #[test]
+    fn the_command_line_reads_with_query_limited_rights_alone() {
+        let kid = kid_with("wakeshot-test-needle");
+        // SAFETY: plain call; the handle is owned from here on.
+        let limited = Owned(
+            unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, kid.0.id()) }
+                .expect("open with QUERY_LIMITED"),
+        );
+        let found = read_command_line(limited.0, |line| {
+            String::from_utf16_lossy(line).ends_with(" wakeshot-test-needle")
+        });
+        assert_eq!(found, Ok(true));
+    }
+
+    #[test]
+    fn current_above_medium_reads_this_processs_integrity() {
+        // SAFETY: the pseudo handle needs no close.
+        let level = token_level(unsafe { GetCurrentProcess() });
+        println!("runner token: {level}");
+        let above = !(level.starts_with("Low") || level.starts_with("Medium ("));
+        assert_eq!(current_above_medium(), Ok(above), "{level}");
+    }
+
+    const DLL_ARG: &str = "wakeshot-test-dll=";
+    const PLANTED_DLL: &str = "wakeshot-planted-test.dll";
+    const LOADED: i32 = 10;
+    const NOT_LOADED: i32 = 11;
+
+    /// The child role of the test below: with `wakeshot-test-dll=harden` it hardens the search first, then it loads
+    /// the planted DLL by name and exits with whether that worked. Any other start ends at once.
+    #[test]
+    #[ignore = "a child role for the other tests of this module"]
+    fn dll_role() {
+        let Some(harden) =
+            std::env::args().find_map(|a| a.strip_prefix(DLL_ARG).map(|v| v == "harden"))
+        else {
+            return;
+        };
+        if harden {
+            harden_dll_search().expect("harden");
+        }
+        let name: Vec<u16> = PLANTED_DLL.encode_utf16().chain([0]).collect();
+        // SAFETY: `name` is NUL-terminated; the module stays loaded until the process exits.
+        let loaded = unsafe { LoadLibraryW(PCWSTR(name.as_ptr())) };
+        std::process::exit(if loaded.is_ok() { LOADED } else { NOT_LOADED });
+    }
+
+    #[test]
+    fn harden_dll_search_keeps_a_dll_in_the_working_folder_out() {
+        let dir = std::env::temp_dir().join(format!("wakeshot-dll-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // Any small System32 DLL under a name no system folder has.
+        std::fs::copy(r"C:\Windows\System32\version.dll", dir.join(PLANTED_DLL)).unwrap();
+        let run = |mode: &str| {
+            let status = Command::new(this_exe())
+                .args([
+                    "process::tests::dll_role",
+                    "--exact",
+                    "--ignored",
+                    "--test-threads=1",
+                    "--quiet",
+                ])
+                .arg(format!("{DLL_ARG}{mode}"))
+                .current_dir(&dir)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .expect("run the child");
+            status.code()
+        };
+        let plain = run("plain");
+        let hardened = run("harden");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(
+            plain,
+            Some(LOADED),
+            "without it the working folder is searched"
+        );
+        assert_eq!(hardened, Some(NOT_LOADED));
     }
 
     #[test]
@@ -1299,7 +1647,12 @@ mod tests {
         if let Some(path) =
             std::env::args().find_map(|a| a.strip_prefix(REPORT_ARG).map(String::from))
         {
-            let report = format!("passed; runner token: {runner}; child token: {level}");
+            // The nested run has Explorer's token: the Medium the hook's hand-off relies on.
+            let above = current_above_medium().unwrap();
+            assert!(!above, "{runner}");
+            let report = format!(
+                "passed; runner token: {runner}, above Medium {above}; child token: {level}"
+            );
             std::fs::write(path, report).expect("write the report");
         }
     }

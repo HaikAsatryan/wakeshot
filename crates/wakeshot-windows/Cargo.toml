@@ -23,6 +23,8 @@ serde_json.workspace = true
 workspace = true
 features = [
     "Wdk_System_SystemInformation",
+    # `NtQueryInformationProcess` for `process::command_line_contains` (`p4-contracts-r3`).
+    "Wdk_System_Threading",
     "Win32_Devices_FunctionDiscovery",
     "Win32_Foundation",
     "Win32_Graphics_Dwm",
