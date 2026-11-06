@@ -72,6 +72,8 @@ Keep awake, then sleeps as usual.
 1. "The tray will have a new look (AI apps)": does this mean the tooltip and menu now name whichever agent holds (for
    example "Codex is working"), as the code already does per source, or do you want a new tray part that lists the AI
    apps Wakeshot watches? Default: the first, no new tray part (you dropped the per-source menu at 12:40 today).
+   Orchestrator, 2026-11-06 ~18:40: Part A starts with this default while Haik is away (a plan is cheap to redo);
+   his answer can change it before Part B.
 
 ## Found outside scope
 

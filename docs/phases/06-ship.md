@@ -177,6 +177,7 @@ those one at a time across all tracks.
 | `p6-menu-hc-status` | no (orchestrator decision for Haik's review) | `p6-menu-status-glyph` | done: status line and its glyph in `WindowText` in high contrast (WinUI's `TextFillColorSecondary` there); marks and chevron stay `ButtonText`; x64 and ARM64 checks clean |
 | `p6-media-captures` | stays off the PC while it runs (Haik ~21:50: "Dell is connected go on") | `p6-media` Part C first draft | done: 22 captures on the DELL at 200% (work set S1 to S4 and S7, menu set S1 and S5a to S5d, light and dark, README stills), S9 from the log; Haik's settings equal before and after; about 11 min of screen |
 | `p6-repo-files` | yes: reads the files; turns on private vulnerability reporting | none | done (2026-11-06): `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 3.0), two issue forms and `config.yml`, a PR template; 3 questions with defaults in the card |
+| `p6-agents-video-readme` | yes: his yes to the plan, then his look at the render and README | `p6-media`, `p6-readme`; Part B after the bigger v1 live tests | Part A (the plan with stills) running since 2026-11-06 ~18:40 with the default for question 1 |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
 dependency 110K, pack and release 110K, install e2e 130K, winget 60K, README 70K, Pages 60K. About 880K in all.
@@ -629,3 +630,8 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   in v1 if a free option exists to test it; OpenCode 2.x first; he gets Codex himself; "minimum time to be involved
   but you also need to test properly"; as much in parallel as possible. Pushed 47d38ac and fb0ebce (workspace checks
   green on x64 and ARM64). The session ends here with a continuation prompt.
+- 2026-11-06 ~18:40: Haik asked for a card to rework the video and `README.md` so the focus is every AI agent, not
+  Claude Code ("ok that the example is on Claude Code in the video, but the tray will have a new look (AI apps)"):
+  `docs/tasks/p6-agents-video-readme.md`. Part A (a plan with still frames) started with the default for its
+  question 1 (the tooltip and menu name whichever agent holds; no new tray part), for Haik's review; Part B after his
+  yes and the live tests. The video upload, Pages and launch still wait.
