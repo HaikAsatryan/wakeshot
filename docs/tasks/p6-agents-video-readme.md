@@ -75,6 +75,10 @@ Keep awake, then sleeps as usual.
    apps Wakeshot watches? Default: the first, no new tray part (you dropped the per-source menu at 12:40 today).
    Orchestrator, 2026-11-06 ~18:40: Part A starts with this default while Haik is away (a plan is cheap to redo);
    his answer can change it before Part B.
+   Haik, 2026-11-06 ~19:15: "Agree to everything": yes to the Part A plan and to the default (no new tray part).
+   Orchestrator: Part B starts now with everything that does not wait for a live result; the agent list, the "tested
+   live" marks and the tooltip capture (Claude Code and Codex at once, on the new install) come last, when the
+   orchestrator says the live results are in.
 
 ## Found outside scope
 

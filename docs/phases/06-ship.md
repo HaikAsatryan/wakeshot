@@ -177,7 +177,7 @@ those one at a time across all tracks.
 | `p6-menu-hc-status` | no (orchestrator decision for Haik's review) | `p6-menu-status-glyph` | done: status line and its glyph in `WindowText` in high contrast (WinUI's `TextFillColorSecondary` there); marks and chevron stay `ButtonText`; x64 and ARM64 checks clean |
 | `p6-media-captures` | stays off the PC while it runs (Haik ~21:50: "Dell is connected go on") | `p6-media` Part C first draft | done: 22 captures on the DELL at 200% (work set S1 to S4 and S7, menu set S1 and S5a to S5d, light and dark, README stills), S9 from the log; Haik's settings equal before and after; about 11 min of screen |
 | `p6-repo-files` | yes: reads the files; turns on private vulnerability reporting | none | done (2026-11-06): `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 3.0), two issue forms and `config.yml`, a PR template; 3 questions with defaults in the card |
-| `p6-agents-video-readme` | yes: his yes to the plan, then his look at the render and README | `p6-media`, `p6-readme`; Part B after the bigger v1 live tests | Part A done (2026-11-06 ~19:00): the plan and stills, waiting for Haik's yes; Part B after it and the live tests |
+| `p6-agents-video-readme` | yes: his yes to the plan, then his look at the render and README | `p6-media`, `p6-readme`; Part B after the bigger v1 live tests | Part A done (2026-11-06 ~19:00); Haik: "Agree to everything" (~19:15); Part B running: all but the agent list, the tested-live marks and the tooltip capture, which wait for the live results |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
 dependency 110K, pack and release 110K, install e2e 130K, winget 60K, README 70K, Pages 60K. About 880K in all.
@@ -635,3 +635,6 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   `docs/tasks/p6-agents-video-readme.md`. Part A (a plan with still frames) started with the default for its
   question 1 (the tooltip and menu name whichever agent holds; no new tray part), for Haik's review; Part B after his
   yes and the live tests. The video upload, Pages and launch still wait.
+- 2026-11-06 ~19:15: Haik: "Agree to everything" (the `p6-agents-video-readme` plan and its question 1 default: no new
+  tray part), "just work work and work". Part B started at once with everything that does not wait for a live
+  result; the final agent list, the tested-live marks and the tooltip capture come after the live tests.
