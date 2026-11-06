@@ -100,7 +100,7 @@ set up; my monitors record each step by themselves. Do not use your own "Cursor 
 
 1. `crates/wakeshot-windows/src/sqlite.rs` (`p4-live-opencode`, mid-edit at 17:40): ARM64 lib clippy (without
    `--all-targets`) fails with "constant `SQLITE_IOERR` is never used" (line 79). x64 lib clippy passed a minute
-   before. Not touched.
+   before. Not touched. Clean again at 18:05.
 2. The Cursor CLI was not signed in for Haik's user (the orchestrator's note said it was): `agent status` "Not logged
    in", `agent --list-models` "Authentication required" (17:36, Medium).
 
@@ -163,6 +163,12 @@ set up; my monitors record each step by themselves. Do not use your own "Cursor 
   `taskkill /PID` without `/F`); fixtures to `tests/fixtures/cursor/live/` and a replay test; docs; clean-up (stop
   flag, `remove.cmd` for the unchanged case, delete `wakeshot-capture` and `.wakeshot-removed*`, compare with
   `<S>\backup\manifest-before.txt`, delete `<S>\target`).
+- 2026-11-06 18:05: live fix from `p4-live-antigravity` (agy loads dot-named plugin folders): staging and removed
+  folders now go to the agent's own folder (Result, "Review fixes", last row). `agent_hooks` tests 59 pass; with the
+  old places on purpose 4 fail; put back. rustfmt clean; clippy x64 and ARM64, with and without `--all-targets`,
+  clean (ARM64 libs clean now too). Nothing written in the real profile. The running conductor still uses the
+  17:31 build (old rule: `.wakeshot-removed` in `local\`), which is what its editor dot-name test needs; the CLI part
+  uses a rebuilt exe. Still blocked on "Steps for Haik".
 
 ## Result
 
@@ -176,10 +182,11 @@ Status: blocked, 2026-11-06 17:50 (part 1 done, the live part waits on "Steps fo
 | m1: 5 s per agent before the restore | Fixed: `medium_copies` starts every copy, then one shared 5 s wait (`on_uninstall` takes one call for all agents) | `the_copies_share_one_wait`; `an_elevated_uninstall_hands_antigravity_to_its_own_medium_copy` now asserts one call for both |
 | m2: the "left behind" line deleted with the logs | Not fixed, accepted: keeping the logs needs a `HookEnv` contract change, for a case that needs a changed or held file and a failed rename. Design text now says the README is the only pointer; change it when a user reports hooks left after an uninstall | none (doc) |
 | m3: an unreadable staging folder blocks the main folder | Fixed: each staging problem is a log line; the main folder's add or removal goes on | `a_staging_folder_that_does_not_read_never_blocks_the_main_folder` (by code the old `?` returned first) |
-| m4: a second `.wakeshot-removed` cannot be made | Fixed: first free of `.wakeshot-removed`, `-2` to `-9`, never replacing; README line updated | `uninstall_renames_a_folder_it_cannot_empty` (broken on purpose: failed) |
+| m4: a second `.wakeshot-removed` cannot be made | Fixed: first free name, `-2` to `-9` after the first, never replacing (names and place since the live fix: last row); README line updated | `uninstall_renames_a_folder_it_cannot_empty` (broken on purpose: failed) |
 | m5: other chats' files stay after the blocked path | Fixed: chat files (`<chat id>.json` by the id rule) deleted under the mutex on the blocked path and in every Medium `hook <agent> remove` | `the_blocked_path_and_the_remove_form_end_every_chat_of_the_agent` (broken on purpose: failed) |
 | m6: `agent_hooks::remove` public with no level check | Fixed: private | compile-time only |
 | m7: stale docs | Fixed: `agent-hooks.md` steps 3 and 4, the `tray_mode` lines, a "Review fixes" note; the install card's open items | none (doc) |
+| Live (`p4-live-antigravity`, agy 1.5.2): `agy` loads dot-named plugin folders, so `.wakeshot-removed` and a half-staged `.wakeshot-new-*` in `plugins\` load | Fixed for both agents (one rule): staging in the agent's own folder (`.cursor\.wakeshot-new-<pid>`, `.gemini\config\.wakeshot-new-<pid>`), moved into place; a folder the uninstall cannot empty moves to `.cursor\wakeshot-removed` or `.gemini\config\wakeshot-removed` (`-2` to `-9`); leftovers cleaned in both places; the hook file is deleted first (every delete was already tried, so this only orders them) | `the_add_never_fills_a_staging_folder_someone_else_made`, `uninstall_renames_a_folder_it_cannot_empty`, `a_crafted_marker_or_record_deletes_nothing_outside_the_fixed_set`, `a_folder_antigravity_or_the_user_changed_is_never_touched` (all four failed with the old places, broken on purpose); new `a_staging_folder_in_the_agents_own_folder_is_cleaned_too` |
 
 Also (orchestrator's item, about 6K tokens): Antigravity hooks for an exe path with a space now use its 8.3 form
 (`GetShortPathNameW`) when that passes the allow list with `~` allowed inside a name; else no hooks, as before.

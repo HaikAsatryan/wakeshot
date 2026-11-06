@@ -43,11 +43,12 @@ const AREA: &str = "agent-hooks";
 pub const FOLDER: &str = "wakeshot";
 /// Wakeshot's marker in each plugin folder: the hash of each fixed file it wrote, by fixed key.
 pub const MARKER: &str = "wakeshot-hooks.json";
-/// A plugin folder while it is written, then renamed in one step, so the agent never sees half a plugin. The pid
-/// follows. A dot name, which Cursor's CLI skips.
+/// A plugin folder while it is written, in the agent's own folder (see [`agent_dir`]), then moved into place in one
+/// step, so the agent never sees half a plugin. The pid follows.
 pub const STAGING_PREFIX: &str = ".wakeshot-new-";
-/// A plugin folder the uninstall could not empty: a dot name, so the agent stops loading it, and the user's edits stay.
-pub const REMOVED: &str = ".wakeshot-removed";
+/// A plugin folder the uninstall could not empty, moved to the agent's own folder, out of the folder the agent loads
+/// plugins from, so the agent stops loading it and the user's edits stay.
+pub const REMOVED: &str = "wakeshot-removed";
 /// Wakeshot's record in the data folder: which agents it added a folder to, and which the user removed since.
 pub const RECORD: &str = "agent-hooks.json";
 /// The hook command's exe, beside the tray exe in the install folder.
@@ -61,6 +62,9 @@ pub const COPY_WAIT_MS: u32 = 5_000;
 const FILE_MAX: u64 = 64 * 1024;
 /// The marker's `wakeshot` value: the version that wrote the folder.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// The fixed file key of the file that holds the hook commands, in every agent's table.
+const HOOKS_KEY: &str = "hooks";
 
 /// One file Wakeshot writes in an agent's plugin folder.
 #[derive(Debug)]
@@ -425,9 +429,7 @@ fn start_one(
         return Ok(false);
     };
     let local = parent_dir(folders, agent);
-    if made == agent.parents.len() {
-        clean_staging(&local, agent, Some(&want), log);
-    }
+    clean_staging(folders, agent, made, Some(&want), log);
     let dir = local.join(FOLDER);
     let shown_dir = shown_folder(agent);
     match kind(&dir)? {
@@ -508,7 +510,7 @@ fn add(folders: &Folders, agent: &Agent, made: usize, want: &Wanted) -> Result<(
             Err(e) => return Err(io_error("CreateDirectoryW", &e)),
         }
     }
-    let staging = local.join(format!("{STAGING_PREFIX}{}", std::process::id()));
+    let staging = agent_dir(folders, agent).join(format!("{STAGING_PREFIX}{}", std::process::id()));
     // `CreateDirectoryW` fails when the name exists, so a folder someone else put there is never filled.
     fs::create_dir(&staging).map_err(|e| io_error("CreateDirectoryW", &e))?;
     let done =
@@ -569,15 +571,43 @@ fn rewrite(dir: &Path, agent: &Agent, want: &Wanted, look: &Look) -> Result<(), 
 /// Removes the staging folders a stop left in `local` (`.wakeshot-new-*`), each only when it holds nothing but fixed
 /// files that are Wakeshot's: what this version writes, the start of it (a stop during the write), or what the
 /// folder's own marker names. Anything else stays, one log line. A leftover never blocks the main folder's work (review
-/// m3), so each problem here is a log line, never an error.
-fn clean_staging(local: &Path, agent: &Agent, want: Option<&Wanted>, log: &dyn Log) {
+/// m3), so each problem here is a log line, never an error. Both places: the agent's own folder, where this version
+/// stages, and the plugin folder's parent (`made` parts deep, when it exists), where test builds of this version staged
+/// before `agy` was seen loading dot-named folders there.
+fn clean_staging(
+    folders: &Folders,
+    agent: &Agent,
+    made: usize,
+    want: Option<&Wanted>,
+    log: &dyn Log,
+) {
+    clean_staging_in(
+        &agent_dir(folders, agent),
+        agent.agent_made,
+        agent,
+        want,
+        log,
+    );
+    if made == agent.parents.len() {
+        clean_staging_in(&parent_dir(folders, agent), made, agent, want, log);
+    }
+}
+
+/// [`clean_staging`] in `local`, the first `depth` parts of the agent's folders.
+fn clean_staging_in(
+    local: &Path,
+    depth: usize,
+    agent: &Agent,
+    want: Option<&Wanted>,
+    log: &dyn Log,
+) {
     let names = match list(local) {
         Ok(names) => names,
         Err(e) => {
             let text = format!(
                 "{}: {} does not list, so no staging folder is removed: {}",
                 agent.label,
-                shown(agent.parents),
+                shown(&agent.parents[..depth]),
                 failed(e)
             );
             line(log, Level::Warn, &text);
@@ -593,7 +623,11 @@ fn clean_staging(local: &Path, agent: &Agent, want: Option<&Wanted>, log: &dyn L
             continue;
         }
         let path = local.join(&name);
-        let shown_staging = format!("{}\\{}", shown(agent.parents), name.to_string_lossy());
+        let shown_staging = format!(
+            "{}\\{}",
+            shown(&agent.parents[..depth]),
+            name.to_string_lossy()
+        );
         let ours = kind(&path).and_then(|kind| {
             if kind != Kind::Folder {
                 return Ok(false);
@@ -814,7 +848,7 @@ fn remove_one(
     }
     let want = hook_exe.and_then(|exe| wanted(agent, exe));
     let local = parent_dir(folders, agent);
-    clean_staging(&local, agent, want.as_ref(), log);
+    clean_staging(folders, agent, agent.parents.len(), want.as_ref(), log);
     let dir = local.join(FOLDER);
     let shown_dir = shown_folder(agent);
     match kind(&dir)? {
@@ -842,12 +876,13 @@ fn remove_one(
     let (level, text) = if emptied.gone {
         (Level::Info, format!("{}: {shown_dir} removed", agent.label))
     } else {
-        match move_aside(&dir, &local) {
+        match move_aside(&dir, &agent_dir(folders, agent)) {
             Ok(name) => (
                 Level::Info,
                 format!(
-                    "{}: {shown_dir} renamed {name}, so the agent stops loading it ({why})",
-                    agent.label
+                    "{}: {shown_dir} moved to {}\\{name}, so the agent stops loading it ({why})",
+                    agent.label,
+                    shown(&agent.parents[..agent.agent_made])
                 ),
             ),
             Err(e) => (
@@ -890,7 +925,10 @@ fn delete_ours(dir: &Path, agent: &Agent, look: &Look) -> Emptied {
     for temp in &look.leftovers {
         left |= !done(remove_file(temp).map(|()| true));
     }
-    for (fixed, seen) in agent.files.iter().zip(&look.files) {
+    // The hook file first: if a later delete fails, what stays runs nothing.
+    let files = agent.files.iter().zip(&look.files);
+    let (hooks, rest): (Vec<_>, Vec<_>) = files.partition(|(fixed, _)| fixed.key == HOOKS_KEY);
+    for (fixed, seen) in hooks.into_iter().chain(rest) {
         left |= match seen {
             Seen::Ours => !done(remove_file(&file_path(dir, fixed)).map(|()| true)),
             Seen::Missing => false,
@@ -930,7 +968,8 @@ fn remove_file(path: &Path) -> Result<(), WinError> {
 }
 
 /// The names a folder the uninstall cannot empty is renamed to, in order: [`REMOVED`], then `-2` to `-9` after it, so
-/// a second uninstall never meets a name an earlier one took (review m4). All dot names, which the agent skips.
+/// a second uninstall never meets a name an earlier one took (review m4). All in the agent's own folder, which the
+/// agent does not load plugins from.
 fn removed_names() -> impl Iterator<Item = String> {
     iter::once(REMOVED.to_owned()).chain((2..=9).map(|n| format!("{REMOVED}-{n}")))
 }
@@ -1304,6 +1343,15 @@ fn parent_dir(folders: &Folders, agent: &Agent) -> PathBuf {
         .fold(folders.profile.clone(), |path, part| path.join(part))
 }
 
+/// The agent's own folder (`.cursor`, `.gemini\config`), which the agent made and the walk checked: staging and
+/// removed folders go here, outside the folder the agent loads plugins from, since `agy` 1.5.2 loads dot-named plugin
+/// folders too (`p4-live-antigravity`, live).
+fn agent_dir(folders: &Folders, agent: &Agent) -> PathBuf {
+    agent.parents[..agent.agent_made]
+        .iter()
+        .fold(folders.profile.clone(), |path, part| path.join(part))
+}
+
 fn file_path(dir: &Path, fixed: &FixedFile) -> PathBuf {
     match fixed.folder {
         Some(folder) => dir.join(folder).join(fixed.name),
@@ -1507,6 +1555,11 @@ mod tests {
 
         fn local(&self) -> PathBuf {
             self.folders.profile.join(r".cursor\plugins\local")
+        }
+
+        /// `.cursor`, where staging and removed folders go.
+        fn cursor(&self) -> PathBuf {
+            self.folders.profile.join(".cursor")
         }
 
         fn plugin(&self) -> PathBuf {
@@ -1958,14 +2011,18 @@ mod tests {
         w.uninstall();
         assert_eq!(
             tree(&w.local()),
+            BTreeMap::new(),
+            "nothing left where Cursor loads plugins"
+        );
+        assert_eq!(
+            tree(&w.cursor().join(REMOVED)),
             BTreeMap::from(
                 [
-                    (REMOVED, "/"),
-                    (r".wakeshot-removed\hooks", "/"),
-                    (r".wakeshot-removed\hooks\other.json", "{}"),
-                    (r".wakeshot-removed\mcp.json", "{}"),
-                    (r".wakeshot-removed\rules", "/"),
-                    (r".wakeshot-removed\rules\a.md", "x"),
+                    ("hooks", "/"),
+                    (r"hooks\other.json", "{}"),
+                    ("mcp.json", "{}"),
+                    ("rules", "/"),
+                    (r"rules\a.md", "x"),
                 ]
                 .map(|(k, v)| (k.to_owned(), v.to_owned()))
             )
@@ -2028,13 +2085,18 @@ mod tests {
         fs::write(w.plugin().join(r"hooks\hooks.json"), b"{\"mine\":1}").unwrap();
         w.uninstall();
         assert!(!w.plugin().exists());
-        let removed = w.local().join(REMOVED);
+        let removed = w.cursor().join(REMOVED);
         assert_eq!(names(&removed), ["hooks", r"hooks\hooks.json", MARKER]);
         assert_eq!(
             fs::read(removed.join(r"hooks\hooks.json")).unwrap(),
             b"{\"mine\":1}"
         );
-        assert!(w.has(r".cursor\plugins\local\wakeshot renamed .wakeshot-removed"));
+        assert!(w.has(r".cursor\plugins\local\wakeshot moved to .cursor\wakeshot-removed, so"));
+        assert_eq!(
+            names(&w.local()),
+            Vec::<String>::new(),
+            "out of the folder Cursor loads plugins from"
+        );
 
         // A later install adds a new folder; its uninstall takes the next free name, never the first one's (review m4),
         // so the plugin stops loading again.
@@ -2043,13 +2105,13 @@ mod tests {
         fs::write(w.plugin().join("mcp.json"), b"{}").unwrap();
         w.uninstall();
         assert!(!w.plugin().exists());
-        assert_eq!(names(&w.local().join(".wakeshot-removed-2")), ["mcp.json"]);
+        assert_eq!(names(&w.cursor().join("wakeshot-removed-2")), ["mcp.json"]);
         assert_eq!(names(&removed), ["hooks", r"hooks\hooks.json", MARKER]);
-        assert!(w.has(r".cursor\plugins\local\wakeshot renamed .wakeshot-removed-2"));
+        assert!(w.has(r".cursor\plugins\local\wakeshot moved to .cursor\wakeshot-removed-2"));
 
         // Every name taken: the folder stays, and the line says so.
         for n in 3..=9 {
-            fs::create_dir(w.local().join(format!(".wakeshot-removed-{n}"))).unwrap();
+            fs::create_dir(w.cursor().join(format!("wakeshot-removed-{n}"))).unwrap();
         }
         fs::remove_file(&w.record).unwrap();
         assert_eq!(w.start(), ["Cursor"]);
@@ -2064,6 +2126,17 @@ mod tests {
         assert_eq!(wait_left(Duration::ZERO), COPY_WAIT_MS);
         assert_eq!(wait_left(Duration::from_millis(4_200)), 800);
         assert_eq!(wait_left(Duration::from_secs(9)), 0);
+    }
+
+    #[test]
+    fn a_staging_folder_in_the_agents_own_folder_is_cleaned_too() {
+        let w = World::new("staging-agent-dir");
+        let left = w.cursor().join(".wakeshot-new-4242");
+        fs::create_dir_all(left.join("hooks")).unwrap();
+        fs::write(left.join(r"hooks\hooks.json"), w.want().files[1].as_slice()).unwrap();
+        assert_eq!(w.start(), ["Cursor"]);
+        assert!(!left.exists());
+        assert!(w.has(r"Cursor: removed .cursor\.wakeshot-new-4242, which a stop left"));
     }
 
     #[test]
@@ -2159,10 +2232,10 @@ mod tests {
 
     #[test]
     fn the_add_never_fills_a_staging_folder_someone_else_made() {
+        // Staged in `.cursor`, never in the folder the agent loads plugins from (`agy` loads dot names there).
         let w = World::new("taken");
-        fs::create_dir_all(w.local()).unwrap();
         let taken = w
-            .local()
+            .cursor()
             .join(format!("{STAGING_PREFIX}{}", std::process::id()));
         fs::create_dir(&taken).unwrap();
         fs::write(taken.join("x.txt"), b"x").unwrap();
@@ -2650,10 +2723,13 @@ mod tests {
             assert!(w.start().is_empty(), "{what}");
             assert_eq!(tree(&w.gemini_plugin()), before, "{what}");
             assert!(w.has("was changed since Wakeshot wrote it"), "{what}");
-            // Uninstall keeps what is not Wakeshot's under a dot name the agent does not load.
+            // Uninstall keeps what is not Wakeshot's out of the folder `agy` loads plugins from, which loads dot names
+            // too (`p4-live-antigravity`, live).
             w.uninstall();
             assert!(!w.gemini_plugin().exists(), "{what}");
-            assert!(w.gemini_plugins().join(REMOVED).is_dir(), "{what}");
+            assert_eq!(names(&w.gemini_plugins()), Vec::<String>::new(), "{what}");
+            let removed = w.folders.profile.join(r".gemini\config").join(REMOVED);
+            assert!(removed.is_dir(), "{what}");
         }
     }
 

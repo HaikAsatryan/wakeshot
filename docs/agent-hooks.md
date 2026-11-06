@@ -287,11 +287,14 @@ Wakeshot's record is `%LocalAppData%\Wakeshot\agent-hooks.json`: `{ "version": 1
   nothing is touched, one log line.
 - Only at Medium: a tray whose token is above Medium (started from an admin terminal) touches no agent folder, one
   log line. The installed tray starts from the Run value or from Velopack at Medium.
-- Add: create `plugins\local\.wakeshot-new-<pid>\` with "fail if it exists" (`CreateDirectoryW`), write the fixed
+- Add: create `.wakeshot-new-<pid>\` in the agent's own folder (`.cursor\`; Antigravity `.gemini\config\`), outside
+  the folder the agent loads plugins from, with "fail if it exists" (`CreateDirectoryW`), write the fixed
   files into it, then rename it to `wakeshot`. Cursor never sees half a plugin. Rewrite: each fixed file with
   `store::write_atomic`. A staging folder left by a crash: at each start and at uninstall, a `.wakeshot-new-*` folder
   that holds only the fixed files, each equal to what this version writes or to its own marker's hash, is removed by
-  the fixed names. The CLI skips dot names (verified); the editor and Antigravity: the live test checks.
+  the fixed names, in the agent's own folder and in the plugin folder's parent (where test builds staged before).
+  Why outside: `agy` 1.5.2 lists and runs dot-named plugin folders (`p4-live-antigravity`, live), so a staging or
+  removed folder in its plugin folder would load; Cursor's CLI skips dot names (code), and one rule serves both.
 - Never fight the user. Deleting the folder is the clearest "no" a user can give, and Cursor's own plugin switch (if
   the user turns it off there) keeps the folder, so Wakeshot does nothing against it either. A reinstall deletes the
   data folder and so starts as on a new PC, like the Run value's startup switch (`p6-uninstall-startup-approval`).
@@ -314,8 +317,10 @@ The notice, once, when Wakeshot adds the folder (`Notice::HooksAdded { agent: "C
     then the marker, then `hooks\` and `.cursor-plugin\` if empty, then `wakeshot\` if empty. Never `local\` or
     `plugins\`, never a recursive delete, never through a link, never a path read from the marker.
   - If a fixed file cannot be deleted (changed by the user, or held open by Cursor), the folder is renamed to
-    `plugins\local\.wakeshot-removed`, or the first free one of `.wakeshot-removed-2` to `-9` (dot names, which the
-    CLI skips; the editor and Antigravity: live test), so the plugin stops loading and the user's edits stay on disk.
+    `wakeshot-removed` in the agent's own folder (`.cursor\wakeshot-removed`; Antigravity
+    `.gemini\config\wakeshot-removed`), or the first free one of `wakeshot-removed-2` to `-9`, outside the folder the
+    agent loads plugins from (`agy` 1.5.2 loads dot-named folders there, live), so the plugin stops loading and the
+    user's edits stay on disk. The hook file is deleted first when it is Wakeshot's, so what stays runs nothing.
     If that rename fails too, one log line; the README's uninstall line says which folder to delete. When the restore
     then succeeds, the data folder step deletes that line with the logs, so the README is the only pointer (review m2,
     accepted: keeping the logs needs a change of the `HookEnv` contract for a case that needs a changed or held file
@@ -347,7 +352,7 @@ The notice, once, when Wakeshot adds the folder (`Notice::HooksAdded { agent: "C
 - The reparse check reads each part with `symlink_metadata` and refuses any reparse point (junctions, links, cloud
   files); files are opened with `FILE_FLAG_OPEN_REPARSE_POINT` and refused if they turn out to be one.
 - Uninstall: the marker stays while a fixed file stays; empty fixed subfolders go anyway. The rename to
-  `.wakeshot-removed` (or `-2` to `-9`) never replaces a folder of that name. A file held open without delete sharing
+  `wakeshot-removed` (or `-2` to `-9`) never replaces a folder of that name. A file held open without delete sharing
   fails the delete (32), and the folder's rename then fails too (5): one log line says to delete it by hand (tested).
 - A staging folder that does not list or read is one log line and stays; the main folder's work goes on (review m3).
   `remove` is private: only `on_uninstall` and `remove_command`, which check the level, call it (m6).
@@ -460,7 +465,8 @@ form"). Where the build differs from or settles the table above:
   with; the walk takes the nearest, as for Cursor.
 - `PreInvocation` prunes the folder (no session end event, so it is the only turn start); `Stop` does not.
 - Files: `hooks.json` first, `plugin.json` last, then the marker: `agy`'s plugin listing has no dot-name check (code
-  read), so a staging folder becomes a plugin only with its last file. `plugin.json` holds `name`, `version`,
+  read; live: it loads them), so a staging folder becomes a plugin only with its last file. Since `p4-live-cursor`
+  the staging folder sits in `.gemini\config\`, outside `plugins\`, so that is a second guard. `plugin.json` holds `name`, `version`,
   `description` and `author`, the fields `agy`'s manifest type reads.
 - Presence: `ANTIGRAVITY_GEMINI_DIR` is read from the tray's environment, like the agents' variables in
   `tray_mode::sources`.
@@ -490,7 +496,7 @@ For `p4-readme-agents`:
   it to a temp file or a command line first. Wakeshot's hook keeps none of it, and Wakeshot adds no hook to an agent
   that puts prompts on a command line."
 - Uninstall: "Uninstall also removes the hooks Wakeshot added to your agents (Cursor, Antigravity). If you changed
-  one, it is renamed to `.wakeshot-removed` (or `.wakeshot-removed-2` and so on) in the same folder; delete that
+  one, it is moved to `wakeshot-removed` (or `wakeshot-removed-2` and so on) in `.cursor` or `.gemini\config`; delete that
   folder if you do not need it."
 - The notice gets no link: a notice click can only open the log or the taskbar settings (`NoticeClick`), and a
   link would be one more contract change for little gain; the README is where users look.
@@ -564,8 +570,8 @@ feature, `Wdk_System_Threading` (added by `p4-contracts-r3`; a feature is not in
 4. Time from send to the agent's start with and without the hook (PowerShell's start; whether Cursor passes
    `-NoProfile`).
 5. With the exe renamed away: what Cursor shows, and that prompts still go.
-6. Uninstall removes the folder; a folder the user changed becomes `.wakeshot-removed`; the editor skips dot-named
-   folders (`.wakeshot-new-*`, `.wakeshot-removed`).
+6. Uninstall removes the folder; a folder the user changed moves to `.cursor\wakeshot-removed`; whether the editor
+   skips dot-named folders (only for leftovers of test builds now).
 7. Antigravity: a dropped folder loads in the CLI and the IDE; dot-named folders are skipped; the shell and the
    hook's parent; the cost per `PreInvocation`; whether Esc fires `Stop`; `fullyIdle` with a dev server; `{}` lets a
    stop through; Esc and a crash in the IDE hub and in a Remote Control chat.
@@ -588,7 +594,7 @@ feature, `Wdk_System_Threading` (added by `p4-contracts-r3`; a feature is not in
 | 9 | A forged state file keeps the PC awake | Any process of the same user can already do that through a hold file (a documented format). A forged file holds only while the pid and start it names run (the watch thread checks both); the battery floor still steps back. Its label maps to the source's fixed strings, so no file text reaches the tooltip. A forged `problem.json` can show a false "update Wakeshot" notice once per start: accepted |
 | 10 | A reused pid holds forever | `procStart` must match (`Liveness::Process`); the walk refuses a parent that started after its child |
 | 11 | A stuck "working" (no `stop`) | Ends with the nearest agent process, the chat's next `stop` or `sessionEnd`; the battery floor; the live test checks Esc and crashes, also in Antigravity's hub and Remote Control daemon; a time cap is Haik's call (question 5) |
-| 12 | Hooks left after Wakeshot is gone | Fail open with exit 127 (code read); the uninstall removes them first, and renames a folder it cannot empty to `.wakeshot-removed`; the README says what to delete; the command form stays frozen for every later version |
+| 12 | Hooks left after Wakeshot is gone | Fail open with exit 127 (code read); the uninstall removes them first, and moves a folder it cannot empty to `wakeshot-removed` in the agent's own folder; the README says what to delete; the command form stays frozen for every later version |
 | 13 | Fighting the user | A removed folder is never added back; a changed file is never overwritten or deleted; Cursor's own plugin switch is respected by leaving the folder alone |
 | 14 | A dev build or a second copy writes hooks naming a temp exe | Only a tray in Velopack's `current` folder writes; the path names `current`, which survives updates |
 | 15 | Two hook runs race on one chat file | Named mutex for the read and write, atomic rename, the turn id check on `stop` |
@@ -599,4 +605,4 @@ feature, `Wdk_System_Threading` (added by `p4-contracts-r3`; a feature is not in
 | 20 | A marker anyone can write steers the rewrite or the uninstall | The file set is fixed in code; the marker has fixed keys and hashes only, no paths; any extra key, file or folder means "changed by someone"; empty folders removed only up to `wakeshot\` |
 | 21 | Gemini CLI's `.gemini` taken for Antigravity | Presence needs `agy.exe` in its install folder and an existing `.gemini\config\`; Wakeshot never creates `config\`; `ANTIGRAVITY_GEMINI_DIR` set means no hooks |
 | 22 | DLL planting from the repo folder a `stop` hook runs in | `SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32)` first thing; no exploitable DLL known, not tested |
-| 23 | A leftover staging folder loads with live hooks | Created with "fail if it exists"; removed by the fixed names at each start and at uninstall; the live test checks the editor skips dot names |
+| 23 | A leftover staging folder loads with live hooks | Created with "fail if it exists" in the agent's own folder, outside the folder the agent loads plugins from; removed by the fixed names at each start and at uninstall |
