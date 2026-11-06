@@ -684,3 +684,6 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   the window closes: not exact under "No guessing". Asked Haik: Cursor out of v1, or in with the gap in the README.
   The HooksAdded notice showed once. A leftover `tail.exe` of Part 1 (pid 51104, this session's) ended by PID. The
   whole-workspace checks passed on the code as it stands, so it is pushed. The video worker renders now.
+- 2026-11-06 23:22: the v1 agent list is final (Haik dropped Cursor at 23:21): Claude Code, Codex CLI, Copilot CLI, Copilot
+  in VS Code (Copilot harness chats), OpenCode 2.x. Sent to the video worker for `agents.ts`. `p4-cursor-off` updates
+  Haik's install once more; the tooltip capture and speed numbers wait for that install.
