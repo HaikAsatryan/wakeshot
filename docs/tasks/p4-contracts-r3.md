@@ -23,8 +23,10 @@ The shared changes the Cursor and Antigravity hooks build needs, in one card run
 
 ## Deliverables
 
-The five items of "Contract changes the build needs" in `docs/agent-hooks.md`, as the design and the review's fixes
-say:
+Every item of "Contract changes the build needs" in `docs/agent-hooks.md`, as the design says after the review's
+fixes (six items on 2026-11-06 ~16:40: `values` in `Command::Hook`, `current_above_medium()` and
+`harden_dll_search()`, and `write_atomic` with `CREATE_NEW` for every caller were added). The list below is the
+first version; where it differs, the design wins:
 
 1. `wakeshot-cli`: `Command::Hook { agent, event }` in `command.rs`, its line in `main.rs`, the parse in `args.rs`
    (hidden from help), a stub `hook.rs` (`Owner: p4-cursor-source`) that prints `{}` and exits 0, so the command is

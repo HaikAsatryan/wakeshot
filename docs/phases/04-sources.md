@@ -116,8 +116,9 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-claude-transcript` | no | `p4-claude-status`, `p4-cron`, `p4-claude-live-shapes` | done (22:35): 46 tests; no contract change |
 | `p4-copilot-source` | no | `p4-cron` | done 2026-11-06 (schema of 1.0.106, not tested live; 42 tests) |
 | `p4-copilot-vscode-research` | no | none | done 2026-11-06: a partly reliable signal, medium confidence (`research/copilot-vscode-signals.md`); a source card follows, after a contracts change run alone |
-| `p4-opencode-source` | no | Part B after `p4-contracts-r2` | Part A done 2026-11-06 (`research/opencode-signals.md`); Part B written (2.x only: 1.x needs the `message` table, outside Haik's yes), ready after `p4-contracts-r2` |
-| `p4-vscode-source` | no | `p4-contracts-r2` | ready after `p4-contracts-r2` (card written 2026-11-06) |
+| `p4-opencode-source` | no | Part B after `p4-contracts-r2` | Part A done 2026-11-06 (`research/opencode-signals.md`); Part B (2.x only: 1.x needs the `message` table, outside Haik's yes) running (2026-11-06 ~16:25) |
+| `p4-vscode-source` | no | `p4-contracts-r2` | running (2026-11-06 ~16:25) |
+| `p4-contracts-r3` | no | `p4-contracts-r2`, the hooks security review and its fixes; runs alone among Rust cards | ready once the review fixes pass; starts when the running Rust cards drain |
 | `p4-cursor-gemini-research` | no | none | done 2026-11-06 (`research/cursor-gemini-signals.md`): Cursor big, Gemini CLI enterprise only since 2026-06-18; hooks question for Haik |
 | `p4-watch-data` | no | `p4-hold-files`, `p4-watch-reads` | done (21:12): 19 tests |
 | `p4-watch-agents` | no | `p4-watch-reads` | done (22:43): 19 tests; API changes for `p4-watch-thread` in its Result |
@@ -129,7 +130,7 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-live-codex` | no: Codex logged in by Haik (2026-11-06); agents run it with `p4-live-harness` | `p4-contracts-r2`, `p4-live-harness`; one live card at a time | ready once those two are done (may run before `p4-live-copilot`) |
 | `p4-live-copilot` | only if the sign-in sitting is needed | `p4-contracts-r2`, `p4-live-harness`; one live card at a time | ready once those two are done |
 | `p4-watch-tick-flake` | no | `p4-watch-thread` | done (15:00: ticks wait for their check; data files written atomically; 20 serial and 24 of 24 load runs pass) |
-| `p4-contracts-r2` | no | the four 2026-11-06 source and research cards (done); runs alone among Rust cards | running (2026-11-06 15:35) |
+| `p4-contracts-r2` | no | the four 2026-11-06 source and research cards (done); runs alone among Rust cards | done (2026-11-06 ~16:20, 24f7405): `FindNewest` (Codex reverted threads) and `Recent` as new variants, `Query`, `ImageSince`; 1541 tests; whole-workspace checks green on x64 and ARM64; no Cargo change |
 | `p4-antigravity-research` | no | none | done (2026-11-06): CLI 1.5.2 (`agy.exe`) and IDE 2.6.0 both need hooks (a Wakeshot plugin folder under `~\.gemini\config\plugins\`); free test yes (Google's claim; Armenia listed); build in v1 (`research/antigravity-signals.md`) |
 | `p4-hooks-design` | no; a security review reads it before any build | `p4-cursor-gemini-research` | done (2026-11-06): `docs/agent-hooks.md`; one command `wakeshot.exe hook <agent> <event>` from a Wakeshot plugin folder per agent, state files read with `Folder` and `Process`; `main.log` dropped; security review running (`docs/reviews/p4-hooks-design-security.md`) |
 | `p4-live-harness` | yes: one short sign-in sitting after Part A | `p4-live-claude`; Part B after `p4-contracts-r2` | Part A running (2026-11-06 15:35) |
@@ -330,3 +331,10 @@ limit; Copilot waiting does not hold. The cards build these.
   skips plugin-only hooks; the editor fires them); 2. a Cursor or Antigravity approval wait holds, as Codex's does;
   3. hooks the user removed stay removed, with no menu item in v1. The hooks contracts go into a third contracts card,
   `p4-contracts-r3`, run alone after `p4-contracts-r2` and after the review.
+- 2026-11-06 ~16:20: hooks design security review done (`docs/reviews/p4-hooks-design-security.md`): 0 blockers, 3
+  majors, 10 minors. M1: an elevated agent runs the hook elevated, so its writes and prunes in a folder a Medium
+  process can swap give that process an elevated delete; M2: removal trusts the marker's own paths (`..` not
+  blocked), so a crafted marker deletes any file; M3: the Cursor editor's payload transport is not verified (the
+  command-line form would put prompts in audit logs). The design worker fixes them; the same reviewer checks the
+  majors; M3's check becomes the first step of `p4-cursor-source`, and Haik decides if the editor uses the command
+  line.
