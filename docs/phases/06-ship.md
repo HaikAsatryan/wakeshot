@@ -712,3 +712,5 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   vibe coded repo. Structured and following best practices repo, with good page and so on." Still his, in the
   morning: the history squash's force push (his yes right before it), the winget submission and the first release,
   and any typed prompt the Claude Desktop test needs.
+- 2026-11-07 02:40: Haik: "I am oq with the sqashing as well. I have nothing to add." His yes for the Phase 8 history
+  squash and its force push, given ahead: do it once the repo polish is done and every check and CI is green.
