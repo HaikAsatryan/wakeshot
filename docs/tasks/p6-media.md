@@ -736,3 +736,162 @@ Renders and checks after the fixes (2026-11-06 05:19):
 
 Final files after the fixes: `media/out/wakeshot-promo.mp4` 7,137,594 bytes (7.14 MB), `media/out/wakeshot-promo-poster.png`
 2,512,195 bytes; the draft 7.43 MB. Copies, the sheet and 26 full-size frames in the build folder.
+
+## Round 5: other music options (2026-11-06)
+
+Written by the orchestrator. Status: done 2026-11-06 10:55 (Result below; Haik picks). Agent: `wakeshot-worker`. Haik, 2026-11-06 morning: "Video is ok
+can we try some other music options on the video?" The picture is final: do not change it. Owns: nothing in the
+repo this round, except a fix to `media/scripts/` if a script breaks on a new track (say so in the Log). Build
+folder: `<scratchpad>\p6-music-options\`; downloads in their own empty folder `<scratchpad>\p6-music-options\raw\`,
+passed to the scripts as paths, never run.
+
+1. Four new CC0 candidates with a spread of moods, so Haik hears real choices: for example one brighter and more
+   upbeat electronic, one lo-fi or chill hop, one warm ambient or soft piano with a beat, one light house or funk
+   groove. Each between about 104 and 138 BPM (the fit's `atempo` warns outside 0.85 to 1.15), a sparse start and a
+   lift, loopable or at least 35 s. Not the current pick ("A Chill Fever") and not the round 1 rejects ("Hope On
+   Repeat", "better days").
+2. Licence: CC0 only, read on each track's own page (quote the line). No Pixabay licence, no CC-BY, no NC.
+3. For each: `scripts/music-candidate.mjs` to fit it, `scripts/make-sounds.mjs --music <fitted.wav> --out <mix.wav>`
+   for the full mix with the effects and chimes, then mux the mix onto the final video's picture
+   (`media/out/wakeshot-promo.mp4`, video stream copied, audio encoded the way the final build encodes it) as
+   `option-N-<short-name>.mp4`. Also copy the current final there as `option-0-current.mp4` for side by side.
+4. Check each: loudness about -15 LUFS and true peak -1 dBTP or lower after AAC, file under 8 MB, the music does not
+   run out before the end, and the end card fade still works. The tempo and lift are found by script: say so, you
+   cannot listen.
+5. Result: a table per option (title, author, page, licence quote, original BPM, `atempo`, lift, mood in a few
+   words, LUFS, dBTP, size, the `data/music.json` numbers to use it) and the full paths of the MP4s.
+
+### Log (round 5)
+
+- 2026-11-06 10:28: started. Read the round, the music lines of Part C's Log (21:33, 22:03, 22:10),
+  `media/README.md` and `media/CREDITS.md` (Sound), `scripts/music-candidate.mjs` and `scripts/lib/fit-music.mjs`.
+  The final video probed with Remotion's ffprobe: H.264 900 frames, AAC LC 48 kHz stereo at 192 kbit/s (the build's
+  `--audio-codec=aac --audio-bitrate=192k`), 7.14 MB. The options get the same audio settings with Remotion's ffmpeg.
+- 2026-11-06 10:32: OpenGameArt searched with its own CC0 and Music filters (keywords upbeat, lofi, chill, house,
+  funk, piano, electronic, groove, synthwave, ambient, hip hop, jazz); about 45 pages read for the licence block and
+  the files. 21 tracks over the four moods downloaded into `raw\tracks\` for a first look (length, tempo peaks from
+  60 to 200 BPM so a half or double tempo shows, key, loudness per 2 s) by a scratch script beside the build folder.
+  OpenGameArt's downloads ran at about 100 KB/s. In range and with some shape: "DJ Synth Wave Funk" (110 BPM, its
+  breakdown and lift at about 64 s), "Mocha Frapp" (125), "Lofi Hip Hop Loop" and "Lofi again" (both 120, C major,
+  flat), "Funky Disco Beats" (110, flat), "Funky House" (128 or 85, flat and loud). Most lo-fi reads 70 to 100 BPM,
+  outside the range; several tracks read two tempos equally (for example 70 and 140), so their tempo is not sure.
+- 2026-11-06 10:38: Free Music Archive: its search is drawn by script, so artist and album pages were read instead
+  (each lists its tracks in `data-track-info`); a track page says "is licensed under a CC0 1.0 Universal License".
+  Two CC0 artists: Loyalty Freak Music (albums "TO CHILL AND STAY AWAKE", "MELODIES WITH A BEAT", "ROLLER DISCO
+  DANCE DANCE", "MINIMAL AMBIENT BOUNCE") and HoliznaCC0 (lo-fi albums). 36 tracks downloaded (fast) for the same
+  first look. The final's atoms: `moov` before `mdat`, so the options are muxed with `-movflags +faststart`.
+- 2026-11-06 10:44: 11 more FMA tracks (Loyalty Freak Music "ROBOT DANCE !", Komiku). Where the first look read two
+  tempos about equally, a second scratch script read the low band (kick, bass) and the high band (hats) apart:
+  "Beach", "One Cool Minute", "After Party", "Everything is groovy", "Static Shoes" and "Dance Robot ACTIVATE" read
+  119.75 in both or in the hats; "People are spinning" and "Funky Disco Beats" 110.25; "You know why", "Busking In
+  the SunLight", "Once more with you" and the Roller Disco tracks stay unsure (90 or 120 or 180; 65 or 130), so they
+  are out. Picked by mood, shape and key (the chimes are C6 and G6, so a key with C and G in it is safer): Komiku
+  "Everything is groovy" (bright, D major), Loyalty Freak Music "Beach" (lo-fi, C major), Loyalty Freak Music
+  "People are spinning" (jazzy chill with a beat, E minor), Fupi "Funky Disco Beats" (disco loop, A minor). Each
+  licence read on its own page (quotes in the Result).
+- 2026-11-06 10:46: option 0 is a byte copy of `media/out/wakeshot-promo.mp4` (SHA-256 `f749cfc3...`); `loudnorm`
+  reads -15.4 LUFS, -1.4 dBTP, LRA 6.7 LU. Control of the mux path: `make-sounds.mjs` without `--music` (the current
+  pick) to a scratch WAV, muxed the same way as the options: also -15.4 LUFS, -1.4 dBTP, LRA 6.7 LU, 7.16 MB. So the
+  options' audio is encoded like the build's to within the reading's 0.1 dB. Remotion's ffmpeg has no `ebur128`
+  filter and no float output, so `loudnorm` is the only loudness reading.
+- 2026-11-06 10:48: the four options built (`music-candidate.mjs`, then `make-sounds.mjs --music --out`, then the
+  mux). "Beach": the found lift (11.8 s) put the track's 12 s breakdown under the lid and settings shots (the mix
+  read LRA 11.5 LU); rebuilt with `--lift 64`, the start of its steady second half (LRA 6.5 LU). The other three
+  kept the lift the script found. Option 1 reads -0.8 dBTP, over the -1 limit; a scratch script that decodes the AAC
+  at 192 kHz puts the loudest moment of every mix at 5.0 s, the tray shot's entrance effects, in the current final
+  too (-1.36 dB there). Not changed: a lower ceiling in `make-sounds.mjs` would change the committed MP4's sound.
+  Each fit rebuilt from its printed `--bpm` and `--lift` gives the same WAV bytes, so the `data/music.json` numbers
+  in the Result reproduce it.
+- 2026-11-06 10:50: checks run (Result). Unused downloads deleted from `raw\tracks\`; the four picks and five
+  runners-up kept. Slip: one read-only `git diff --stat` was run by mistake while checking a file's line endings;
+  nothing was changed by it.
+- 2026-11-06 10:55: Result written. Status done.
+
+### Result (round 5)
+
+**Done 2026-11-06 10:55: four new CC0 music options on the final picture, plus the current final for side by side.
+No repo file changed except this card; no script change was needed. Tempo, lift and key were found by script, not
+heard: the moods come from each page's tags, album and description, and from the numbers.**
+
+The MP4s, in `C:\Users\haika\AppData\Local\Temp\claude\f7c2c08a8f04f07b\de37e39e-ac9f-4f08-8aa0-3d773dd2f757\scratchpad\p6-music-options\`:
+
+- `option-0-current.mp4`: the committed final, byte copy ("A Chill Fever", Pro Sensory).
+- `option-1-everything-is-groovy.mp4`
+- `option-2-beach.mp4`
+- `option-3-people-are-spinning.mp4`
+- `option-4-funky-disco.mp4`
+
+| # | Title, author | Mood (not heard) | Orig. BPM | `atempo` | Lift (s, orig.) | Key | LUFS | dBTP | MB |
+|---|---|---|---|---|---|---|---|---|---|
+| 0 | "A Chill Fever (Loopable)", Pro Sensory | the current pick | 130 | 0.923 | 44.33 | G minor (unsure) | -15.4 | -1.4 | 7.14 |
+| 1 | "Everything is groovy (How to move your body)", Komiku | bright, bouncy dance-game electronic; builds, a short break, then drops back in on the light | 119.75 | 1.0021 | 36.03 | D major | -15.2 | **-0.8** | 7.17 |
+| 2 | "Beach", Loyalty Freak Music | relaxed lo-fi chill hop (FMA genres: Lo-fi, Chill-out, Hip-Hop Beats) | 119.75 | 1.0021 | 63.93 (set by hand) | C major | -15.2 | -1.9 | 7.16 |
+| 3 | "People are spinning", Loyalty Freak Music | warmer, jazzy chill with a beat (FMA genres: Jazz, Electronic, Hip-Hop Beats; album "TO CHILL AND STAY AWAKE") | 110.25 | 1.0884 | 17.21 | E minor | -15.2 | -2.0 | 7.14 |
+| 4 | "Funky Disco Beats to Boogie/Woogie to", Fupi | funky disco loop, the most energy (page tags: disco, funk, funky, dance) | 110.25 | 1.0884 | 45.75 | A minor | -15.3 | -1.2 | 7.16 |
+
+Pages and licences, each read on the track's own page on 2026-11-06:
+
+1. https://freemusicarchive.org/music/Komiku/Helice_Awesome_Dance_Adventure_/everything-is-groovy-how-to-move-your-body/
+   : "Everything is groovy (How to move your body) by Komiku is licensed under a CC0 1.0 Universal License" (link to
+   creativecommons.org/publicdomain/zero/1.0/). File: MP3 320 kbit/s, 116.0 s, SHA-256
+   `2c39ca0c3834c2ce5c215a5ac4acea86f80a31a20d3aa3958f2d02b005e2691e`.
+2. https://freemusicarchive.org/music/Loyalty_Freak_Music/MELODIES_WITH_A_BEAT/Loyalty_Freak_Music_-_MELODIES_WITH_A_BEAT_-_08_Beach/
+   : "Beach by Loyalty Freak Music is licensed under a CC0 1.0 Universal License". File: MP3 320 kbit/s, 161.0 s,
+   SHA-256 `f16e2eb58fa48fb00aa47192d8159c2c952d3d538ceec7bef3f79ee49db58724`.
+3. https://freemusicarchive.org/music/Loyalty_Freak_Music/TO_CHILL_AND_STAY_AWAKE/Loyalty_Freak_Music_-_TO_CHILL_AND_STAY_AWAKE_-_06_People_are_spinning/
+   : "People are spinning by Loyalty Freak Music is licensed under a CC0 1.0 Universal License". File: MP3
+   320 kbit/s, 236.7 s, SHA-256 `d8d96c3fc02d68f30e31af66e67b3735a4dc8eda11453e10369f6d472281211c`.
+4. https://opengameart.org/content/funky-disco-beats-to-boogiewoogie-to : the License(s) block reads "CC0" (only
+   that); the author writes "Just got in the mood to make a funky disco loop so here it is!!". File
+   `funkydiscobeatstoboogieslashwoogieto_0.ogg`, Vorbis 160 kbit/s, 133.1 s, SHA-256
+   `89f796ee542f3cfd0fa587a07b4c5bc8856c076e6c836c44b95a78176f9eded6`.
+
+The originals are in `...\p6-music-options\raw\tracks\` (names start `fma-` for the FMA files). To use one: copy it
+unchanged into `media/public/music/`, set `data/music.json` as below (title, author and page as above), add its
+`CREDITS.md` line, then `npm run video`. Each pair of numbers rebuilds the same fitted WAV bytes (checked).
+
+| # | `file` | `bpm` | `lift` |
+|---|---|---|---|
+| 1 | `music/everything-is-groovy.mp3` | 119.75 | 36.03 |
+| 2 | `music/beach.mp3` | 119.75 | 63.93 |
+| 3 | `music/people-are-spinning.mp3` | 110.25 | 17.21 |
+| 4 | `music/funky-disco-beats.ogg` | 110.25 | 45.75 |
+
+Checks:
+
+- Picture: the video packets of every option hash the same as the final's (900 packets, SHA-256 per packet with
+  ffprobe); H.264 1920 x 1080, 30 fps, BT.709 tags kept. Audio: AAC LC 48 kHz stereo at about 192 kbit/s, starting at
+  0 like the final's. The mux path gives the current pick the final's own readings (-15.4 LUFS, -1.4 dBTP, LRA 6.7).
+- Loudness about -15 LUFS: pass for all (-15.2 to -15.3, `loudnorm` after AAC).
+- True peak -1 dBTP or lower after AAC: pass for 2, 3 and 4; **fail for 1 (-0.8)**. Its loudest moment is at 5.0 s,
+  the tray shot's entrance effects over the music; every mix peaks there, the current final too (-1.36 dB).
+- Under 8 MB: pass for all (7.14 to 7.17 MB).
+- The music does not run out: pass. The music alone never falls below -27 dB RMS in any 0.5 s from the light (2 s)
+  to the end card (26 s); the quietest stretch is the planned 5 dB dip under the lid chime. No loop seam falls inside
+  the video: the cut ends at 64, 92, 48 and 76 s of tracks 116, 161, 237 and 133 s long.
+- The end card fade: pass. Mix levels every 0.5 s from 26 s: 1: -16 -15 -16 -17 -21 -28 -37 -53; 2: -16 -19 -20
+  -19 -21 -29 -38 -51; 3: -17 -18 -17 -20 -23 -30 -41 -56; 4: -15 -15 -16 -16 -21 -26 -38 -53 (the current: -15 -18
+  -15 -18 -21 -30 -40 -56); the last 0.1 s silent in all.
+- The chimes are C6 and G6: both are in the key of options 2, 3 and 4; option 1's D major has G but C sharp, so its
+  C6 chime may rub. Keys by script.
+
+Open items:
+
+- If Haik picks option 1, its true peak needs a fix before the final render: a lower limiter ceiling for it, or a
+  true-peak limiter, in `make-sounds.mjs`. A new track means a new final render anyway, so that change can come then.
+  Not done now: it would change the committed MP4's sound.
+- Runners-up, not built: "Dance Robot ACTIVATE" (Loyalty Freak Music, disco, 120 BPM, a sparse start then a lift at
+  6 s; C sharp minor, neither chime note in key; licence read: CC0 1.0), "Windows Down" (HoliznaCC0, lo-fi, 110 BPM,
+  C major, a sparse start; licence read: CC0 1.0), "One Cool Minute" (Loyalty Freak Music, ambient bounce, 120 BPM,
+  C major, flat; licence read: CC0 1.0), "After Party" and "It feels good to be alive too" (Loyalty Freak Music,
+  electronic; F minor at 120, and D major at 140.5, outside the range; licences not read). Their files are kept in
+  `raw\tracks\`.
+- Haik picks by ear; the pick then goes into the repo as in round 2 (file, `data/music.json`, `CREDITS.md`, README
+  decision 1, a new final render and its checks).
+
+Found outside scope (round 5):
+
+- `media/README.md` decision 1 says the final measures -1.2 dBTP after AAC; `loudnorm` here reads -1.4 dBTP on the
+  committed `out/wakeshot-promo.mp4` (SHA-256 `f749cfc3...`). Which build the -1.2 came from: not checked.
+- The fit's own lift search takes the biggest 2 s rise in the first minute; on "Beach" it landed before a 12 s
+  breakdown. `--lift` set it right, as the README allows; worth a line in the README's `music-candidate.mjs` row.

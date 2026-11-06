@@ -681,3 +681,164 @@ CPU in 10 idle minutes, 0.018% of one core; about 0.1 s to start holding (median
 2. `docs/research.md` "Tray size" (2,706,432 bytes) is an earlier build; "Speed numbers" has 0.1.0's sizes.
 3. `docs/research/img/ux/taskbar-*.png` and `int-icon-*.png` still show the old sunrise glyph, with another app's tray
    icon beside it. Fine as history; not for the README.
+
+## Round 5: a new README from scratch (Haik, 2026-11-06)
+
+Written by the orchestrator. Status: done. Agent: `wakeshot-worker`. Owns: `README.md` (whole),
+`docs/research/readme.md` (new), this card's Round 5 Log and Result; `site/index.html` only where its words now say
+the opposite of the new README (list the rest for `p6-pages`). Real laptop: no. Build folder:
+`<scratchpad>\p6-readme-r5\`.
+
+Haik's words, verbatim (voice input): "I do not like the readme.md. It's focus is on comparison and some numbers from
+start. I guess it's focus should be what it does and how easy to install and the installation part should be super
+simple to read. Then all other stuff can come. Maybe your agent should research how perfect readme.md should be and
+craft it from scratch. No need to do so many external links to claude and etc. Do not forget that we are going to add
+more and more features and options which will hold awake. Table of comparison is too big in rows. Not sure people
+care on velopack or too technical things there related to size. Lightweighness is enough. Also claude keep awake is
+only for claude desktop, you are right that claude code is out of it but also other agents or software are out. Go
+on research how perfect readme should be wich engage reading. First of all installation easiest way is winget path
+which has 0 words about it."
+
+What that means for the build:
+
+1. **Research first**, into `docs/research/readme.md` (short, sources linked, dates): what makes a README people read
+   to the end and act on. GitHub's own docs on READMEs, a few loved READMEs of small desktop utilities (read them,
+   do not copy layouts or lines), and what readers look for first. Rules with reasons, then the outline it leads to.
+2. **Write `README.md` from scratch** on that outline. Top: what Wakeshot does in plain words, the video spot, then
+   install, super simple. Everything else after.
+3. **Install: winget first.** `winget install HaikAsatryan.Wakeshot` is the main path; Setup.exe from Releases is the
+   second. Fact to keep honest: the winget package and the first release are not live yet (Phase 8 submits the first
+   version, `packaging/winget/README.md`). Write for launch day and leave one HTML comment where Phase 8 checks the
+   line. Check in `packaging/winget/` whether winget picks x64 or ARM64 by itself; say only what the manifest does.
+4. **Built to grow.** Present what holds the PC awake as a list of sources that will grow (today: Claude Code, any
+   command through `wakeshot run`, Keep awake from the menu; more later). No Claude-only framing of the product.
+5. **Lightweight is enough.** No Velopack, no MB numbers, no size cells near the top or in the table. The measured
+   numbers may stay as one line deep in the details (link `docs/research.md#speed-numbers`) or go: your call, say
+   which.
+6. **Small comparison table**, few rows, low on the page. The Claude desktop app's "Keep computer awake" covers only
+   the Claude desktop app: Claude Code, other agents and other software are not covered. Fewer external links overall,
+   especially to Claude pages.
+7. **Keep what must stay** (lower down, folded is fine): decision 41's list (`docs/architecture.md` row 41: the crash
+   gap and every path into it, one signed-in user per PC, `winget upgrade` ends `wakeshot run`, a credit line for
+   each port from a rival), what it changes on the PC and what an uninstall leaves (with `NotifyIconSettings`), the
+   commands, privacy, limits, Haik's story (`## Why I built it`, his words from Round 4, shorter is fine, keep it his
+   voice and true), the links to CONTRIBUTING, SECURITY and CODE_OF_CONDUCT, the icon loop, the menu and tooltip
+   stills, the state icons, and the "Haik: paste the video URL here" comment.
+8. Every fact still true to the code and docs; nothing new claimed without a source. Plain short English, no em
+   dashes, no emojis. Render check: the GitHub markdown API, light and dark pictures.
+9. Result: the new outline, the choices you made for Haik's review, what you cut and why, and the site lines that
+   now differ.
+
+### Log (round 5)
+
+- 2026-11-06: started by `wakeshot-worker`. Status: in progress. Read the Round 5 and Round 4 sections, the current
+  `README.md` (562 lines) and the plan's "How we work".
+- 2026-11-06 10:49: research read (GitHub docs, makeareadme, standard-readme, Art of README via the Wayback Machine,
+  NN/g, the 2017 Open Source Survey, Prana et al. 2018) and 10 READMEs of small desktop utilities (`gh api`, raw, into
+  the build folder). Facts: no release yet (`gh release list` empty); the winget manifest lists one installer per
+  CPU (x64, arm64); a silent Setup does not start the app (`research.md` 3610, 4370), so a winget install needs a
+  Start menu start. Claude desktop's Keep computer awake: the docs give no scope; issue anthropics/claude-code#94420
+  (a user's log) shows a hold per Code turn of the desktop app. No check script reads `README.md` besides our own.
+- 2026-11-06 about 10:52: `docs/research/readme.md` written: sources, 12 rules with reasons, the outline, and the facts
+  checked for the new install lines. Writing `README.md` now.
+- 2026-11-06 about 10:56: `README.md` written from scratch on that outline (579 lines; old copy in the build folder as
+  `README-round4.md`). Check scripts copied from round 4 into the build folder and changed: the install line's place
+  and the table's row count replace the old top count. First runs: links 46 of 46, help block equal, render has 5
+  tables, 9 folds, 8 pictures each with a dark source, the note alert in gfm mode, no comment shows.
+- 2026-11-06 10:58: read once as a stranger: the system line moved above the command, MIT into the pitch, one
+  repeated line cut. All checks run again (Result). `site/index.html`: no line says the opposite of the new README,
+  so not edited; the lines that now differ are listed for `p6-pages`. Scratch downloads deleted; the two check scripts
+  and the old README copy stay in the build folder for the final pass.
+
+### Result (round 5)
+
+Status: done. The card as a whole stays blocked as before: the video URL (Haik's upload), `p5-haik-check`, the
+SmartScreen `todo:`, and the `release:` and `winget:` comments that wait for the first release and Phase 8.
+
+**Done.** `docs/research/readme.md` (new): 8 sources and 6 utility READMEs, read 2026-11-06, 12 rules with reasons,
+the outline, and the facts checked for the new install lines. `README.md` rewritten from scratch on that outline
+(578 lines, was 562; everything below "Details" is folded).
+
+**The new outline.**
+
+1. Header lockup, light and dark.
+2. What it does: one bold sentence; one line of what holds the PC awake (an agent, a build or any command, Keep
+   awake), the lid, your settings back; "small, lightweight", MIT.
+3. The video spot ("Haik: paste the video URL here", unchanged).
+4. `## Install`: one `[!NOTE]` (not released yet, with a `release:` comment), the system line,
+   `winget install HaikAsatryan.Wakeshot` (with a `winget:` comment for Phase 8), "start it once from the Start
+   menu", `Setup.exe` from Releases as the other way; one fold: what the install sets up, the first notice,
+   SmartScreen (`todo:` kept), signing, updates.
+5. `## What keeps your PC awake`: a 4-row table of today's holds (Claude Code, any command, any script, you), "the
+   list grows", Codex CLI and Copilot CLI next.
+6. `## How it works`: a night with Wakeshot, five steps, agent-neutral.
+7. `## What you see`: the icon loop, the three state icons, the menu, the two tooltips.
+8. `## How it compares`: 5 rows, 3 rivals; one line on the Claude desktop app's own setting; where the others lead.
+9. `## Why I built it` and `### What comes next`: Haik's story, shorter, his voice.
+10. `## Details`, folded: when each hold counts, what it changes, lid and battery, menu and notices, commands,
+    updates and privacy, limits, uninstall.
+11. `## Credits and license`.
+
+**Choices for Haik's review.**
+
+1. winget is the first install path; the README is written for launch day, with one `[!NOTE]` saying nothing is
+   released yet. Change it when you prefer no install command until winget has the package.
+2. After `winget install`, the README says "start Wakeshot once from the Start menu": a winget install runs Setup
+   silently, and a silent Setup does not start the app (`docs/research/readme.md`, "Facts checked").
+3. "winget picks the Setup for your PC, x64 or ARM64": the manifest has one installer per CPU and Microsoft's docs
+   say winget selects the installer for the system. How it ranks them on an Arm PC is not verified.
+4. The icon loop moved from the top to "What you see", so the top is words, the video, then install. Change it when
+   the video is not uploaded by launch: put the loop back under the pitch.
+5. Measured numbers: one line kept, deep in "Updates and privacy" (memory and CPU only, linked to "Speed numbers").
+   The 0.1 s start delay, the `Setup.exe` size, the exe sizes and the Velopack size are cut.
+6. Table: 11 rows to 5 (set time; on its own for an agent; builds and scripts; lid closed; lock). Cut rows: keep
+   screen on (all do it), battery, updates, runs on, download size, price. Windows 10 support and the tiny
+   downloads of the others stay in one "where the others lead" line, without numbers.
+7. Links: each rival is linked once, in the table head; the cell sources are one link to `launch.md` part 1. One link
+   to a Claude page in the whole README (was 2); external links 8 (was 41, 14 unique).
+8. The Claude desktop app's Keep computer awake: "It holds for that app's own sessions, not for Claude Code in a
+   terminal, other agents or other programs", plus its docs' lid line. The scope rests on a user's log in
+   anthropics/claude-code#94420, not on Anthropic's docs (marked **reported** in `docs/research/readme.md`).
+   Change it when Anthropic documents the scope.
+9. Story: kept your facts and voice; "over 300 MB" without a link; the Claude part is one sentence with no link; one
+   relative link at the end to the "Story checks".
+10. Holds are a table with "Today these can hold" and "The list grows with each version", so new sources add a row.
+
+**Kept** (decision 41 and the brief's item 7): the crash gap and every path into it, one signed-in user per PC,
+`winget upgrade` ends `wakeshot run` and leaves Wakeshot off until sign-in, the credit line (no port), what it changes
+and what an uninstall leaves (with `NotifyIconSettings` and Velopack's own logs), the commands (help block equal to
+`USAGE`), privacy, limits, the story, the three community links, the icon loop, menu and tooltip stills, state icons,
+the video comment. The fold texts are the round 4 texts; only "Once Wakeshot is on winget:" and "Claude Code only, in
+v1" were reworded for launch day and for more sources.
+
+| Check | Outcome |
+|---|---|
+| Relative links and anchors (`check_readme.py`) | pass: 46 of 46 |
+| No em or en dash, no emoji or other non-ASCII; UTF-8, LF, no BOM | pass (README, `docs/research/readme.md`, this card's round 5 lines) |
+| Install command place | line 26; 9 counted lines before it (image tags, comments, blanks not counted) |
+| Comparison table | 5 rows; no "Velopack", "MB" or "KB" above its end |
+| External links (`--web`, one GET each, 10:58) | 8 of 8 gave 200 (`softwareok.com` is back) |
+| Help block equals `USAGE` in `args.rs` (`check_help.py`) | pass |
+| GitHub render (`gh api markdown`, gfm, repo context) | 5 tables, 9 folds, 8 `<picture>` each with a dark `<source>` and alt text, 1 note alert, no comment text shows; a repo README renders alerts (Ice's, `application/vnd.github.html`) |
+| `site/check_page.py site` | pass: 0 errors, 7 spots wait (unchanged) |
+| Other checks that read `README.md` | none (`media/scripts`, `site/check_page.py` and CI grepped) |
+
+**Site lines that now differ** (for `p6-pages`; none says the opposite, so `site/index.html` is not edited):
+
+1. Hero lead: "Your PC stays awake while your AI agent works"; the README leads with "while something needs it" and
+   names the holds.
+2. Hero speed line with three numbers; the README keeps two numbers, deep in the folds.
+3. Install: the site leads with the `Setup.exe` button and keeps winget for a Phase 8 comment; the README leads with
+   winget and the Start menu step.
+4. "A night with Wakeshot" step 1: "You give Claude Code a long task"; the README: "You start a long job".
+5. The site's comparison spot waits for "the reworked README": the 5-row table is ready to take.
+
+**Found outside scope (round 5).**
+
+1. `docs/product.md` "README (Haik, 2026-11-04)" still says the top shows the speed numbers, then the side by side
+   table, and that the README says macOS is planned. Haik's 2026-11-06 words change the order and the numbers; the
+   README now says macOS comes if Wakeshot gets popular or gets donations (his round 4 words). The line needs his new
+   words.
+2. This card's "Deliverables" and "Acceptance checks" (top at most 15 lines before the rival table, a source link in
+   every rival cell, speed numbers at the top) are the round 1 rules; round 5 replaces them.
+3. Art of README and common-readme (`hackergrrl/*`) are gone from GitHub (404); read in the Wayback Machine.

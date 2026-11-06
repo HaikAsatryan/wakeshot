@@ -5,6 +5,90 @@
   </picture>
 </h1>
 
+**Wakeshot keeps your Windows PC awake while something needs it, then lets it sleep as usual.**
+
+An AI agent at work, a long build or any other command, or Keep awake from the tray menu: while one of them runs, the
+PC stays awake, even with the laptop lid closed. When the work is done, your own power settings come back. A small,
+lightweight tray app: no window to learn, nothing else to install. Free and open source (MIT).
+
+<!-- Haik: paste the video URL here. Upload the final 30 second promo MP4 (where it is: media/README.md) to GitHub, by dragging it into a comment box on github.com or with `gh issue comment <n> --attach`. Then replace this whole comment with the bare https://github.com/user-attachments/assets/<id> URL on its own line, with a blank line above and below, so GitHub shows a player. Link nothing else for the video. -->
+
+## Install
+
+> [!NOTE]
+> Not released yet. The first release and the winget package are on the way; until then there is nothing to install.
+
+<!-- release: drop this note once the first release is out and winget has the package (Phase 8). -->
+
+For Windows 11, x64 and ARM64. It installs for your user only and never asks for admin rights.
+
+```powershell
+winget install HaikAsatryan.Wakeshot
+```
+
+<!-- winget: Phase 8 checks that this command installs Wakeshot once HaikAsatryan.Wakeshot is merged in winget-pkgs. -->
+
+Then start Wakeshot once from the Start menu. From then on it starts by itself each time you sign in.
+
+Or download the Setup from [Releases](https://github.com/HaikAsatryan/wakeshot/releases) and run it:
+`HaikAsatryan.Wakeshot-win-x64-Setup.exe`, or `HaikAsatryan.Wakeshot-win-arm64-Setup.exe` for Windows on Arm. It
+starts Wakeshot right away.
+
+<details>
+<summary>What the install sets up, the SmartScreen warning, and updates</summary>
+
+- **winget** picks the Setup for your PC, x64 or ARM64, and runs it silently. That is why Wakeshot first
+  starts from the Start menu or at your next sign-in.
+- **On first start**, a notice, "Wakeshot is running", says that its icon may hide under the `^` arrow on the
+  taskbar. To keep it in view, click the notice, then turn on Wakeshot under "Other system tray icons".
+- **What the install sets up:**
+  - the app in `%LocalAppData%\HaikAsatryan.Wakeshot`, and a Start menu shortcut (no desktop shortcut);
+  - start at login, a `Run` value under your user's registry;
+  - the `wakeshot` command on your user `Path` (open a new terminal to use it);
+  - its own data in `%LocalAppData%\Wakeshot`, kept apart from the app, so updates and reinstalls never touch it.
+- **Not signed yet.** v1 is not code-signed, so Windows SmartScreen may warn you before Setup runs.
+  <!-- todo: the exact SmartScreen words and the steps to go on are not in docs/research.md yet; add them from a capture of the first public pre-release (v0.1.0-rc.1). -->
+  Signing comes through SignPath Foundation's free program once Wakeshot has users; signed builds then show
+  "SignPath Foundation" as the publisher.
+- **Updates.** Wakeshot updates itself, also when winget installed it, so `winget upgrade --all` skips it. More in
+  [Updates and privacy](#updates-and-privacy).
+
+</details>
+
+## What keeps your PC awake
+
+Wakeshot calls each reason to stay awake a hold. While any hold runs, the PC stays awake. When the last one ends, the
+PC sleeps as usual, and your settings are your own again. Today these can hold:
+
+| What | The PC stays awake while |
+|---|---|
+| **Claude Code** | a session works, runs background tasks, or has a scheduled run due within the hour. Wakeshot reads the small status file Claude Code keeps: no hooks, no change to its settings |
+| **Any command**: `wakeshot run -- <command>` | that command runs: a build, a test suite, a backup, a download |
+| **Any script**: a [hold file](docs/hold-files.md) | the process named in the file runs |
+| **You**: Keep awake in the menu | the time you picked runs: 30 minutes, 1, 2 or 4 hours, or until you turn it off |
+
+The list grows with each version: Codex CLI and Copilot CLI are next. **Automatic**, on by default, is the switch for
+the first three; Keep awake works either way. The exact rules: [When each hold counts](#when-each-hold-counts).
+
+## How it works
+
+A night with Wakeshot:
+
+1. **You start a long job and walk away**, such as an agent's task or a build. The tray icon's light comes on. Your
+   screen still turns off on its usual timer; only sleep waits.
+2. **You close the lid.** A short chime says the laptop keeps running, and Wakeshot locks it, so a closed laptop
+   never runs unlocked.
+3. **The job ends in the night.** Wakeshot puts your lid and sleep settings back at once. After 5 minutes with no
+   input it plays a soft "going to sleep" sound and puts the laptop to sleep.
+4. **Morning.** You open the lid and sign in. A notice says how long the PC ran with the lid closed, and what kept it
+   running.
+5. **The battery ran low instead?** Below Windows' own energy saver level, Wakeshot steps back, puts your settings
+   back and puts the closed laptop to sleep after 5 minutes with no input.
+
+When nothing holds, Wakeshot changes nothing: your PC behaves as if Wakeshot were not there.
+
+## What you see
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="media/out/icon-loop-dark.gif">
@@ -12,52 +96,15 @@
   </picture>
 </p>
 
-**Your PC stays awake while your AI agent works. Then it sleeps as usual, with your own power settings back.**
-Keep awake on demand comes in the same menu, so you never need a second tool.
+The icon tells you what is going on, and its tooltip names what holds the PC awake:
 
-Small and quiet: [4.3 MB of private memory](docs/research.md#speed-numbers) and [109 ms of CPU in 10 idle minutes](docs/research.md#speed-numbers) (0.018% of one core). It starts holding the PC awake [about 0.1 s](docs/research.md#speed-numbers) after Claude Code starts work. Measured on 0.1.0, x64, 2026-11-06.
+| Icon | State | The tooltip says | What it means |
+|---|---|---|---|
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/out/state-holding-dark.png"><img src="media/out/state-holding-light.png" alt="A filled light over a line" width="16" height="16"></picture> | Holding | `Holding awake: Claude Code (1 session)` | Something needs the PC. It stays awake, and closing the lid does not stop it. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/out/state-idle-dark.png"><img src="media/out/state-idle-light.png" alt="An outlined light over a line" width="16" height="16"></picture> | Idle | `Not holding, the PC sleeps as usual` | Automatic is on, and nothing needs the PC right now. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/out/state-off-dark.png"><img src="media/out/state-off-light.png" alt="An outlined light over a line, struck through" width="16" height="16"></picture> | Off | `Automatic is off, the PC sleeps as usual` | Wakeshot watches nothing. Keep awake still works. |
 
-**Install:** download `HaikAsatryan.Wakeshot-win-x64-Setup.exe` (`-win-arm64-` for Windows on Arm) from [Releases](https://github.com/HaikAsatryan/wakeshot/releases) and run it. <!-- winget: Phase 8 adds "or: winget install HaikAsatryan.Wakeshot" to this line once the package is merged. -->
-Windows 11, x64 and ARM64. Per user, no admin. Free and open source (MIT). macOS is planned for later.
-Knows Claude Code today, with no hooks and no edits to its settings. Codex CLI and Copilot CLI come next.
-
-> Not released yet: the Releases page is still empty. <!-- release: drop this line at the first release. -->
-
-## How it compares
-
-PowerToys Awake, Caffeine and Don't Sleep are the most popular keep-awake tools for Windows that we could count.
-They keep the PC awake while you tell them to, and so does Wakeshot. The three rows in bold are what only Wakeshot
-does. Each rival cell links to the tool's own page or repo; all were read on 2026-11-04, and PowerToys again on
-2026-11-06.
-
-| | Wakeshot | PowerToys Awake | Caffeine | Don't Sleep |
-|---|---|---|---|---|
-| Keep the PC awake for a set time, or until I turn it off? | yes | [yes](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [yes](https://www.zhornsoftware.co.uk/caffeine/) | [yes](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
-| Keep the screen on too? | yes, if you ask | [yes, if you ask](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [yes, by default: it fakes a key press](https://www.zhornsoftware.co.uk/caffeine/) | [yes, if you ask](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
-| **Stay awake on its own while my AI agent works, then sleep as usual?** | yes | [no](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [no](https://www.zhornsoftware.co.uk/caffeine/) | [no](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
-| Stay awake while a build or a script runs? | yes: `wakeshot run -- <command>`, or a hold file from any script | [until a process ends, from the command line (`--pid`)](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [while a window with a given title is open, or until CPU use drops](https://www.zhornsoftware.co.uk/caffeine/) | [until CPU or network use drops; then it can also sleep or shut down the PC](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
-| **Keep a laptop working with the lid closed?** | yes, while something needs it, and locked; it sleeps once the work is done | [no](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [no](https://www.zhornsoftware.co.uk/caffeine/) | [no](https://www.softwareok.com/?seite=faq-DontSleep&faq=1) |
-| **Does my PC still lock when I walk away?** | yes: Windows locks it as usual; with the lid closed or Keep screen on, Wakeshot locks it | [not listed; its page says to lock the PC yourself](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [no, by default: its key presses stop the lock](https://www.zhornsoftware.co.uk/caffeine/) | [not listed](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
-| Step back when the battery runs low? | yes, at Windows' own energy saver level | [not listed](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [can work only while plugged in (`-onac`)](https://www.zhornsoftware.co.uk/caffeine/) | [can quit or sleep the PC at a battery level you set](https://www.softwareok.com/?seite=Microsoft/DontSleep/History) |
-| Updates itself? | yes, only while nothing needs the PC awake | [checks, then shows a notice](https://learn.microsoft.com/en-us/windows/powertoys/install) | [not listed](https://www.zhornsoftware.co.uk/caffeine/) | [an optional auto update](https://www.softwareok.com/?seite=Microsoft/DontSleep/History) |
-| Runs on | Windows 11, x64 and ARM64; macOS later | [Windows 10 and 11, x64 and ARM64](https://learn.microsoft.com/en-us/windows/powertoys/install) | [Windows, x86 and x64](https://www.zhornsoftware.co.uk/caffeine/) | [Windows 7 to 11, x86 and x64](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
-| Download | [12.3 MB Setup.exe](docs/research.md#speed-numbers) | [323.9 MB, all of PowerToys](https://github.com/microsoft/PowerToys/releases/tag/v0.102.3001) | [306 KB zip](https://www.zhornsoftware.co.uk/caffeine/) | [267 KB](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
-| Price | free, open source (MIT) | [free, open source (MIT)](https://github.com/microsoft/PowerToys) | [free (freeware)](https://www.zhornsoftware.co.uk/) | [free (freeware)](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
-
-A small native app: Wakeshot's two exes come to [3.6 MB on x64](docs/research.md#speed-numbers) and need no .NET or
-other runtime. Velopack's updater (about 5 MB) comes with them: 14.3 MB installed in all.
-
-Why no rival keeps a closed laptop working: Windows takes a lid close as you asking for sleep, and no keep-awake
-request can stop that; only the lid setting can ([Windows power facts](docs/research.md#windows-power-facts)).
-None of the three lists an option to change it.
-
-Where the others lead: years of use and many users. PowerToys Awake and Don't Sleep run on Windows 10 too, and
-Caffeine and Don't Sleep are tiny downloads (306 KB and 267 KB). Don't Sleep can also block a shutdown and shut the
-PC down on a schedule. Wakeshot is new, runs on Windows 11 only and knows only Claude Code today.
-
-## See it work
-
-<!-- Haik: paste the video URL here. Upload the final 30 second promo MP4 (where it is: media/README.md) to GitHub, by dragging it into a comment box on github.com or with `gh issue comment <n> --attach`. Then replace this whole comment with the bare https://github.com/user-attachments/assets/<id> URL on its own line, with a blank line above and below, so GitHub shows a player. Link nothing else for the video. -->
+Click the icon for the menu:
 
 <p align="center">
   <picture>
@@ -65,8 +112,6 @@ PC down on a schedule. Wakeshot is new, runs on Windows 11 only and knows only C
     <img src="media/public/shots/readme-menu-light.png" alt="Wakeshot's menu: Automatic, Keep awake, Restore my power settings, Open log and Quit" width="350" height="275">
   </picture>
 </p>
-
-The icon tells you what is going on, and the tooltip names what holds the PC awake:
 
 <p align="center">
   <picture>
@@ -79,52 +124,55 @@ The icon tells you what is going on, and the tooltip names what holds the PC awa
   </picture>
 </p>
 
-| Icon | State | The tooltip says | What it means |
-|---|---|---|---|
-| <picture><source media="(prefers-color-scheme: dark)" srcset="media/out/state-holding-dark.png"><img src="media/out/state-holding-light.png" alt="A filled light over a line" width="16" height="16"></picture> | Holding | `Holding awake: Claude Code (1 session)` | Something needs the PC. It stays awake, and closing the lid does not stop it. |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="media/out/state-idle-dark.png"><img src="media/out/state-idle-light.png" alt="An outlined light over a line" width="16" height="16"></picture> | Idle | `Not holding, the PC sleeps as usual` | Automatic is on, and nothing needs the PC right now. |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="media/out/state-off-dark.png"><img src="media/out/state-off-light.png" alt="An outlined light over a line, struck through" width="16" height="16"></picture> | Off | `Automatic is off, the PC sleeps as usual` | Wakeshot watches nothing. Keep awake still works. |
+## How it compares
 
-### A night with Wakeshot
+PowerToys Awake, Caffeine and Don't Sleep are the most popular keep-awake tools for Windows that we could count. All
+three keep the PC awake while you tell them to, and so does Wakeshot. The rows in bold are what only Wakeshot does.
 
-1. **You give Claude Code a long task and walk away.** The icon turns to holding. Your screen still turns off on its
-   usual timer; only sleep waits.
-2. **You close the lid.** A short chime says the laptop keeps running, and Wakeshot locks it, so a closed laptop
-   never runs unlocked.
-3. **Claude finishes in the night.** Wakeshot puts your lid and sleep settings back at once. After 5 minutes with no
-   input it plays a soft "going to sleep" sound and puts the laptop to sleep.
-4. **Morning.** You open the lid and sign in. A notice says how long the PC ran with the lid closed, and what kept it
-   running.
-5. **The battery ran low instead?** Below Windows' own energy saver level, Wakeshot steps back, puts your settings
-   back and puts the closed laptop to sleep after 5 minutes with no input.
+| | Wakeshot | [PowerToys Awake](https://learn.microsoft.com/en-us/windows/powertoys/awake) | [Caffeine](https://www.zhornsoftware.co.uk/caffeine/) | [Don't Sleep](https://www.softwareok.com/?seite=Microsoft/DontSleep) |
+|---|---|---|---|---|
+| Keep the PC awake for a set time, or until you turn it off | yes | yes | yes | yes |
+| **Stay awake on its own while an AI agent works, then sleep as usual** | yes | no | no | no |
+| Stay awake while a build or a script runs | yes | until a process you name ends (command line) | while a window with a given title is open, or until CPU use drops | until CPU or network use drops |
+| **Keep a laptop working with the lid closed** | yes, and locks it | no | no | no |
+| **Still lock the PC when you walk away** | yes | not listed; its docs say to lock the PC yourself | no, by default: its fake key presses stop the lock | not listed |
 
-No window, no settings page, nothing to learn: a tray icon, one menu, a few notices and a small command line.
+Read on each tool's own pages on 2026-11-04, and PowerToys Awake again on 2026-11-06. The source of every cell:
+[launch research](docs/research/launch.md#1-rivals-for-the-readme-table). Why none of them keeps a closed laptop
+working: no keep-awake request can stop a lid close, only the lid setting can
+([Windows power facts](docs/research.md#windows-power-facts)), and none of the three changes it.
+
+The Claude desktop app has a
+[Keep computer awake](https://code.claude.com/docs/en/desktop-scheduled-tasks#how-scheduled-tasks-run) setting too. It
+holds for that app's own sessions, not for Claude Code in a terminal, other agents or other programs, and its docs
+say that closing the lid still puts the laptop to sleep.
+
+Where the others lead: years of use and many users. They run on Windows 10 too, and Caffeine and Don't Sleep are tiny
+downloads. Don't Sleep can also block a shutdown and shut the PC down on a schedule. Wakeshot is new, runs on Windows
+11 only and knows one AI agent today.
 
 ## Why I built it
 
 Before Wakeshot, I used PowerToys Awake when an agent worked for hours or a big download ran. I installed all of
-PowerToys, a [323.9 MB download](https://github.com/microsoft/PowerToys/releases/tag/v0.102.3001) today, for that one
-feature. In its tray menu the longest set time is 2 hours. Longer ones are there too, but in PowerToys Settings or a
-JSON file ([its docs](https://learn.microsoft.com/en-us/windows/powertoys/awake)), and for me that was a step too
-many. Now and then I also ran into its bugs. Other tools I tried had gaps of their own.
+PowerToys, a download of over 300 MB, for that one feature. In its tray menu the longest set time is 2 hours. Longer
+ones are there too, but in PowerToys Settings or a JSON file, and for me that was a step too many. Now and then I also
+ran into its bugs. Other tools I tried had gaps of their own. The Claude desktop app's own setting does not keep a
+closed laptop working, and Claude Code in a Windows terminal does not keep the PC awake at all.
 
-So I ended up changing my laptop's power settings by hand for long sessions. When I had to close the lid, that meant
-more settings to change. Small stresses, again and again, but nothing critical. The critical part came when I forgot
-to change them back: a laptop running hot in my bag, or a dead battery right when I needed it.
+So I ended up changing my laptop's power settings by hand for long sessions, and more of them when I had to close the
+lid. Small stresses, again and again, but nothing critical. The critical part came when I forgot to change them back:
+a laptop running hot in my bag, or a dead battery right when I needed it.
 
-Claude's desktop app has a
-[Keep computer awake](https://code.claude.com/docs/en/desktop-scheduled-tasks#how-scheduled-tasks-run) setting, but
-its docs say closing the lid still puts the laptop to sleep. And Claude Code in a Windows terminal does not keep the
-PC awake at all
-([checked in its 2.1.318 binary](docs/research.md#story-checks-powertoys-awake-and-claudes-own-keep-awake)).
+That is why I built the tool I wanted, first of all for myself. It does a simple, almost trivial thing. Under the
+hood it is not simple: the lid, the battery, a dock, the lock, sleep, a crash, sign-out and updates each bring their
+own cases. I tried to get each one right, down to every notice and every sound. I hope it helps you too.
 
-That is why I built the tool I wanted, first of all for myself. It keeps the PC awake only while something needs it,
-keeps working with the lid closed, and puts my settings back when the work is done. It does a simple, almost trivial
-thing. Under the hood it is not simple: the lid, the battery, a dock, the lock, sleep, a crash, sign-out and updates
-each bring their own cases. I tried to get each one right, down to every notice and every sound. I hope it helps you
-too.
+(What this says about other tools is checked in
+[docs/research.md](docs/research.md#story-checks-powertoys-awake-and-claudes-own-keep-awake).)
 
 ### What comes next
+
+More reasons to stay awake will come, Codex CLI and Copilot CLI first.
 
 Wakeshot runs on Windows only, because I built it for myself and I use Windows. Its design is ready for other systems:
 the part that decides when to hold has no Windows code, so a port adds only the parts that talk to the system. A macOS
@@ -138,8 +186,9 @@ If you want to build something yourself, pull requests are welcome; I review eac
 
 ## Details
 
-- [Install](#install)
-- [What keeps the PC awake](#what-keeps-the-pc-awake)
+Everything else, folded. Open what you need.
+
+- [When each hold counts](#when-each-hold-counts)
 - [What it changes on your PC](#what-it-changes-on-your-pc)
 - [Lid closed, lock and battery](#lid-closed-lock-and-battery)
 - [The menu, notices and start at login](#the-menu-notices-and-start-at-login)
@@ -147,46 +196,11 @@ If you want to build something yourself, pull requests are welcome; I review eac
 - [Updates and privacy](#updates-and-privacy)
 - [Limits](#limits)
 - [Uninstall](#uninstall)
-- [Credits and license](#credits-and-license)
 
-### Install
-
-<details>
-<summary>Setup.exe from GitHub Releases, the SmartScreen warning, winget</summary>
-
-1. Open [Releases](https://github.com/HaikAsatryan/wakeshot/releases) and download the Setup for your PC:
-   - `HaikAsatryan.Wakeshot-win-x64-Setup.exe` for most PCs;
-   - `HaikAsatryan.Wakeshot-win-arm64-Setup.exe` for Windows on Arm.
-2. Run it. It installs for your user only and never asks for admin rights.
-3. Wakeshot starts right away, and from then on at each sign-in. A first notice, "Wakeshot is running", says that its
-   icon may hide under the `^` arrow on the taskbar. To keep it in view, click the notice, then turn on Wakeshot under
-   "Other system tray icons".
-
-What the install sets up:
-
-- the app in `%LocalAppData%\HaikAsatryan.Wakeshot`, and a Start menu shortcut (no desktop shortcut);
-- start at login, a `Run` value under your user's registry;
-- the `wakeshot` command on your user `Path` (open a new terminal to use it);
-- its own data in `%LocalAppData%\Wakeshot`, kept apart from the app, so updates and reinstalls never touch it.
-
-**Not signed yet.** v1 is not code-signed, so Windows SmartScreen may warn you before Setup runs.
-<!-- todo: the exact SmartScreen words and the steps to go on are not in docs/research.md yet; add them from a capture of the first public pre-release (v0.1.0-rc.1). -->
-Signing comes through SignPath Foundation's free program once Wakeshot has users; signed builds then show "SignPath
-Foundation" as the publisher.
-
-**winget.** Coming. Wakeshot will update itself there too: winget installs it, and Wakeshot's own updater keeps it
-current.
-<!-- winget: Phase 8 adds "winget install HaikAsatryan.Wakeshot" here once the package is merged. -->
-
-</details>
-
-### What keeps the PC awake
+### When each hold counts
 
 <details>
-<summary>Claude Code, <code>wakeshot run</code>, hold files and Keep awake</summary>
-
-Wakeshot calls each reason to stay awake a hold. While any hold counts, the PC stays awake. When the last one ends,
-the PC sleeps as usual.
+<summary>Claude Code, <code>wakeshot run</code>, hold files and Keep awake, exactly</summary>
 
 **Claude Code.** Wakeshot reads the small status file Claude Code keeps for each session (in `~/.claude/sessions`),
 and that session's transcript for timers and background tasks. It reads only the fields it needs, never stores or
@@ -426,7 +440,7 @@ For your own lengths and labels, write a hold file: [docs/hold-files.md](docs/ho
 ### Updates and privacy
 
 <details>
-<summary>Automatic updates between holds, two checks a day, no telemetry</summary>
+<summary>Automatic updates between holds, two checks a day, no telemetry, and what it uses</summary>
 
 - Wakeshot updates itself from GitHub Releases. It checks 5 minutes after it starts, then every 12 hours, and
   downloads a new version at once.
@@ -439,6 +453,8 @@ For your own lengths and labels, write a hold file: [docs/hold-files.md](docs/ho
 - No telemetry. The log stays on your PC: `%LocalAppData%\Wakeshot\logs\wakeshot.log`, plain English, rolled over at
   start once it passes 1 MB, three files kept. It never holds your prompts, transcript text or full command lines;
   `wakeshot run` keeps only the program's name.
+- Lightweight: at idle the tray app uses 4.3 MB of private memory and 109 ms of CPU in 10 minutes (0.018% of one
+  core), measured on 0.1.0, x64, on 2026-11-06 ([how](docs/research.md#speed-numbers)).
 
 </details>
 
@@ -484,18 +500,18 @@ agent turn. After a Quit whose restore failed, Wakeshot comes back 2 minutes lat
 user), Wakeshot puts your values back and keeps only its power request, then applies them again when you come back.
 If one user's changes were left behind (that session ended without a restore), another user's Wakeshot takes Do
 nothing for that user's own choice: no lock, no sleep. A second signed-in user's Wakeshot keeps the PC awake with
-the power request only. Remote Desktop into your session most likely counts as
-leaving the screen, so it gets the power request only; not tested yet.
+the power request only. Remote Desktop into your session most likely counts as leaving the screen, so it gets the
+power request only; not tested yet.
 
-**`winget upgrade` turns Wakeshot off until you sign in again.** Once Wakeshot is on winget: `winget upgrade` runs
-the new Setup silently. That ends Wakeshot and any running `wakeshot run` wrapper; the command itself goes on. Setup
-puts your power settings back, but a silent Setup does not start the app, so Wakeshot stays off until your next
-sign-in or until you start it from the Start menu. While it is off, nothing keeps the PC awake, also not for that
-command. If winget installed Wakeshot, `winget upgrade --all` skips it, since Wakeshot updates itself. If you
-installed from GitHub, `winget pin add HaikAsatryan.Wakeshot` makes `--all` skip it too (not tested on Wakeshot yet).
+**`winget upgrade` turns Wakeshot off until you sign in again.** `winget upgrade HaikAsatryan.Wakeshot` runs the new
+Setup silently. That ends Wakeshot and any running `wakeshot run` wrapper; the command itself goes on. Setup puts your
+power settings back, but a silent Setup does not start the app, so Wakeshot stays off until your next sign-in or
+until you start it from the Start menu. While it is off, nothing keeps the PC awake, also not for that command. If
+winget installed Wakeshot, `winget upgrade --all` skips it, since Wakeshot updates itself. If you installed from
+GitHub, `winget pin add HaikAsatryan.Wakeshot` makes `--all` skip it too (not tested on Wakeshot yet).
 
-**Claude Code only, in v1.** Codex CLI and Copilot CLI come next. Until then, `wakeshot run -- <agent>` holds for as
-long as the agent runs, idle or not; or write a hold file.
+**One AI agent in v1: Claude Code.** Codex CLI and Copilot CLI come next. Until then, `wakeshot run -- <agent>` holds
+for as long as the agent runs, idle or not; or write a hold file.
 
 **Some Claude Code waits do not hold.** Waiting for your answer holds only with Remote Control on, for at most 1
 hour; without it the PC may sleep while Claude waits for you. A scheduled run more than 1 hour away does not hold: the

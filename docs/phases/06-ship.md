@@ -160,8 +160,8 @@ those one at a time across all tracks.
 | `p6-install-e2e` | no; real laptop: installs, the real Run value and Path, a throwaway plan copy | `p6-velopack-dependency`, `p6-pack-and-release`; `p3-power-plan` (its first test shows a write to an inactive copy leaves the real plan alone) | done (committed 03:57): `packaging/e2e.ps1`, 81 of 81 checks twice at Medium; AFTER equals BEFORE |
 | `p6-launch-research` | yes: reads its Result (rival pick, Store recommendation) before the README, winget and Store cards are rewritten; no installs | none | done: its Result waits for Haik's read |
 | `p6-winget-manifest` | no | `p6-pack-and-release`; `p6-launch-research` (the winget rules for an app that updates itself) | done (committed 02:25): templates and `fill.ps1`; `winget validate` passed on the local packs |
-| `p6-readme` | yes: a read at the Phase 6 sign-off; the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3, sign-off item 12) are in, all defaults | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-claude`; the tray track's `p5-haik-check` (review m2); `p6-launch-research` (its scope grows from that Result, Haik 2026-11-04); `p6-media` | round 4 done (2026-11-06, da11c61): Haik's story, media, state icons, measured numbers, community file links; waits for Haik's video upload (one marked spot) and his read |
-| `p6-media` | yes: watches the video and the loop and says yes or what to change; about 10 min off the PC for the captures | `p6-launch-research` (tool, storyboard, shot list); `p5-haik-check` (final icon); integration's `p6-int-real-e2e` (the real app) | round 4 done (2026-11-06): the final video `media/out/wakeshot-promo.mp4` (7.1 MB, every check passing, same bytes on rebuild), speed numbers measured, review 0/1/10 fixed; waits for Haik's yes and his upload |
+| `p6-readme` | yes: a read at the Phase 6 sign-off; the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3, sign-off item 12) are in, all defaults | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-claude`; the tray track's `p5-haik-check` (review m2); `p6-launch-research` (its scope grows from that Result, Haik 2026-11-04); `p6-media` | round 5 done (2026-11-06): a new README from scratch on `docs/research/readme.md` (what it does, video, winget install first, holds as a growing list, a 5-row table low on the page, details folded); waits for Haik's read and his video upload (one marked spot) |
+| `p6-media` | yes: watches the video and the loop and says yes or what to change; about 10 min off the PC for the captures | `p6-launch-research` (tool, storyboard, shot list); `p5-haik-check` (final icon); integration's `p6-int-real-e2e` (the real app) | round 5 done (2026-11-06): Haik said yes to the picture; four new CC0 music options on it in the scratchpad; waits for his pick, then one render round, then his upload |
 | `p6-pages` | yes: one look before it goes live at v1 | `p6-readme`; the tray track's `p5-icon-art` and `p5-haik-check` (Haik's icon pick rewrites `assets/wakeshot.ico`; review m3) | blocked: draft done (11:50); 9 marked spots wait for other cards |
 | `p6-startup-switch-check` | no | `p6-install-e2e` | done (06:23: the off choice survives Setup over the install by the keys; uninstall leaves the StartupApproved value) |
 | `p6-tray-size` | no (stop 2, a dependency change, waits for the orchestrator) | `p6-int-update-wiring` | done (07:01: release tray 3.95 to 2.71 MB, CLI 0.67 to 0.56 MB) |
@@ -535,3 +535,27 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   for one frame inside a 12-frame blurred whip) left for Haik's eye; the reviewer and the orchestrator read it as
   motion, not a pop. Final: `media/out/wakeshot-promo.mp4`, 7,137,594 bytes, committed (d0ab62d). Pushed 6fc6280
   earlier (CI green) and this round after a clean secret scan.
+- 2026-11-06 10:28: Haik: "Video is ok", and he asks to try other music under it. The picture is signed off; the
+  upload still waits for his go. `p6-media` round 5 started (one worker): four new CC0 tracks with a spread of moods,
+  each fitted and muxed onto the final picture in the scratchpad, for Haik to pick by ear. No repo media change until
+  he picks.
+- 2026-11-06 10:40: Haik does not like the README: its top is comparison and numbers. He wants what it does and a
+  very simple install first (winget first, which the README never mentioned), a small comparison table, no Velopack
+  or size details ("lightweight is enough"), fewer Claude links, and room for more hold sources later. `p6-readme`
+  round 5 started (one worker): research what makes a README work (`docs/research/readme.md`), then a new README from
+  scratch. Runs alongside the music worker; they own different files.
+- 2026-11-06 10:45: Haik, yes to the three README defaults: the install leads with `winget install
+  HaikAsatryan.Wakeshot` written for launch day (the package goes live in Phase 8); his story stays after the install
+  and the main features, shorter is fine, his own words; the measured numbers become at most one line deep in the
+  details, or go, the worker's call.
+- 2026-11-06 11:00: `p6-media` round 5 done: four new CC0 options on the final picture (video packets the same as
+  the final's), in the scratchpad's `p6-music-options\`: 1 "Everything is groovy" (Komiku), 2 "Beach" and 3 "People
+  are spinning" (Loyalty Freak Music), 4 "Funky Disco Beats to Boogie/Woogie to" (Fupi); licences read on each
+  page; -15.2 to -15.3 LUFS; option 1 peaks at -0.8 dBTP (limit -1), fixed in the render if Haik picks it. Sent to
+  Haik to pick by ear. The worker ran one read-only `git diff --stat` against the rule; it changed nothing.
+- 2026-11-06 11:20: `p6-readme` round 5 done: `README.md` written from scratch on new research
+  (`docs/research/readme.md`): what it does, the video spot, install with winget first (written for launch day, with
+  a "not released yet" note), what holds as a growing table, how it works, what you see, a 5-row comparison, Haik's
+  story, details folded. External links 41 to 8. Every link, the help text and the GitHub render checked by the
+  worker. Not verified: how winget picks x64 or ARM64 on an Arm PC; the Claude desktop app line rests on a user's
+  report plus Haik's own words. Outside scope: `docs/product.md`'s README entry still has the old order.
