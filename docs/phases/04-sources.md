@@ -122,7 +122,7 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-cursor-source` | no: Cursor 3.27.12 passes hook input through a temp file on every plugin path, so the plugin ships | `p4-contracts-r3`, the hooks review verify | done (2026-11-06 ~20:50, f9a41e2): 21 + 8 core, 17 + 4 CLI tests; privacy and exit code rules broken on purpose and caught; `hook <agent> remove` wired |
 | `p4-agent-hooks-install` | no | `p4-contracts-r3`, the hooks review verify | done (2026-11-06 ~20:30, f46828f): 23 tests; link check and fixed file set broken on purpose and caught; the tray call and the CLI remove call not wired yet (to `p4-antigravity-source` and `p4-cursor-source`) |
 | `p4-antigravity-source` | only if its payload is on the command line | `p4-cursor-source`, `p4-agent-hooks-install` | running (2026-11-06 ~20:50), with the Cursor and Antigravity tray wiring |
-| `p4-live-vscode` | no | `p4-vscode-source`, `p4-live-harness`; live cards in parallel since 18:50 | running (2026-11-06 ~19:35) |
+| `p4-live-vscode` | no | `p4-vscode-source`, `p4-live-harness`; live cards in parallel since 18:50 | done, partly (2026-11-06 ~21:05, 857909e): 5 prompts; new chats go to the Copilot harness (the Copilot source holds them since 00e0120); Local chat files save on a 60 s beat (first save 44 s after a send, 34 s after an end), waiting posted 25 ms after the save; approve, stop and crash not tested (they need a click) |
 | `p4-live-opencode` | no | `p4-opencode-source`, the OpenCode review fixes; live cards in parallel since 18:50 | running (2026-11-06 ~20:30) |
 | `p4-live-cursor` | only if the payload check finds the command line | `p4-cursor-source`, `p4-agent-hooks-install`, the hooks code review fixes; live lane after `p4-live-opencode` | card written 2026-11-06 |
 | `p4-live-antigravity` | only if its payload is on the command line | `p4-antigravity-source`, `p4-live-cursor` | card written 2026-11-06 |
@@ -454,3 +454,9 @@ limit; Copilot waiting does not hold. The cards build these.
   and `watch/agents.rs` counts the holder whose pid is in the file name, whatever its image (only that pid when
   Restart Manager fails). VS Code's Copilot harness chats now hold as "Copilot". Worker calls for Haik's review: the
   pid-in-name rule; those chats show as "Copilot". `watch/*` handed to the `p4-live-opencode` worker for the poll.
+- 2026-11-06 ~21:05: `p4-live-vscode` done, partly (857909e). Haik's VS Code runs elevated (started by him at 11:05),
+  so the test chats ran at High in his instance (`code -n`, `code chat`); the readers ran at Medium. No parser fix
+  needed; the Linux path tests fixed. Not tested live: approve, Stop, closing mid-request, a crash (all need a click
+  or Haik's own window). For the end-to-end check on the new install: a VS Code Copilot harness chat must hold through
+  the Copilot source. Clean-up for Haik: close the "vscode-live" window (one confirmation); then the empty
+  `target\vscode-live` folder goes.
