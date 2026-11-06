@@ -554,3 +554,8 @@ limit; Copilot waiting does not hold. The cards build these.
   re-test before Wakeshot holds for it again (a changed cancel line could not be seen, so a version pin is the only
   exact guard). Told Haik. README and video name: "Antigravity CLI" (`docs/agent-hooks.md`, "README lines").
   `p4-vscode-local-off` starts now.
+- 2026-11-06 21:40: Haik: "Yes remove antigravity. Too much problematic." The version pin would hold nothing most of the
+  time: the Antigravity CLI's CHANGELOG.md was updated on about 25 days since 2026-10-02 (checked with `gh api`), and
+  no other exact signal shows an Esc. Antigravity is out of v1: the `p4-vscode-local-off` worker unwires it (tray and
+  plugin add; the remove path and the code stay). A feature request to Google (run `Stop` on Esc and Ctrl+C) was
+  offered; Haik did not take it up, so none is drafted.
