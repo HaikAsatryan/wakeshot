@@ -598,7 +598,7 @@ Every decision in `product.md`, by section. Phase numbers are from `plan.md`.
 | 6 | Idle with a timer due within 1 hour holds; none for the hidden loop fallback | section 7 | 4 |
 | 7 | `waiting` holds only with Remote Control, at most 1 hour | section 7 | 4 |
 | 8 | `shell` and open background tasks of non-terminal sessions hold while the process lives | section 7 | 4 |
-| 9 | Codex CLI, Copilot CLI, Copilot in VS Code (if its signal holds) and OpenCode in v1 (Haik, 2026-11-06; on 2026-11-03 they had moved to after v1); others later; logic may be ported from the MIT rivals with credit | section 7; a credit line in the README for each port | 4, 6 |
+| 9 | Codex CLI, Copilot CLI, Copilot in VS Code (its Copilot harness chats; VS Code's own Local chats out of v1, Haik 2026-11-06 21:28), OpenCode and Cursor in v1 (Haik, 2026-11-06; on 2026-11-03 they had moved to after v1); Antigravity out of v1 (Haik, 2026-11-06 about 21:50); others later; logic may be ported from the MIT rivals with credit | section 7; a credit line in the README for each port | 4, 6 |
 | 10 | `wakeshot run -- <command>` with a documented hold file | sections 4 and 6 | 4 |
 | 11 | Keep awake on demand | `holds\keep-awake.json` (section 6), episode flow | 2, 4, 5 |
 | 12 | Every signal checked against a fact; only the waiting hour and the battery floor limit time | `Liveness` on every hold and session (sections 5, 6, 7); the Codex rule is not yet tied to its session (section 7) | 2, 4 |
@@ -1303,8 +1303,9 @@ only the fallback for a Restart Manager failure (any `codex.exe`) still can, and
 `codex.exe` processes running. While a thread is listed, the Codex source also lists `sessions\` one level deep with a
 filter that takes no name, only so the watch thread watches that tree: rollout appends then reach the source within a
 second instead of at the 30 s tick. The tray starts the Codex source beside Claude Code (`app/tray_mode.rs`), and
-since `p4-contracts-r3` also Copilot CLI (`COPILOT_HOME`, else `.copilot`), VS Code chat and OpenCode, each found by
-its agent's own rule (below), one log line each saying which; the live cards test them through the app.
+since `p4-contracts-r3` also Copilot CLI (`COPILOT_HOME`, else `.copilot`) and OpenCode, each found by its agent's
+own rule (below), one log line each saying which; the live cards test them through the app. VS Code chat was started
+too until `p4-vscode-local-off` (below).
 
 OpenCode (in v1, 2.x only, Haik 2026-11-06; built by `p4-opencode-source`, started by the tray since
 `p4-contracts-r3`): `OpenCodeSource` reads `<data>\opencode\opencode.db` (`XDG_DATA_HOME`, else `%USERPROFILE%\.local\share`) with
@@ -1314,8 +1315,12 @@ schedules (timers, due at the later of `next_due_at` and `retry_at`). No query n
 holds OpenCode's login tokens, and a test fails if one does. A failed or odd answer is one `Unreadable("opencode.db")`
 entry; `no_sqlite` (no usable `winsqlite3.dll`) is no signal and no notice. 1.x is not read (its state is in `message` rows, which hold prompt text). `docs/research/opencode-signals.md`.
 
-VS Code chat (in v1, Haik 2026-11-06; built by `p4-vscode-source`, started by the tray since `p4-contracts-r3`):
-`VsCodeSource` follows `research/copilot-vscode-signals.md` rules 1 to 5 and 7, label "Copilot in VS Code".
+VS Code chat (built by `p4-vscode-source`; started by the tray from `p4-contracts-r3` to `p4-vscode-local-off`): out
+of v1 (Haik, 2026-11-06): a Local chat whose window closes mid-turn stays Pending on disk until VS Code exits, so its
+end is not seen (`p4-live-vscode-stop`). `tray_mode::watched_sources` leaves it out; the code and its tests stay for
+a later version. VS Code's Copilot harness chats are Copilot CLI sessions of `copilot-runtime.exe` and hold through
+`CopilotSource`. `VsCodeSource` follows `research/copilot-vscode-signals.md` rules 1 to 5 and 7, label "Copilot in
+VS Code".
 
 - Two `Recent` wants per build (Stable and Insiders, found from `VSCODE_APPDATA`, else `APPDATA`):
   `<User>\workspaceStorage\<workspace>\chatSessions\<id>.jsonl` and `<User>\globalStorage\emptyWindowChatSessions\
@@ -1340,8 +1345,9 @@ found, label "Cursor" or "Cursor CLI" from the source's own strings; `problem.js
 "update Wakeshot" notice while their process lives. The shared code is `sources::hooked` (`HookedSource` and the
 `Agent` table), so Antigravity adds only its table.
 
-Antigravity, CLI and IDE (built by `p4-antigravity-source`, 2026-11-06; started by the tray beside Cursor): the same
-way, from `agents\antigravity\<chat>.json`. `agy` 1.5.2 runs each hook as `cmd /c <command>` with the input on stdin
+Antigravity, CLI and IDE (built by `p4-antigravity-source`, 2026-11-06; started by the tray beside Cursor until
+`p4-vscode-local-off` took it out of v1, Haik 2026-11-06; kept for a later version): the same way, from
+`agents\antigravity\<chat>.json`. `agy` 1.5.2 runs each hook as `cmd /c <command>` with the input on stdin
 (`research.md`, "Antigravity hook payload form"). `PreInvocation` (before every model call) writes the chat's file as
 `working`, skipped when it already says so; `Stop` deletes it when `fullyIdle` is true and rewrites it as `background`
 when false, which the source gives as `Idle` with one open task. There is no session end event, so every session
@@ -1559,8 +1565,9 @@ from `.gemini\config\plugins\wakeshot\` with `PreInvocation` and `Stop`):
 - Since `p4-antigravity-source` (2026-11-06): Antigravity's folder `.gemini\config\plugins\wakeshot\` (`plugin.json`,
   `hooks.json` and the marker, no subfolder) runs `<exe> hook antigravity PreInvocation` and `... Stop` with the exe
   as a bare path, since `agy` runs each hook as `cmd /c <command>` and only a path with no space, quote or `cmd`
-  sign survives that; any other path gets no Antigravity hooks. The tray starts both hooked sources
-  (`tray_mode::hooked_sources`) and calls `startup::add_agent_hooks` once per start (`tray_mode::start_agent_hooks`).
+  sign survives that; any other path gets no Antigravity hooks. Out of v1 since `p4-vscode-local-off`: a start adds
+  only the agents of `agent_hooks::ADDED_AT_START` (Cursor), while remove and uninstall still know Antigravity. The
+  tray starts the hooked source (`tray_mode::hooked_sources`, Cursor only since then) and calls `startup::add_agent_hooks` once per start (`tray_mode::start_agent_hooks`).
   An agent whose own folder (`.cursor`, `.gemini\config`) is gone at a start is dropped from the record, so a
   reinstall of that agent gets the hooks again; only Wakeshot's folder gone, the agent's still there, stays "removed"
   (orchestrator decision, for Haik's review).

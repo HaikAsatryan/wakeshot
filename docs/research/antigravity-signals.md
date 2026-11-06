@@ -448,3 +448,14 @@ are not held. The IDE's hooks write nothing (the IDE is out of v1 until its own 
 
 Not tested: `killBackgroundTasks=true` (never seen), `/clear` or `/new` during a turn, a turn that ends on a quota or
 network error, `/btw`, a second TUI through the tray in Part B (Part A saw each process keep its own log), the IDE.
+
+## Out of v1 (2026-11-06)
+
+Haik, about 21:50: "Yes remove antigravity. Too much problematic." (card `p4-vscode-local-off`). The reason the
+orchestrator gave: the rule above trusts `agy` 1.5.2 only, and `agy` releases almost daily (its `CHANGELOG.md`
+changed on about 25 days since 2026-10-02; not verified here), so it would hold nothing most of the time, and
+Esc has no other exact signal ("Exact end"). Since then the tray neither watches Antigravity nor adds its plugin
+folder at a start; `wakeshot hook antigravity remove` and the uninstall still remove a folder an earlier build added.
+Verified by tests in `app/tray_mode.rs` (`the_tray_starts_the_v1_sources_only`) and `agent_hooks.rs`
+(`a_start_adds_no_antigravity_folder_and_the_uninstall_still_removes_an_old_one`), each seen failing when Antigravity
+was put back. The source, the log reader and their tests stay for a later version.

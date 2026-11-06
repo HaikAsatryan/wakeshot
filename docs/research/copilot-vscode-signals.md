@@ -493,3 +493,19 @@ reload heals the request to Cancelled on disk (`chatModel.ts:3432-3435`) was not
 nothing in 4.5 minutes nor at its window's close. Rule 7 still drops the leftover once VS Code starts anew. The same
 is expected for a Reload Window or a folder change mid-turn (same dispose path; not run). The leftover test chat was
 deleted after the fixture was taken, so no later dry-run tray on this PC holds on it.
+
+## Local chats out of v1 (2026-11-06)
+
+Haik, 21:28, on the default the Stop live test proposed: "your default answer is good" (card
+`p4-vscode-local-off`). Wakeshot v1 does not read VS Code's own Local chat files: the tray no longer starts
+`VsCodeSource` and watches no folder under the VS Code user folder, so the window close case above cannot hold the
+PC. Copilot harness chats in VS Code stay supported: they are Copilot CLI sessions of `copilot-runtime.exe`, held by
+the Copilot source (rule 8). The source, its fixtures and its tests stay for a later version; revisit when VS Code
+writes the end of a Local turn at a window close.
+
+Checked by tests in `app/tray_mode.rs`, each on real files in a scratch profile, read by the watch's own `Agents` and
+fed to the core: `a_local_vs_code_chat_holds_nothing_through_the_tray` (the live `close-while-working.jsonl` with a
+`Code.exe` started before its send holds through `VsCodeSource`, and holds nothing through the tray's sources) and
+`a_copilot_harness_chat_in_vs_code_holds_through_the_tray_until_its_stop` (the live harness log, cut at its first
+`sleep 60`, holds through the tray with the runtime holding `inuse.2728.hold`, and the hold ends at its `abort` and
+`assistant.turn_end` while the Local chat on disk still says working). Both fail when `VsCodeSource` is put back.

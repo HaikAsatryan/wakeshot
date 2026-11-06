@@ -3,6 +3,10 @@
 //!
 //! Owner: `p4-vscode-source`; fixes by the VS Code live card.
 //!
+//! Not started by the v1 tray (Haik, 2026-11-06, `docs/tasks/p4-vscode-local-off.md`): a Local chat whose window
+//! closes mid-turn stays Pending on disk, so its end is not seen (`docs/tasks/p4-live-vscode-stop.md`). Kept, with its
+//! tests, for a later version. VS Code's Copilot harness chats hold through `sources::copilot`.
+//!
 //! Built from VS Code 1.145.1's own code, read as data (`docs/tasks/p4-vscode-source.md`, Log), then checked on real
 //! chats (`docs/tasks/p4-live-vscode.md`, `docs/tasks/p4-live-vscode-stop.md`). Rules still marked "not verified"
 //! were not seen live.

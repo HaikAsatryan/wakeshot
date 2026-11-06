@@ -5938,3 +5938,45 @@ its prompt lines cut out, then the built rule through a dry-run tray. Details: `
   runs no hook. **Verified** live.
 - **Through the app** (built rule, debug build, dry-run tray): Esc or Ctrl+C ended the hold at the next safety tick,
   7.6 to 20.4 s after the cancel line (4 runs); Esc then `/exit` ended it at the process's end. **Verified** live.
+
+## Media: the promo's music level and three new music options
+
+Card `p6-agents-video-readme`, Part D, 2026-11-06. How checked: scripts on the decoded audio (Remotion's own ffmpeg to
+48 kHz WAV, then BS.1770 short-term loudness and FFT band shares in plain JavaScript), and each track page read with
+curl. Nothing here was heard by ear. Details and the numbers per track: `docs/research/promo-video.md`, "Music and
+effects".
+
+- **The Part C mix dipped where Haik heard it**: the music sat 6 dB down under the hook, was silent for 4 frames
+  before the light, and went 9 dB down under the lid chime (a 4 dB duck of the whole music plus a 5 dB dip in the
+  fit). **Verified** in the code (`fit-music.mjs`, `make-sounds.mjs`) and on the round 6 final's 3 s loudness curve
+  (from -19.5 LUFS at 1.5 s to -12.5 under the chimes).
+- **Funky Disco Beats has its bass mostly below 100 Hz**: 78% of its energy in 40 to 100 Hz and 11% in 100 to
+  250 Hz (20 to 100 s of the track). Small speakers play little under about 150 Hz (general audio knowledge, **not
+  verified** on Haik's speakers), which may be why he asked for "a little bass". The three new tracks put 26%, 20%
+  and 45% in 100 to 250 Hz.
+- **Licences**: "Can't Stop My Feet !" (Loyalty Freak Music) and "Lost In The Rythm" (HoliznaCC0) pages on the Free
+  Music Archive say "is licensed under a CC0 1.0 Universal License"; "Funked Up" (Joth) on OpenGameArt says
+  "License(s): CC0" and asks for credit in its notice (a request; CC0 does not require it). **Verified** by curl,
+  2026-11-06. The first page says "Instrumental: No": **not verified** what voice is in it.
+- **One clean rebuild of the final differed once** ("Can't Stop My Feet !", first run), while the draft, the
+  soundtrack and the poster of the same run matched; the same track's second run, and the runs of the other three
+  tracks, rebuilt every output to the same bytes, and the two finals of that track made in `media/` were the same
+  bytes. The pain rendered twice gave equal pixels in all 246 frames. Which frames differed: **not verified** (the
+  copy was gone before the finder was added).
+
+## VS Code Local chats and Antigravity out of v1
+
+Card `p4-vscode-local-off`, 2026-11-06, from Haik's answers (21:28 and about 21:50). How checked: tests in
+`crates/wakeshot-windows` that run real files in a scratch profile through the watch's own `Agents` and the core's
+`Sim`, and a mutation check (VS Code's source and Antigravity put back: the tests fail). Details:
+`research/copilot-vscode-signals.md` and `research/antigravity-signals.md`, the last section of each.
+
+- **The v1 tray starts five sources**: Claude Code, Codex CLI, Copilot CLI, OpenCode, Cursor. **Verified** by test
+  (`the_tray_starts_the_v1_sources_only`).
+- **A Local VS Code chat left working holds nothing through the tray**, though the same file and a `Code.exe` started
+  before its send hold through `VsCodeSource`. **Verified** by test.
+- **A Copilot harness chat in VS Code still holds through the tray** and ends at its Stop (`abort`, then
+  `assistant.turn_end`), read from the live harness log. **Verified** by test.
+- **A start adds no Antigravity folder and leaves an old one alone; the uninstall still removes it.** **Verified** by
+  test. Why Antigravity left: its rule trusts `agy` 1.5.2 only, and `agy` releases almost daily (the orchestrator's
+  count: `CHANGELOG.md` changed on about 25 days since 2026-10-02; **not verified** here).
