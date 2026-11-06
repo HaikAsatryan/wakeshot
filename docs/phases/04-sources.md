@@ -529,7 +529,12 @@ limit; Copilot waiting does not hold. The cards build these.
 - 2026-11-06 19:50: Haik did `p4-live-cursor` round 2 ("done", nothing shown); the worker finishes the card. Haik
   kept Claude's cancelled wakeup as it is (default; `docs/product.md`, "No guessing"). `p4-antigravity-exact-end`
   Question 1 (read `agy`'s log for the cancel line) asked of him.
-- 2026-11-06 20:00: Haik, "ok agree": `p4-antigravity-exact-end` Part B reads `agy`'s log for the cancel line, with a
+- 2026-11-06 19:52: Haik, "ok agree": `p4-antigravity-exact-end` Part B reads `agy`'s log for the cancel line, with a
   guard (a log that stops looking as tested turns Antigravity off with "update Wakeshot"); the CLI only in v1, the
   IDE out until its own check passes (so Haik's IDE first-run pass is not needed for v1). Part B starts when
   `p4-live-cursor` ends.
+- 2026-11-06 19:58: Haik did `p4-live-cursor` round 3 (Ctrl+N and Ctrl+F4 while a chat works) and the
+  `p4-live-vscode-stop` window close ("Done both"). Both workers resumed to finish. Cursor round 2 results: the Stop
+  button is exact (`stop` "aborted", hold ends about 1.4 s later); a window close ends the found process in 20 ms; the
+  Cursor CLI fires only `sessionEnd`, so it is not covered in v1 (editor only). VS Code: Stop, approve and deny exact
+  for both chat kinds (Local chats up to a minute late, at their 60 s save); no fix needed so far.

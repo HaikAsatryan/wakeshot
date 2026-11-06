@@ -99,7 +99,7 @@ absence of an event. A state that can stay "working" after the work ended is not
    is not documented, so a later `agy` may change the line. Default: yes, build it this way. If no: Antigravity
    leaves v1, as the card says.
 
-   Haik, 2026-11-06 20:00: "ok agree" (to: yes, with a guard: if the log stops looking as tested, Wakeshot stops
+   Haik, 2026-11-06 19:52: "ok agree" (to: yes, with a guard: if the log stops looking as tested, Wakeshot stops
    holding for Antigravity and shows "update Wakeshot", never a guess; the CLI only in v1, the IDE out until its own
    check passes). Part B builds it once `p4-live-cursor` is done.
 
