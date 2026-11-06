@@ -435,3 +435,12 @@ limit; Copilot waiting does not hold. The cards build these.
   away, so its record is forgotten and the hooks come back when it is found again; only Wakeshot's own folder gone
   stays "removed by the user" (`p4-antigravity-source` item 7). `p4-live-opencode` started (slot freed). The VS Code
   live card asked Haik to close its elevated test window after one approval click (relayed in chat).
+- 2026-11-06 ~20:40: `p4-live-opencode` found a watch bug: OpenCode turns are read only at the 30 s tick, never on a
+  notice (a 2.8 s turn was never posted). The `-wal` keeps one size and NTFS reports no last-write change while
+  OpenCode holds it open, so no notice fires; and OpenCode leaves `-wal` and `-shm` after a clean stop, so the "only
+  while `-wal` exists" rule never turns reads off. Orchestrator decision: a poll of about 2 s for `Query` wants while
+  a process of the source's images lives, none while none lives, through a new field on `WantedFile::Query` (a narrow
+  contract change: only OpenCode and the watch thread name `Query`), built by the `p4-live-opencode` worker after
+  `p4-live-copilot` (owner of `watch/*` now) ends, with a live re-time. For Haik's review: this narrow change runs
+  beside cards that never name `Query`, not alone (his rule says contracts change alone; the risk is only to the
+  files that name the variant).
