@@ -460,3 +460,10 @@ limit; Copilot waiting does not hold. The cards build these.
   or Haik's own window). For the end-to-end check on the new install: a VS Code Copilot harness chat must hold through
   the Copilot source. Clean-up for Haik: close the "vscode-live" window (one confirmation); then the empty
   `target\vscode-live` folder goes.
+- 2026-11-06 ~21:10: hooks code review done (`docs/reviews/p4-hooks-code.md`): 0 blockers, 1 major, 7 minors. M1: the
+  privacy check on the parent's command line runs only after the parent walk finds an agent process, and not when the
+  process list fails (`hook.rs:295-326`): if a later Cursor runs plugin hooks from its agent host daemon (command-line
+  form), prompts would reach audit logs and the plugin would stay. Not a risk on today's Cursor (temp file on every
+  plugin path). Orchestrator decision, to save a round: `p4-live-cursor` owns `hooked.rs`, `hook.rs`, `agent_hooks.rs`
+  and `hooks.rs` this round, so it fixes M1 and the minors in them first, then runs the live steps; the same
+  reviewer checks M1 after. `sources/antigravity.rs` was not reviewed (being written); the live card covers it.
