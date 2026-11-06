@@ -421,3 +421,10 @@ limit; Copilot waiting does not hold. The cards build these.
   not catch it. Fix card `p4-core-linux-tests` started (owns the Codex and OpenCode test files; tries a Rust toolchain
   in WSL for Haik's user, no sudo; lists other failing files). Orchestrator decision: it runs as a fifth Rust card,
   since it builds only the core and CI is red. The running cards were told the path rule.
+- 2026-11-06 ~20:15: `p4-core-linux-tests` done (750b023, 322924e): CI's core step now runs `--no-fail-fast`. From
+  `p4-live-vscode`: in this VS Code every new chat from `code chat` goes to the Copilot (agent host) harness, not
+  Local, even with `chat.defaultToCopilotHarness: false`; the session is in `~\.copilot\session-state\<id>\` owned by
+  `copilot-runtime.exe`, and the Copilot source posts it working but `Gone` (its liveness looks for `copilot.exe`), so
+  it does not hold. Routed to `p4-live-copilot` (research rule 8: accept `copilot-runtime.exe` and `Code.exe` owners).
+  Also `alive=Gone` from Medium for a running `copilot.exe`: elevation of the test process or a real Medium-to-High
+  gap; `p4-live-copilot` says which. The VS Code worker was asked to check who started the elevated VS Code.
