@@ -161,7 +161,7 @@ those one at a time across all tracks.
 | `p6-launch-research` | yes: reads its Result (rival pick, Store recommendation) before the README, winget and Store cards are rewritten; no installs | none | done: its Result waits for Haik's read |
 | `p6-winget-manifest` | no | `p6-pack-and-release`; `p6-launch-research` (the winget rules for an app that updates itself) | done (committed 02:25): templates and `fill.ps1`; `winget validate` passed on the local packs |
 | `p6-readme` | yes: a read at the Phase 6 sign-off; the answers it states (Phase 1 Questions 10 to 12, this track's 1 to 3, sign-off item 12) are in, all defaults | `p6-pack-and-release`, `p6-install-e2e`; the sources track's `p4-hold-files`, `p4-cli-args`, `p4-live-claude`; the tray track's `p5-haik-check` (review m2); `p6-launch-research` (its scope grows from that Result, Haik 2026-11-04); `p6-media` | round 5 done (2026-11-06): a new README from scratch on `docs/research/readme.md` (what it does, video, winget install first, holds as a growing list, a 5-row table low on the page, details folded); waits for Haik's read and his video upload (one marked spot) |
-| `p6-media` | yes: watches the video and the loop and says yes or what to change; about 10 min off the PC for the captures | `p6-launch-research` (tool, storyboard, shot list); `p5-haik-check` (final icon); integration's `p6-int-real-e2e` (the real app) | round 5 done (2026-11-06): Haik said yes to the picture; four new CC0 music options on it in the scratchpad; waits for his pick, then one render round, then his upload |
+| `p6-media` | yes: watches the video and the loop and says yes or what to change; about 10 min off the PC for the captures | `p6-launch-research` (tool, storyboard, shot list); `p5-haik-check` (final icon); integration's `p6-int-real-e2e` (the real app) | round 6 done (2026-11-06): the final with Haik's music pick (option 4, Fupi, CC0) and a time cut that shows "Later," on black; `media/out/wakeshot-promo.mp4` 7.0 MB, every check passing, same bytes on rebuild; waits for his upload |
 | `p6-pages` | yes: one look before it goes live at v1 | `p6-readme`; the tray track's `p5-icon-art` and `p5-haik-check` (Haik's icon pick rewrites `assets/wakeshot.ico`; review m3) | blocked: draft done (11:50); 9 marked spots wait for other cards |
 | `p6-startup-switch-check` | no | `p6-install-e2e` | done (06:23: the off choice survives Setup over the install by the keys; uninstall leaves the StartupApproved value) |
 | `p6-tray-size` | no (stop 2, a dependency change, waits for the orchestrator) | `p6-int-update-wiring` | done (07:01: release tray 3.95 to 2.71 MB, CLI 0.67 to 0.56 MB) |
@@ -559,3 +559,18 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   story, details folded. External links 41 to 8. Every link, the help text and the GitHub render checked by the
   worker. Not verified: how winget picks x64 or ARM64 on an Arm PC; the Claude desktop app line rests on a user's
   report plus Haik's own words. Outside scope: `docs/product.md`'s README entry still has the old order.
+- 2026-11-06 11:40: Haik picks music option 4, "Funky Disco Beats to Boogie/Woogie to" (Fupi, CC0, OpenGameArt):
+  "much better". He also asks about the black at about 16 to 17 s: that is the planned time cut into the sleep shot
+  (`T.sleeps`, 0.2 s down to dark, 0.4 s back, "Later" only after it), and to him it looks like a broken cut. His
+  answer on how to fix it decides the next render round.
+- 2026-11-06 11:50: Haik left the time cut fix to the orchestrator and said to finalize with option 4. Orchestrator
+  decision: keep the time cut but make it explain itself ("Later" lands while the frame is dark, the dip about 0.8 s
+  and darker than the dim settings shot), since a plain slide would make the sleep look immediate, a claim the app
+  does not keep (Haik's 00:56 note). `p6-media` round 6 started (one worker): option 4 in, the time cut, the final
+  render and every check.
+- 2026-11-06 11:55: `p6-media` round 6 done: option 4 in (`media/public/music/funky-disco-beats.ogg`, the original
+  file, SHA-256 checked; licence read again; the old track removed); the time cut fades to full black over 501 to
+  508, holds to 515 with "Later," on the black from 511, and the picture comes back by 525. Final 7,022,023 bytes;
+  `check`, typecheck, `check-art`, `check-video`, `check-rebuild --final` pass; loudness -15.3 LUFS, -1.1 dBTP
+  (rechecked by the orchestrator with `loudnorm`; 0.1 dB under the limit). The orchestrator looked at frames 505, 513,
+  520 and 525. The worker ran `git --version` once against the rule; it changed nothing.

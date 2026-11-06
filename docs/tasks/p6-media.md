@@ -895,3 +895,172 @@ Found outside scope (round 5):
   committed `out/wakeshot-promo.mp4` (SHA-256 `f749cfc3...`). Which build the -1.2 came from: not checked.
 - The fit's own lift search takes the biggest 2 s rise in the first minute; on "Beach" it landed before a 12 s
   breakdown. `--lift` set it right, as the README allows; worth a line in the README's `music-candidate.mjs` row.
+
+## Round 6: option 4 and a clear time cut, the final (2026-11-06)
+
+Written by the orchestrator. Status: done 2026-11-06 11:36 (Result below; waits for Haik's look). Agent: `wakeshot-worker`. Owns what Part C owns. Real laptop: no
+screen, no power settings, no Claude Code test session. Build folder: `<scratchpad>\p6-media-r6\`.
+
+Haik, 2026-11-06: "option 4 is much better", and about the black at 16 to 17 s: "is that ok that screen changes with
+black. Like cutted?" Asked how to fix it, he left the call to the orchestrator and said to finalize with option 4.
+
+1. **Music: option 4**, "Funky Disco Beats to Boogie/Woogie to" by Fupi (Round 5 Result: page, licence quote,
+   SHA-256, `bpm` 110.25, `lift` 45.75). Read the licence on its page again. Copy the original file unchanged into
+   `media/public/music/`, set `data/music.json`, write its `CREDITS.md` line. Remove `a-chill-fever.mp3` and its line
+   (say in `CREDITS.md` that it was the earlier pick, replaced 2026-11-06). README decision 1 and `promo-video.md`
+   "Sound" follow.
+2. **The time cut into the sleep shot (`T.sleeps`), orchestrator decision.** Today the frame dips to 85% black for
+   0.2 s and back over 0.4 s, and "Later" comes only after the picture is back. Since the settings shot before it is
+   already dim, the dip reads as a dropped picture, not as time passing. Keep the time cut (a dip to dark is the
+   usual sign of time passing, and a plain slide would make the sleep look immediate, a claim the app does not keep:
+   Haik's 00:56 note) and make it explain itself: "Later" lands while the frame is dark and stays readable, then the
+   picture comes back under the rest of the line. The whole dip about 0.8 s (for example 9 frames down, a short hold
+   at the darkest, the rest back), darker than the dim settings shot at its lowest, so it reads as a deliberate
+   beat. Keep `check-pace` passing and the shot times; `promo-video.md` rows (Time cut, shot 6) follow.
+3. **Final render**: DRAFT off, CRF 18, under 8 MB, poster, and every check passing (`npm run check`, typecheck,
+   `check-art`, `check-video` final, `check-rebuild --final`, loudness about -15 LUFS and -1 dBTP or lower, the music
+   not running out, the end fade). Look at full-size frames through the time cut (every frame from 500 to 560) and at
+   the end card.
+4. Fix in passing: `media/README.md` decision 1's dBTP number must be the new final's; add the `--lift` tip for a
+   track whose biggest rise comes before a breakdown to the `music-candidate.mjs` row.
+5. Result: what changed, the check table, the time cut frames you looked at, file size and SHA-256 of the MP4.
+
+### Log (round 6)
+
+- 2026-11-06 11:17: started. Read the round, the Round 5 Result and the Round 4 Log. Build folder
+  `<scratchpad>\p6-media-r6\`.
+- 11:20 (item 1, music): option 4's page read again (curl; WebFetch got 403): the License(s) block reads "CC0" and
+  nothing else; author Fupi, posted 2025-01-24; the page offers a FLAC and the `.ogg`. The original
+  `raw\tracks\funky-disco.ogg` hashes `89f796ee...` as in the Round 5 Result; copied unchanged to
+  `media/public/music/funky-disco-beats.ogg` (same hash after the copy; Vorbis 44.1 kHz stereo, 133.09 s).
+  `a-chill-fever.mp3` removed; `data/music.json` and `CREDITS.md` set. Slip: one `git --version` ran inside a file
+  listing (no repo read, nothing changed).
+- 11:22 (item 2, the time cut): `T.sleeps.dip` holds four frames (500, 509, 515, 525): black from 0 to full over the 8
+  frames before the cut, full black 509 to 515 (the cut at 510 inside it), back over 516 to 524, the picture fully
+  back at 525 (beat 35); sine in and out. "Later, it sleeps as usual." starts at the cut (510, was 525), so "Later,"
+  is in by 519 and reads on the black from about 513. Before the cut the black covers everything, the settings line
+  too; from the cut it is drawn under the words. Pace check ok (48 starts on the beat, at most 5 in 2 s, gap 1.80 s).
+- 11:23: `npm run sounds` with the new track: -15.0 LUFS, peak -2.0 dBFS, limiter -1.3 dB. Round 5's path (fit to a
+  WAV, then `--music`) rebuilt to a scratch WAV: within 1 step of 16 bits of the build's soundtrack (the fitted
+  stem's rounding), so the build sounds as option 4 did.
+- 11:24: frames 498 to 530 rendered full size (final props) and looked at (500, 505, 513, 519, 525); luma read by
+  script: the dimmed settings shot means 12.8 (of 255) above the caption band; the dip takes it to 0 at 509, black
+  above the band from 509 to 515, "Later," shows on the black from 511, the picture back from 516 and in full at 525
+  (mean 28.2). The settings line goes dark with the picture; no frame shows two lines.
+- 11:25 (item 3): `npm run video`: `out/wakeshot-promo.mp4` 7,022,023 bytes, poster 2,512,195 bytes (frame 120,
+  unchanged). `check-video` ok; `loudnorm` -15.29 LUFS, -1.14 dBTP, LRA 6.6. The music stem alone never falls below
+  -25.6 dB RMS in any 0.5 s from 2 to 26 s (its quietest is the planned dip under the lid chime at 11.5 s); the mix
+  per 0.5 s from 26 s: -15 -15 -16 -16 -21 -26 -38 -53, the last 0.1 s silent (decoded AAC).
+- 11:29: frames 495 to 560 and the end card's 780, 795, 810, 825, 840, 870 and 899 taken from the MP4 (BT.709
+  decode; Remotion's ffmpeg has no `select` filter, so `trim`). 500 to 560 looked at on seven 3 x 3 sheets at a
+  third, 517 and 840 at full size from the MP4 (500, 505, 513, 519 and 525 full size from the source render above).
+  Luma by script matches the source render. The end card holds still: 899 against 840 differs by encoder noise only.
+  Against the round 4 final: video packets differ only at 466 to 600 and 780; decoded, 780 and 600 are equal to the
+  pixel, 466 to 500 and 561 to 599 differ by encoder noise only (mean 0.05 to 0.42 levels); their source frames are
+  unchanged by construction (the dip is 0 before 501, and from 546 the line is fully in in both).
+- 11:30: docs: `media/README.md` (decision 1 with the new track and the final's -15.3 LUFS and -1.1 dBTP, decision 6
+  with the new time cut, the `--lift` tip in the `music-candidate.mjs` row), `promo-video.md` (the Time cut row,
+  storyboard row 6, "Sound", a round 5 and 6 music paragraph, question 1, the size line), `launch.md` part 4 (the
+  music as built; Part C owns it). `npm run check`, typecheck and `check-art` ok.
+- 11:32: `npm run draft` (7.40 MB) and `check-video --draft` ok, so `check-rebuild --final` compares against outputs of
+  this round. `check-rebuild --final` started.
+- 11:36: `check-rebuild --final` ok: a clean copy (`npm ci`, every build command) gives all 15 outputs the same bytes,
+  the final video and poster included; its temp folder is gone. Result written. Status done.
+
+### Result (round 6)
+
+**Done 2026-11-06 11:36: the final video with option 4's music and a time cut that explains itself. Every check
+passes.** Waits for Haik's look.
+
+#### What changed
+
+1. **Music: option 4.** "Funky Disco Beats to Boogie/Woogie to" by Fupi, from
+   https://opengameart.org/content/funky-disco-beats-to-boogiewoogie-to. Licence read again on its page
+   (2026-11-06, by curl: WebFetch got 403): the License(s) block reads "CC0" and nothing else. The original
+   (SHA-256 `89f796ee542f3cfd0fa587a07b4c5bc8856c076e6c836c44b95a78176f9eded6`, as in round 5) copied unchanged to
+   `media/public/music/funky-disco-beats.ogg`; `data/music.json` set (`bpm` 110.25, `lift` 45.75);
+   `a-chill-fever.mp3` removed; `CREDITS.md` has the new line and says the old track was the earlier pick, replaced
+   2026-11-06. The build's soundtrack is within 1 step of 16 bits of round 5's option 4 mix, so it sounds as Haik
+   heard it.
+2. **The time cut (17 s), orchestrator decision.** A fade to full black: 8 frames going down (501 to 508), black 509
+   to 515 with the cut at 510 inside it, 9 frames coming back (516 to 524), the picture fully back at 525 (the next
+   beat); 0.8 s, sine in and out. "Later, it sleeps as usual." now starts at the cut (510, was 525), drawn over the
+   black: "Later," shows from 511 and is in by 519; the picture comes back under the rest of the line (in by 531).
+   Before the cut the black covers everything, the settings line too, so that shot leaves as one. The shot times are
+   unchanged (cut 510, sleep 540, moon 555). Code: `T.sleeps.dip` in `src/timeline.ts` (the old `dipOut` and
+   `dipIn` gone), the dip and its two layers in `src/promo/Promo.tsx`.
+3. **Docs.** `media/README.md`: decision 1 (the new track, the final's -15.3 LUFS and -1.1 dBTP), decision 6 (the
+   new time cut and why), the `--lift` tip in the `music-candidate.mjs` row. `docs/research/promo-video.md`: the Time
+   cut row, storyboard row 6, "Sound", a round 5 and 6 music paragraph, question 1, the size line.
+   `docs/research/launch.md` part 4: the music as built.
+
+#### Files
+
+`media/public/music/funky-disco-beats.ogg` (new), `media/public/music/a-chill-fever.mp3` (removed),
+`media/data/music.json`, `media/CREDITS.md`, `media/src/timeline.ts`, `media/src/promo/Promo.tsx`,
+`media/README.md`, `media/out/wakeshot-promo.mp4`, `media/out/wakeshot-promo-poster.png` (rebuilt, same size),
+`docs/research/promo-video.md`, `docs/research/launch.md`, this card. Not in git, rebuilt: `media/out/draft/` and
+`media/public/sound/soundtrack.wav`.
+
+#### The final
+
+`C:\Users\haika\code\wakeshot\media\out\wakeshot-promo.mp4`: 7,022,023 bytes (7.02 MB), SHA-256
+`c35177c7c300629d4b464f573e6b91a7d5419e91031bce5b1330b3c27ea82fc4`; H.264 CRF 18, BT.709 tagged, AAC 48 kHz stereo
+192 kbit/s, 1920 x 1080, 30 fps, 30.02 s, no DRAFT mark. Poster `media/out/wakeshot-promo-poster.png` 2,512,195
+bytes (frame 120). Copies in
+`C:\Users\haika\AppData\Local\Temp\claude\f7c2c08a8f04f07b\de37e39e-ac9f-4f08-8aa0-3d773dd2f757\scratchpad\p6-media-r6\`.
+
+#### Checks
+
+| Check | Outcome |
+|---|---|
+| `npm run check` (dashes, emoji, credits, colour pairs; pace) | ok: 87 files, 31 assets credited, 18 colour pairs; 48 starts on the beat, 10 framings of 2 to 4 s, 103 new things, longest gap 1.80 s, at most 5 things within 2 s, 14 lines of words |
+| `npm run typecheck` | ok |
+| `node scripts/check-art.mjs` | ok, all 9,458,740 pixels |
+| `npm run check-video` (final) | ok: h264, 1920 x 1080, 30 fps, yuv420p, BT.709 tags, aac, 30.02 s, 7.02 MB; both loops; the 6 state icons |
+| `npm run check-video -- --draft` | ok (draft 7.40 MB) |
+| `npm run check-rebuild -- --final` | ok: all 15 outputs the same bytes, the final video and poster included |
+| Under 8 MB | ok, 7.02 MB |
+| Loudness about -15 LUFS (`loudnorm`, after AAC) | ok, -15.29 LUFS (LRA 6.6 LU) |
+| True peak -1 dBTP or lower (after AAC) | ok, -1.14 dBTP (0.14 dB to spare; round 5 read -1.2 for this option) |
+| The music does not run out | ok: the fitted stem never falls below -25.6 dB RMS in any 0.5 s from 2 to 26 s, its quietest the planned dip under the lid chime (11.5 s); the cut ends at about 76 s of the 133 s track |
+| The end card fade | ok: mix per 0.5 s from 26 s -15 -15 -16 -16 -21 -26 -38 -53, the last 0.1 s silent (decoded AAC) |
+| Picture outside the time cut unchanged | ok: against the round 4 final, decoded frames 600 and 780 are equal to the pixel; 466 to 500 and 561 to 599 differ by encoder noise only (mean 0.05 to 0.42 levels) |
+| Time cut frames looked at | every frame 500 to 560 from the MP4 on seven 3 x 3 sheets at a third; 517 and 840 full size from the MP4; 500, 505, 513, 519, 525 full size from the source render; luma per frame by script (below) |
+| End card looked at | 780, 795, 810, 825, 840, 870, 899 taken; 840 full size; 899 equal to 840 within encoder noise |
+
+Luma above the caption band (mean, of 255), from the MP4: the dimmed settings shot 11.6 (500); 501 10.5, 503 8.3,
+505 4.2, 507 1.0, 508 0.1; 509 to 515 0 (black; "Later," on it from 511); 516 0.1, 518 4.5, 520 12.7, 522 20.8,
+524 26.0; 525 on 27.1 (the shut laptop, back in full).
+
+Full-size frames for a look, in
+`C:\Users\haika\AppData\Local\Temp\claude\f7c2c08a8f04f07b\de37e39e-ac9f-4f08-8aa0-3d773dd2f757\scratchpad\p6-media-r6\final-frames\`:
+`frame-495.png` to `frame-560.png` (every frame), and the end card's `frame-780.png`, `frame-795.png`,
+`frame-810.png`, `frame-825.png`, `frame-840.png`, `frame-870.png`, `frame-899.png`. The review sheets:
+`...\p6-media-r6\sheets\cut-01.png` to `cut-07.png`.
+
+#### Decisions (principal designer, for Haik's review)
+
+1. **Full black, not a deeper dim.** The shot before is already dimmed to 35% by the focus, so only full black reads
+   as a beat of its own; it also hides the cut. Change it when Haik wants a hint of the picture kept (the dip's
+   peak under 1).
+2. **"Later" starts on the cut, in the black, as part of the same line** (one caption, the same word reveal), not a
+   separate title card: a one-word caption would fail the pace check's 2 to 6 words, and a title card would be a new
+   kind of thing in the video. Change it when Haik wants "Later" alone, held longer, before the rest.
+3. **The whoosh stays at the cut**, now inside the black. Change it when the dip's sound should start with the fade
+   (501).
+
+#### Open items
+
+1. Haik's look and yes on the new final.
+2. The true peak has 0.14 dB to spare. The loudest moment of every mix is at 5.0 s, the tray shot's entrance
+   effects (round 5). A true-peak limiter in `make-sounds.mjs` would give room; not done, as it passes.
+3. Upload and the site copy, as in round 4's open item 3.
+
+Found outside scope (round 6):
+
+- `docs/phases/06-ship.md` and `docs/reviews/p6-media-final.md` name "A Chill Fever" as the music; both are records
+  of their time (work log, review), so left as they are.
+- Remotion's bundled ffmpeg has no `select` filter (`ffmpeg -filters`, 2026-11-06); frame grabs use `trim`.
+- Where the picture comes back from black (516 to 518, mean luma 0.1 to 4.5), H.264 at CRF 18 shows faint blocks in
+  the near-black stage at full size; they last 0.1 s and are gone by 520. Not changed.

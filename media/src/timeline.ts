@@ -61,11 +61,15 @@ export const T = {
   lid: {cut: beat(20), settle: 15, close: beat(21), shut: beat(22), lock: beat(22), work: beat(24), orbit: beat(24), done: beat(27)},
   settings: {move: beat(28), card: beat(29), row1: beat(31), row2: beat(32)},
   /**
-   * A time cut: the frame dips dark over `dipOut` frames into the cut and comes back over `dipIn`, the words say
-   * "Later", and the laptop goes to sleep. No clock and no countdown on screen: Wakeshot sleeps a closed laptop once
-   * nothing has happened for 5 minutes (`docs/product.md`), and the video claims no time it does not keep.
+   * A time cut: the frame goes to black into the cut, "Later" lands on the black, and the picture comes back under the
+   * rest of the line; then the laptop goes to sleep. `dip` holds the frames where the black starts, is full, starts to
+   * lift and is gone: 8 frames going down, 7 black (the cut in the middle), 9 coming back, 0.8 s in all, and the
+   * picture is fully back on the next beat. Black, not a dim: the settings shot before it is
+   * already dimmed to 35% by the focus, and the old 0.2 s dip to 85% read as a dropped picture, not as time passing
+   * (Haik, 2026-11-06). No clock and no countdown on screen: Wakeshot sleeps a closed laptop once nothing has happened
+   * for 5 minutes (`docs/product.md`), and the video claims no time it does not keep.
    */
-  sleeps: {cut: beat(34), dipOut: 6, dipIn: 12, line: beat(35), sleep: beat(36), moon: beat(37)},
+  sleeps: {cut: beat(34), dip: [beat(34) - 10, beat(34) - 1, beat(34) + 5, beat(35)], line: beat(34), sleep: beat(36), moon: beat(37)},
   menu: {
     cut: beat(40),
     click1: beat(41),

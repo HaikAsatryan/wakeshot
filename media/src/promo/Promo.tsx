@@ -1,5 +1,5 @@
 import React from 'react';
-import {AbsoluteFill, Easing, staticFile, useCurrentFrame} from 'remotion';
+import {AbsoluteFill, Easing, interpolate, staticFile, useCurrentFrame} from 'remotion';
 import {Audio} from '@remotion/media';
 import speedData from '../../data/speed.json';
 import {AppIcon, TrayGlyph} from '../art/Glyph.tsx';
@@ -540,9 +540,10 @@ export const Promo: React.FC<PromoProps> = ({draft}) => {
   };
   const focus = focusAt(FOCUS, f, resolve);
   const dim = within(f, T.hook.sleep, SCENES.light.from) ? 0.9 * progress(f, T.hook.sleep, T.hook.dimLen, (t) => t) : 0;
-  // The time cut before the sleep: the frame dips dark into the cut and comes back after it.
-  const cut = T.sleeps.cut;
-  const dip = within(f, cut - T.sleeps.dipOut, cut) ? 0.85 * ((f - cut + T.sleeps.dipOut + 1) / T.sleeps.dipOut) : within(f, cut, cut + T.sleeps.dipIn) ? 0.85 * (1 - (f - cut) / T.sleeps.dipIn) : 0;
+  // The time cut before the sleep. Before the cut the black covers everything, the settings line too, so the shot
+  // leaves as one; from the cut it sits under the words, so "Later" reads on the black as the picture comes back.
+  const dip = interpolate(f, T.sleeps.dip, [0, 1, 1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.sin)});
+  const black = dip > 0 ? <AbsoluteFill style={{background: '#000', opacity: dip}} /> : null;
   const stageLift = f < SCENES.light.from ? 1 - dim : f < SCENES.tray.from ? progress(f, T.light.on, 18, SETTLE) : 1;
   const inTray = within(f, T.tray.whip + T.tray.whipLen, SCENES.lid.from);
   const inMenu = within(f, SCENES.menu.from, SCENES.end.from);
@@ -593,6 +594,7 @@ export const Promo: React.FC<PromoProps> = ({draft}) => {
             opacity={inMenu ? 1 - progress(f, T.menu.click2 + 8, 8, (t) => t) : 1}
           />
         ) : null}
+        {f >= T.sleeps.cut ? black : null}
         {CAPTIONS.map((b) => {
           const first = Math.min(...b.lines.map((l) => l.at));
           return f >= first && (f < b.until + 6 || b.leave === 'stay') ? (
@@ -616,7 +618,7 @@ export const Promo: React.FC<PromoProps> = ({draft}) => {
             <span style={speed.measured ? undefined : {background: DARK.draft, padding: '3px 10px', borderRadius: 4, fontWeight: 600}}>{speed.note}</span>
           </div>
         ) : null}
-        {dip > 0 ? <AbsoluteFill style={{background: '#000', opacity: dip}} /> : null}
+        {f < T.sleeps.cut ? black : null}
         {draft ? <DraftBanner f={f} /> : null}
       </AbsoluteFill>
       <Audio src={staticFile('sound/soundtrack.wav')} />

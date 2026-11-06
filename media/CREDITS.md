@@ -38,13 +38,15 @@ screenshots: not checked.
 
 | File | Source | Licence |
 |---|---|---|
-| `public/music/a-chill-fever.mp3` | "A Chill Fever (Loopable)" by Pro Sensory, from https://opengameart.org/content/a-chill-fever-loopable (file `a_chill_fever_0.mp3`, 59.1 s, MP3 192 kbit/s, SHA-256 `9ae1326374674c1de8719b4d952394992ad819f12cf7730705be2ad05a1dfe49`), unchanged. Haik's pick of 2026-11-05 from three CC0 candidates. `make-sounds.mjs` fits it to the video on every build with the numbers in `data/music.json` (130 BPM conformed to 120, its lift at 44.33 s on the light) | CC0: the page's License(s) block reads "CC0", and the author writes "all my music is public domain" (read 2026-11-05) |
+| `public/music/funky-disco-beats.ogg` | "Funky Disco Beats to Boogie/Woogie to" by Fupi, from https://opengameart.org/content/funky-disco-beats-to-boogiewoogie-to (file `funkydiscobeatstoboogieslashwoogieto_0.ogg`, 133.1 s, Vorbis 160 kbit/s, 44.1 kHz stereo, SHA-256 `89f796ee542f3cfd0fa587a07b4c5bc8856c076e6c836c44b95a78176f9eded6`), unchanged. Haik's pick of 2026-11-06 from four new CC0 options (`docs/tasks/p6-media.md`, round 5). `make-sounds.mjs` fits it to the video on every build with the numbers in `data/music.json` (110.25 BPM conformed to 120, its lift at 45.75 s on the light) | CC0: the page's License(s) block reads "CC0" and lists no other licence; the author writes "Just got in the mood to make a funky disco loop so here it is!!" (read 2026-11-06, for the options and again for the final) |
 | `public/sound/soundtrack.wav` | Made by `scripts/make-sounds.mjs`: the music above fitted to the video, the effects from sine waves and seeded noise, Wakeshot's own two chimes rendered from the numbers in `crates/wakeshot-windows/src/sound/chime.rs`. Not kept in git; every build makes it again | MIT, ours, over the CC0 music |
 
 The code bed (a 120 BPM sequencer in `make-sounds.mjs`) is the fallback when `data/music.json` names no file. The
 launch research picked Kenney (CC0) effects; the code effects are used instead, so there is no third-party effect
-file. The other two music candidates were not used and are not in the repo. The tempo was found by the script's
-autocorrelation, not checked by ear.
+file. The earlier pick, "A Chill Fever (Loopable)" by Pro Sensory (CC0, https://opengameart.org/content/a-chill-fever-loopable),
+was the music from 2026-11-05 until it was replaced on 2026-11-06; its file is no longer in the repo. The other
+candidates and options were not used and are not in the repo. The tempo was found by the script's autocorrelation, and
+for this track by its low and high bands apart, not checked by ear.
 
 ## Fonts
 

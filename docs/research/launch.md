@@ -615,8 +615,9 @@ not required for CC0; we list it anyway). Fallback for the bed: a soft pad made 
 Haik's review.
 
 Built differently (2026-11-05, `p6-media` Part C): every effect is made in code, so no Kenney file is used, and the
-music is "A Chill Fever (Loopable)" by Pro Sensory (CC0, from OpenGameArt; Freesound needs a login to download), Haik's
-pick from three candidates. Sources and licences: `media/CREDITS.md`; how it is fitted: `promo-video.md`.
+music is "Funky Disco Beats to Boogie/Woogie to" by Fupi (CC0, from OpenGameArt; Freesound needs a login to download),
+Haik's pick of 2026-11-06 from four options; it replaced his first pick, "A Chill Fever (Loopable)" by Pro Sensory
+(CC0). Sources and licences: `media/CREDITS.md`; how it is fitted: `promo-video.md`.
 
 ### Specs
 

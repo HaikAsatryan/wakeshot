@@ -59,7 +59,7 @@ kind (counted frame by frame and from their sound), then set for Wakeshot.
 | Camera move between near places | the world slides and scales under a fixed frame | 12 to 18 frames (0.4 to 0.6 s) | `Easing.bezier(0.16, 1, 0.3, 1)`: fast start, long settle |
 | Whip | the same, faster, with a directional blur that peaks mid-move (up to 40 px along the move) | 9 to 12 frames | same |
 | Hard cut | to a far place, always on a beat, with a whoosh into it | 0 | none |
-| Time cut (built in round 4, once, at 17 s) | a hard cut back to the same place, later: the frame dips to 85% black over the 6 frames into the cut and comes back over 12, with a soft whoosh; the words say "Later" | 18 frames | linear |
+| Time cut (built in round 4, once, at 17 s; reshaped in round 6) | a hard cut back to the same place, later, hidden in a fade to full black: 8 frames down, 7 black with the cut inside, 9 back, the picture fully back on the next beat; "Later," lands on the black (the line starts at the cut, drawn over the black) and the picture comes back under the rest of the line; a soft whoosh at the cut. Full black, because the shot before is already dimmed to 35% by the focus and the round 4 dip (85% for 0.2 s, the words only after it) read as a dropped picture (Haik, 2026-11-06) | 24 frames (0.8 s) | sine in and out |
 | Slow push during a hold | scale +3% over 2 s, on drawn parts only. While a capture is in view the camera rests at a whole-number zoom; the motion then comes from the cursor, pops and the ring | while holding | linear |
 | Pop (chip, badge, card) | scale 0.94 to 1 from its anchor, opacity 0 to 1 in 4 frames. A capture (tooltip, menu, submenu) rises 16 px on whole pixels instead, so it is never scaled | 10 frames | spring, mass 0.6, damping 12, stiffness 200 (about 4% overshoot) |
 | Focus | everything but the target drops to 35% brightness and 4 px blur; a 2 px ring in the light's edge colour `#FFEA9C` with a soft 24 px glow wraps the target, 6 px outside it | 8 frames; the ring glides to the next target with the camera easing | |
@@ -83,8 +83,9 @@ capture scaled by anything but a whole number (decision 4 in `media/README.md`).
 
 ### Sound
 
-- One music track at 120 BPM (or conformed to it), calm electronic: sparse in the hook, full when the light comes on,
-  thinned to let the lid chime sit alone, lifted at the menu, resolved on the end card (the last chord rings 1.5 s).
+- One music track at 120 BPM (or conformed to it): sparse in the hook, full when the light comes on, thinned to let
+  the lid chime sit alone, lifted at the menu, resolved on the end card (the last chord rings 1.5 s). The plan asked
+  for calm electronic; Haik's final pick (2026-11-06) is a funky disco loop.
 - Every camera move has a whoosh: 0.3 to 0.6 s of filtered noise, loudest at the move's fastest frame. Every click has
   a click. Typing has soft key ticks (at most 12 a second, not one per character). Counters tick at most 8 a second.
 - Wakeshot's own chimes where the app plays them: the lid chime at the lid close, the going-to-sleep chime when the
@@ -106,7 +107,7 @@ the laptop, the settings card and the menu each have a place in it, so near move
 | 3 | 5.0 to 10.0 (150 to 299) | **Claude Code turns it green, then lets go** (round 2, Haik's note: show exactly that Claude Code starts work and the icon turns green, then goes back when it finishes). A drawn terminal (the cause) left of the real tray rectangle (the effect): the 200% tray set (S1 to S4) at 2x. The terminal shows only `claude`, a short prompt ("fix the failing tests") and one status line, at 30 px, so it can be read and ends left of the capture (round 4 review) | Whip, 12 frames: the big glyph, drawn from the port at each whole size, flies to where the capture's idle icon (S1) is on screen, lands on it at frame 158 and fades into it by 162. Frame 165: Enter, Claude Code starts, and at that frame the icon turns holding (S2), a ring of green spreading from it. The cursor comes to rest on the icon; frame 195 the holding tooltip (S3) rises, ringed (no dimming: the terminal stays in view). Frame 210 the camera drifts 90 px (15 frames). Frame 240 the terminal shows done and at that frame the icon is idle again with the idle tooltip (S4) | "Claude Code starts: it turns **green**." (frame 165, in by 189), then "Done: it lets **go**." (frame 240, in by 258) | Enter and a soft rise at 165; pop; a soft whoosh; a soft fall at 240 |
 | 4 | 10.0 to 14.0 (300 to 419) | **Lid, and the work goes on behind it** (round 4, Haik's note of 2026-11-06 00:56: show the closed laptop working, then the work clearly done, then the sleep). Cut to a drawn laptop (graphite, keys, touchpad, the terminal on its screen), three-quarter view; then shut, a thin holding-green light on the lid's front edge, breathing (2 s period). Above the shut laptop, in one row: a lock badge and a work chip (the terminal's spinner and the agent's step) | Camera settles back 15 frames; frames 315 to 330 the lid closes (ease in, a 2 degree settle); frame 330 the lock badge pops with the lid chime (the app locks at the lid close); frame 360 the work chip rises: "run npm test" under the turning spinner; frame 405 the chip says "Done. All 128 tests pass." with a check and at that frame the edge light goes off (24 frames): the hold ends; slow orbit of 6 degrees from frame 360 | "Close the lid: work goes **on**." (frame 315, in by 339), gone with a fade at 405, so no line says the work goes on once it is done (round 4 review: one line and one chip step, so this shot is not the densest stretch again) | Whoosh; soft thump and Wakeshot's lid chime at frame 330, no lock sound so the chime sits alone; the music dips under the chime; a pop at 360; a soft fall at 405 |
 | 5 | 14.0 to 17.0 (420 to 509) | **Done, settings back.** Frame 435: a drawn card pops right of the laptop: "Power settings", two rows from the capture log (S9). The work chip stays in view at the left with its done line | Camera slides right from frame 420 (15 frames) and widens a little (zoom 0.92, drawn parts only), so the laptop, the badge, the chip and the card all fit; each value rolls from Wakeshot's to the user's own (8 frames) at frames 465 and 480; the ring moves row to row | "Work done. Your settings, **back**." (frame 435, in by 456) | Whoosh; pop; two ticks |
-| 6 | 17.0 to 20.0 (510 to 599) | **Later, it sleeps.** A time cut back to the shut laptop, its edge dark, the lock badge alone above it. No clock and no countdown: Wakeshot sleeps a closed laptop once nothing has happened for 5 minutes (`docs/product.md`), and the video claims no time it does not keep | The frame dips dark into the cut at 510 and back by 522; slow push of 3%; frame 540 the power light fades (24 frames) and the badge goes; frame 555 a moon rises | "Later, it sleeps as **usual**." (frame 525, in by 546) | Soft whoosh at the cut; Wakeshot's going-to-sleep chime at frame 540 |
+| 6 | 17.0 to 20.0 (510 to 599) | **Later, it sleeps.** A time cut back to the shut laptop, its edge dark, the lock badge alone above it. No clock and no countdown: Wakeshot sleeps a closed laptop once nothing has happened for 5 minutes (`docs/product.md`), and the video claims no time it does not keep | The frame goes to black from 501, is black 509 to 515 (the cut at 510 inside it) and is back by 525 (round 6); slow push of 3%; frame 540 the power light fades (24 frames) and the badge goes; frame 555 a moon rises | "Later, it sleeps as **usual**." (frame 510, on the black, "Later," in by 519, the line in by 531) | Soft whoosh at the cut; Wakeshot's going-to-sleep chime at frame 540 |
 | 7 | 20.0 to 26.0 (600 to 779) | **Keep awake on demand.** The menu set (one screen rect, five captures) at rest zoom, the drawn cursor | Cursor glides in and clicks the icon at frame 615; the menu (S5a) rises from the taskbar; frame 645 the cursor reaches Keep awake: S5b (hover, submenu open); frame 690 it reaches "1 hour": S5c, and the camera pans 150 px to the submenu (12 frames); click at frame 720; the menu closes and the icon turns holding (S5d); ring on the icon (no dimming) and a round lens rises above it with the tray glyph at 128 px, its light coming on (round 3: the frame had no subject after the click); the cursor fades. The battery figure is held at S5a's 97% throughout (it read 96% in S1) | "Keep awake on **demand**." (frame 645, in by 663), then "No second **tool**." (frame 720, in by 735) | Clicks at 615 and 720; pops |
 | 8 | 26.0 to 30.0 (780 to 899) | **End card.** The stacked lockup (icon 256 px): the app icon unlit, its light comes on at frames 780 to 793, "Wakeshot" under it. The speed numbers fold in here (round 2) | The lines under the lockup pop in whole (no word reveal); still for the last 3 s | Frame 795: "Free and open source. Windows 11, x64 and ARM64." Frame 810: "Idle: {ram} MB of memory, {cpu} ms of CPU in 10 minutes." at 40 px from `data/speed.json` (round 4: 4.3 and 109, `docs/research.md` "Speed numbers"), with "Measured on Wakeshot <build>, <date>, x64." at 28 px (0.1.0, 2026-11-06). Frame 825: the install line in mono | One soft swell of air as the light comes on; no whoosh, sweep or pops; the music plays on a beat, fades over 2.5 s into a soft echo and is silent 0.1 s before the end |
 
@@ -261,6 +262,14 @@ whoosh and two pops. Now the loopable track plays three times over before it is 
 card it plays on for a beat, fades over 2.5 s into a soft ping-pong echo and is silent 0.1 s before the end; the
 lockup has one soft unpitched swell of air (the track's key could not be pinned down, so no added chord).
 
+Round 5 and 6 (2026-11-06): Haik asked to hear other music on the final picture. Four new CC0 options (OpenGameArt
+and the Free Music Archive, each licence read on the track's own page) were fitted and muxed onto the final; he
+picked option 4, "Funky Disco Beats to Boogie/Woogie to" by Fupi (CC0), now in `media/public/music/` with its numbers
+in `data/music.json` (110.25 BPM, conformed with `atempo` 1.0884; its lift at 45.75 s on the light). "A Chill Fever"
+left the repo. The fit and the shape are unchanged: the same storyboard cut, the dip under the lid chime and the end
+card's fade and echo. Tempo and key were found by script (A minor, so the C6 and G6 chimes are in key), not by ear.
+The options, their pages and their readings are in `docs/tasks/p6-media.md`, round 5.
+
 ## Formats
 
 | Where | What plays | File |
@@ -274,9 +283,9 @@ lockup has one soft unpitched swell of air (the track's key could not be pinned 
 
 Size: the dynamic cut will be larger than the 2.5 MB draft. Keep CRF 16 if the file stays under 8 MB; else CRF 18,
 then less dither. Measured on the first full draft (2026-11-05, stand-in captures): 7.8 MB at CRF 16; the round 2 draft was
-8.5 MB at CRF 16, so from round 3 (real captures) the build uses CRF 18. The final (round 4, 2026-11-06, after the review's fixes) is 7.14 MB
-at CRF 18, BT.709 (converted and tagged; Remotion 4's default was BT.601 with no tags), -15.4 LUFS, true peak -1.4
-dBTP.
+8.5 MB at CRF 16, so from round 3 (real captures) the build uses CRF 18. The final (round 6, 2026-11-06: the new
+music and the reshaped time cut) is 7.02 MB at CRF 18, BT.709 (converted and tagged; Remotion 4's default was BT.601
+with no tags), -15.3 LUFS, true peak -1.1 dBTP. The round 4 final was 7.14 MB, -15.4 LUFS, -1.4 dBTP.
 
 ## Effort and risks
 
@@ -317,7 +326,8 @@ orchestrator decisions for Haik's review (Haik away: "can start media ... even w
 asked again before the capture session.
 
 1. **Music:** a found CC0 track that you pick from three, or music made in code? Default: three CC0 candidates, you
-   pick one; code is the fallback. Answered by Haik, 2026-11-05: candidate 3, "A Chill Fever (Loopable)".
+   pick one; code is the fallback. Answered by Haik, 2026-11-05: candidate 3, "A Chill Fever (Loopable)". Changed by
+   Haik, 2026-11-06: option 4 of four new ones, "Funky Disco Beats to Boogie/Woogie to" by Fupi.
 2. **Length:** keep 30 s, as the card says? Default: yes. Builds (`wakeshot run`), the morning notice and the battery
    floor wait for a longer cut; if 30 s still feels rushed, the speed numbers fold into the end card.
 3. **Hook:** open on the problem (an agent at work, then the PC going to sleep) and show the name at 2 s? Default: yes.

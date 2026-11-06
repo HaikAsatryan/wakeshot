@@ -27,7 +27,7 @@ sends no usage event (`@remotion/renderer` 4.0.540, `render-media.js`: the event
 | `out/wakeshot-promo-poster.png` alone | `npm run poster` | Frame 120 of the video (the light on, the name and its line in), for the Pages `<video poster>` |
 | `out/state-<holding\|idle\|off>-<light\|dark>.png` | `npm run states` | The README's state table: the tray glyph per state for the light and the dark taskbar, see-through, 32 x 32 (`tray_mask` drawn at 32 px, the tray at 200%); show at 16 px, the tray's size at 100%, so it stays sharp on a HiDPI screen. No Remotion |
 | `public/sound/soundtrack.wav` | `npm run sounds` | Also run by `draft` and `video`; not kept in git. `-- --music <file.wav>` puts a fitted found track in place of the code bed, `-- --out <file.wav>` writes elsewhere |
-| A found track fitted to the video | `node scripts/music-candidate.mjs <track> --out <file.wav> [--bpm N] [--lift s]` | Finds the tempo and the lift, conforms to 120 BPM with `atempo`, cuts 30 s on the storyboard; prints the numbers to rebuild it with |
+| A found track fitted to the video | `node scripts/music-candidate.mjs <track> --out <file.wav> [--bpm N] [--lift s]` | Finds the tempo and the lift, conforms to 120 BPM with `atempo`, cuts 30 s on the storyboard; prints the numbers to rebuild it with. The lift it finds is the biggest 2 s rise in the first minute: when that rise comes just before a breakdown (a quiet stretch would then fall under the lid and settings shots), set `--lift` by hand to where the track's steady part starts (round 5, "Beach") |
 | A contact sheet for review | `npm run sheet -- <composition> <from> <to> <out.png>` | About 4 frames a second, rendered at full size and shrunk to a quarter, tiled; add `--final` for frames without the DRAFT mark |
 | Speed numbers | `pwsh scripts/measure-speed.ps1 -Mode <mode>` | See "Speed numbers" below |
 | The live preview | `npm run studio` | Opens Remotion Studio in the browser |
@@ -99,13 +99,15 @@ PowerShell window with no Claude Code session working.
 ## Decisions (principal designer, for Haik's review)
 
 1. **Effects made in code; the music is Haik's pick.** Every effect (whooshes, clicks, pops, ticks, the low hit, the
-   end card's swell of air) is sine waves and seeded noise, and the chimes come from `chime.rs`. The music is "A
-   Chill Fever (Loopable)" by Pro Sensory (CC0), Haik's pick of 2026-11-05 from three candidates: the loopable track
-   is played three times over, conformed from 130 to 120 BPM, cut so its lift lands on the light at 2 s, softer
-   under the hook with a short silence before the light, 5 dB down under the lid chime, and on the end card it plays
-   on for a beat and fades over 2.5 s into a soft echo, silent 0.1 s before the end. The music ducks 4 dB under each
-   chime; the mix is set to -15 LUFS with sample peaks under -2 dBFS in the WAV; after AAC the final measures
-   -15.4 LUFS and -1.2 dBTP true peak (`loudnorm`), its sample peaks up to -1.6 dBFS. The 120 BPM
+   end card's swell of air) is sine waves and seeded noise, and the chimes come from `chime.rs`. The music is "Funky
+   Disco Beats to Boogie/Woogie to" by Fupi (CC0), Haik's pick of 2026-11-06 from four new options (it replaced "A
+   Chill Fever (Loopable)" by Pro Sensory, his pick of 2026-11-05): conformed from 110.25 to 120 BPM, cut so its
+   lift (45.75 s into the track) lands on the light at 2 s, softer under the hook with a short silence before the
+   light, 5 dB down under the lid chime, and on the end card it plays on for a beat and fades over 2.5 s into a soft
+   echo, silent 0.1 s before the end. The fit plays any track three times over, so it never runs out; this one is
+   133 s long and the cut ends at about 76 s of it. A minor, so both chimes (C6, G6) are in its key (by script, not
+   heard). The music ducks 4 dB under each chime; the mix is set to -15 LUFS with sample peaks under -2 dBFS in the
+   WAV; after AAC the final measures -15.3 LUFS and -1.1 dBTP true peak (`loudnorm`, 2026-11-06). The 120 BPM
    sequencer in code (C major, so the C6 and G6 chimes sit in tune) stays as the fallback when `data/music.json`
    names no file. Why: a real track sounds full where the code bed sounded thin, and every build still makes the
    same bytes. Change it when Haik wants another track: try it with `music-candidate.mjs`, then `data/music.json`.
@@ -134,7 +136,11 @@ PowerShell window with no Claude Code session working.
    chime. No clock and no countdown on screen (Haik, 2026-11-06 00:56: the 5:00 count read as confusing); the app
    sleeps a closed laptop once nothing has happened for 5 minutes (`docs/product.md`), so the words say "Later" and
    claim no time. Before it, the work goes on behind the shut lid (a chip with the agent's next step) and is clearly
-   done (the chip's done line, the edge light off at that frame). Change it when Haik wants the 5 minutes named.
+   done (the chip's done line, the edge light off at that frame). The time cut is a fade to full black (0.8 s:
+   8 frames down, 7 black with the cut inside, 9 back): "Later," lands on the black, and the picture comes back
+   under the rest of the line (round 6). Before, a 0.2 s dip to 85% black came out of a shot the focus had already
+   dimmed, and Haik read it as a dropped picture. Black with a word on it is the usual sign that time passed; a plain
+   slide would make the sleep look immediate. Change it when Haik wants the 5 minutes named.
 7. **The art is drawn from the port's pixels, never redrawn as vectors.** `src/art/Glyph.tsx` puts them on a canvas
    1:1 at whole-pixel places, so the title and outro icons are `app_icon(256)` and `app_icon(192)` and the loop's
    ends are `tray_mask(128)`, byte for byte. The port rounds to f32 at every step, as `art.rs` computes, so it draws
