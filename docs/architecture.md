@@ -1325,6 +1325,14 @@ VS Code chat (in v1, Haik 2026-11-06; built by `p4-vscode-source`, started by th
   start) when such a request has no usable time or went back from done to Pending (a retry keeps its first time).
   Rule 6 (`AnyProcess` on `state.vscdb`) is not used.
 
+Cursor, editor and CLI (in v1, Haik 2026-11-06; built by `p4-cursor-source`, not yet started by the tray:
+`p4-live-cursor` adds `sources::cursor::source(data.root())`): no file of Cursor's own is read. Wakeshot's hook
+(section 12, `agent-hooks.md`) writes `agents\cursor\<chat>.json` while a turn runs, and the source reads that folder
+(`WantedFile::Folder`): one `Working` session per file, `Liveness::Process` on the Cursor process the hook's walk
+found, label "Cursor" or "Cursor CLI" from the source's own strings; `problem.json` and `blocked.json` give the
+"update Wakeshot" notice while their process lives. The shared code is `sources::hooked` (`HookedSource` and the
+`Agent` table), so Antigravity adds only its table.
+
 ## 8. Errors and logging
 
 The core never fails. The Windows layer returns `Result<T, WinError>` (`WinError { call: &'static str, code: u32 }`);

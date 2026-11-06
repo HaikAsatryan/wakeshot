@@ -213,6 +213,26 @@ start is Cursor's cost.
   same way.
 - No new `WantedFile` or `Liveness` variant is needed.
 
+**Built** (`p4-cursor-source`, 2026-11-06): "The hook command", "The files it writes" and this part, in
+`sources::hooked` (shared: the `Agent` table type, the parse, the id rules, the event rules with Antigravity's idle
+stop, the files, the walk, the checked values, a generic `HookedSource`), `sources::cursor` (`AGENT`, `LABEL`,
+`CLI_LABEL`, `source(data_root)`) and the CLI's `hook.rs`. Live test 0 is done by code reading: the editor 3.27.12
+passes the input through a temp file on every path that runs a plugin hook, so the Gate holds (`research.md`, "Cursor
+hook payload form"). Where the build differs from the text above:
+
+- The runtime check searches the bare key `conversation_id`, not `"conversation_id"`: Node writes a `"` inside an
+  argument as `\"`, so the quoted needle would miss a here-string passed through Node (checked with Node 26). Found,
+  the hook writes `blocked.json` and calls `agent_hooks::remove_command`.
+- The checked values are `<chat> <turn> <pid> <procStart> <image key> <op> <deadline>`: the image key is `editor` or
+  `cli` (no space), the op is `working`, `background`, `none` (the event's delete), `input` or `command-line` (the
+  two problem files, which carry empty ids), and the deadline is wall ms since 1970, the same clock as a FILETIME.
+- An elevated hook writes no log line either: the log folder is in the same data folder a Medium process can swap.
+  Its Medium copy logs. A hook with nothing to say opens no log.
+- A newer `version` in a file is ignored with no log line: sources have no log (core). A bad file gets `RetryOnce`,
+  then no session and no notice.
+- `hook <agent> remove` hands the agent word to `agent_hooks::remove_command` as given and reads no input.
+- For the tray (`p4-live-cursor`): `Box::new(sources::cursor::source(data.root()))`.
+
 ### Cursor's `main.log`: dropped
 
 The editor's own wakelock lines in `main.log` (`research/cursor-gemini-signals.md`) are not used, not even as a

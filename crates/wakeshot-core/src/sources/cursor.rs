@@ -1,5 +1,88 @@
-//! Cursor sessions, editor and CLI (architecture section 7; `docs/research/cursor-gemini-signals.md`, the Cursor
-//! sections: the editor's own wakelock lines in `main.log`, the CLI's `.running` markers, hooks from a Wakeshot
-//! folder). A stub until that card builds the source here.
+//! Cursor sessions, editor and CLI, from the files Wakeshot's own Cursor hook writes in `agents\cursor\` (architecture
+//! sections 7 and 12; `docs/agent-hooks.md`, "Cursor"). The table is all the hook and the source know of Cursor; the
+//! shared rules are in `sources::hooked`. The editor's wakelock lines in `main.log` are not read (the design's
+//! "Cursor's `main.log`: dropped").
 //!
 //! Owner: `p4-cursor-source`.
+
+use std::path::Path;
+
+use crate::sources::SourceId;
+use crate::sources::hooked::{
+    Action, Agent, Base, EventRule, HookedSource, ImageRule, InputFields, State, Under,
+};
+
+/// What the tooltip names a session of the editor, and Cursor's plain name.
+pub const LABEL: &str = "Cursor";
+
+/// What the tooltip names a session of the Cursor CLI.
+pub const CLI_LABEL: &str = "Cursor CLI";
+
+/// The CLI's install folder, `%LocalAppData%\cursor-agent\` (`docs/research/other-agent-signals.md`; its `node.exe`
+/// lies in `versions\<version>\`, read 2026-11-06).
+const CLI_FOLDER: Under = Under {
+    base: Base::LocalAppData,
+    parts: &["cursor-agent"],
+};
+
+/// Cursor's table (`docs/agent-hooks.md`, "Events and states" and "The hook command").
+pub static AGENT: Agent = Agent {
+    source: SourceId::Cursor,
+    name: "cursor",
+    label: LABEL,
+    fields: InputFields {
+        chat: "conversation_id",
+        turn: Some("generation_id"),
+        event: Some("hook_event_name"),
+        version: Some("cursor_version"),
+        idle: None,
+    },
+    events: &[
+        EventRule {
+            name: "beforeSubmitPrompt",
+            action: Action::Write(State::Working),
+            prune: true,
+        },
+        // Any `status` (completed, aborted, error): each ends the turn.
+        EventRule {
+            name: "stop",
+            action: Action::DeleteIfTurn,
+            prune: false,
+        },
+        EventRule {
+            name: "sessionEnd",
+            action: Action::Delete,
+            prune: false,
+        },
+    ],
+    images: &[
+        // The editor runs hooks from its extension host or agent host daemon, both `Cursor.exe`.
+        ImageRule {
+            image: "Cursor.exe",
+            under: None,
+            key: "editor",
+            label: LABEL,
+        },
+        // `node.exe` is any Node, so only the CLI's own folder counts.
+        ImageRule {
+            image: "node.exe",
+            under: Some(CLI_FOLDER),
+            key: "cli",
+            label: CLI_LABEL,
+        },
+        ImageRule {
+            image: "cursor-agent.exe",
+            under: Some(CLI_FOLDER),
+            key: "cli",
+            label: CLI_LABEL,
+        },
+    ],
+    payload_key: "conversation_id",
+    input_problem: "Cursor hook input",
+    blocked_problem: "Cursor hook command line",
+};
+
+/// Cursor's source: `data_root` is Wakeshot's data folder, the one that holds `agents`.
+pub fn source(data_root: &Path) -> HookedSource {
+    HookedSource::new(&AGENT, data_root)
+}

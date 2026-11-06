@@ -5632,3 +5632,114 @@ here (see the last point).
   no-sudo setup needs a self-contained one (for example Zig as `cc`). Checked with `which` and `ls` in WSL. The
   agent's permission check refused the download and install, so no Linux run was done: **not verified** that a
   Zig-linked toolchain works there.
+
+## Agent hooks install checks
+
+Card `p4-agent-hooks-install`, 2026-11-06, Windows 11 build 26300, the test runner elevated (High). Each from a test in
+`crates/wakeshot-windows/src/agent_hooks.rs` on temp folders; no real `.cursor` folder was read or written.
+
+- **A file held open by a reader that shares no delete** (`FILE_SHARE_READ` only): `DeleteFileW` fails with 32
+  (sharing violation), and `MoveFileExW` of the folder that holds it fails with 5 (access denied). **Verified**:
+  `uninstall_leaves_a_file_held_open_and_says_so`.
+- **std does not report a junction as a folder**: `fs::symlink_metadata` on a `mklink /J` junction gives
+  `is_dir() == false` (`is_file()` too by std's code, which counts a name-surrogate reparse point as a link: **not
+  verified** here). So a check built on `is_dir` alone already refuses a junction; the
+  module still tests the reparse attribute, which also covers reparse points std counts as folders (cloud files:
+  **not verified**). **Verified**: with the attribute test removed, no write or delete went through a junction in
+  `a_link_anywhere_on_the_path_stops_every_write_and_delete`; with `fs::metadata` (which follows links) it did.
+- **`CreateDirectoryW` on a name that exists** fails with 183 (`ERROR_ALREADY_EXISTS`), so the staging folder's
+  "fail if it exists" holds. **Verified**: `the_add_never_fills_a_staging_folder_someone_else_made`.
+- **`MoveFileExW` without `MOVEFILE_REPLACE_EXISTING` onto a folder that exists** fails with 183. **Verified**:
+  `uninstall_renames_a_folder_it_cannot_empty`.
+- **A file link at a fixed name** (`symlink_file`, which this elevated runner may make): opened with
+  `FILE_FLAG_OPEN_REPARSE_POINT`, its metadata shows the reparse attribute, so it counts as changed and the file it
+  names is never read, written or deleted. **Verified** in the same link test. A **hard link** at a fixed name whose
+  bytes match the marker counts as Wakeshot's: the rewrite replaces the name (`write_atomic`) and the uninstall
+  deletes the name, and the file the other name shares keeps its bytes. **Verified** in the same test.
+- **The Medium rule with real tokens**: this test exe started through `process::spawn_outside_tree` from the High
+  runner ran with `current_above_medium() == Ok(false)` and added the folder; the High runner added nothing.
+  **Verified**: `a_medium_start_writes_and_an_elevated_one_does_not` (ignored by default, needs Explorer; run once).
+
+## VS Code chat live test
+
+Card `p4-live-vscode`, 2026-11-06. How checked: VS Code 1.145.1 with Copilot Free on the test laptop, prompts sent
+with `code chat`, files read by `agent-watch --source vscode,copilot` and the dry-run tray at Medium and by a monitor
+that printed only kinds, paths, send times and `modelState`. VS Code source read as data (`gh api`, tag 1.145.1).
+Details: `docs/research/copilot-vscode-signals.md`, "Phase 4 live test (2026-11-06)".
+
+- **New chats here default to the Copilot harness**, in folder and empty windows: `~\.copilot\session-state\<id>\`
+  with `inuse.<pid>.lock` and `.hold`, pid = `copilot-runtime.exe`. **Verified** live (three prompts). A Local chat
+  came only in a window opened after a workspace `chat.defaultToCopilotHarness: false`; New Chat keeps the current
+  chat's harness. Why the default is the Copilot harness for this user (the rollout or a remembered pick): **not
+  verified**.
+- **A Local chat file is saved on a 60 s beat per window**, and not at all while nothing changes. **Verified** live:
+  first save 44 s after a send, 34 s after an end (screen locked, so no save on blur). A 3 s turn never showed
+  Pending on disk.
+- **NeedsInput (`modelState` 4) is saved** at the first beat of a wait; the source posts `waiting` 25 ms after the
+  save. **Verified** live. 4 back to 0 after a click: **not tested**.
+- **Medium readers see an elevated VS Code**: its files read and `ImageSince` gives `alive=Yes` for its `Code.exe`.
+  **Verified** live. A Medium `code` cannot join an elevated instance ("already running as administrator",
+  `main.ts:396-400`). **Verified** in the source.
+- **A read at file creation got 0 bytes** and the one retry parsed 14 ms later. **Verified** live.
+- **Closing a window while a Local chat runs or waits asks for a click** ("A session is in progress...",
+  `chatLifecycle.ts`). **Verified** in the source; not run.
+- Not tested live: approval then go on, Stop, a close or reload mid-request, a crash, compaction, the Local
+  empty-window folder, a VS Code running at Medium.
+
+## Copilot CLI live test
+
+Card `docs/tasks/p4-live-copilot.md`, 2026-11-06, Copilot CLI 1.0.106 (npm), Copilot Free through `gh`'s login,
+Copilot Fusion (it picked `gpt-6-luna`), every session at Medium in a pseudo console. Detail:
+`research/other-agent-signals.md`, "GitHub Copilot CLI", "Phase 4 live test (2026-11-06)".
+
+- **The held in-use file is `inuse.<pid>.hold`, not `inuse.<pid>.lock`**: the process that has a session open makes
+  both, named after its own pid; Restart Manager names it as the holder of the `.hold` and no one for the `.lock`.
+  **Verified** live (two TUIs, a PowerShell `RmGetList` script elevated and at Medium). The source named the `.lock`,
+  so every live session read `Gone`; fixed in `sources/copilot.rs`.
+- **A clean exit deletes both files; a crash leaves both, and the next Copilot start deletes them**: **verified** live.
+  Killed by pid mid-turn, the session posted `Gone` 61 ms later.
+- **VS Code's Copilot harness writes the same files, held by `copilot-runtime.exe`**: sessions started through VS
+  Code chat by another card had `inuse.2728.*` with 2728 VS Code's (elevated) `copilot-runtime.exe` as the holder,
+  named by Restart Manager from Medium with its start time. **Verified** live (names, holders and event kinds only).
+  The watch now counts the holder whose pid the name gives, whatever its image (`watch/agents.rs`).
+- **VS Code's shim stays as a parent**: shim `copilot.exe` > `cmd.exe` > `node.exe` > `copilot.exe` (the CLI); the
+  files name the inner one; killing it ends the tree within 66 ms. **Verified** live.
+- **`events.jsonl` is written only from the first prompt on, then each event at once**: the first write carries
+  `session.start` from the start; later lines were read 0.13 to 0.25 s after their `timestamp`. **Verified** live.
+- **`tool.execution_start` comes before `permission.requested`; `ask_user` is a tool start with `toolName`
+  `ask_user`; Ctrl+C (not Esc) interrupts a running command and writes `abort` (`user_initiated`)**: **verified**
+  live.
+- **`/every` needs `--experimental`; a fire is a `user.message` with `source` `schedule-<id>`**: `/every 2m` made
+  `id` 1 with `intervalMs` 120000 and `recurring` true, did not run at creation, fired 2 min 0.12 s later as
+  `schedule-1`. **Verified** live.
+- **`COPILOT_HOME` moves the whole home**: a `copilot -p` with it on an empty folder made `session-state\` and the rest
+  there, and `gh`'s login still worked. **Verified** live (one run, through npm's `copilot.cmd`).
+- **The app holds for it**: a dry-run tray (fixed build, Medium) logged "Holding starts: Copilot" and `PowerSetRequest
+  SYSTEM` 0.25 s after `user.message`, "Holding ends" 0.24 s after the last `assistant.turn_end`. **Verified** live.
+  When `session-state\` did not exist at the tray's start, the first session was seen only at the 30 s tick (26.7 s
+  late): the timing matches the tick, the cause is **inferred** (a missing folder is listed only at the tick).
+- Not tested live: log rotation, sub-agents, `/after`, cron and self-paced schedules, `--resume`, VS Code Background
+  sessions (`Code.exe` holder), two clients on one session.
+
+## Cursor hook command checks
+
+Card `p4-cursor-source`, 2026-11-06, Windows 11 build 26300, the test runner elevated (High). Each fact is a test in
+the repo or a run named here.
+
+- **Node writes a `"` inside an argument as `\"`**: Node 26.13.0 (`C:\Program Files\nodejs`) spawning
+  `powershell.exe -c <here-string with JSON>` the way Cursor's executors do gave a command line with
+  `{\"conversation_id\":\"x\",...}` (the child printed `[Environment]::CommandLine`; script in the card's scratch
+  folder). So the runtime check's needle is the bare `conversation_id`. **Verified**.
+- **A child of `spawn_outside_tree` gets the caller's environment**: an elevated hook under a fake `Cursor.exe` (a copy
+  of `cmd.exe`) handed off to its Medium copy under Explorer, and the copy wrote into the `WAKESHOT_DATA_DIR` the test
+  set, not the real data folder (`tests/hook.rs`, `a_hook_under_cursor_writes_the_chats_file_and_its_stop_deletes_it`,
+  run with `--ignored`; `%LocalAppData%\Wakeshot\agents` still absent after). **Verified**.
+- **A Medium process cannot create a file in a folder with a High mandatory label** (`icacls /setintegritylevel
+  (OI)(CI)H`), also through a junction: the Medium copy's write failed with `CreateFileW` 5 and the folder kept its
+  file (`the_medium_copy_writes_where_it_may_and_nothing_through_a_junction`, `--ignored`). The elevated hook's
+  `stop` copy also left a High-labeled file of its turn in place; whether the read or the delete was refused: **not
+  verified**.
+- **The hook reads a 65 MiB input to its end**: the writer's `write_all` succeeded for every event
+  (`every_input_answers_an_empty_object_with_exit_0_and_is_read_to_its_end`). **Verified**.
+- **`serde_json` names the place after a bad value**: a number for `conversation_id` on line 2 reports line 3 (the
+  reader had moved past the newline). Logged as is; **verified** (`a_parse_problem_keeps_its_place_and_no_text`).
