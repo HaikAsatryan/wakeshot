@@ -5472,8 +5472,8 @@ crate `libsqlite3-sys` 0.39.1, Part A's scratch copy), `@opencode/cli` 2.2.5. Te
   (`a_read_runs_only_while_the_agent_has_the_database_open_and_creates_no_file`).
 - **A read-only `-wal` cannot checkpoint**: `sqlite3WalCheckpoint` returns `SQLITE_READONLY` when the WAL is read
   only (`sqlite3.c:71284`), and `sqlite3WalClose` deletes the `-wal` and `-shm` only after a checkpoint that succeeded
-  (`sqlite3.c:69461-69520`). So the reader's close never writes or deletes the agent's files. **Verified** in the
-  3.54.1 source; not tested.
+  (`sqlite3.c:69461-69520`). **Verified** in the 3.54.1 source; not tested. This alone did not keep the reader from
+  deleting (review `docs/reviews/p4-opencode-db-read.md`, finding 2): see the empty-database line below.
 - **Read-only WAL reads need 3.22.0**: sqlite.org/wal.html, "Read-Only Databases": "This constraint was relaxed
   beginning with SQLite version 3.22.0 (2018-01-22)". **Verified** in the docs (fetched 2026-11-06).
 - **The exports**: `winsqlite3.dll` 3.53.4 here exports `sqlite3_vfs_find`, `sqlite3_vfs_register`,
@@ -5491,3 +5491,51 @@ crate `libsqlite3-sys` 0.39.1, Part A's scratch copy), `@opencode/cli` 2.2.5. Te
 - **OpenCode ids and times**: `ses_` or `sch_` plus 26 letters and digits (`schema/src/identifier.ts`,
   `session-id.ts`, `schedule.ts:8-12`); event times from `Clock.currentTimeMillis` (`core/src/bus.ts:524`), so
   `time_busy` and the schedule times are wall ms. **Verified** in the 2.2.5 source.
+
+Review fixes, 2026-11-06 (`docs/reviews/p4-opencode-db-read.md`):
+
+- **An empty database file loses its `-wal` to a reader**: `pagerOpenWalIfPresent` deletes the `-wal` through the
+  connection's VFS when the db has 0 pages (`sqlite3.c:62352+`). With the shim's `xDelete` refusing, a read of a
+  0-byte db with a `-wal` and `-shm` fails as `prepare` and the `-wal` stays; with the default `xDelete` the read
+  removed it. **Verified** in the 3.54.1 source and by test (`an_empty_database_keeps_its_wal`, the second by a
+  change made on purpose and taken back).
+- **No checkpoint on close**: `SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE` (1006) sets `SQLITE_NoCkptOnClose`, and the pager
+  then passes no buffer to `sqlite3WalClose`, which skips the exclusive lock and the checkpoint
+  (`sqlite3.c:63202`). `winsqlite3.dll` 3.53.4 exports `sqlite3_db_config` (a C variadic call) and reads the setting
+  back as 1. **Verified** in the source and by test (`the_reader_skips_the_checkpoint_on_close`); the lock not
+  being taken: not measured.
+- **Across processes**: with a writer in a child process, a read gave its committed row and changed neither the db
+  nor the `-wal` (bytes and write time). After the child was killed, both files stayed; two reads still gave the
+  committed rows from the `-wal` and again changed only the `-shm` (no other file in the folder). After a clean close
+  by the child, both files were gone and a read made none. **Verified** by test
+  (`a_reader_beside_a_writer_in_another_process_and_after_it_died_writes_only_the_shm`,
+  `an_agent_in_another_process_that_closes_takes_its_files_and_a_read_then_makes_none`).
+- **SQLite takes a string literal as a table name** where only a name fits (`SELECT * FROM 'account'`), so the
+  table test reads literals after `FROM`, `JOIN` and `IN` as names. **Verified** by test with `winsqlite3` 3.53.4
+  (`sqlite_takes_a_literal_where_only_a_table_name_fits`). The other scan holes are the review's, checked by it with
+  `scan-holes.ps1`.
+
+## Codex CLI live test
+
+Card `docs/tasks/p4-live-codex.md`, 2026-11-06, Codex CLI 0.167.0 (npm), model `gpt-6-luna` at `low` effort, 7
+one-line prompts, every session at Medium in a pseudo console. Detail: `research/other-agent-signals.md`, "Phase 4
+live test (2026-11-06)".
+
+- **The lock file's holder is the session's own `codex.exe`**: Restart Manager gave the pid and start time of the
+  TUI's (or `codex exec`'s) `codex.exe`, the same the process list gives. **Verified** live (two TUIs, one `exec`;
+  a PowerShell `RmGetList` script and the watch thread at Medium agreed).
+- **A crash leaves the lock file with no holder, and the next start deletes it**: killed by pid mid-turn, posted
+  `Gone` 115 ms later; a TUI start and an `exec` start each deleted the stale lock first. **Verified** live. So the
+  Restart Manager rule does not outlive its session; the fallback (any `codex.exe`, when Restart Manager fails) still
+  can, since the desktop app keeps `codex.exe` running. **Verified** (the app's two `codex.exe` ran all through).
+- **Rollout appends give change notices at once**: a .NET `FileSystemWatcher` with the watch thread's filter saw each
+  append to the open rollout within milliseconds, while a folder listing kept the file's creation time as its last
+  write time. **Verified** live. Before the fix the source's turns reached a post only at the 30 s tick (1.3 to 29 s
+  late, and a 12 s turn never); after it 0.3 s (start) and 17 ms (end). **Verified** live.
+- **A backtrack writes `..._<rollout id>.jsonl` and remakes the lock file**: twice in 0.8 s; the source ends on the
+  new file. **Verified** live.
+- **An approval wait writes nothing; Esc writes `turn_aborted` (`interrupted`)**: **verified** live. A unified exec
+  command goes on as a background terminal after Esc; the rollout says idle meanwhile (seen once; not checked further).
+- **The CLI's TUI did not start the app-server daemon** in these runs, although `daemon_auto_start` is on (`codex
+  features list`). Why `p4-live-harness` saw two more `codex.exe` once is **not verified**. Whether the desktop app's
+  own threads write the same files is **not tested live** (the app cannot be driven from the command line).

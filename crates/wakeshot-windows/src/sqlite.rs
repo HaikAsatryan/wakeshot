@@ -5,19 +5,24 @@
 //!
 //! The agent owns the database, so a read must never change it or get in its way:
 //!
-//! - It runs only while the database, its `-wal` and its `-shm` exist, that is while the agent has it open in WAL
-//!   mode. Otherwise it answers `Busy` (the watch thread feeds `Gone` once the `-wal` went).
+//! - It runs only while the database, its `-wal` and its `-shm` exist: the agent has it open in WAL mode, or an agent
+//!   that died left them. Then each read rebuilds the `-shm`'s index from the whole `-wal` (it is the first opener of
+//!   the `-shm`), and writes nothing else. Otherwise it answers `Busy` (the watch thread feeds `Gone` once the `-wal`
+//!   went).
 //! - The connection goes through a VFS shim, [`VFS_NAME`], that opens the database and its `-wal` read only and never
 //!   creates them. A plain read-only open of a WAL database whose agent just closed it creates both the `-wal` and the
 //!   `-shm` and leaves them (`docs/research/opencode-signals.md`, probe). SQLite opens the `-shm` only after the
 //!   `-wal`, so the shim stops both. The `-shm` is opened read-write, as by every WAL reader: its read marks are how a
 //!   writer knows which pages a reader still needs.
-//! - A `-wal` opened read only also means the reader can never checkpoint, so its close never writes or deletes the
-//!   agent's files.
+//! - The shim refuses every delete (SQLite deletes the `-wal` of an empty database file), and the connection skips
+//!   the checkpoint on close (`SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE`, so the close takes no lock on the database either);
+//!   with the `-wal` read only no checkpoint could run anyway. So a read never writes the database or the `-wal` and
+//!   never deletes a file.
 //! - Open `SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX`, a [`BUSY_MS`] busy timeout, one statement, finalize and close
 //!   on every call: nothing stays open between reads to hold back the agent's checkpoints.
 //!
-//! An answer names what failed with a fixed word, never SQLite's text, so nothing from the file reaches a log.
+//! An answer names what failed with a fixed word, never SQLite's text, so nothing from the file reaches a log. A text
+//! cell longer than [`MAX_CELL`] bytes ends the read before it is copied.
 //!
 //! Owner: `p4-opencode-source`; the signature by `p4-contracts-r2`.
 
@@ -37,7 +42,8 @@ use windows::core::{HSTRING, PCSTR};
 pub enum Answer {
     /// The bytes to feed as `Feed::Whole`, in the contract's JSON: `{"rows":[[...],...]}` with integer, text or null
     /// cells, or `{"error":"<kind>"}` with a fixed kind, never SQLite's own text: `no_sqlite`, `open`, `prepare`,
-    /// `step`, `type` (a real or blob cell) or `size` (more than [`MAX_ROWS`] rows).
+    /// `step`, `type` (a real or blob cell) or `size` (more than [`MAX_ROWS`] rows, or a text cell over [`MAX_CELL`]
+    /// bytes).
     Json(Vec<u8>),
     /// `SQLITE_BUSY`, or the database closed before or during the read: no feed, so the source keeps the last
     /// answer.
@@ -57,6 +63,10 @@ pub const BUSY_MS: c_int = 100;
 /// or active schedule.
 pub const MAX_ROWS: usize = 10_000;
 
+/// The longest text cell taken, in bytes: the queries return ids and table names, and the source takes ids of at most
+/// 128 characters. A longer one is refused before Wakeshot copies it.
+pub const MAX_CELL: usize = 1_024;
+
 /// The VFS shim's name.
 pub const VFS_NAME: &CStr = c"wakeshot-readonly";
 
@@ -65,6 +75,9 @@ const SQLITE_BUSY: c_int = 5;
 const SQLITE_CANTOPEN: c_int = 14;
 const SQLITE_ROW: c_int = 100;
 const SQLITE_DONE: c_int = 101;
+const SQLITE_IOERR_DELETE: c_int = 10 | (10 << 8);
+
+const DBCONFIG_NO_CKPT_ON_CLOSE: c_int = 1006;
 
 const OPEN_READONLY: c_int = 0x0000_0001;
 const OPEN_READWRITE: c_int = 0x0000_0002;
@@ -95,8 +108,9 @@ struct OsFile {
 
 type VfsOpen =
     unsafe extern "system" fn(*mut Vfs, *const c_char, *mut OsFile, c_int, *mut c_int) -> c_int;
+type VfsDelete = unsafe extern "system" fn(*mut Vfs, *const c_char, c_int) -> c_int;
 
-/// `struct sqlite3_vfs`, version 3, as `winsqlite3.h` spells it. The methods after `xOpen` are only copied from the
+/// `struct sqlite3_vfs`, version 3, as `winsqlite3.h` spells it. The methods after `xDelete` are only copied from the
 /// default VFS and called by SQLite, never by Wakeshot, so they stay plain pointers.
 #[repr(C)]
 struct Vfs {
@@ -107,8 +121,9 @@ struct Vfs {
     name: *const c_char,
     app_data: *mut c_void,
     open: Option<VfsOpen>,
-    /// `xDelete` to `xGetLastError` (version 1), `xCurrentTimeInt64` (2), the three system call methods (3).
-    methods: [*const c_void; 15],
+    delete: Option<VfsDelete>,
+    /// `xAccess` to `xGetLastError` (version 1), `xCurrentTimeInt64` (2), the three system call methods (3).
+    methods: [*const c_void; 14],
 }
 
 /// The shim: its `Vfs` first, so SQLite's pointer to it is a pointer to the whole.
@@ -130,6 +145,8 @@ type PrepareV2 = unsafe extern "system" fn(
 ) -> c_int;
 type OfConnection = unsafe extern "system" fn(*mut Connection) -> c_int;
 type BusyTimeout = unsafe extern "system" fn(*mut Connection, c_int) -> c_int;
+/// `sqlite3_db_config` is the one `SQLITE_CDECL` export taken, and it has variable arguments.
+type DbConfig = unsafe extern "C" fn(*mut Connection, c_int, ...) -> c_int;
 type OfStatement = unsafe extern "system" fn(*mut Statement) -> c_int;
 type OfColumn = unsafe extern "system" fn(*mut Statement, c_int) -> c_int;
 type ColumnInt64 = unsafe extern "system" fn(*mut Statement, c_int) -> i64;
@@ -143,6 +160,7 @@ struct Api {
     open_v2: OpenV2,
     close: OfConnection,
     busy_timeout: BusyTimeout,
+    db_config: DbConfig,
     prepare_v2: PrepareV2,
     step: OfStatement,
     finalize: OfStatement,
@@ -243,12 +261,12 @@ fn run(api: &Api, db: &Path, sql: &str) -> Result<Vec<Value>, Fail> {
     run_on(api, db, sql, VFS_NAME.as_ptr())
 }
 
-fn run_on(api: &Api, db: &Path, sql: &str, vfs: *const c_char) -> Result<Vec<Value>, Fail> {
+/// A read-only connection on `vfs`, with the busy timeout and no checkpoint on close.
+fn open_on<'a>(api: &'a Api, db: &Path, vfs: *const c_char) -> Result<Open<'a>, Fail> {
     let path = db
         .to_str()
         .and_then(|path| CString::new(path).ok())
         .ok_or(Fail::Kind("open"))?;
-    let len = c_int::try_from(sql.len()).map_err(|_| Fail::Kind("prepare"))?;
     let mut conn = Open {
         api,
         ptr: ptr::null_mut(),
@@ -267,6 +285,24 @@ fn run_on(api: &Api, db: &Path, sql: &str, vfs: *const c_char) -> Result<Vec<Val
     }
     // SAFETY: an open connection.
     unsafe { (api.busy_timeout)(conn.ptr, BUSY_MS) };
+    // SAFETY: an open connection; this option takes an int and an int pointer, which may be null.
+    let rc = unsafe {
+        (api.db_config)(
+            conn.ptr,
+            DBCONFIG_NO_CKPT_ON_CLOSE,
+            1 as c_int,
+            ptr::null_mut::<c_int>(),
+        )
+    };
+    if rc != SQLITE_OK {
+        return Err(Fail::Kind("open"));
+    }
+    Ok(conn)
+}
+
+fn run_on(api: &Api, db: &Path, sql: &str, vfs: *const c_char) -> Result<Vec<Value>, Fail> {
+    let len = c_int::try_from(sql.len()).map_err(|_| Fail::Kind("prepare"))?;
+    let conn = open_on(api, db, vfs)?;
     let mut stmt = Prepared {
         api,
         ptr: ptr::null_mut(),
@@ -318,7 +354,14 @@ fn cell(api: &Api, stmt: *mut Statement, i: c_int) -> Result<Value, Fail> {
         // SAFETY: as above.
         COLUMN_INTEGER => Ok(Value::from(unsafe { (api.column_int64)(stmt, i) })),
         COLUMN_TEXT => {
-            // The text first, then its length: SQLite's documented order, so the length is of the UTF-8 form.
+            // The length in UTF-8 (SQLite converts a UTF-16 value first), so a long cell is refused uncopied.
+            // SAFETY: as above.
+            let long =
+                usize::try_from(unsafe { (api.column_bytes)(stmt, i) }).unwrap_or(usize::MAX);
+            if long > MAX_CELL {
+                return Err(Fail::Kind("size"));
+            }
+            // The text, then its length again: SQLite's documented order, so the length is of the bytes given.
             // SAFETY: as above; the bytes stay valid until the next step, and are copied before it.
             let text = unsafe { (api.column_text)(stmt, i) };
             // SAFETY: as above.
@@ -362,6 +405,7 @@ fn load(dll: &str) -> Option<Api> {
         open_v2: export!("sqlite3_open_v2" as OpenV2),
         close: export!("sqlite3_close" as OfConnection),
         busy_timeout: export!("sqlite3_busy_timeout" as BusyTimeout),
+        db_config: export!("sqlite3_db_config" as DbConfig),
         prepare_v2: export!("sqlite3_prepare_v2" as PrepareV2),
         step: export!("sqlite3_step" as OfStatement),
         finalize: export!("sqlite3_finalize" as OfStatement),
@@ -391,6 +435,7 @@ fn register_shim(vfs_find: VfsFind, vfs_register: VfsRegister) -> bool {
     vfs.next = ptr::null_mut();
     vfs.name = VFS_NAME.as_ptr();
     vfs.open = Some(open_read_only);
+    vfs.delete = Some(refuse_delete);
     let shim = Box::leak(Box::new(Shim { vfs, base }));
     // SAFETY: the shim lives for the process, as a registered VFS must.
     unsafe { vfs_register(&mut shim.vfs, 0) == SQLITE_OK }
@@ -420,12 +465,25 @@ unsafe extern "system" fn open_read_only(
     }
 }
 
+/// The shim's `xDelete`: the agent's files are never Wakeshot's to remove, so the read fails instead.
+unsafe extern "system" fn refuse_delete(
+    _vfs: *mut Vfs,
+    _name: *const c_char,
+    _sync: c_int,
+) -> c_int {
+    SQLITE_IOERR_DELETE
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
     use std::fs;
+    use std::io::{BufRead, BufReader, Write};
     use std::path::PathBuf;
+    use std::process::{Child, Stdio};
     use std::sync::Arc;
+    use std::time::Duration;
+
     use wakeshot_core::command::Command;
     use wakeshot_core::core::Core;
     use wakeshot_core::event::Event;
@@ -868,11 +926,206 @@ mod tests {
         assert_eq!(query(&db, &many), json(r#"{"error":"size"}"#));
         let enough = many.replace(&(MAX_ROWS + 1).to_string(), &MAX_ROWS.to_string());
         assert_eq!(rows_of(&query(&db, &enough)).len(), MAX_ROWS);
+        // `hex` of n zero bytes is 2n characters.
+        let cell = |chars: usize| format!("SELECT hex(zeroblob({}))", chars / 2);
+        assert_eq!(query(&db, &cell(MAX_CELL + 2)), json(r#"{"error":"size"}"#));
+        assert_eq!(
+            query(&db, &cell(MAX_CELL)),
+            json(&format!(r#"{{"rows":[["{}"]]}}"#, "0".repeat(MAX_CELL)))
+        );
         assert_eq!(
             query(&db, "SELECT 'a\"b' || char(10) || 'ü', NULL, -7"),
             json("{\"rows\":[[\"a\\\"b\\nü\",null,-7]]}"),
             "text escaped as JSON"
         );
+    }
+
+    /// Why the core's table test reads a literal after `FROM` as a table.
+    #[test]
+    fn sqlite_takes_a_literal_where_only_a_table_name_fits() {
+        let dir = TempDir::new("sqlite-literal");
+        let (db, writer) = opencode_db(&dir);
+        writer.exec(&session("ses_first", Some(3_000), None, None));
+        assert_eq!(
+            rows_of(&query(&db, "SELECT id FROM 'session_v2'")),
+            set(&[r#"["ses_first"]"#])
+        );
+    }
+
+    #[test]
+    fn an_empty_database_keeps_its_wal() {
+        let dir = TempDir::new("sqlite-empty");
+        let db = dir.write("opencode.db", b"");
+        let wal = dir.write("opencode.db-wal", b"frames");
+        dir.write("opencode.db-shm", b"");
+        // SQLite deletes the `-wal` of an empty database file; the shim refuses, so the read fails instead.
+        assert_eq!(query(&db, WORKING.sql), json(r#"{"error":"prepare"}"#));
+        assert_eq!(fs::read(&wal).unwrap(), b"frames");
+        assert_eq!(fs::read(&db).unwrap(), b"");
+    }
+
+    #[test]
+    fn the_reader_skips_the_checkpoint_on_close() {
+        let dir = TempDir::new("sqlite-no-checkpoint");
+        let (db, _writer) = opencode_db(&dir);
+        let conn = open_on(real(), &db, VFS_NAME.as_ptr()).unwrap();
+        let mut on = -1;
+        // SAFETY: an open connection; -1 reads the setting into `on`.
+        let rc = unsafe {
+            (real().db_config)(conn.ptr, DBCONFIG_NO_CKPT_ON_CLOSE, -1 as c_int, &mut on)
+        };
+        assert_eq!((rc, on), (SQLITE_OK, 1));
+    }
+
+    // Across processes: SQLite shares one `-shm` mapping per process, so only a writer in another process makes the
+    // reader open the `-shm` itself, and only a killed one leaves its files behind.
+
+    const WRITER_ARG: &str = "wakeshot-test-sqlite-writer=";
+    /// A child that outlives its test (a crashed run) closes on its own after this.
+    const WRITER_MAX: Duration = Duration::from_secs(120);
+
+    /// The child role. Started as `<this exe> sqlite::tests::writer_role --exact --ignored
+    /// wakeshot-test-sqlite-writer=<db>` it opens `<db>` as OpenCode does, commits one session, says `open` on stdout
+    /// and closes the database when stdin closes; started any other way it ends at once. The last argument is a test
+    /// filter that matches nothing, so the harness takes it.
+    #[test]
+    #[ignore = "a child role for the cross-process tests"]
+    fn writer_role() {
+        let Some(db) = std::env::args().find_map(|a| a.strip_prefix(WRITER_ARG).map(PathBuf::from))
+        else {
+            return;
+        };
+        let writer = Writer::open(&db);
+        writer.exec(&session("ses_child", Some(9_000), None, None));
+        // Straight to the handle: the harness captures only the print macros.
+        let mut out = std::io::stdout().lock();
+        out.write_all(b"open\n").unwrap();
+        out.flush().unwrap();
+        drop(out);
+        let (done, wait) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = std::io::stdin().read_line(&mut String::new());
+            let _ = done.send(());
+        });
+        let _ = wait.recv_timeout(WRITER_MAX);
+        drop(writer);
+    }
+
+    /// A writer child, killed and reaped on drop, so a failed assert leaves no process.
+    struct OtherWriter(Child);
+
+    impl OtherWriter {
+        fn start(db: &Path) -> Self {
+            let mut arg = std::ffi::OsString::from(WRITER_ARG);
+            arg.push(db);
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "sqlite::tests::writer_role",
+                    "--exact",
+                    "--ignored",
+                    "--test-threads=1",
+                    "--quiet",
+                ])
+                .arg(arg)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap();
+            let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+            let writer = Self(child);
+            assert!(
+                lines.any(|line| line.is_ok_and(|l| l.trim() == "open")),
+                "the child never opened the database"
+            );
+            writer
+        }
+
+        /// Closes its stdin, so it closes the database and ends by itself. Its exit code is not checked: its harness
+        /// may fail to print its summary to the stdout pipe dropped in `start`.
+        fn close(&mut self) {
+            drop(self.0.stdin.take());
+            self.0.wait().unwrap();
+        }
+
+        /// Ends it by its own handle, as a crash would: the database is never closed.
+        fn kill(&mut self) {
+            self.0.kill().unwrap();
+            self.0.wait().unwrap();
+        }
+    }
+
+    impl Drop for OtherWriter {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    /// A file's bytes and write time.
+    fn stamp(path: &Path) -> (Vec<u8>, std::time::SystemTime) {
+        (
+            fs::read(path).unwrap(),
+            fs::metadata(path).unwrap().modified().unwrap(),
+        )
+    }
+
+    fn names(dir: &TempDir) -> Vec<String> {
+        let mut names: Vec<String> = fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// A database with one session, closed, so the child is its only writer.
+    fn closed_db(dir: &TempDir) -> PathBuf {
+        let (db, writer) = opencode_db(dir);
+        writer.exec(&session("ses_first", Some(3_000), None, None));
+        db
+    }
+
+    const BOTH: [&str; 2] = [r#"["ses_child",9000]"#, r#"["ses_first",3000]"#];
+
+    #[test]
+    fn a_reader_beside_a_writer_in_another_process_and_after_it_died_writes_only_the_shm() {
+        let dir = TempDir::new("sqlite-cross-kill");
+        let db = closed_db(&dir);
+        let (wal, shm) = (with(&db, "-wal"), with(&db, "-shm"));
+        let mut child = OtherWriter::start(&db);
+        let before = (stamp(&db), stamp(&wal));
+        assert_eq!(rows_of(&query(&db, WORKING.sql)), set(&BOTH));
+        assert_eq!(
+            (stamp(&db), stamp(&wal)),
+            before,
+            "the reader wrote neither"
+        );
+
+        // A crash: both files stay, and a read rebuilds the `-shm` from the `-wal`, which holds the child's commit.
+        child.kill();
+        assert!(wal.exists() && shm.exists());
+        let left = (stamp(&db), stamp(&wal));
+        for _ in 0..2 {
+            assert_eq!(rows_of(&query(&db, WORKING.sql)), set(&BOTH));
+        }
+        assert_eq!((stamp(&db), stamp(&wal)), left, "only the -shm changes");
+        assert_eq!(
+            names(&dir),
+            ["opencode.db", "opencode.db-shm", "opencode.db-wal"]
+        );
+    }
+
+    #[test]
+    fn an_agent_in_another_process_that_closes_takes_its_files_and_a_read_then_makes_none() {
+        let dir = TempDir::new("sqlite-cross-close");
+        let db = closed_db(&dir);
+        let mut child = OtherWriter::start(&db);
+        assert_eq!(rows_of(&query(&db, WORKING.sql)), set(&BOTH));
+        child.close();
+        assert_eq!(names(&dir), ["opencode.db"], "its last close removed both");
+        assert_eq!(query(&db, WORKING.sql), Answer::Busy);
+        assert_eq!(names(&dir), ["opencode.db"]);
     }
 
     /// A process of OpenCode's image that started at the epoch, so every row time is later than it.

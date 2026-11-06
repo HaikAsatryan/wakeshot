@@ -193,7 +193,7 @@ impl OpenCodeSource {
                 whole
             }
         };
-        if whole {
+        if whole || no_sqlite(bytes) {
             self.unread.remove(&query);
         } else {
             self.unread.insert(query);
@@ -268,6 +268,13 @@ fn rows<T>(bytes: &[u8], row: fn(&[Value]) -> Option<T>) -> (Vec<T>, bool) {
         })
         .collect();
     (taken, whole)
+}
+
+/// The answer of a Windows with no usable `winsqlite3.dll`. Updating Wakeshot cannot mend that, so it gives no signal
+/// and no "update Wakeshot" notice.
+fn no_sqlite(bytes: &[u8]) -> bool {
+    serde_json::from_slice::<Value>(bytes)
+        .is_ok_and(|answer| answer.get("error").and_then(Value::as_str) == Some("no_sqlite"))
 }
 
 fn table_row(cells: &[Value]) -> Option<&'static str> {

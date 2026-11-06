@@ -114,6 +114,17 @@ done). A failure in another card's file is reported, never fixed. The orchestrat
 - 2026-11-06: dropped a timing assert that could flake under load (the rows check already proves no wait). Docs:
   architecture sections 7 and 11, research "OpenCode SQLite reader checks", the "Built" note. All checks run again on
   the final code: clean. Build folder, scratch files and two temp folders from the break runs deleted. Part B done.
+- 2026-11-06: review fixes started (`docs/reviews/p4-opencode-db-read.md`, 1 major, 7 minors). The major (re-run a
+  query only on `<db>-wal` or `<db>` notices) is in `watch/agents.rs`: moved to `p4-contracts-r3`, not touched here.
+  Checked in the 3.54.1 source: an empty db with a `-wal` deletes it through `pPager->pVfs` (`pagerOpenWalIfPresent`,
+  `sqlite3.c:62352+`), and `SQLITE_NoCkptOnClose` skips the close checkpoint (`sqlite3.c:63202`).
+- 2026-11-06: fixes written: the shim's own `xDelete` refuses; `NO_CKPT_ON_CLOSE` after each open; a 1,024-byte
+  text cell cap; cross-process tests with a writer child (killed by its own handle, and closed); `no_sqlite` is no
+  signal and no problem; the table scan reads comments, `FROM (x)`, `IN x` and literals as names. Broke the
+  refusal, the setting, the cap, the `no_sqlite` rule and the scan's four rules on purpose: each failed its tests,
+  files copied back (byte compare). Docs fixed in my files and lines.
+- 2026-11-06: fmt, clippy both ways (x64; ARM64 `--all-targets`), `cargo test -p wakeshot-core -p wakeshot-windows
+  --locked` clean on the final code. Build folder and scratch deleted. Review fixes done.
 
 ## Questions for Haik
 
@@ -122,6 +133,9 @@ done). A failure in another card's file is reported, never fixed. The orchestrat
    that file read only and runs four fixed queries on `sqlite_master`, `session_v2`, `schedule`, `session` and
    `message` only. It never queries the token tables, so SQLite never loads their pages, and nothing is stored or
    logged. Is that OK? Default: yes. If no, OpenCode cannot be supported, and Part B is dropped. (Answered: yes.)
+   Correction (review finding 7): "SQLite never loads their pages" does not hold after an OpenCode that died left its
+   `-wal`: each read then rebuilds the WAL index from every `-wal` frame, token pages included, in Wakeshot's memory.
+   Nothing of it is kept or logged, and no query still names those tables.
 2. (Part B, not blocking.) Add OpenCode 1.x? It is most users (npm, week to 11-04: 4.29 M downloads of 1.x, 0.61 M
    of 2.x). It needs one more query on the `session` and `message` tables. SQLite would read each session's newest
    `message` row, whose JSON holds prompt text, inside Wakeshot's process to pick two fields (role, completed time);
@@ -220,6 +234,33 @@ rounds (Log), each failed its tests.
 without `time_busy` shows "update Wakeshot" (which release added it: not verified). Question 2 (1.x). The Part A
 scratch folder (`de37e39e-...\scratchpad\p4-opencode-source`, downloaded sources and the probe) was made by the Part A
 worker, not me, so I left it.
+
+### Review fixes (2026-11-06): done
+
+Review: `docs/reviews/p4-opencode-db-read.md` (0 blockers, 1 major, 7 minors). Only my files changed; nothing in
+`crates/wakeshot-windows/src/watch/`.
+
+| # | Finding | Outcome |
+|---|---|---|
+| 1 (major) | A killed OpenCode leaves `-wal` and `-shm`; each read rewrites the `-shm`, whose notice runs the next read | **Moved to `p4-contracts-r3`**: the fix (run a query only on `<db>-wal` or `<db>` notices; change the limit test that feeds `OPENCODE.DB-SHM`) is in `watch/agents.rs`, which `p4-live-codex` may be editing. What it relies on is now tested here: after the writer is killed, reads change only the `-shm` (db and `-wal` bytes and write times stay). Add the crash-leftover case to the live card. |
+| 2 | The shim still let SQLite delete the `-wal` (empty db) | **Fixed**: the shim's own `xDelete` returns `SQLITE_IOERR_DELETE`. Test `an_empty_database_keeps_its_wal` (0-byte db, `-wal`, `-shm`: answer `prepare`, `-wal` kept); without the refusal the `-wal` went and the test failed. |
+| 3 | The table test missed `FROM (x)`, `JOIN (x)`, comments, `IN x` | **Fixed**: the scan skips `--` and `/* */`, reads a name after `(` that follows `FROM` or `JOIN` (a `SELECT`, `WITH` or `VALUES` there is a subquery), a name after `IN` with no `(`, and a `'...'` literal as a name (SQLite takes `FROM 'account'`, verified by `sqlite_takes_a_literal_where_only_a_table_name_fits`). The five review cases and five more are in `the_table_scan_finds_every_table_a_query_names`; with the four rules off it failed. **Not fixed**: the stronger option (a `sqlite3_set_authorizer` callback); the three queries are fixed strings the test checks, and a file crafted to fool it needs write access to the user's tokens anyway. Change it when a query is built at run time or gets more complex. |
+| 4 | Each close asked for an exclusive lock on `opencode.db` | **Fixed**: `sqlite3_db_config(NO_CKPT_ON_CLOSE, 1)` after each open (a C variadic export; ARM64 clippy clean, not run there). Test `the_reader_skips_the_checkpoint_on_close` reads the setting back as 1; with 0 it failed. That the lock is no longer taken: from SQLite's source, not measured. |
+| 5 | No bound on a cell's size or a scan's cost | **Fixed** for the cell: a text cell over `MAX_CELL` (1,024 bytes) ends the read as `size` before Wakeshot copies it (checked by `column_bytes` first). `SQLITE_LIMIT_LENGTH` was not used: it also bounds a whole row, so a large `session_v2` row would fail the query. Tests at 1,024 and 1,026 characters; with a doubled cap it failed. **Not fixed**: the scan cost (every `session_v2` row walked per read); for the live card: time one read on a real, long-used `opencode.db` and log it if it passes 50 ms. |
+| 6 | The SQLite tests never crossed a process | **Fixed**: a child role `writer_role` (the same test exe, as `lockowner`'s holder) and two tests: a read beside the child's open writer changes neither db nor `-wal`; after the child is killed by its own handle the files stay and two reads give the committed rows and change only the `-shm`; after a clean close both files are gone and a read gives `Busy` and makes none. The notice part (no notice from a read with the writer open) is the watch thread's: with finding 1. |
+| 7 | Docs that do not match the code | **Fixed** in my files and lines: `sqlite.rs` module doc (leftover files, no delete, no checkpoint on close); `research/opencode-signals.md` ("never loads their pages" and "a `-wal` means OpenCode has it open", both with the crash exception); this card's question 1; `docs/research.md` my section (the close claim, and the new facts); `docs/architecture.md` section 7. **Moved to `p4-contracts-r3`**: section 6 (`:1129` "shares read, write and delete", `:1132-1134` "only while its `-wal` file exists"), which this card does not own. |
+| 8 | `no_sqlite` showed "update Wakeshot" | **Fixed**: the source reads `{"error":"no_sqlite"}` as no rows and no problem entry, so no notice and no log line. Test `a_windows_without_sqlite_gives_no_signal_and_no_notice`; with the old rule it failed. A once-only log line for it would need the watch thread: not done. |
+
+**Files changed:** `crates/wakeshot-windows/src/sqlite.rs`, `crates/wakeshot-core/src/sources/opencode.rs`,
+`crates/wakeshot-core/tests/opencode_source.rs`, `crates/wakeshot-core/tests/fixtures/opencode/README.md`;
+`docs/research/opencode-signals.md`, `docs/research.md` (my section), `docs/architecture.md` (my section 7 lines),
+this card.
+
+**Checks** (own target folder, `--locked`, final code): rustfmt on my three Rust files clean; clippy with and without
+`--all-targets` on `wakeshot-core` and `wakeshot-windows`, `-D warnings`: clean on x64, and `--all-targets` clean on
+ARM64; `cargo test -p wakeshot-core -p wakeshot-windows --locked`: all pass (core unit 707, `claude_status` 11,
+`claude_transcript` 25, `codex_source` 22, `copilot_source` 42, `opencode_source` 15, `vscode_source` 31;
+`wakeshot-windows` 656 with 25 ignored, `sqlite::tests` 14 and the child role). Build folder deleted.
 
 ### Part A (2026-11-06)
 

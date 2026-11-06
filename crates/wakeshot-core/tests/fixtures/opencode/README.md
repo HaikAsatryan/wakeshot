@@ -15,7 +15,7 @@ Ids have OpenCode's shape: `ses_` or `sch_` and 26 letters and digits. Times are
 | `working-none.json` | `working` | no turn runs |
 | `schedules.json` | `schedules` | three schedules of a working session (two due at the same time), one of an idle session, one with no session |
 | `error-prepare.json` | any | a query that did not prepare (a renamed column) |
-| `error-no-sqlite.json` | any | no usable `winsqlite3.dll` |
+| `error-no-sqlite.json` | any | no usable `winsqlite3.dll`: no signal, and no problem entry |
 | `working-bad-rows.json` | `working` | one good row and rows of the wrong shape: swapped cells, too few, a real number, a text that is no id, too many, a bare prefix, not a list |
 | `schedules-bad-rows.json` | `schedules` | one good row and rows of the wrong shape: a number for the session, a session id for the id, no due time, a text that is no session id |
 | `not-json.txt` | any | bytes that are not JSON |

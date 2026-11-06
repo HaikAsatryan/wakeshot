@@ -1226,8 +1226,10 @@ What a source can ask the watch thread for (`WantedFile`; the full rules are in 
   a change of the db's files in its folder, at most once a second per want (a run held back comes when due, with no
   tick), and on the safety tick; `Gone` once the db or its `-wal` goes; `SQLITE_BUSY` gives no feed. `sqlite.rs`
   (`p4-opencode-source`) loads Windows' `winsqlite3.dll` (3.22.0 or later, else `no_sqlite`) and reads through a VFS
-  shim that opens the db and its `-wal` read only and never creates them; it reads only while the db, `-wal` and
-  `-shm` exist, and finalizes and closes on every call, so it never blocks the agent's writes or checkpoints.
+  shim that opens the db and its `-wal` read only, never creates them and refuses every delete; it reads only while
+  the db, `-wal` and `-shm` exist, skips the checkpoint on close, and finalizes and closes on every call, so it never
+  blocks the agent's writes or checkpoints. A killed or crashed agent leaves its `-wal` and `-shm`; each read then
+  rebuilds the `-shm` (only that file changes), and how the watch thread stops re-reading then is `p4-contracts-r3`'s.
 
 `Liveness::ImageSince` (`p4-contracts-r2`): alive while the system process list (no rights needed) has a process of
 one of the images, case ignored, that started at or before `since_wall_ms` plus 2 s (`IMAGE_SINCE_SLACK_MS`), or at
@@ -1267,13 +1269,21 @@ Manager `RmGetList`; not verified for this lock) and checks that pid and start t
 "can outlive its session". Each agent gets one live test (product). `wakeshot run` and hold files are not a source; the
 watch thread parses them into `Event::Holds`.
 
+Codex live test (`p4-live-codex`, 2026-11-06, Codex CLI 0.167.0): Restart Manager names the TUI's or `codex exec`'s own
+`codex.exe` as the lock file's holder, with the same pid and start time. A crash leaves the lock file with no holder,
+read `Gone` at once, and the next Codex start deletes it. So with Restart Manager the rule does not outlive its session;
+only the fallback for a Restart Manager failure (any `codex.exe`) still can, and the Codex desktop app keeps
+`codex.exe` processes running. While a thread is listed, the Codex source also lists `sessions\` one level deep with a
+filter that takes no name, only so the watch thread watches that tree: rollout appends then reach the source within a
+second instead of at the 30 s tick. The tray starts the Codex source beside Claude Code (`app/tray_mode.rs`).
+
 OpenCode (in v1, 2.x only, Haik 2026-11-06; built by `p4-opencode-source`, not registered in the tray until its live
 card): `OpenCodeSource` reads `<data>\opencode\opencode.db` (`XDG_DATA_HOME`, else `%USERPROFILE%\.local\share`) with
 three `Query` wants: a `sqlite_master` probe for `session_v2` and `schedule`, then the sessions with `time_busy` newer
 than `time_idle` (working, `ImageSince` from `time_busy` on `opencode.exe` or `opencode-cli.exe`) and the active
 schedules (timers, due at the later of `next_due_at` and `retry_at`). No query names another table: the file also
 holds OpenCode's login tokens, and a test fails if one does. A failed or odd answer is one `Unreadable("opencode.db")`
-entry. 1.x is not read (its state is in `message` rows, which hold prompt text). `docs/research/opencode-signals.md`.
+entry; `no_sqlite` (no usable `winsqlite3.dll`) is no signal and no notice. 1.x is not read (its state is in `message` rows, which hold prompt text). `docs/research/opencode-signals.md`.
 
 VS Code chat (in v1, Haik 2026-11-06; built by `p4-vscode-source`, not registered in the tray until its live card):
 `VsCodeSource` follows `research/copilot-vscode-signals.md` rules 1 to 5 and 7, label "Copilot in VS Code".

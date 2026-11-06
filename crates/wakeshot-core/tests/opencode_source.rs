@@ -210,12 +210,7 @@ fn gone_drops_what_its_query_said_and_a_gone_probe_drops_everything() {
 
 #[test]
 fn an_error_answer_is_one_unreadable_entry_until_a_good_answer() {
-    for bad in [
-        "error-prepare.json",
-        "error-no-sqlite.json",
-        "not-json.txt",
-        "rows-not-a-list.json",
-    ] {
+    for bad in ["error-prepare.json", "not-json.txt", "rows-not-a-list.json"] {
         let mut source = with_tables();
         feed(&mut source, WORKING, "working.json");
         feed(&mut source, SCHEDULES, "schedules.json");
@@ -237,12 +232,33 @@ fn an_error_answer_is_one_unreadable_entry_until_a_good_answer() {
 fn a_probe_that_fails_asks_for_nothing_else_and_reports_it() {
     let mut source = with_tables();
     feed(&mut source, WORKING, "working.json");
-    feed(&mut source, TABLES, "error-no-sqlite.json");
+    feed(&mut source, TABLES, "error-prepare.json");
     assert_eq!(wanted(&source), ["tables"]);
     assert_eq!(source.sessions(), [problem()]);
     feed(&mut source, TABLES, "tables-both.json");
     assert!(source.sessions().is_empty());
     assert_eq!(wanted(&source), ["tables", "working", "schedules"]);
+}
+
+#[test]
+fn a_windows_without_sqlite_gives_no_signal_and_no_notice() {
+    let mut source = with_tables();
+    feed(&mut source, WORKING, "working.json");
+    feed(&mut source, SCHEDULES, "error-prepare.json");
+    feed(&mut source, WORKING, "error-no-sqlite.json");
+    assert_eq!(
+        source.sessions(),
+        [problem()],
+        "the schedules' own problem only"
+    );
+    feed(&mut source, SCHEDULES, "error-no-sqlite.json");
+    assert!(
+        source.sessions().is_empty(),
+        "updating Wakeshot cannot mend it"
+    );
+    feed(&mut source, TABLES, "error-no-sqlite.json");
+    assert_eq!(wanted(&source), ["tables"]);
+    assert!(source.sessions().is_empty());
 }
 
 #[test]
@@ -319,7 +335,8 @@ const ALLOWED: [&str; 3] = ["sqlite_master", "session_v2", "schedule"];
 enum Token {
     /// A bare word, or a quoted name (`"x"`, `` `x` ``, `[x]`) with `true`.
     Word(String, bool),
-    Literal,
+    /// A `'...'` literal, which SQLite also takes as a name where only a name fits (`FROM 'account'`).
+    Literal(String),
     Punct(char),
 }
 
@@ -329,14 +346,34 @@ fn tokens(sql: &str) -> Vec<Token> {
     while let Some(c) = chars.next() {
         match c {
             c if c.is_whitespace() => {}
+            '-' if chars.next_if_eq(&'-').is_some() => {
+                // A line comment.
+                for c in chars.by_ref() {
+                    if c == '\n' {
+                        break;
+                    }
+                }
+            }
+            '/' if chars.next_if_eq(&'*').is_some() => {
+                // A block comment.
+                let mut star = false;
+                for c in chars.by_ref() {
+                    if star && c == '/' {
+                        break;
+                    }
+                    star = c == '*';
+                }
+            }
             '\'' => {
                 // `''` inside a literal is a quote.
+                let mut text = String::new();
                 while let Some(c) = chars.next() {
                     if c == '\'' && chars.next_if_eq(&'\'').is_none() {
                         break;
                     }
+                    text.push(c);
                 }
-                out.push(Token::Literal);
+                out.push(Token::Literal(text));
             }
             '"' | '`' | '[' => {
                 let close = if c == '[' { ']' } else { c };
@@ -361,28 +398,52 @@ fn tokens(sql: &str) -> Vec<Token> {
 const NOT_ALIAS: &str = "WHERE JOIN INNER LEFT RIGHT FULL OUTER CROSS NATURAL ON USING GROUP ORDER LIMIT UNION \
                          EXCEPT INTERSECT WINDOW HAVING INDEXED NOT AS RETURNING";
 
+/// Words that open a subquery where a table could stand.
+const SUBQUERY: &str = "SELECT WITH VALUES";
+
 fn is_word(token: Option<&Token>, word: &str) -> bool {
     matches!(token, Some(Token::Word(w, false)) if w.eq_ignore_ascii_case(word))
 }
 
-/// Every table a query reads: each name after `FROM` or `JOIN`, and after a comma that follows one, in subqueries
-/// too. A schema prefix (`main.x`) is dropped; a table-valued function counts by its name.
+/// A token that can name a table: a word, a quoted name or a literal.
+fn name_of(token: Option<&Token>) -> Option<(String, bool)> {
+    match token {
+        Some(Token::Word(name, quoted)) => Some((name.clone(), *quoted)),
+        Some(Token::Literal(name)) => Some((name.clone(), true)),
+        _ => None,
+    }
+}
+
+/// Every table a query reads: each name after `FROM` or `JOIN` (also in parentheses, `FROM (x)`), after a comma that
+/// follows one, and after `IN` with no parenthesis (`x IN account`), in subqueries too, comments skipped. A schema
+/// prefix (`main.x`) is dropped; a table-valued function counts by its name.
 fn tables_named(sql: &str) -> Vec<String> {
     let t = tokens(sql);
     let mut tables = Vec::new();
     let mut i = 0;
     while i < t.len() {
-        if is_word(t.get(i), "FROM") || is_word(t.get(i), "JOIN") {
+        let into_in = is_word(t.get(i), "IN") && t.get(i + 1) != Some(&Token::Punct('('));
+        if is_word(t.get(i), "FROM") || is_word(t.get(i), "JOIN") || into_in {
             loop {
                 i += 1;
-                let Some(Token::Word(mut name, _)) = t.get(i).cloned() else {
-                    // A subquery: its own `FROM` comes next in the scan.
+                while t.get(i) == Some(&Token::Punct('(')) {
+                    i += 1;
+                }
+                let Some((mut name, quoted)) = name_of(t.get(i)) else {
                     break;
                 };
-                if t.get(i + 1) == Some(&Token::Punct('.'))
-                    && let Some(Token::Word(table, _)) = t.get(i + 2)
+                if !quoted
+                    && SUBQUERY
+                        .split_whitespace()
+                        .any(|k| name.eq_ignore_ascii_case(k))
                 {
-                    name.clone_from(table);
+                    // A subquery: its own `FROM` comes next in the scan.
+                    break;
+                }
+                if t.get(i + 1) == Some(&Token::Punct('.'))
+                    && let Some((table, _)) = name_of(t.get(i + 2))
+                {
+                    name = table;
                     i += 2;
                 }
                 tables.push(name.to_ascii_lowercase());
@@ -485,6 +546,29 @@ fn the_table_scan_finds_every_table_a_query_names() {
             &["schedule", "control_account"],
         ),
         ("SELECT * FROM [account]", &["account"]),
+        // The review's holes (`docs/reviews/p4-opencode-db-read.md`, finding 3), and a literal as a name.
+        ("SELECT * FROM (account)", &["account"]),
+        (
+            "SELECT id FROM session_v2 JOIN (account) ON 1",
+            &["session_v2", "account"],
+        ),
+        ("SELECT * FROM/**/account", &["account"]),
+        ("SELECT * FROM -- c\naccount", &["account"]),
+        (
+            "SELECT id FROM session_v2 WHERE id IN account",
+            &["session_v2", "account"],
+        ),
+        ("SELECT * FROM 'account'", &["account"]),
+        (
+            "SELECT id FROM schedule WHERE id IN (SELECT id FROM credential)",
+            &["schedule", "credential"],
+        ),
+        (
+            "SELECT id FROM schedule WHERE id IN ('a', 'b')",
+            &["schedule"],
+        ),
+        ("SELECT * FROM ((SELECT * FROM schedule))", &["schedule"]),
+        ("SELECT 1 /* FROM account */ FROM schedule", &["schedule"]),
     ];
     for (sql, tables) in cases {
         assert_eq!(tables_named(sql), *tables, "{sql}");
