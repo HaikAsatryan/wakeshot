@@ -119,9 +119,9 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-opencode-source` | no | Part B after `p4-contracts-r2` | Part A done 2026-11-06 (`research/opencode-signals.md`); Part B done (2026-11-06 ~17:55, 1c58f43): 2.x only, 14 + 8 tests, the table test (caught a planted `JOIN message`), a log leak test; a VFS shim so a read never creates `-wal` or `-shm`; minimum SQLite 3.22.0; 1.x question for Haik (default no); review running (`docs/reviews/p4-opencode-db-read.md`) |
 | `p4-vscode-source` | no | `p4-contracts-r2` | done (2026-11-06 ~17:45, 5869c5c): 31 tests; `ImageSince` on `Code.exe` with the newest send time; label "Copilot in VS Code"; Insiders read, portable not (worker calls, for Haik's review); not live yet |
 | `p4-contracts-r3` | no | `p4-contracts-r2`, the hooks security review and its fixes; runs alone among Rust cards | done (2026-11-06 ~19:30, 98c8795): the six hooks contract items, the OpenCode `-shm` loop fix, Copilot, VS Code and OpenCode in the tray; 1622 tests; whole-workspace checks green on x64 and ARM64; one `windows` feature added (`Wdk_System_Threading`) |
-| `p4-cursor-source` | only if the editor puts the payload on the command line (design Question 4) | `p4-contracts-r3`, the hooks review verify | running (2026-11-06 ~19:35) |
+| `p4-cursor-source` | no: Cursor 3.27.12 passes hook input through a temp file on every plugin path, so the plugin ships | `p4-contracts-r3`, the hooks review verify | done (2026-11-06 ~20:50, f9a41e2): 21 + 8 core, 17 + 4 CLI tests; privacy and exit code rules broken on purpose and caught; `hook <agent> remove` wired |
 | `p4-agent-hooks-install` | no | `p4-contracts-r3`, the hooks review verify | done (2026-11-06 ~20:30, f46828f): 23 tests; link check and fixed file set broken on purpose and caught; the tray call and the CLI remove call not wired yet (to `p4-antigravity-source` and `p4-cursor-source`) |
-| `p4-antigravity-source` | only if its payload is on the command line | `p4-cursor-source`, `p4-agent-hooks-install` | card written 2026-11-06 |
+| `p4-antigravity-source` | only if its payload is on the command line | `p4-cursor-source`, `p4-agent-hooks-install` | running (2026-11-06 ~20:50), with the Cursor and Antigravity tray wiring |
 | `p4-live-vscode` | no | `p4-vscode-source`, `p4-live-harness`; live cards in parallel since 18:50 | running (2026-11-06 ~19:35) |
 | `p4-live-opencode` | no | `p4-opencode-source`, the OpenCode review fixes; live cards in parallel since 18:50 | running (2026-11-06 ~20:30) |
 | `p4-live-cursor` | only if the payload check finds the command line | `p4-cursor-source`, `p4-agent-hooks-install`, the hooks code review fixes; live lane after `p4-live-opencode` | card written 2026-11-06 |
@@ -444,3 +444,8 @@ limit; Copilot waiting does not hold. The cards build these.
   `p4-live-copilot` (owner of `watch/*` now) ends, with a live re-time. For Haik's review: this narrow change runs
   beside cards that never name `Query`, not alone (his rule says contracts change alone; the risk is only to the
   files that name the variant).
+- 2026-11-06 ~20:50: `p4-cursor-source` done (f9a41e2): the privacy Gate holds (temp file on every Cursor path that
+  runs a plugin hook), so no design Question 4 for Haik. Worker calls for Haik's review: the runtime check searches
+  `conversation_id` without quotes (Node escapes quotes); an elevated hook writes no log line; a bad or newer state
+  file gives no notice. Started: `p4-antigravity-source` and the hooks code review (`wakeshot-reviewer`,
+  `docs/reviews/p4-hooks-code.md`), in parallel, as decided at 18:50.
