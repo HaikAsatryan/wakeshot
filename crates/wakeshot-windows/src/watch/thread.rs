@@ -1562,6 +1562,62 @@ mod tests {
         assert_eq!(count(), 1);
     }
 
+    /// Lock file and database holders the test sets, the same for every path, and how often it was asked.
+    #[derive(Clone, Default)]
+    struct HeldBy(Arc<Mutex<Vec<ProcessRef>>>, Arc<AtomicUsize>);
+
+    impl HeldBy {
+        fn new(holders: Vec<ProcessRef>) -> Self {
+            Self(Arc::new(Mutex::new(holders)), Arc::default())
+        }
+    }
+
+    impl crate::lockowner::LockOwners for HeldBy {
+        fn holders(&self, _: &Path) -> Result<Vec<ProcessRef>, WinError> {
+            self.1.fetch_add(1, Ordering::SeqCst);
+            Ok(self.0.lock().unwrap().clone())
+        }
+    }
+
+    /// A poll wakes the thread every 2 s, so it stops once the agent that held the database exits: the exit wait
+    /// wakes the thread, and the next poll finds nobody (`p4-idle-cpu`).
+    #[test]
+    fn the_poll_stops_when_the_agent_that_held_the_database_exits() {
+        let mut rig = Rig::new("query-hosts");
+        let db = rig.agent.path().join("opencode.db");
+        rig.agent.write("opencode.db-wal", b"");
+        rig.agent.write("opencode.db", b"");
+        rig.agent.write("opencode.db-shm", &[1; 32_768]);
+        rig.source.set(|f| f.wanted = vec![opencode_want(db)]);
+        let mut kid = Kid::start();
+        let agent = kid.process();
+        rig.liveness.alive.lock().unwrap().push((agent, Alive::Yes));
+        let owners = HeldBy::new(vec![agent]);
+        let io = crate::watch::agents::AgentIo {
+            owners: Box::new(owners.clone()),
+            query: Box::new(|_, _| crate::sqlite::Answer::Json(b"{\"rows\":[]}".to_vec())),
+            ..Default::default()
+        };
+        rig.start_with(Config::default(), io);
+        let asked = || owners.1.load(Ordering::SeqCst);
+        until(Instant::now(), || asked() >= 1, || "never asked".to_owned());
+        let poll = Duration::from_millis(crate::watch::agents::QUERY_POLL_MS);
+        std::thread::sleep(2 * poll);
+        assert_eq!(asked(), 1, "a live holder is asked about once");
+
+        owners.0.lock().unwrap().clear();
+        rig.liveness.alive.lock().unwrap().clear();
+        kid.end();
+        let took = until(
+            Instant::now(),
+            || asked() >= 2,
+            || "not asked again".to_owned(),
+        );
+        assert!(took <= poll + QUIET, "{took:?}");
+        std::thread::sleep(3 * poll);
+        assert_eq!(asked(), 2, "no poll, so no question");
+    }
+
     /// [`FakeLiveness`] that counts the process lists asked of it.
     #[derive(Default)]
     struct CountingLiveness {
@@ -1605,11 +1661,21 @@ mod tests {
             f.wanted = vec![opencode_want(db.clone())];
             f.sessions = vec![facts];
         });
+        // The agent that holds the database open, so the poll runs.
+        let kid = Kid::start();
+        let agent = kid.process();
         let io = crate::watch::agents::AgentIo {
+            owners: Box::new(HeldBy::new(vec![agent])),
             query: Box::new(|_, _| crate::sqlite::Answer::Json(b"{\"rows\":[]}".to_vec())),
             ..Default::default()
         };
         let liveness = Arc::new(CountingLiveness::default());
+        liveness
+            .inner
+            .alive
+            .lock()
+            .unwrap()
+            .push((agent, Alive::Yes));
         let agents = Agents::with_io(vec![rig.source.boxed()], rig.log.clone(), io);
         let handle = WatchThread::spawn(
             rig.dir.clone(),
@@ -1648,9 +1714,14 @@ mod tests {
         rig.agent.write("opencode.db-shm", &[1; 32_768]);
         rig.source
             .set(|f| f.wanted = vec![opencode_want(db.clone())]);
+        // The agent that holds the database open, so the poll runs.
+        let kid = Kid::start();
+        let agent = kid.process();
+        rig.liveness.alive.lock().unwrap().push((agent, Alive::Yes));
         let committed = Arc::new(AtomicBool::new(false));
         let seen = Arc::clone(&committed);
         let io = crate::watch::agents::AgentIo {
+            owners: Box::new(HeldBy::new(vec![agent])),
             query: Box::new(move |_, _| {
                 let rows = if seen.load(Ordering::SeqCst) {
                     &b"{\"rows\":[[\"ses_1\",1]]}"[..]

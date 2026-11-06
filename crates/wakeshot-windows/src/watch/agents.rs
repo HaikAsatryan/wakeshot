@@ -11,14 +11,20 @@
 //! again at the open), a `Tail` path, and the file a `FindTail` or `FindNewest` found. `Names` are listed, never
 //! opened. A `Recent` file last written more than [`RECENT_WINDOW`] ago, and before `Agents` was made, is not opened
 //! until it changes. A `Query` runs through [`AgentIo::query`] only while the database's `-wal` file exists, at most
-//! once per [`QUERY_EVERY_MS`] for each want. While the database is there it is due every [`QUERY_POLL_MS`], and a
-//! run held back by the limit is due later ([`Agents::next_due`], [`Agents::run_due`]): OpenCode's commits give no
-//! change notice. A run on the poll or the tick reads only when the `-shm`'s WAL-index header changed since the last
-//! read ([`sqlite::wal_index_header`]), so files a stopped agent left are read once. A notice runs it only when it
-//! names the database or its `-wal`, never the `-shm`, which a read itself rewrites on such files.
+//! once per [`QUERY_EVERY_MS`] for each want. While a process other than Wakeshot holds the database open (Restart
+//! Manager, through [`AgentIo::owners`]) it is due every [`QUERY_POLL_MS`], and a run held back by the limit is due
+//! later ([`Agents::next_due`], [`Agents::run_due`]): OpenCode's commits give no change notice. Who holds it is asked
+//! at a want's first run, after a notice that names one of the database's files while nobody held it (an agent's first
+//! open rebuilds the `-shm`), after a read that found a commit, after every holder ended, and [`HOSTS_RECHECK_MS`]
+//! after the last question while held; holders go to [`Snapshots::live`]. A run on the poll or the tick reads only
+//! when the `-shm`'s WAL-index header changed since the last read ([`sqlite::wal_index_header`]), so files a stopped
+//! agent left are read once. A notice reads only when it names the database or its `-wal`, never the `-shm`, which a
+//! read itself rewrites on such files.
 //!
 //! An `AnyProcess` session (Codex, Copilot) lives while a process running its image holds its lock file open, as
-//! Restart Manager tells ([`LockOwners`]); that process is then checked by pid and start like any other. A lock file
+//! Restart Manager tells ([`LockOwners`]); that process is then checked by pid and start like any other. Restart
+//! Manager is asked again only when the lock file changes, its holders end, or (when nobody held it) the facts of its
+//! session change, never on a tick: a question costs as much CPU as minutes of rest. A lock file
 //! whose name gives a pid (Copilot's `inuse.<pid>.hold`: the pid of the process that holds it, seen live
 //! 2026-11-06) also counts that holder whatever its image, since VS Code's Copilot harness holds it as
 //! `copilot-runtime.exe`. If Restart Manager fails, the process the name gives counts while it runs; a name with no
@@ -30,6 +36,7 @@
 //! `ImageSince` by `p4-contracts-r2`; fixes by `p4-live-claude`, `p4-live-codex`, `p4-live-copilot`,
 //! `p4-contracts-r3`; the `Query` poll by `p4-live-opencode`.
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io;
@@ -41,7 +48,7 @@ use wakeshot_core::event::Event;
 use wakeshot_core::process::{Alive, ProcessRef};
 use wakeshot_core::sources::{
     self, AgentSource, Fed, Feed, FileId, FormatHealth, IMAGE_SINCE_SLACK_MS, SessionFacts,
-    SourceId, WantedFile,
+    SessionKey, SourceId, WantedFile,
 };
 use wakeshot_core::time::Now;
 
@@ -71,9 +78,9 @@ const AREA: &str = "watch";
 /// `-wal`), and an agent that streams may write many times a second.
 pub const QUERY_EVERY_MS: u64 = 1_000;
 
-/// How often a `Query` looks for a commit while its database is there: OpenCode keeps its `-wal` open at one size, so
-/// a commit gives no change notice (`docs/tasks/p4-live-opencode.md`). A look reads 48 bytes of the `-shm`
-/// ([`sqlite::wal_index_header`]), and the query reads the database only when they changed since its last read.
+/// How often a `Query` looks for a commit while a process holds its database open: OpenCode keeps its `-wal` open at
+/// one size, so a commit gives no change notice (`docs/tasks/p4-live-opencode.md`). A look reads 48 bytes of the
+/// `-shm` ([`sqlite::wal_index_header`]), and the query reads the database only when they changed since its last read.
 pub const QUERY_POLL_MS: u64 = 2_000;
 
 /// How far back a `Recent` want reads at start (VS Code rule 3): up to 400 old sessions per workspace stay unread.
@@ -116,7 +123,7 @@ pub type QueryFn = dyn Fn(&Path, &str) -> sqlite::Answer + Send;
 
 /// What `Agents` calls besides file reads, so tests stand in for it. [`Default`] is the real one.
 pub struct AgentIo {
-    /// Who holds a lock file (`AnyProcess`): Restart Manager.
+    /// Who holds a lock file (`AnyProcess`) or a `Query` database open: Restart Manager.
     pub owners: Box<dyn LockOwners>,
     /// [`sqlite::query`].
     pub query: Box<QueryFn>,
@@ -141,9 +148,12 @@ impl Default for AgentIo {
 /// One call's view of [`AgentIo`].
 struct Ctx<'a> {
     query: &'a QueryFn,
+    owners: &'a dyn LockOwners,
     now: Instant,
     /// A `Recent` file last written before this (a FILETIME) is not read until it changes.
     recent_since: u64,
+    /// The databases whose holders this call asked about: the queries on one database share the answer.
+    asked: RefCell<BTreeSet<PathBuf>>,
 }
 
 impl<'a> Ctx<'a> {
@@ -152,9 +162,33 @@ impl<'a> Ctx<'a> {
         let window = wall.checked_sub(RECENT_WINDOW).unwrap_or(UNIX_EPOCH);
         Self {
             query: &*io.query,
+            owners: &*io.owners,
             now: (io.now)(),
             recent_since: filetime_of(window.min(started)),
+            asked: RefCell::default(),
         }
+    }
+}
+
+/// How long a database's holders stay known while it is polled. A process that held it only for a moment (a virus
+/// scan when the agent exits, another reader) would otherwise keep the poll on for as long as that process lives.
+pub const HOSTS_RECHECK_MS: u64 = 5 * 60_000;
+
+/// Who holds a `Query` want's database open, so its poll runs only while a commit can come.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Hosts {
+    /// Nobody but Wakeshot: no poll until a notice names one of its files or a read finds a commit.
+    Nobody,
+    /// These processes, asked about at that time, checked at each [`Agents::snapshots`] and waited on; when all
+    /// ended, or [`HOSTS_RECHECK_MS`] after the question, asked again.
+    Held(Vec<ProcessRef>, Instant),
+    /// Restart Manager failed: the poll runs, and the next tick asks again.
+    Unknown,
+}
+
+impl Hosts {
+    fn polls(&self) -> bool {
+        !matches!(self, Hosts::Nobody)
     }
 }
 
@@ -184,7 +218,8 @@ pub struct Snapshots {
     /// every source on the first call and after [`Agents::forget_posted`] (track note 14).
     pub events: Vec<Event>,
     /// The process of every live session of every source (for a lock file session, the holders that keep it alive),
-    /// sorted, so the caller can wait on its exit; the session then shows as `Gone` at the next call.
+    /// and every process that holds a `Query` database open, sorted, so the caller can wait on its exit; the session
+    /// then shows as `Gone` at the next call, and a database nobody holds any more stops its poll.
     pub live: Vec<ProcessRef>,
 }
 
@@ -268,8 +303,8 @@ impl Agents {
         let ctx = Ctx::new(&self.io, self.started);
         let mut retries = Vec::new();
         for (i, slot) in self.slots.iter_mut().enumerate() {
-            // A lock file nobody held is asked about again, in case a notice of its change was lost.
-            slot.owners.retain(|_, held| !held.is_empty());
+            // Restart Manager failed on a database last time; asking again on each 2 s poll would cost more.
+            slot.hosts.retain(|_, hosts| *hosts != Hosts::Unknown);
             slot.run(&Scope::All, i, &mut retries, &ctx);
         }
         retries
@@ -286,6 +321,7 @@ impl Agents {
         for (i, slot) in self.slots.iter_mut().enumerate() {
             if slot.watches(folder) {
                 slot.forget_owners(folder, names);
+                slot.forget_hosts(folder, names);
                 slot.run(&scope, i, &mut retries, &ctx);
             }
         }
@@ -350,6 +386,12 @@ impl Agents {
             let mut problems = slot.io_problems();
             let mut known = std::mem::take(&mut slot.owners);
             let mut named = BTreeSet::new();
+            let before: BTreeMap<&SessionKey, &SessionFacts> = slot
+                .posted
+                .iter()
+                .flatten()
+                .map(|(facts, _)| (&facts.key, facts))
+                .collect();
             let sessions: Vec<(SessionFacts, Alive)> = slot
                 .source
                 .sessions()
@@ -369,6 +411,13 @@ impl Agents {
                         }
                         sources::Liveness::AnyProcess { image, lock_file } => {
                             named.insert(lock_file.clone());
+                            // A process can take up a lock file a crash left with no notice (Codex reopens it and
+                            // writes nothing), but its turn writes the session's log, which changes these facts.
+                            if before.get(&session.key) != Some(&&session)
+                                && known.get(lock_file).is_some_and(Vec::is_empty)
+                            {
+                                known.remove(lock_file);
+                            }
                             let lock = LockFile {
                                 image,
                                 path: lock_file,
@@ -411,6 +460,7 @@ impl Agents {
                 .collect();
             known.retain(|path, _| named.contains(path));
             slot.owners = known;
+            slot.check_hosts(liveness, &mut out.live);
             slot.log_problems(&*self.log, now, problems);
             if slot.posted.as_ref() != Some(&sessions) {
                 out.events.push(Event::Sources {
@@ -456,8 +506,10 @@ struct LockFile<'a> {
 /// `Yes` while a process running the image, or the process the lock file's name gives ([`named_pid`]), holds the lock
 /// file open; its holders go to `live`. The holders found are kept in `known` until the lock file changes
 /// ([`Slot::forget_owners`], a listing that feeds it) or all of them are gone, so Restart Manager is asked once per
-/// lock file, not on every call. Another holder (a virus scanner, say) does not count. If Restart Manager fails: the
-/// process the name gives counts while it is listed, and goes to `live`; with no pid in the name, any live process
+/// lock file, not on every call. An answer of nobody is kept the same way, and also until the facts of the session
+/// that names the file change ([`Agents::snapshots`]): a question costs 14 to 22 ms of CPU, and a crash leaves lock
+/// files that nobody holds for days. Another holder (a virus scanner, say) does not count. If Restart Manager fails:
+/// the process the name gives counts while it is listed, and goes to `live`; with no pid in the name, any live process
 /// running the image counts while the source lists the lock file, and nothing goes to `live`.
 fn any_process(
     liveness: &dyn Liveness,
@@ -646,12 +698,20 @@ impl Scope<'_> {
     fn covers_query(&self, key: &QueryKey, due: Option<Instant>, now: Instant) -> bool {
         match self {
             Scope::All => true,
-            Scope::Change(folder, names) => {
-                key.db.parent() == Some(*folder)
-                    && names.is_none_or(|names| names.iter().any(|n| names_db_file(&key.db, n)))
-            }
+            Scope::Change(..) => self.names_in_db(key, names_db_file),
             Scope::Retry(_) => false,
             Scope::Due => due.is_some_and(|due| due <= now),
+        }
+    }
+
+    /// A notice in the database's folder with a name `names` passes, or one that lost its names.
+    fn names_in_db(&self, key: &QueryKey, names: fn(&Path, &Path) -> bool) -> bool {
+        match self {
+            Scope::Change(folder, changed) => {
+                key.db.parent() == Some(*folder)
+                    && changed.is_none_or(|changed| changed.iter().any(|n| names(&key.db, n)))
+            }
+            Scope::All | Scope::Retry(_) | Scope::Due => false,
         }
     }
 
@@ -708,17 +768,22 @@ impl Scope<'_> {
 /// agent left, so its notice would run the next read, three reads a second without end (review
 /// `p4-opencode-db-read`, major 1).
 fn names_db_file(db: &Path, name: &Path) -> bool {
-    let (Some(name), Some(db_name)) = (plain_name(name), file_name(db)) else {
-        return false;
-    };
-    let Some(rest) = name
-        .get(..db_name.len())
+    db_file_rest(db, name).is_some_and(|rest| rest.is_empty() || rest.eq_ignore_ascii_case("-wal"))
+}
+
+/// A notice name that names any file of the database, its `-shm` included: the first process to open a database
+/// truncates and rebuilds the `-shm` it finds, so an agent's start gives that notice while its commits give none.
+fn names_any_db_file(db: &Path, name: &Path) -> bool {
+    names_db_file(db, name)
+        || db_file_rest(db, name).is_some_and(|rest| rest.eq_ignore_ascii_case("-shm"))
+}
+
+/// What follows the database's name in a notice name right in its folder, case ignored.
+fn db_file_rest<'a>(db: &Path, name: &'a Path) -> Option<&'a str> {
+    let (name, db_name) = (plain_name(name)?, file_name(db)?);
+    name.get(..db_name.len())
         .filter(|head| head.eq_ignore_ascii_case(db_name))
         .map(|_| &name[db_name.len()..])
-    else {
-        return false;
-    };
-    rest.is_empty() || rest.eq_ignore_ascii_case("-wal")
 }
 
 /// The full path of a notice name (relative to the want's root) that names a `Recent` file of `key`:
@@ -909,6 +974,8 @@ struct Slot {
     finder: Finder,
     /// The holders found for each lock file an `AnyProcess` session names; an empty list: nobody held it.
     owners: BTreeMap<PathBuf, Vec<ProcessRef>>,
+    /// Who holds each `Query` database open; none for a database not asked about yet.
+    hosts: BTreeMap<PathBuf, Hosts>,
     posted: Option<Vec<(SessionFacts, Alive)>>,
     logged: BTreeSet<Problem>,
     last_line_ms: Option<u64>,
@@ -989,6 +1056,7 @@ impl Slot {
             tails: BTreeMap::new(),
             finder: Finder::new(),
             owners: BTreeMap::new(),
+            hosts: BTreeMap::new(),
             posted: None,
             logged: BTreeSet::new(),
             last_line_ms: None,
@@ -1023,6 +1091,36 @@ impl Slot {
         }
     }
 
+    /// The processes that keep a `Query` poll on go to `live`, so their exit wakes the caller; a database whose holders
+    /// all ended is asked about again at its next run (the poll, still due). A check that fails keeps the process and
+    /// logs nothing: the poll then only runs a little longer.
+    fn check_hosts(&mut self, liveness: &dyn Liveness, live: &mut Vec<ProcessRef>) {
+        self.hosts.retain(|_, hosts| {
+            let Hosts::Held(held, _) = hosts else {
+                return true;
+            };
+            held.retain(|&p| match liveness.check(p) {
+                Alive::Yes => {
+                    live.push(p);
+                    true
+                }
+                Alive::Unknown => true,
+                Alive::Gone => false,
+            });
+            !held.is_empty()
+        });
+    }
+
+    /// A notice that names a file of a database nobody held: someone may hold it now, so it is asked about again. A
+    /// database already held stays so until its holders end, so the notices of a working agent cost no question.
+    fn forget_hosts(&mut self, folder: &Path, names: Option<&[PathBuf]>) {
+        self.hosts.retain(|db, hosts| {
+            let named = db.parent() == Some(folder)
+                && names.is_none_or(|names| names.iter().any(|n| names_any_db_file(db, n)));
+            !(named && *hosts == Hosts::Nobody)
+        });
+    }
+
     /// Feeds one file and asks the source what it wants now (wants change only after a feed: the `AgentSource`
     /// promise). The state of every want that left goes at once, so a want that leaves and comes back within one call
     /// starts over: a resumed session whose leftover status file was fed `Gone` first gets its transcript from byte 0.
@@ -1042,6 +1140,11 @@ impl Slot {
         self.recents.retain(|key, _| wants_recent(wants, key));
         self.queries.retain(|key, _| wants_query(wants, key));
         self.tails.retain(|key, _| wants_tail(wants, key));
+        self.hosts.retain(|db, _| {
+            wants
+                .iter()
+                .any(|w| matches!(w, WantedFile::Query { db: d, .. } if d == db))
+        });
     }
 
     /// Drops the state of wants that left and adds fresh state for new folders, listings, recent files and queries.
@@ -1145,7 +1248,7 @@ impl Slot {
                 Unit::Names(dir, depth) => self.list(dir, *depth),
                 Unit::Recent(key) => self.read_recent(key, scope, slot, retries, ctx),
                 Unit::Query(key) => {
-                    self.run_query(key, ctx, matches!(scope, Scope::Change(..)));
+                    self.run_query(key, ctx, scope.names_in_db(key, names_db_file));
                 }
                 Unit::Tail(key) => self.poll_tail(key),
             }
@@ -1176,7 +1279,10 @@ impl Slot {
                 let state = self.queries.get(&key);
                 let fresh = state.is_some_and(|q| q.fresh);
                 let due = state.and_then(|q| q.due);
-                (fresh || scope.covers_query(&key, due, now)).then_some(Unit::Query(key))
+                // A `-shm` notice runs a query only to ask who holds the database (`forget_hosts`), never to read.
+                let ask =
+                    !self.hosts.contains_key(&key.db) && scope.names_in_db(&key, names_any_db_file);
+                (fresh || ask || scope.covers_query(&key, due, now)).then_some(Unit::Query(key))
             }
             WantedFile::Tail(_) | WantedFile::FindTail { .. } | WantedFile::FindNewest { .. } => {
                 None
@@ -1323,8 +1429,9 @@ impl Slot {
     }
 
     /// Runs one query, unless its last read was less than [`QUERY_EVERY_MS`] ago: then a run is due at that time. While
-    /// the database is there, the next run is due [`QUERY_POLL_MS`] later. `noticed`: a change notice named the
-    /// database or its `-wal`; any other run reads only when the WAL-index header changed since the last read.
+    /// a process other than Wakeshot holds the database open, the next run is due [`QUERY_POLL_MS`] later. `noticed`:
+    /// a change notice named the database or its `-wal`; any other run reads only when the WAL-index header changed
+    /// since the last read.
     fn run_query(&mut self, key: &QueryKey, ctx: &Ctx<'_>, noticed: bool) {
         let Some(mut state) = self.queries.remove(key) else {
             return;
@@ -1340,8 +1447,9 @@ impl Slot {
             return;
         }
         let there = key.db.is_file();
-        // A database not made yet needs no poll: the notice of its making names it.
-        state.due = there.then(|| ctx.now + Duration::from_millis(QUERY_POLL_MS));
+        if !there {
+            self.hosts.remove(&key.db);
+        }
         let mut wal = key.db.clone().into_os_string();
         wal.push("-wal");
         // The `-wal` file lives while the agent has the database open, and a read without it could make one.
@@ -1358,6 +1466,12 @@ impl Slot {
             state.last_run = Some(ctx.now);
             state.noticed = false;
             self.changes += 1;
+            // Something wrote the database since the last read, so someone may hold it now.
+            if self.hosts.get(&key.db) == Some(&Hosts::Nobody)
+                && !ctx.asked.borrow().contains(&key.db)
+            {
+                self.hosts.remove(&key.db);
+            }
             match (ctx.query)(&key.db, state.sql) {
                 // The header is kept from before, so the next look reads again.
                 sqlite::Answer::Busy => None,
@@ -1376,9 +1490,44 @@ impl Slot {
             };
             self.feed(FileId::query(&key.db, key.name).0, feed);
         }
+        // A database not made yet needs no poll: the notice of its making names it.
+        let polls = there && self.hosts_poll(&key.db, ctx);
+        state.due = polls.then(|| ctx.now + Duration::from_millis(QUERY_POLL_MS));
         if wants_query(&self.wants, key) {
             self.queries.insert(key.clone(), state);
         }
+    }
+
+    /// Whether `db`'s poll runs, asking Restart Manager first when no answer is kept: only a process that holds the
+    /// database open can commit, and a poll wakes the thread every 2 s for about 1 ms of CPU each time. Wakeshot's own
+    /// reads do not count.
+    fn hosts_poll(&mut self, db: &Path, ctx: &Ctx<'_>) -> bool {
+        let recheck = Duration::from_millis(HOSTS_RECHECK_MS);
+        if let Some(Hosts::Held(_, asked)) = self.hosts.get(db)
+            && ctx.now >= *asked + recheck
+            && !ctx.asked.borrow().contains(db)
+        {
+            self.hosts.remove(db);
+        }
+        self.hosts
+            .entry(db.to_path_buf())
+            .or_insert_with(|| {
+                ctx.asked.borrow_mut().insert(db.to_path_buf());
+                match ctx.owners.holders(db) {
+                    Ok(holders) => {
+                        let me = std::process::id();
+                        let held: Vec<ProcessRef> =
+                            holders.into_iter().filter(|h| h.pid != me).collect();
+                        if held.is_empty() {
+                            Hosts::Nobody
+                        } else {
+                            Hosts::Held(held, ctx.now)
+                        }
+                    }
+                    Err(_) => Hosts::Unknown,
+                }
+            })
+            .polls()
     }
 
     fn read_folder(
@@ -2731,7 +2880,7 @@ mod tests {
     #[test]
     fn a_lock_file_session_lives_while_a_holder_running_its_image_lives() {
         let lock = PathBuf::from(r"C:\Users\x\.codex\thread-writer-locks\t1.lock");
-        let (mut agents, log, _source, owners) = lock_agents(&lock);
+        let (mut agents, log, source, owners) = lock_agents(&lock);
         let live = FakeLiveness::default();
         owners.answer(Ok(vec![process(7)]));
         live.processes
@@ -2769,11 +2918,53 @@ mod tests {
         assert!(ended.live.is_empty());
         assert_eq!(owners.asked(), 1);
 
-        // "Nobody" is kept too, until the tick asks again.
+        // "Nobody" is kept too, ticks included, until the session's facts change (a log line came).
         agents.snapshots(&live, START);
-        assert_eq!(owners.asked(), 0);
         agents.on_tick();
         agents.snapshots(&live, START);
+        assert_eq!(owners.asked(), 0, "a tick does not ask again");
+        source.set(|f| f.sessions[0].activity = Activity::Idle);
+        agents.snapshots(&live, START);
+        assert_eq!(owners.asked(), 1);
+        agents.snapshots(&live, START);
+        assert_eq!(owners.asked(), 0);
+    }
+
+    /// A crash leaves lock files nobody holds for days (two Copilot sessions on the test laptop), and one Restart
+    /// Manager question costs 14 to 22 ms of CPU: a tick must not ask about them again.
+    #[test]
+    fn a_lock_file_nobody_holds_is_asked_about_once_however_many_ticks_come() {
+        let dir = TempDir::new("agents-lock-dead");
+        let lock = dir.write("inuse.8588.hold", b"");
+        let (mut agents, _, source, owners) = lock_agents_for(copilot_session(&lock));
+        source.set(|f| {
+            f.wanted = vec![WantedFile::Names {
+                dir: dir.path().to_path_buf(),
+                depth: 0,
+                accept: |name| name.ends_with(".hold"),
+            }];
+        });
+        let live = FakeLiveness::default();
+        agents.on_tick();
+        assert_eq!(only_alive(&agents.snapshots(&live, START)), Alive::Gone);
+        assert_eq!(owners.asked(), 1);
+
+        for _ in 0..20 {
+            agents.on_tick();
+            agents.snapshots(&live, START);
+        }
+        assert_eq!(owners.asked(), 0);
+
+        // A crashed session's file taken up again with no notice: its next log line changes the facts.
+        owners.answer(Ok(vec![process(8588)]));
+        live.processes
+            .lock()
+            .unwrap()
+            .push(entry(process(8588), "copilot.exe"));
+        live.alive.lock().unwrap().push((process(8588), Alive::Yes));
+        source.set(|f| f.sessions[0].activity = Activity::Idle);
+        agents.on_tick();
+        assert_eq!(only_alive(&agents.snapshots(&live, START)), Alive::Yes);
         assert_eq!(owners.asked(), 1);
     }
 
@@ -2934,7 +3125,7 @@ mod tests {
     #[test]
     fn a_holder_whose_pid_the_lock_name_gives_counts_whatever_its_image() {
         let lock = PathBuf::from(r"C:\Users\x\.copilot\session-state\s1\inuse.2728.hold");
-        let (mut agents, log, _source, owners) = lock_agents_for(copilot_session(&lock));
+        let (mut agents, log, source, owners) = lock_agents_for(copilot_session(&lock));
         let live = FakeLiveness::default();
         let runtime = process(2728);
         let scanner = process(8);
@@ -2962,7 +3153,8 @@ mod tests {
         assert!(snapshots.live.is_empty());
 
         // A pid the name gives that started at another time is another process: still gone, until the list agrees.
-        agents.on_tick();
+        // Each step changes the session's facts, as a log line does, so Restart Manager is asked again.
+        source.set(|f| f.sessions[0].activity = Activity::Idle);
         owners.answer(Ok(vec![runtime]));
         live.processes.lock().unwrap()[1] = entry(
             ProcessRef {
@@ -2972,8 +3164,9 @@ mod tests {
             "copilot-runtime.exe",
         );
         let snapshots = agents.snapshots(&live, START);
-        assert!(snapshots.events.is_empty() && snapshots.live.is_empty());
-        agents.on_tick();
+        assert_eq!(only_alive(&snapshots), Alive::Gone);
+        assert!(snapshots.live.is_empty());
+        source.set(|f| f.sessions[0].activity = Activity::Working);
         live.processes.lock().unwrap()[1] = entry(runtime, "copilot-runtime.exe");
         assert_eq!(only_alive(&agents.snapshots(&live, START)), Alive::Yes);
     }
@@ -3697,7 +3890,8 @@ mod tests {
         calls: Vec<(PathBuf, String)>,
     }
 
-    /// One source that wants one query on `<dir>\opencode.db`, a fake SQLite and a fake run time.
+    /// One source that wants one query on `<dir>\opencode.db`, a fake SQLite, a fake run time and fake holders: the
+    /// database is held by an agent ([`AGENT`]) unless a test says otherwise.
     struct QueryRig {
         dir: TempDir,
         db: PathBuf,
@@ -3705,7 +3899,11 @@ mod tests {
         agents: Agents,
         fake: Arc<Mutex<FakeDb>>,
         clock: Arc<Mutex<Instant>>,
+        owners: Owners,
     }
+
+    /// The agent process that holds the rig's database open.
+    const AGENT: u32 = 4242;
 
     const ROWS: &[u8] = br#"{"rows":[["ses_1",1793750400000]]}"#;
 
@@ -3730,7 +3928,10 @@ mod tests {
             }));
             let clock = Arc::new(Mutex::new(Instant::now()));
             let (db_fake, now) = (Arc::clone(&fake), Arc::clone(&clock));
+            let owners = Owners::default();
+            owners.answer(Ok(vec![process(AGENT)]));
             let io = AgentIo {
+                owners: Box::new(owners.clone()),
                 query: Box::new(move |db, sql| {
                     let mut fake = db_fake.lock().unwrap();
                     fake.calls.push((db.to_path_buf(), sql.to_owned()));
@@ -3747,6 +3948,7 @@ mod tests {
                 agents,
                 fake,
                 clock,
+                owners,
             }
         }
 
@@ -4008,6 +4210,186 @@ mod tests {
         rig.later(QUERY_POLL_MS);
         rig.agents.run_due();
         assert_eq!(rig.agents.next_due(), None, "the database went");
+    }
+
+    /// Each poll wakes the thread for about 1 ms of CPU (`p4-idle-cpu`), and only a process that holds the database
+    /// open can commit, so a database nobody holds is not polled. Wakeshot's own reads do not count.
+    #[test]
+    fn a_query_is_not_polled_while_nobody_holds_its_database() {
+        let mut rig = QueryRig::new("agents-query-nobody");
+        rig.owners.answer(Ok(vec![]));
+        rig.open();
+        rig.shm(1, 0);
+        rig.agents.on_tick();
+        assert_eq!((rig.runs(), rig.owners.asked()), (1, 1), "the first read");
+        assert_eq!(rig.agents.next_due(), None);
+
+        // Ticks still look at the header, and ask nobody.
+        for _ in 0..3 {
+            rig.later(30_000);
+            rig.agents.on_tick();
+        }
+        assert_eq!((rig.runs(), rig.owners.asked()), (0, 0));
+        assert_eq!(rig.agents.next_due(), None);
+
+        // Only Wakeshot holds it, as during its own read.
+        let mut me = QueryRig::new("agents-query-me");
+        me.owners
+            .answer(Ok(vec![crate::process::current().unwrap()]));
+        me.open();
+        me.agents.on_tick();
+        assert_eq!(me.agents.next_due(), None);
+    }
+
+    #[test]
+    fn a_shm_notice_while_nobody_held_the_database_starts_the_poll_without_a_read() {
+        let mut rig = QueryRig::new("agents-query-arm");
+        let poll = Duration::from_millis(QUERY_POLL_MS);
+        rig.owners.answer(Ok(vec![]));
+        rig.open();
+        rig.shm(1, 0);
+        rig.agents.on_tick();
+        assert_eq!((rig.runs(), rig.owners.asked()), (1, 1));
+        assert_eq!(rig.agents.next_due(), None);
+
+        // OpenCode starts: its first open rebuilds the `-shm` it finds, the same header again.
+        rig.owners.answer(Ok(vec![process(AGENT)]));
+        rig.later(2_000);
+        rig.change(&["opencode.db-shm"]);
+        assert_eq!(rig.runs(), 0, "a -shm notice never reads by itself");
+        assert_eq!(rig.owners.asked(), 1);
+        assert_eq!(rig.agents.next_due(), Some(rig.now() + poll));
+
+        // Its commit gives no notice: the poll reads it.
+        rig.shm(2, 0);
+        rig.later(QUERY_POLL_MS);
+        rig.agents.run_due();
+        assert_eq!(rig.runs(), 1);
+
+        // While it holds the database, notices ask nothing.
+        rig.later(2_000);
+        rig.change(&["opencode.db-shm", "opencode.db-wal"]);
+        assert_eq!((rig.runs(), rig.owners.asked()), (1, 0));
+    }
+
+    #[test]
+    fn the_poll_stops_after_every_holder_of_its_database_ended() {
+        let mut rig = QueryRig::new("agents-query-hosts-end");
+        let live = FakeLiveness::default();
+        let agent = process(AGENT);
+        live.alive.lock().unwrap().push((agent, Alive::Yes));
+        rig.open();
+        rig.agents.on_tick();
+        assert_eq!(rig.owners.asked(), 1);
+        assert!(rig.agents.next_due().is_some());
+        assert_eq!(
+            rig.agents.snapshots(&live, START).live,
+            [agent],
+            "its exit is waited on"
+        );
+        rig.agents.snapshots(&live, START);
+        assert_eq!(rig.owners.asked(), 0, "a live holder is only checked");
+
+        // It ended: the poll, still due, asks again and finds nobody.
+        live.alive.lock().unwrap().clear();
+        rig.owners.answer(Ok(vec![]));
+        assert!(rig.agents.snapshots(&live, START).live.is_empty());
+        rig.later(QUERY_POLL_MS);
+        rig.agents.run_due();
+        assert_eq!(rig.owners.asked(), 1);
+        assert_eq!(rig.agents.next_due(), None);
+    }
+
+    /// A start that gave no notice is still read at the next tick, and then polled.
+    #[test]
+    fn a_commit_a_tick_finds_while_nobody_held_the_database_asks_again() {
+        let mut rig = QueryRig::new("agents-query-tick-commit");
+        rig.owners.answer(Ok(vec![]));
+        rig.open();
+        rig.shm(1, 0);
+        rig.agents.on_tick();
+        assert_eq!((rig.runs(), rig.owners.asked()), (1, 1));
+        assert_eq!(rig.agents.next_due(), None);
+
+        rig.owners.answer(Ok(vec![process(AGENT)]));
+        rig.shm(2, 0);
+        rig.later(30_000);
+        rig.agents.on_tick();
+        assert_eq!((rig.runs(), rig.owners.asked()), (1, 1));
+        assert_eq!(
+            rig.agents.next_due(),
+            Some(rig.now() + Duration::from_millis(QUERY_POLL_MS))
+        );
+    }
+
+    /// A process that held the database only for a moment (a virus scan when the agent exits, another reader such as
+    /// a second Wakeshot) must not keep the poll on for as long as it lives (`p4-idle-cpu`, seen live).
+    #[test]
+    fn a_database_still_held_is_asked_about_again_after_the_recheck_time() {
+        let mut rig = QueryRig::new("agents-query-recheck");
+        rig.open();
+        rig.agents.on_tick();
+        assert_eq!(rig.owners.asked(), 1);
+        let polls = HOSTS_RECHECK_MS / QUERY_POLL_MS;
+        for _ in 1..polls {
+            rig.later(QUERY_POLL_MS);
+            rig.agents.run_due();
+        }
+        assert_eq!(
+            rig.owners.asked(),
+            0,
+            "a holder is not asked about at each poll"
+        );
+        assert!(rig.agents.next_due().is_some());
+
+        // The scan ended long ago, the scanner lives on.
+        rig.owners.answer(Ok(vec![]));
+        rig.later(QUERY_POLL_MS);
+        rig.agents.run_due();
+        assert_eq!(rig.owners.asked(), 1);
+        assert_eq!(rig.agents.next_due(), None);
+    }
+
+    /// The queries on one database share one question per call: one costs about 20 ms of CPU.
+    #[test]
+    fn the_queries_on_one_database_ask_once_per_call() {
+        let mut rig = QueryRig::new("agents-query-ask-once");
+        let db = rig.db.clone();
+        rig.source.set(|f| {
+            f.wanted
+                .push(query_want(&db, "v2", "SELECT id FROM session_v2"));
+            f.wanted
+                .push(query_want(&db, "s", "SELECT id FROM schedule"));
+        });
+        rig.owners.answer(Ok(vec![]));
+        rig.open();
+        rig.shm(1, 0);
+        rig.agents.on_tick();
+        assert_eq!((rig.runs(), rig.owners.asked()), (3, 1), "the first reads");
+
+        // A commit a tick finds: three reads, one question.
+        rig.shm(2, 0);
+        rig.later(30_000);
+        rig.agents.on_tick();
+        assert_eq!((rig.runs(), rig.owners.asked()), (3, 1));
+    }
+
+    #[test]
+    fn a_failed_question_polls_as_before_and_asks_again_only_on_the_tick() {
+        let mut rig = QueryRig::new("agents-query-rm-failed");
+        rig.owners.answer(Err(RM_FAILED));
+        rig.open();
+        rig.agents.on_tick();
+        assert_eq!(rig.owners.asked(), 1);
+        for _ in 0..3 {
+            rig.later(QUERY_POLL_MS);
+            rig.agents.run_due();
+            assert!(rig.agents.next_due().is_some(), "polled");
+        }
+        assert_eq!(rig.owners.asked(), 0);
+        rig.later(QUERY_POLL_MS);
+        rig.agents.on_tick();
+        assert_eq!(rig.owners.asked(), 1);
     }
 
     /// OpenCode leaves its `-wal` and `-shm` after it stops (`p4-live-opencode`), so a look that finds the header as

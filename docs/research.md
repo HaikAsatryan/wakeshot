@@ -6107,3 +6107,88 @@ variables the tray reads, nothing held in its log during the window:
 - **Also seen:** the installed tray's private memory rose from a median of 3.98 MB (00:07 to 00:17) to 7.69 MB (01:21
   to 01:44, 60 samples at 7.69, max 7.79) while it held for the busy Claude Code session; its idle window in between
   read 4.99 (max 7.29). Not investigated: a leak is **not verified**.
+
+## Speed numbers after the idle CPU fix (2026-11-07)
+
+Measured 2026-11-07 from 02:10 to 02:52 (UTC+4) for card `docs/tasks/p4-idle-cpu.md`, on the test laptop (x64). Raw
+files and scripts: the card's scratch folder, `p4-idle-cpu\speed\` (not kept in the repo). **ARM64: not measured.**
+
+How: a release build of the tree before the fix and one after it (`ProductVersion` 0.1.0 both), each run as
+`wakeshot-tray.exe --dry-run` at Medium, started through `explorer.exe`, measured the same way: a quiet minute after
+the start, then 60 samples 10 s apart over 10 minutes, as `measure-speed.ps1 -Mode idle` does, and the dry run's log
+read for lines in the window (none either time). How it differs from the 0.1.0 method of "Speed numbers":
+
+1. A dry-run copy, not Haik's installed tray: the orchestrator's Claude Code session works all the time, so the
+   installed tray holds. The release dry run has its own data folder (`%LocalAppData%\Wakeshot\dry-run`) and mutex
+   names; `WAKESHOT_DATA_DIR` moves only a debug build's folder.
+2. Claude Code's folder on an empty scratch folder (`CLAUDE_CONFIG_DIR`), so no Claude session is watched; the profile
+   below puts Claude Code's share at about 9 ms in 10 minutes. 0.1.0's run watched one idle Claude session.
+3. Three more sources on real files: 7 Copilot sessions with in-use files (2 left by crashed sessions, 5 held by VS
+   Code's `copilot-runtime.exe`), Codex's home, and OpenCode's database with its `-wal` and `-shm` and no OpenCode
+   running.
+4. One more column: the process's cycle time (`QueryProcessCycleTime`), which counts every cycle instead of 15.625 ms
+   ticks, turned into ms at the rate a 500 ms spin measured (1.97 to 1.99 million per ms).
+
+| Number | Before the fix | After the fix | Notes |
+|---|---|---|---|
+| Tray, idle, CPU | 1,109.375 ms in 10 minutes (0.18% of one core) | 109.375 ms (0.018%) | `TotalProcessorTime` at start and end |
+| Tray, idle, CPU by cycles | 1,112 ms | 87 ms | `QueryProcessCycleTime` |
+| Tray, idle, private memory | median 2.76 MB, max 3.59 | median 3.33 MB, max 3.38 | `PrivateMemorySize64`; a dry run shows no menu and checks no update |
+| Tray, idle, working set | median 17.50 MB | median 17.62 MB | |
+| Windows | 02:14:11 to 02:24:12 | 02:42:18 to 02:52:19 | |
+
+**Where the CPU went.** A temporary example (deleted with the card) ran one `Agents` per real source the way the watch
+thread does at rest: the safety tick every 30 s, the `Query` poll when due, a snapshot after each call that changed
+something, at Medium for 10 minutes, counting thread cycles per part and per call. Per 10 minutes:
+
+| Source | Before | After | What cost it before |
+|---|---|---|---|
+| Copilot CLI | 825 ms | 32 ms | 780 ms in 38 Restart Manager questions (20.5 ms each) about the 2 in-use files of crashed sessions, asked again at each tick |
+| OpenCode | 299 ms | 9 ms | 286 ms in 281 `Query` polls (1.0 ms each), with no OpenCode running |
+| Claude Code (empty folder) | 9 ms | 9 ms | the tick |
+| Codex CLI | 7 ms | 6 ms | the tick |
+| All four | 1,140 ms | 57 ms | the whole tray before: 1,112 ms by cycles |
+
+- **One Restart Manager question about a file nobody holds costs about 20 ms of CPU** (38 calls, thread cycles), as
+  `p6-agents-video-readme` timed from outside (14 to 22 ms). **Verified.**
+- **A `Query` poll costs about 1 ms of CPU, though a warm look at the database's files costs 0.09 ms** (`is_file`
+  0.017 to 0.028 ms, the `-shm` header read 0.029 to 0.039 ms, 20 calls each). Cold, after a 2 s sleep, one look took
+  0.394 ms and three looks 0.620 ms (15 rounds each). So the wake costs most, and only fewer wakes help. **Verified**
+  (profile and cold runs); why a cold wake costs more (caches, clock speed) is **not verified**.
+- **One process list (`NtQuerySystemInformation`) costs 7 to 9 ms here** (358 to 377 processes; 20 calls, three
+  runs). **Verified.** So gating the poll on a process list would cost more than the poll.
+- **The fixes** (`crates/wakeshot-windows/src/watch/agents.rs`): Restart Manager is not asked again about an in-use
+  or lock file on a tick; a "nobody holds it" answer is kept until the file changes (listing or notice) or the facts
+  of the session that names it change (its log moved, so a process may have taken the file up again with no notice).
+  The `Query` poll runs only while a process other than Wakeshot holds the database open, as Restart Manager tells;
+  it is asked at a want's first run, after a notice naming the database, its `-wal` or its `-shm` while nobody held
+  it, after a read that found a commit, after every holder ended (holders are waited on like session processes), and
+  5 minutes after the last question while held; the queries on one database ask once per call. The tick still looks
+  at the `-shm` header, so a start that gave no notice is read within 30 s.
+- **OpenCode's start gives a `-shm` notice.** `opencode run` (2.2.5) at Medium: a watcher on its data folder with the
+  tray's filter saw `opencode.db-shm` change at the start, then `-wal` and `opencode.db` changes within 0.6 s, before
+  the turn's first commit. **Verified** live, one run (`p4-idle-cpu` Log, 03:01).
+- **A holder seen for a moment keeps a poll on while that process lives, unless asked again.** A dry run started
+  while the installed tray ran polled every 2 s for 10 minutes though Restart Manager said nobody held the database;
+  its watch thread switched every 2 s (thread counters) and took 42.8 ms of CPU in 60 s. Most likely one of its start
+  questions caught the installed tray reading the database: **inferred, not verified** which process it kept. Hence
+  the 5-minute question while held.
+- **The poll stops after OpenCode exits, at the latest 5 minutes later.** Final build, dry run beside the installed
+  tray: 15.7 ms of cycles in the 2 minutes before an `opencode run` turn; 77.8 ms in the 2 minutes from 26 s after
+  `opencode service stop` (03:27:59), with the watch thread switching every 2 s at 03:31; at 03:34 the switches were
+  gone and the next 2 minutes read 16.4 ms. So after the exits it still kept a holder, most likely the other tray
+  again (both read the database on the same notices), until the 5-minute question. With one tray, a holder kept
+  that way would be a reader that held the file at the moment of the question (a virus scan at the agent's exit, say):
+  **not seen**. **Verified** live, one run (`p4-idle-cpu` Log, 03:24 to 03:36). For the end card's measurement:
+  start a dry run's window at least 5 minutes after the last OpenCode activity.
+- **Hold start and end on the final install, one turn each at Medium**: Claude Code under 0.06 s both (per session
+  in `state.json`); Codex CLI 0.26 s and 0.01 s; OpenCode 0.38 s and 0.03 s (before the fix the install check
+  measured 2.01 s and 1.63 s; the first install of this card 0.35 s and 1.28 s; both inside the 2 s poll).
+  **Verified** live. Installed from `HaikAsatryan.Wakeshot-win-x64-Setup.exe`, 12,491,601 bytes, SHA-256
+  `C1F09BE2E857F06351E15E672D90A3ABE58551F4A14169C0038D55A21008FB63`.
+- **Memory, a short look**: a dry run, which shows no menu and checks no update, read 2.8 to 4.1 MB private in every
+  window. The installed tray rose from 3.94 to 4.68 MB and from 44 to 51 modules across its first update check
+  (network modules `mswsock`, `dnsapi`, `iphlpapi`, `nsi`, `rasadhlp`, `fwpuclnt` loaded); the 3-hour tray before it
+  read 7.67 MB with 72 modules, the rest of them shell launch and UI text modules (menu, tooltip, theme changes during
+  the tooltip capture). So the rise most likely comes from the update check and the UI, not the watch: **inferred,
+  not verified**; not fixed (outside the watch).
