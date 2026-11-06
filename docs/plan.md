@@ -86,7 +86,7 @@ Facts with how they were checked: `docs/research.md`. Longer research: `docs/res
 | 1 | Detailed design and skeleton | Detailed `architecture.md`, public GitHub repo, Cargo workspace, the contracts between the parts (`p1-contracts`), CI (fmt, clippy, tests, x64 and ARM64 builds), tray menu look that matches Windows 11 (`p1-tray-menu-look`), audible lid-close sound (`p1-lid-sound`) | Done (signed off 2026-11-03 19:13; `docs/phases/01-design-skeleton.md`) |
 | 2 | Core (track) | State machine, policies, settings ownership rules, file formats, full tests | Built (`docs/phases/02-core.md`) |
 | 3 | Windows power layer (track) | Power requests and settings, journal and restore, guard process, OS events | Built (`docs/phases/03-windows-power.md`) |
-| 4 | Sources (track) | Claude Code (with timers), `wakeshot run` and hold files, Keep awake; Codex CLI, Copilot CLI and in VS Code, OpenCode back in v1 (Haik, 2026-11-06) | Built for v1; the new agents in progress (`docs/phases/04-sources.md`) |
+| 4 | Sources (track) | Claude Code (with timers), `wakeshot run` and hold files, Keep awake; Codex CLI, Copilot CLI, Copilot in VS Code (Copilot harness chats), OpenCode 2.x (Haik, 2026-11-06); Cursor, Antigravity and VS Code Local chats out of v1 ("No guessing", `docs/product.md`) | Built and tested live (`docs/phases/04-sources.md`) |
 | 5 | Tray UX (track) | Icons (design, light and dark, high contrast, every scale), menu, notifications, sounds, first run, log | Built (`docs/phases/05-tray-ux.md`) |
 | 6 | Ship (track, then integration) | Velopack installer and updates, start at login, uninstall restore, signing, winget manifest, README, GitHub Pages; then wiring all tracks into the two exes, end-to-end tests, Haik's manual checklist | Built and checked with Haik; README, Pages and media wait for his UI review (`docs/phases/06-ship.md`, `docs/phases/06-integration.md`) |
 | 7 | Field test | A week of real use on the test laptop, fixes, v1.0 | |
@@ -323,8 +323,16 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   tests), x64 packed. Part 2 (the install over Haik's, one turn per agent) waits for `p4-live-cursor` and the
   Antigravity IDE turn, since a new tray's `at_start` rewrites the Cursor card's test plugin folder. Secret scan clean
   (34 commits since 98c8795); auto mode refused the push, so it waits for Haik. Nothing runs.
-- Next (orchestrator): Haik's push; on his "done", a worker finishes `p4-live-cursor` from its Log; on "Antigravity
-  IDE ready", a worker runs the IDE turn of `p4-live-antigravity`; then `p6-agents-install-e2e` Part 2 (runs alone;
-  checks again if code changed; the Cursor editor turn needs Haik's typing), `p6-agents-video-readme` Part B last
-  steps, push and CI, Haik's review of README and video, `p4-live-uninstall` last; then ask Haik about the video
-  upload, Pages, Phase 7, Phase 8.
+- 2026-11-06 23:56 (session wakeshot-f5): Haik's rule "No guessing" (18:45): an agent's end of work must be seen
+  exactly, or that agent or case is not supported. Live tests with Haik's hands (Cursor three rounds, a VS Code close)
+  and by agents: Codex, Copilot CLI and OpenCode see a cancel exactly; Copilot in VS Code harness chats pass every
+  case; VS Code Local chats (a window closed mid-turn), Antigravity (Esc fires no hook; a log-based guard would need a
+  version lock, and `agy` releases almost daily) and Cursor (a chat deleted mid-turn) are out of v1, their code kept
+  unwired with why-comments. v1 adds no hook folders; a start retires the ones test builds added. `p6-agents-install-e2e`
+  passed on the bigger v1 and Haik's install is the final build (Setup 12,481,433 bytes; checks green x64 and ARM64,
+  1782 tests). Video: Haik's new scenario in three rounds (a typed prompt with only keyboard sounds, the agent
+  loading, the laptop sleeping, music from the Wakeshot reveal; 38 s, his music kept). Pushed up to e3588bf.
+- Next (orchestrator): `p6-agents-video-readme` Part B last round (README and site on the final list, speed numbers
+  on the final install, the two-agent tooltip capture with Haik's hands off, final render), Haik's look at README and
+  video, push and CI, `p4-live-uninstall` last (Haik confirms the list first); then ask Haik about the video upload,
+  Pages, Phase 7, Phase 8.
