@@ -704,3 +704,11 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   Restart Manager again about dead Copilot lock files (14 to 22 ms each), plus OpenCode's 2 s check (about 250 ms);
   both in `watch/agents.rs`. Memory while holding 4.0 to 7.7 MB, not looked into. Orchestrator decision, for Haik's
   review: fix card `p4-idle-cpu` before the end card is final.
+- 2026-11-07 02:39: Haik before sleep (lid open, charger in): (1) the `winget upgrade` by-name limit may stay; a short,
+  low-effort research for a fix only. (2) The Claude waits paragraph and behavior stay as they are. (3, wake timer for
+  far scheduled runs: not answered.) He signed in to Claude Desktop. His standing go for the night: "video you can
+  upload yourself, you can do cleanup, you can even do code cleanup session if needed (names, structure, places,
+  comments (I mean deleting idiotic wordy comments). Like full polish of the repo so it would not look like fully
+  vibe coded repo. Structured and following best practices repo, with good page and so on." Still his, in the
+  morning: the history squash's force push (his yes right before it), the winget submission and the first release,
+  and any typed prompt the Claude Desktop test needs.
