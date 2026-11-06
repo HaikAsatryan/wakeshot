@@ -5262,7 +5262,10 @@ From `p6-repo-files`, 2026-11-06 04:00 to 04:30.
   files use (`gh search code`); logged out it redirects to sign-in. That it opens the form here once reporting is on:
   not verified.
 - **Reporting a comment to GitHub** (GitHub docs "Reporting abuse or spam"): the comment's three-dot menu, then
-  "Report content"; an account: "Block or Report" on the profile, then "Report abuse". Not tried.
+  "Report content"; an account: "Block or Report" on the profile, then "Report abuse". Not tried. Reports to the
+  repo's admins ("Reported content" under Settings > Moderation options) exist only for repos an organization owns
+  (GitHub docs "Managing how contributors report abuse in your organization's repository"), so on this user-owned
+  repo such a report goes to GitHub (inferred, not tried).
 - **`cargo test --workspace --locked` writes no real power settings.** Every test that writes them is `#[ignore]` and
   works on a plan copy (`e2e_real.rs`, `power/plan.rs`, `power/stop_points.rs`); the `power_check` example has
   `required-features = ["test-support"]` and examples do not run their tests by default. **Verified** by reading the

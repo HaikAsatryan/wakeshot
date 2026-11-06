@@ -176,7 +176,7 @@ those one at a time across all tracks.
 | `p6-menu-status-glyph` | no (Haik ~20:10: "1 yes, 2 yes, go ahead") | `p6-brand-apply-art` | done: the tray glyph for the current state in the status row's icon column (`MenuItem::Label { text, icon }`); x64 and ARM64 checks clean; sheet `docs/research/img/ux/menu-render-status-glyph.png` |
 | `p6-menu-hc-status` | no (orchestrator decision for Haik's review) | `p6-menu-status-glyph` | done: status line and its glyph in `WindowText` in high contrast (WinUI's `TextFillColorSecondary` there); marks and chevron stay `ButtonText`; x64 and ARM64 checks clean |
 | `p6-media-captures` | stays off the PC while it runs (Haik ~21:50: "Dell is connected go on") | `p6-media` Part C first draft | done: 22 captures on the DELL at 200% (work set S1 to S4 and S7, menu set S1 and S5a to S5d, light and dark, README stills), S9 from the log; Haik's settings equal before and after; about 11 min of screen |
-| `p6-repo-files` | yes: reads the files; turns on private vulnerability reporting | none | in progress (2026-11-06): contributing, security, conduct, issue and PR templates |
+| `p6-repo-files` | yes: reads the files; turns on private vulnerability reporting | none | done (2026-11-06): `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 3.0), two issue forms and `config.yml`, a PR template; 3 questions with defaults in the card |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
 dependency 110K, pack and release 110K, install e2e 130K, winget 60K, README 70K, Pages 60K. About 880K in all.

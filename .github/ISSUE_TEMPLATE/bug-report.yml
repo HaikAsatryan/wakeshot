@@ -1,0 +1,71 @@
+name: Bug report
+description: Wakeshot did something wrong, or did not do what it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. A security problem goes through
+        [SECURITY.md](https://github.com/HaikAsatryan/wakeshot/blob/main/SECURITY.md), not here.
+
+  - type: input
+    id: version
+    attributes:
+      label: Wakeshot version
+      description: The log says it each time Wakeshot starts, as `Wakeshot 0.1.0 starts`. `wakeshot log` opens the log.
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: Run `winver`, or see Settings > System > About.
+      placeholder: Windows 11 Pro 25H2, OS build 26200.xxxx
+    validations:
+      required: true
+
+  - type: dropdown
+    id: cpu
+    attributes:
+      label: CPU
+      options:
+        - x64 (Intel or AMD)
+        - ARM64 (Windows on Arm)
+    validations:
+      required: true
+
+  - type: textarea
+    id: holds
+    attributes:
+      label: What held
+      description: >-
+        What kept the PC awake, or should have: an agent session, `wakeshot run`, a hold file or Keep awake. Paste
+        what `wakeshot status` says, if you can.
+    validations:
+      required: true
+
+  - type: textarea
+    id: saw
+    attributes:
+      label: What you saw
+      description: What you did, and what happened. Say if the PC was on battery and if the lid was closed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: >-
+        The lines around the problem from `%LocalAppData%\Wakeshot\logs\wakeshot.log`. It holds no prompts or full
+        command lines, but read it first and remove anything private, such as your user name in a path.
+      render: text
