@@ -46,10 +46,10 @@ Cursor editor `3.29.9` (commit `306d153d51d7`, Linux `.deb`; its app JS is share
 | **CLI interactive loop fires `beforeSubmitPrompt` and `stop` only when the user's or the project's `hooks.json` has that event**; plugin hooks alone are not counted there. `sessionStart` and `sessionEnd` use `hasHooksForStep`, which counts plugins | CLI `3026.index.js` (the gates before `executeHookForStep`) | verified (code), **not run** |
 | `stop` carries `status` (`completed`, `aborted`, `error`) and the turn's `generation_id`; the editor compares it with the chat's latest turn ("a newer turn owns the chat") | editor `triggerStopHook`; CLI `3026.index.js` (three `stop` calls: completed, aborted, error) | verified (code) |
 | `beforeSubmitPrompt` input holds the prompt text and attachments; every input holds `conversation_id`, `generation_id`, `user_email`, `workspace_roots`, `transcript_path`, `cursor_version` | docs; CLI `executeHookForStep` | verified |
-| On Windows the command runs in PowerShell. CLI: payload in a temp file `%TEMP%\cursor-hooks-<random>\payload.json`, then `$OutputEncoding` set to UTF-8 and `Get-Content -Raw -Encoding UTF8 <file> \| & { $input \| <command> }`. Other mode: the payload as a here-string in the PowerShell command line | CLI `619.index.js` `executeCommandScript`; `index.js` `dt`, `it` (`"stdin"` gives the temp file) | verified (code); the editor's mode **not verified** |
+| On Windows the command runs in PowerShell. CLI: payload in a temp file `%TEMP%\cursor-hooks-<random>\payload.json`, then `$OutputEncoding` set to UTF-8 and `Get-Content -Raw -Encoding UTF8 <file> \| & { $input \| <command> }`. Other mode: the payload as a here-string in the PowerShell command line | CLI `619.index.js` `executeCommandScript`; `index.js` `dt`, `it` (`"stdin"` gives the temp file) | verified (code); the editor's temp file form verified live ("Phase 4 live test") |
 | A command that is not found ends with exit 127; any exit but 2 fails open (the action goes on); exit 2 blocks; empty stdout counts as a failed hook; default timeout 60 s | CLI `index.js` `lt`, `R=60`; editor `extensionHostProcess.js` has the same exit 127 code | verified (code) |
 | Plugin `stop` hooks run in the workspace root, other plugin hooks in the plugin folder; `CURSOR_PLUGIN_ROOT` is set | CLI `619.index.js`; docs | verified |
-| The editor runs hook commands from its extension host or its agent host daemon, both `Cursor.exe` processes | the spawn code is in `extensionHostProcess.js` and `agent-host-daemon/dist/bin/daemon.cjs`; the image name by VS Code convention | **not verified** |
+| The editor runs hook commands from its extension host or its agent host daemon, both `Cursor.exe` processes | the spawn code is in `extensionHostProcess.js` and `agent-host-daemon/dist/bin/daemon.cjs` | verified live for plugin hooks: the hook's PowerShell is a child of the window's extension host (`Cursor.exe --type=utility --utility-sub-type=node.mojom.NodeService`), which ends with the window |
 | Cursor watches the hook files and reloads them on change | docs | verified (docs) |
 
 ### The folder
@@ -104,18 +104,20 @@ also reads) are the user's own: never touched.
 |---|---|---|
 | `beforeSubmitPrompt` | writes the chat's file (replaces it) | working |
 | `stop` (any `status`) | deletes the chat's file if it names this turn's `generation_id` | idle |
-| `sessionEnd` | deletes the chat's file | gone |
+| `sessionEnd` | deletes the chat's file, unless `final_status` is `generating`: then writes it working | gone, or working until the turn's `stop` |
 
 - Idle and gone are "no file": the source sees only working chats.
+- `sessionEnd` with `final_status` `generating` comes when the user closes a running chat's tab (Ctrl+F4): the turn
+  goes on in the background and fires its own `stop` when it ends (live, "Phase 4 live test"). Any other value, type
+  or a missing field deletes. Closing the window fires no `sessionEnd`; its extension host ends with it.
 - Waiting for approval: Cursor sends no hook event for it (the CLI maps Claude's `Notification` and
   `PermissionRequest` to nothing, `index.js`). So an approval wait counts as working, as for Codex (`product.md`,
   "Answers to the track plan questions"). The battery floor still protects. Product question 2.
 - Subagents run inside the parent turn, which ends with the parent's `stop`. `subagentStart`/`subagentStop` are not
   hooked. Change it when a live test shows a subagent still running after the parent's `stop`.
-- The `generation_id` check keeps a late `stop` of turn N from deleting turn N+1's file. That the prompt hook and the
-  stop hook carry the same id for one turn: likely (both are the turn's id in the editor code), **not verified**; the
-  live test checks it. If they differ, `stop` would never match: change the rule then to "delete unless the file
-  names another turn and is under 2 s old".
+- The `generation_id` check keeps a late `stop` of turn N from deleting turn N+1's file. The prompt hook and the stop
+  hook carry the same id for one turn: verified live for `completed` and `aborted` (the Stop button), also for turns
+  that ended in the background.
 
 ### The hook command
 
@@ -133,8 +135,8 @@ knows only a small table: the input field names, the events and the process imag
    does not parse is unreadable (below).
 2. Check the input: `conversation_id` must have the UUID shape (8-4-4-4-12 hex digits) and is lowercased; it becomes
    the file name, so device names (`CON`, `COM1`) and case twins cannot occur. Antigravity's is a UUID (its docs);
-   Cursor's looks like one, **not verified**: the live test checks it, and another shape shows as unreadable input
-   (the "update Wakeshot" notice), not as a silent gap. `generation_id`: at most 80 of `A-Z a-z 0-9 - _`, or empty.
+   Cursor's is one in every live input (editor and CLI); another shape shows as unreadable input (the "update
+   Wakeshot" notice), not as a silent gap. `generation_id`: at most 80 of `A-Z a-z 0-9 - _`, or empty.
    `hook_event_name`, if present, must equal the event in the command; else the input counts as unreadable.
 3. Find the agent process: list processes with their parents (`process::list`) and walk up from the hook's parent,
    at most 10 steps. Each parent must be listed and must have started at or before its child, so a reused pid ends
@@ -250,8 +252,9 @@ The editor's own wakelock lines in `main.log` (`research/cursor-gemini-signals.m
 second signal. Reasons: they are log text with no contract (wording, level and rotation not verified); they name no
 chat, so they cannot be matched to a hook file; a second parser and a second live test cost more than they give. What
 they would add: ending a hold during an approval wait (the editor releases its lock then), and ending a hold whose
-`stop` never came. Change it when the live test shows `stop` missing in a real case (Esc, a crash of the agent
-runtime), or Haik wants approval waits not to hold for Cursor (product question 2).
+`stop` never came. The live test found no real case with `stop` missing (Esc does not cancel a turn in 3.27.12; the
+Stop button fires `stop` `aborted`). Change it when a case shows `stop` missing, or Haik wants approval waits not to
+hold for Cursor (product question 2).
 
 ## Adding
 
@@ -368,12 +371,14 @@ The notice, once, when Wakeshot adds the folder (`Notice::HooksAdded { agent: "C
 |---|---|
 | Tray not running | The hook still writes and deletes its files. A tray that starts later sees the working chats. |
 | Automatic off | Files are written; the tray ignores agent sessions, as for every source. |
-| Wakeshot removed without cleanup (data folder deleted by hand, uninstall hook killed, install folder deleted) | Each event runs PowerShell, the exe is not found, exit 127: Cursor counts the hook failed and goes on (fail open; verified in code, CLI and editor). Cost: one PowerShell start per prompt and per stop. Fix: delete `.cursor\plugins\local\wakeshot`. Whether Cursor shows the failure to the user: **not verified**. |
-| Hook slow or stuck | Cursor waits for `beforeSubmitPrompt` before it sends the prompt (editor `await`, verified), so the hook delays each prompt by PowerShell's start plus the exe. `timeout` 5 s caps it. The exe never waits on the tray, the network or a user. |
+| Wakeshot removed without cleanup (data folder deleted by hand, uninstall hook killed, install folder deleted) | Each event runs PowerShell, the exe is not found, exit 127: Cursor counts the hook failed and goes on (fail open; verified in code, CLI and editor). Live: a plugin hook naming a missing exe in the same `'<path>' args` form failed with 127 on 12 runs while all 6 prompts went through, and Haik saw no message. Cost: one PowerShell start per prompt and per stop (about 0.9 s per prompt). Fix: delete `.cursor\plugins\local\wakeshot`. |
+| Hook slow or stuck | Cursor waits for `beforeSubmitPrompt` before it sends the prompt (editor `await`, verified), so the hook delays each prompt by PowerShell's start plus the exe: about 0.85 s here, almost all of it Windows PowerShell 5.1's own start (live, "Phase 4 live test"). `timeout` 5 s caps it. The exe never waits on the tray, the network or a user. |
 | `stop` never comes (crash, kill) | The file stays; the hold lasts until the named process ends, or the chat's next `stop` or `sessionEnd`. When that process is long-lived and shared (Cursor's agent host daemon, which may outlive a window: not verified; Antigravity's IDE hub, one `agy.exe` for all IDE chats; its Remote Control daemon, which runs from logon), a missed end holds for the whole session on AC. The walk takes the nearest match, which is the process that ran the hook, so it never picks a longer-lived one above it. Live test rows: Esc and a crash in each. Any fallback beyond this is a time cap, which the product rule forbids: product question 5. |
 | An agent elevated as another account (over-the-shoulder UAC) | The Medium copy runs as the Explorer user, so the file lands in that user's data folder and the console user's tray holds. It holds only ids; accepted. |
-| Esc or the stop button | `stop` with `aborted` (CLI code: three `stop` calls; editor: one call with the status). **Not run.** |
-| Cursor CLI interactive mode | Plugin-only `beforeSubmitPrompt` and `stop` are not fired (code read): the CLI then shows nothing. If the user has their own `~/.cursor/hooks.json` with those events, the gate opens and ours run too. Product question 1. |
+| Esc or the stop button | Editor 3.27.12, live: the Stop button fires `stop` `aborted` with the turn's id, and the hold ends about 1.4 s later; Esc does not cancel a turn (the turn goes on and ends with its own `stop`). CLI: three `stop` calls in code (completed, aborted, error), not run with the gate open. |
+| A chat left running behind a new one (Ctrl+N), or its tab closed (Ctrl+F4) | Live: the turn goes on in the background and fires its own `stop` when it ends. Ctrl+F4 also fires `sessionEnd` with `final_status` `generating` at once, which keeps the chat working (fixed in the live card: the first rule deleted the file there, 50 s before the work ended). |
+| A chat deleted while it runs | Code: `triggerStopHook` returns with no `stop` when the chat's data is gone. If so, the hold lasts until the window closes. **Not run**; the install check runs it. |
+| Cursor CLI (interactive and `-p`) | Live (CLI 2026.11.05-86047df): with only the plugin, the CLI fires `sessionEnd` and no `beforeSubmitPrompt` or `stop`, in both modes, so the CLI shows nothing and holds nothing. If the user has their own `~/.cursor/hooks.json` with those events, the gate opens and ours run too (code read, not run). Product question 1. |
 | A newer Cursor changes the hook format | File `version` 2 that drops version 1: the hook never runs, so no hold (fails safe, no notice). Renamed input fields: `problem.json`, the "update Wakeshot" notice. Renamed events: no hold. The live test is repeated on each Cursor version Wakeshot claims. |
 | Enterprise policy | "Allow Local Plugin Imports" off (the Enterprise default): the plugin is not loaded, no hold, nothing breaks. |
 | Two Wakeshot installs | Velopack installs per user, so one per user, each with its own profile and `.cursor`. A dev tray beside the installed one never touches agent folders. |
@@ -578,6 +583,31 @@ feature, `Wdk_System_Threading` (added by `p4-contracts-r3`; a feature is not in
 8. Each agent with the exe in a folder named with `ё`, `ւ` and a space (a test copy of the plugin pointing there).
 9. An elevated agent: the Medium copy writes the file; a test under an elevated token with a junction in place of
    `agents\cursor` shows that nothing is written or deleted through it (the elevated runner exists on the laptop).
+
+## Phase 4 live test (2026-11-06)
+
+`p4-live-cursor`, editor 3.27.12 and CLI 2026.11.05-86047df, Haik's user, signed in on Free. The plugin was added by
+the product's `agent_hooks::at_start` (scratch hook exe, a debug build with a scratch data folder) and removed by
+`hook cursor remove`. A second, capture-only plugin saved each input redacted. Prompts in the editor were Haik's, in
+test windows of their own; times are from the payload file Cursor writes (its name holds the time) to `agent-watch`'s
+post. Fixtures: `crates/wakeshot-core/tests/fixtures/cursor/live/`.
+
+| # | Test | Result |
+|---|---|---|
+| 0 | Payload form | Temp file on every editor hook run: the hook's PowerShell command line (1,024 to 1,150 chars, read on 13 runs) never held `conversation_id`. The CLI runs `powershell.exe -ExecutionPolicy Bypass -NonInteractive -File %TEMP%\ps-script-<uuid>.ps1`, no key either. The runtime check never tripped. |
+| 1 | Load, events, process | No prompt or dialog at load (Haik; UIA tree). `beforeSubmitPrompt`, `stop` (`completed`, `aborted`) and `sessionEnd` ran the exe. The process found is the window's extension host, `Cursor.exe --type=utility --utility-sub-type=node.mojom.NodeService`; it ended 20 ms after the window closed. Ids: UUID shape. `error` status: not run. |
+| 2 | One turn id | The prompt and its `stop` carry the same `generation_id`, also for the Stop button and for turns that ended in the background. |
+| 3 | CLI | Only `sessionEnd` fires, in `-p` and in interactive mode: the CLI is not covered (product question 1). |
+| 4 | Delay per prompt | Cursor's exact line rebuilt, at Medium, 10 runs: Windows PowerShell alone median 841 ms; with the hook exe (debug) 858 ms; exe gone 883 ms (exit 127). Live from Cursor's payload write to the file: 1.1 to 1.6 s with the capture hook running beside it; the first prompt in a new window 3.7 s. The editor passes `-NoProfile`; the CLI does not. |
+| 5 | Exe gone | A plugin hook naming a missing exe (same form) failed with exit 127 on 12 runs; all 6 prompts went through, Haik saw no message. Not run with Wakeshot's own exe renamed (my conductor's capture failed that round). |
+| 6 | Uninstall | Unchanged folder: removed, nothing else left in `.cursor`. `hooks.json` changed (timeout 6): moved to `.cursor\wakeshot-removed`, the changed file and the marker kept, `plugin.json` deleted. Dot-named folders in `local\`: moot since the staging fix (Wakeshot makes none there); not checked for the editor. |
+| app | Through the tray | Dry-run tray at Medium; `Cursor.exe` run as Node (`ELECTRON_RUN_AS_NODE`) ran the hook the editor's way: "Holding starts: Cursor" 0.96 s after the prompt hook started; "Holding ends" 0.91 s after `stop` `aborted`; with no `stop`, 24 ms after that process exited. |
+
+"No guessing" (`product.md`) for the editor: each end seen is an exact event or a process end. Completed: `stop`.
+Stop button: `stop` `aborted`. Esc: no cancel. Ctrl+N or Ctrl+F4 on a running chat: the turn's own `stop`, after the
+`sessionEnd` fix. Window close: the extension host ends. Not run: an `error` turn, a chat deleted while it runs (code
+says no `stop` then; the install check runs it), an approval wait (holds until its `stop`, product question 2), the
+"Cursor Agents" window.
 
 ## Risks for the security review
 

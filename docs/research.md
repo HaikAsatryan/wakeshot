@@ -5858,3 +5858,32 @@ a scratch capture plugin for the inputs. Details: `research/antigravity-signals.
   hook folder made while it ran. Verified live.
 - **IDE**: its hub is `.gemini\bin\agy.exe --hub`, a child of the extension host, only in a trusted window; an IDE
   chat did not run (first-run screen, Haik's to finish). Not tested live.
+
+## Cursor live test
+
+Card `p4-live-cursor`, 2026-11-06. Editor 3.27.12 and CLI 2026.11.05-86047df for Haik's user. How checked: a
+capture-only local plugin beside Wakeshot's saved each hook input redacted at capture time (keys, ids, status words;
+no prompt, e-mail or path) and the hook shell's command line; a process trace; a file poller on the hook's folder;
+`agent-watch --source cursor`. Editor prompts were Haik's, in test windows; CLI runs at Medium (`agent -p`, and
+interactive through `agent-drive`). Details and times: `agent-hooks.md`, "Phase 4 live test".
+
+- **The editor hands the payload through a temp file**: its PowerShell command line held no `conversation_id` on any
+  of 13 runs read. The CLI's hook shell is `powershell.exe -ExecutionPolicy Bypass -NonInteractive -File
+  %TEMP%\ps-script-<uuid>.ps1` (no `-NoProfile`), no key either. Verified live.
+- **The Stop button fires `stop` with `status` `aborted`** and the prompt's `generation_id`; Esc does not cancel a
+  turn (Haik). Verified live.
+- **A chat left running behind Ctrl+N, or its tab closed with Ctrl+F4, runs on and fires its own `stop`**
+  (`completed`, 1.5 s after its transcript's last write). Ctrl+F4 also fires `sessionEnd` at once with `reason`
+  `user_close`, `final_status` `generating` and the running turn's id. An empty chat's `sessionEnd` has `final_status`
+  `none` and an empty `generation_id`. Closing the window fires no `sessionEnd`. Verified live, one run each.
+- **The process that runs plugin hooks is the window's extension host**, `Cursor.exe --type=utility
+  --utility-sub-type=node.mojom.NodeService`, a child of the main `Cursor.exe`; it ended 20 ms after its window
+  closed. Verified live.
+- **The CLI fires only `sessionEnd` from a plugin**, in `-p` and in interactive mode (`final_status` `completed`).
+  Verified live. Interactive input under the driver: `enter` after a 2 s pause submits; `kenter` did not.
+- **Hook cost per prompt**: Cursor's exact line rebuilt and run at Medium, 10 runs each: Windows PowerShell 5.1 alone
+  median 841 ms, with the hook exe (debug build) 858 ms, a missing exe 883 ms (exit 127, empty stdout). Measured.
+- **A missing hook exe fails open with no message**: a capture hook naming a path that does not exist exited 127 on
+  12 editor runs; all 6 prompts went through and Haik saw nothing. Verified live.
+- Not verified: an `error` turn, a chat deleted while it runs (code: `triggerStopHook` returns when the chat's data is
+  gone), the "Cursor Agents" window, the CLI with a user `hooks.json` that opens its gate.

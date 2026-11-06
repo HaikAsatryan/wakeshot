@@ -1,8 +1,8 @@
 # Live test: Cursor editor and CLI through Wakeshot's hooks
 
-Phase: 4. Status: blocked (2026-11-06 19:28) on "Steps for Haik, round 2"; round 1 read (Log 19:15). Was: ready once `p4-cursor-source`, `p4-agent-hooks-install`, the hooks code review fixes and the live
-card before it in the lane are done (new 2026-11-06). Needs Haik: no (he signed in to Cursor and its CLI,
-2026-11-06 ~17:30); only if the payload check finds the command line (design Question 4).
+Phase: 4. Status: done (2026-11-06 20:40). Was: ready once `p4-cursor-source`, `p4-agent-hooks-install`, the hooks code review fixes and the live
+card before it in the lane are done (new 2026-11-06). Needs Haik: done (`agent login` and three short rounds of
+editor prompts, 2026-11-06 19:00 to 20:23).
 Agent: `wakeshot-worker`. Size: about 130K tokens.
 Runs after: `p4-cursor-source`, `p4-agent-hooks-install`, the hooks review in Round 4 (fixes of blockers and
 majors), `p4-live-harness`; one live card at a time (agent-session lane).
@@ -73,42 +73,27 @@ not start.
 
 ## Questions for Haik
 
-None (no product question). Steps Haik must do by hand: "Steps for Haik" below.
+None (no product question). Steps for Haik: done; the install check reuses the steps below.
 
-## Steps for Haik, round 2 (about 4 minutes; the card is blocked on them)
+## Steps for Haik, for the install check (`p6-agents-install-e2e` Part 2 reuses them)
 
-Why: round 1 worked for Wakeshot's hook, but my capture hook failed, so the Stop-button cancel, the prompt with the
-exe gone and the window close need one short run more. The CLI part needs nothing from you now.
+Rounds 1 to 3 of this card are done (2026-11-06, Log 19:05, 19:28, 20:20). What they taught: a cancel is the Stop
+button (the square at the chat box), never Esc; a cancel prompt must run long enough to click Stop (count to 10000);
+send each prompt once; a test window of its own, never your "Cursor Agents" window. About 5 minutes, with the
+installed Wakeshot running and its tray icon visible:
 
-1. Use the Cursor window titled **cursor-live2 - Cursor** (open now; Wakeshot's test window, not your own).
-2. Send `This is an app test. Reply with one word: ok`. Wait for the answer, then 5 seconds.
+1. Open a new Cursor window on a test folder (File > New Window, then open the folder). If it asks whether you trust
+   the folder, say yes.
+2. Send `This is an app test. Reply with one word: ok`. While it answers, Wakeshot's icon shows a hold; it ends a
+   second or two after the answer.
 3. Send `This is an app test. Count from 1 to 10000, one number per line.` About 3 seconds after the numbers start,
-   click the Stop button (the square at the chat box). Wait 5 seconds.
-4. Send `This is an app test. Reply with one word: ok` again. Wakeshot's hook exe is gone for this one on purpose:
-   note any message Cursor shows. Wait for the answer, then 5 seconds.
-5. Close the window with its X; take the default if Cursor asks anything.
-6. Tell the orchestrator "done", with anything Cursor showed. Send each prompt once; if one goes wrong, say which.
-
-## Steps for Haik, round 1 (done 2026-11-06 ~19:00, not exactly as written; Log 19:05)
-
-Why: the Cursor CLI is not signed in for your user (`agent status` at Medium: "Not logged in"), and the editor's chat
-box takes no text through UI Automation, so a test prompt would need the keyboard focus while you work. Everything is
-set up; my monitors record each step by themselves. Do not use your own "Cursor Agents" window for this.
-
-1. In a normal terminal (not admin): `agent login`, finish the sign-in in the browser, then `agent status`; it should
-   say you are logged in.
-2. In the Cursor window titled **cursor-live - Cursor** (Wakeshot's test window):
-   1. Click the chat box ("Plan, Build, / for skills, @ for context"), type
-      `This is an app test. Reply with one word: ok` and press Enter. Wait for the answer, then 5 seconds.
-   2. Send the same text again and wait for the answer. (Wakeshot's hook exe is gone for this one on purpose: note any
-      message Cursor shows.) Wait 5 seconds.
-   3. Send `This is an app test. Count from 1 to 200, one number per line.` and press Esc about 2 seconds after the
-      answer starts.
-   4. Close the window with its X. If Cursor asks anything, note it and take the default.
-3. Within about a minute a new window **cursor-live2 - Cursor** opens by itself. If it asks whether you trust the
-   folder, say yes (it is a test folder). Send `This is an app test. Reply with one word: ok`, wait for the answer,
-   then close that window.
-4. Tell the orchestrator "done", with anything Cursor showed (a plugin prompt, a hook error, a dialog).
+   click the Stop button. The hold ends within about 2 seconds.
+4. Send `This is an app test. Count from 1 to 3000, one number per line.` When the numbers start, press Ctrl+F4 (the
+   chat's tab closes, the turn goes on unseen). The hold stays until that turn ends, about a minute.
+5. Not run yet: send the 3000 count again; when the numbers start, open Show Chat History (the clock icon at the chat
+   tabs) and delete that running chat. Note whether the hold ends within about a minute or stays until step 6.
+6. Close the window with its X. The hold, if any, ends at once.
+7. Tell the orchestrator "done", with anything Cursor showed and the times you saw.
 
 ## Found outside scope
 
@@ -116,7 +101,24 @@ set up; my monitors record each step by themselves. Do not use your own "Cursor 
    `--all-targets`) fails with "constant `SQLITE_IOERR` is never used" (line 79). x64 lib clippy passed a minute
    before. Not touched. Clean again at 18:05.
 2. The Cursor CLI was not signed in for Haik's user (the orchestrator's note said it was): `agent status` "Not logged
-   in", `agent --list-models` "Authentication required" (17:36, Medium).
+   in", `agent --list-models` "Authentication required" (17:36, Medium). Signed in at 19:13.
+3. `crates/wakeshot-core/tests/vscode_source.rs`, `every_live_fixture_is_listed_once`, failed at 20:29 while another
+   card added files to `fixtures/vscode/live/`; it passed at 20:36. Not touched.
+4. Haik's installed Wakeshot tray (pid 11424 since 04:34, guard 48172) ran through the whole test. This card never
+   touched it (no power settings; the hook was a debug build writing a scratch data folder; its version predates the
+   agent hooks, so it added no plugin).
+5. Left in Haik's Cursor profile by the test windows and CLI runs, not deleted (Cursor's own files): four folders
+   `.cursor\projects\<path>-p4-live-cursor-work-{cli,cursor-live,cursor-live2,cursor-live3}`, the test chats in
+   Cursor's chat history, and `cli-config.json`, `agent-cli-state.json`, `statsig-cache.json` rewritten by the CLI at
+   19:31 to 19:33 (`cli-config.json` does not name the test folder). Harmless; Haik may delete the four folders.
+6. The Cursor CLI sets `CURSOR_PLUGIN_ROOT` to a Claude Code plugin's folder (`.claude\plugins\cache\
+   claude-plugins-official\postman\2.3.0`) for our plugin's `sessionEnd` hook: it loads Claude Code's plugins too and
+   names the wrong one. Cursor's bug; Wakeshot does not read the variable.
+7. Product cost to weigh, not a bug: each Cursor prompt waits about 0.85 s for the hook (Windows PowerShell's start;
+   the exe is about 20 ms of it). Every Cursor hook pays this, not only Wakeshot's.
+8. `crates/wakeshot-core/tests/fixtures/cursor/README.md` (`p4-cursor-source`) says this card replaces those made-up
+   inputs with real captures; they went to `fixtures/cursor/live/` instead (this card owns only that folder), and the
+   made-up `editor-session-end.json` lacks the real `generation_id` and `final_status`. A one-line README fix.
 
 ## Log
 
@@ -204,10 +206,61 @@ set up; my monitors record each step by themselves. Do not use your own "Cursor 
   close. Window `cursor-live2` opened 19:26:45 (hwnd 2231074, new Cursor pids 520 2248 43016 49616 55048 55968, in
   Haik's main 49860); no dialog in its UIA tree. An installed Wakeshot tray runs (pid 11424 since 04:34, guard 48172);
   not touched. Blocked on "Steps for Haik" round 2.
+- 2026-11-06 19:28 to 19:29: Haik's round 2 in `cursor-live2` (2 prompts, then the close; he reported nothing shown).
+  Prompt 1: `beforeSubmitPrompt` and `stop` `completed`, same `generation_id`. Prompt 2 (count to 10000, Stop
+  button): `stop` with `status` `aborted` and the prompt's `generation_id`, 14 s after the send; the hook deleted the
+  file 1.4 s after Cursor wrote the payload. Window closed 19:29:05.351; the found process (pid 520, `Cursor.exe
+  --type=utility --utility-sub-type=node.mojom.NodeService`, the window's extension host, child of the main 49860)
+  ended 19:29:05.370. No `sessionEnd` at the close. Prompt 3 (exe gone) not sent; conductor2 never counted the
+  captures (a bug in my script), so no rename happened anyway. Conductor2 ended by PID.
+- 2026-11-06 19:31: CLI `-p` at Medium (`agent -p --trust`, CLI 2026.11.05-86047df): answered; only `sessionEnd`
+  fired (no `beforeSubmitPrompt`, no `stop`); no chat file. The CLI's hook line: `powershell.exe -ExecutionPolicy
+  Bypass -NonInteractive -File %TEMP%\ps-script-<uuid>.ps1` (no `-NoProfile`), payload key not on it.
+- 2026-11-06 19:32 to 19:34: CLI interactive through `agent-drive` at Medium: `enter` after a 2 s pause submits
+  (`kenter` does not); answered; only `sessionEnd` at the exit. Same as `-p`.
+- 2026-11-06 19:35: test 4 at Medium, Cursor's exact line rebuilt, 10 runs each: PowerShell 5.1 alone median 841
+  ms; with the debug hook exe 858 ms; exe gone 883 ms, exit 127, empty stdout.
+- 2026-11-06 19:38: test 6 on the real folder through `hook cursor remove` at Medium: unchanged folder removed
+  ("removed"), `local\` back to the capture plugin only, nothing else in `.cursor`. Then the same bytes copied back,
+  `hooks.json` timeout 5 to 6: moved to `.cursor\wakeshot-removed` (changed `hooks.json` and the marker kept,
+  `plugin.json` deleted), log line "moved to .cursor\wakeshot-removed". That test folder deleted by me.
+- 2026-11-06 19:39 to 19:40: through the app. Lock `<scratchpad>\dry-run.lock` taken 19:39:22; dry-run tray (debug,
+  Medium, pid 47084, every other agent on an empty folder). `Cursor.exe` itself as Node (`ELECTRON_RUN_AS_NODE`, pid
+  14516, Medium) ran the hook the editor's way (temp file, same PowerShell line, fake ids). Prompt A at 41.554:
+  "Holding starts: Cursor" 42.518; `stop` `aborted` at 57.571: "Holding ends" 58.482; prompt B at 40:06.521: holds
+  07.469; the process exits with no `stop` at 19.511: "Holding ends" 19.535 (24 ms). Tray quit by `taskkill /PID`
+  (no force), code 0; lock released 19:40:50.
+- 2026-11-06 19:44: round 3 set up for the "No guessing" check (Steps for Haik, round 3). Wakeshot's plugin stays
+  removed (test 6); the capture plugin alone shows whether each turn gets its `stop`. Window `cursor-live3` (hwnd
+  4197230, new Cursor pids 8424 8756 38824 47392 53832 55672 56640); logger `run\conductor3.ps1` at High (pid 23260,
+  log `logs\conductor3.log`: capture events, transcript sizes and times, never their text, the found process). No
+  dialog in the window's UIA tree.
+- 2026-11-06 20:20 to 20:23 (clock): Haik's round 3 (he reported nothing shown). An empty chat ended first
+  (`sessionEnd`, `user_close`, `final_status` `none`, no turn id). Chat A's prompt 20:20:37; Ctrl+N; chat B's prompt
+  20:20:48; Ctrl+F4 on B 20:20:58: `sessionEnd` `user_close`, `final_status` `generating`, B's turn id, and B's turn
+  went on. A's `stop` `completed` 20:21:36.9 (its transcript's last write 20:21:35.4); B's `stop` `completed`
+  20:21:48.8 (transcript 20:21:47.3). Window closed 20:22:58. So both background turns end with their own `stop`,
+  but the old rule (`sessionEnd` deletes) would have ended B's hold at the tab close, 50 s before B's work ended.
+- 2026-11-06 20:30: fix: Cursor's `sessionEnd` keeps the chat working when `final_status` is `generating`
+  (`Action::EndUnlessRunning` in `hooked.rs`, rule in `cursor.rs`; any other value, type or no field deletes, as
+  before). Live fixtures in `tests/fixtures/cursor/live/`, replay test `tests/cursor_live.rs` (5), hook test
+  `a_running_chats_closed_tab_keeps_it_working_until_its_own_stop`, unit test
+  `an_end_that_names_a_running_turn_keeps_the_chat_working`. With the old rule put back on purpose, the replay test
+  and the hook test failed; restored.
+- 2026-11-06 20:30 to 20:36: rustfmt check clean on my six files; clippy `-p wakeshot-core -p wakeshot-windows -p
+  wakeshot-cli`, with and without `--all-targets`, x64 and ARM64: clean. Tests: one run stopped at another card's
+  `vscode_source.rs` (mid-edit, Found outside scope 3); the `--no-fail-fast` rerun passed everything.
+- 2026-11-06 20:34 to 20:40: clean-up. agent-watch 48456 ended by PID; poller 56304 and trace 53724 ended on
+  `run\stop.flag`; conductor3 had ended by itself (20:25:58). My capture plugin deleted; `.cursor\plugins` now equals
+  the 17:28 backup (only an empty `local\`); no `.cursor\wakeshot-removed`; nothing in `%LocalAppData%\Wakeshot\agents`;
+  no `cursor-hook-payload-*` left in `%TEMP%`; no test window open (only Haik's "Cursor Agents"); `<S>\target` (14 GB)
+  deleted. Docs: `agent-hooks.md` ("Phase 4 live test", events, facts, failure cases), `research.md` ("Cursor live
+  test").
 
 ## Result
 
-Status: blocked, 2026-11-06 17:50 (part 1 done, the live part waits on "Steps for Haik"). No git, no power settings.
+Status: done, 2026-11-06 20:40. No git, no power settings. Live tests 0 to 6, the CLI part, the app step, one fix
+with tests, fixtures, docs and the clean-up are done; the review fixes below were part 1.
 
 **Review fixes** (`docs/reviews/p4-hooks-code.md`; each test failed before the fix where marked):
 
@@ -221,6 +274,7 @@ Status: blocked, 2026-11-06 17:50 (part 1 done, the live part waits on "Steps fo
 | m5: other chats' files stay after the blocked path | Fixed: chat files (`<chat id>.json` by the id rule) deleted under the mutex on the blocked path and in every Medium `hook <agent> remove` | `the_blocked_path_and_the_remove_form_end_every_chat_of_the_agent` (broken on purpose: failed) |
 | m6: `agent_hooks::remove` public with no level check | Fixed: private | compile-time only |
 | m7: stale docs | Fixed: `agent-hooks.md` steps 3 and 4, the `tray_mode` lines, a "Review fixes" note; the install card's open items | none (doc) |
+| Live (this card, round 3): Cursor's `sessionEnd` deleted the chat's file when a running chat's tab was closed (Ctrl+F4), though the turn ran on 50 s and fired its own `stop` | Fixed: `Action::EndUnlessRunning` (`hooked.rs`); Cursor's `sessionEnd` keeps the chat working when `final_status` is `generating`, any other value, type or no field deletes as before; the Medium copy takes `working` or `none` for it | `a_running_chats_closed_tab_keeps_it_working_until_its_own_stop` in `tests/cursor_live.rs` and in `hook.rs` (both failed with the old rule, broken on purpose); `an_end_that_names_a_running_turn_keeps_the_chat_working` |
 | Live (`p4-live-antigravity`, agy 1.5.2): `agy` loads dot-named plugin folders, so `.wakeshot-removed` and a half-staged `.wakeshot-new-*` in `plugins\` load | Fixed for both agents (one rule): staging in the agent's own folder (`.cursor\.wakeshot-new-<pid>`, `.gemini\config\.wakeshot-new-<pid>`), moved into place; a folder the uninstall cannot empty moves to `.cursor\wakeshot-removed` or `.gemini\config\wakeshot-removed` (`-2` to `-9`); leftovers cleaned in both places; the hook file is deleted first (every delete was already tried, so this only orders them) | `the_add_never_fills_a_staging_folder_someone_else_made`, `uninstall_renames_a_folder_it_cannot_empty`, `a_crafted_marker_or_record_deletes_nothing_outside_the_fixed_set`, `a_folder_antigravity_or_the_user_changed_is_never_touched` (all four failed with the old places, broken on purpose); new `a_staging_folder_in_the_agents_own_folder_is_cleaned_too` |
 
 Also (orchestrator's item, about 6K tokens): Antigravity hooks for an exe path with a space now use its 8.3 form
@@ -228,13 +282,17 @@ Also (orchestrator's item, about 6K tokens): Antigravity hooks for an exe path w
 Test: `a_path_cmd_would_split_gets_no_antigravity_hooks` (here the temp path became `WA2A5C~1\MYAPPS~1`, and the hook
 file names it).
 
-**Files changed:** `crates/wakeshot-cli/src/hook.rs`, `crates/wakeshot-windows/src/agent_hooks.rs`,
-`crates/wakeshot-windows/src/hooks.rs` (copy closure type only), `docs/agent-hooks.md`,
-`docs/tasks/p4-agent-hooks-install.md`, this card. No contract or `Cargo` change.
+**Files changed (whole card):** `crates/wakeshot-core/src/sources/hooked.rs`, `crates/wakeshot-core/src/sources/cursor.rs`,
+`crates/wakeshot-core/tests/cursor_live.rs` (new), `crates/wakeshot-core/tests/fixtures/cursor/live/` (new: 11 inputs,
+a chat file, README), `crates/wakeshot-cli/src/hook.rs`, `crates/wakeshot-windows/src/agent_hooks.rs`,
+`crates/wakeshot-windows/src/hooks.rs` (copy closure type only), `docs/agent-hooks.md`, `docs/research.md`,
+`docs/tasks/p4-agent-hooks-install.md`, this card. No contract, `Cargo`, `tray_mode.rs` or `agent-watch.rs` change (the
+Cursor lines there came from `p4-antigravity-source`; this card tested through them).
 
-**Checks so far:** `rustfmt --edition 2024` on the three Rust files: clean. Clippy `-p wakeshot-core -p
-wakeshot-windows -p wakeshot-cli --all-targets -D warnings`: x64 and ARM64 clean; without `--all-targets`: x64 clean,
-ARM64 failed in `sqlite.rs` (another card's file mid-edit, Found outside scope 1). Tests: all pass (Log 17:50).
+**Checks:** rustfmt check clean on the six Rust files. Clippy `-p wakeshot-core -p wakeshot-windows -p wakeshot-cli
+-D warnings`, with and without `--all-targets`, x64 and ARM64: clean (20:30). Tests `--no-fail-fast`, x64: all pass
+(core lib 731, its integration files incl. `cursor_live` 5; `wakeshot-windows` 716; CLI 102, `exe` 3, `hook` 5, `run`
+5). The new tests failed with the old rule. Release build of the CLI and tray: built (19:20).
 
 **Two Wakeshot builds on one profile** (orchestrator's question): the "ours, unchanged, older content" row rewrites a
 folder that names another build's exe to name its own. Right for the product: only an installed tray writes, Velopack
@@ -242,6 +300,27 @@ installs one per user, so the folder should always name that install's exe, and 
 install is what keeps it working. It bites only tests that run `at_start` on the real profile beside an installed
 tray or another test: run those on a scratch profile. No code change.
 
-**Live part so far:** backup made; plugin added by the product's code (17:32:54); capture plugin and monitors set; my
-editor window open. Open: live tests 0 to 6, the CLI modes, fixtures, the dry-run app step, docs, clean-up
-(Continuation in the Log).
+**Live tests** (details: `docs/agent-hooks.md`, "Phase 4 live test"; times in the Log):
+
+| # | Outcome |
+|---|---|
+| 0 | Payload in a temp file on all 13 editor runs read; the CLI's form also keeps it off the command line. The Gate holds |
+| 1 | No prompt or dialog at load; each event ran the exe; the process found is the window's extension host, which ended 20 ms after the close; ids are UUIDs |
+| 2 | One `generation_id` from prompt to `stop`, also for the Stop button and background turns |
+| 3 | CLI (interactive and `-p`): only `sessionEnd` fires from a plugin, so the CLI is not covered (design Question 1 stays open) |
+| 4 | About 0.85 s per prompt, almost all Windows PowerShell's start (exe about 20 ms); `agent-watch` posted 1.1 to 1.6 s after Cursor wrote the payload (3.7 s for a new window's first prompt) |
+| 5 | A missing hook exe (same form) failed open with exit 127 on 12 runs, prompts went, no message (Haik). Not run with Wakeshot's own exe renamed |
+| 6 | Unchanged folder removed; a changed one moved to `.cursor\wakeshot-removed` with the user's file kept |
+| app | Dry-run tray: hold starts 0.96 s after the prompt hook, ends 0.91 s after `stop`, and 24 ms after the agent process exits with no `stop` |
+
+**"No guessing" check (Haik's rule):** the Stop button fires `stop` `aborted` for that turn, and the hold ends about
+1.4 s after; exact. Esc does not cancel a turn in 3.27.12. A chat left running behind Ctrl+N, or its tab closed with
+Ctrl+F4, runs on and ends with its own `stop`; exact, after this card's `sessionEnd` fix (before it, Ctrl+F4 ended the
+hold 50 s too early). Window close: the extension host ends at once. No case seen leaves "working" with no event, so
+no blocker for the editor from what was run. Open: a chat deleted while it runs (code: no `stop` when the chat's data
+is gone; if so the hold lasts until the window closes, which would be a blocker by the rule), an `error` turn, the
+"Cursor Agents" window. The install check's steps above run the deleted-chat case (step 5).
+
+**Open items:** the deleted-chat case (install check step 5); the CLI is not covered (product question 1); Haik may
+delete the four `.cursor\projects\...p4-live-cursor-work-*` folders (Found outside scope 5); the 0.85 s per prompt
+(Found outside scope 7).

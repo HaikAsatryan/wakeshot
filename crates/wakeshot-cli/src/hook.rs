@@ -1049,6 +1049,51 @@ mod tests {
         assert!(fake.handed.borrow().is_empty());
     }
 
+    /// What the editor 3.27.12 really sent (`wakeshot-core/tests/fixtures/cursor/live/`, `p4-live-cursor`).
+    fn live(name: &str) -> Vec<u8> {
+        fixture(&format!(r"live\{name}"))
+    }
+
+    #[test]
+    fn a_running_chats_closed_tab_keeps_it_working_until_its_own_stop() {
+        let fake = Fake::new("live-tab");
+        let chat = fake
+            .folder()
+            .join(hooked::chat_file("7f2e1a4c-9d63-4b5a-9caf-3e8d4a6b9c12"));
+        fake.run(
+            "beforeSubmitPrompt",
+            &live("r3-3-before-submit-prompt-b.json"),
+        );
+        let written = fs::read(&chat).unwrap();
+        // Ctrl+F4 on the running chat: Cursor says `generating`, and the turn went on for 50 s in the live test.
+        let closed = live("r3-4-session-end-running-b.json");
+        fake.run("sessionEnd", &closed);
+        assert_eq!(fs::read(&chat).unwrap(), written);
+        fake.run("stop", &live("r3-6-stop-completed-b.json"));
+        assert!(!chat.exists(), "the turn's own stop ends it");
+
+        // A tab closed after its turn ended, or a status Wakeshot does not know, ends the chat at once.
+        let ended = String::from_utf8(closed.clone())
+            .unwrap()
+            .replace(r#""final_status":"generating""#, r#""final_status":"none""#);
+        assert_ne!(ended.as_bytes(), &closed[..]);
+        fake.run(
+            "beforeSubmitPrompt",
+            &live("r3-3-before-submit-prompt-b.json"),
+        );
+        fake.run("sessionEnd", ended.as_bytes());
+        assert!(!chat.exists());
+        assert!(fake.handed.borrow().is_empty());
+
+        // Elevated, the Medium copy gets the same op.
+        let mut up = Fake::new("live-tab-up");
+        up.above = Ok(true);
+        up.run("sessionEnd", &closed);
+        let handed = up.handed.borrow();
+        assert_eq!(handed.len(), 1);
+        assert!(handed[0].iter().any(|arg| arg == "working"), "{handed:?}");
+    }
+
     #[test]
     fn the_cli_is_named_by_its_node_in_the_clis_folder() {
         let mut fake = Fake::new("cli");

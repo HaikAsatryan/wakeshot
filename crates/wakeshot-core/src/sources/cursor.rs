@@ -9,7 +9,7 @@ use std::path::Path;
 
 use crate::sources::SourceId;
 use crate::sources::hooked::{
-    Action, Agent, Base, EventRule, HookedSource, ImageRule, InputFields, State, Under,
+    Action, Agent, Base, EventRule, HookedSource, ImageRule, InputFields, Running, State, Under,
 };
 
 /// What the tooltip names a session of the editor, and Cursor's plain name.
@@ -49,9 +49,14 @@ pub static AGENT: Agent = Agent {
             action: Action::DeleteIfTurn,
             prune: false,
         },
+        // Closing a running chat's tab fires this with `final_status` `generating`; the turn goes on and its own
+        // `stop` comes when it ends (live, editor 3.27.12, `p4-live-cursor`), so the chat stays working until then.
         EventRule {
             name: "sessionEnd",
-            action: Action::Delete,
+            action: Action::EndUnlessRunning(Running {
+                field: "final_status",
+                value: "generating",
+            }),
             prune: false,
         },
     ],

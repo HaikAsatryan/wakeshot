@@ -14,7 +14,8 @@ use std::io::{BufReader, ErrorKind, Read};
 use std::path::{Component, Path, PathBuf};
 
 use serde::de::{
-    self, DeserializeOwned, DeserializeSeed, Deserializer, IgnoredAny, MapAccess, Visitor,
+    self, DeserializeOwned, DeserializeSeed, Deserializer, IgnoredAny, MapAccess, SeqAccess,
+    Visitor,
 };
 use serde::{Deserialize, Serialize};
 
@@ -107,6 +108,27 @@ pub enum Action {
     Delete,
     /// The idle flag true: deletes the chat's file; false: writes it with `Background`.
     StopIfIdle,
+    /// Deletes the chat's file, unless the input's [`Running`] field names a turn that still runs: then writes it
+    /// `Working`, so that turn's own end deletes it. Cursor closes a running chat's tab with this event while the
+    /// turn goes on and fires its own `stop` later (live, `p4-live-cursor`). Any other value, another type or no
+    /// field at all deletes, as a plain end does.
+    EndUnlessRunning(Running),
+}
+
+/// The input field and the one value of it that says a turn still runs, for [`Action::EndUnlessRunning`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Running {
+    pub field: &'static str,
+    pub value: &'static str,
+}
+
+impl EventRule {
+    fn running(&self) -> Option<Running> {
+        match self.action {
+            Action::EndUnlessRunning(running) => Some(running),
+            _ => None,
+        }
+    }
 }
 
 /// A process that runs the agent's hooks: an exe name (ASCII case ignored), and where that exe must lie when the name
@@ -191,6 +213,8 @@ pub enum Op {
 pub struct HookInput {
     pub chat: String,
     pub turn: String,
+    /// Whether an end event says the agent is fully idle: Antigravity's `fullyIdle`, or for an
+    /// [`Action::EndUnlessRunning`] event whether its field names no running turn. `None`: the input does not say.
     pub idle: Option<bool>,
 }
 
@@ -248,7 +272,11 @@ pub fn parse_input(agent: &Agent, event: &str, input: impl Read) -> Parsed {
         &head[..got]
     };
     let mut de = serde_json::Deserializer::from_reader(head.chain(reader));
-    let raw = InputSeed(&agent.fields)
+    let seed = InputSeed {
+        fields: &agent.fields,
+        running: agent.event(event).and_then(EventRule::running),
+    };
+    let raw = seed
         .deserialize(&mut de)
         .and_then(|raw| de.end().map(|()| raw));
     match raw {
@@ -303,7 +331,8 @@ fn check(event: &str, raw: RawInput) -> Result<HookInput, InputProblem> {
     Ok(HookInput {
         chat,
         turn,
-        idle: raw.idle,
+        // An agent's table has one or the other, so the two never meet.
+        idle: raw.idle.or(raw.running.map(|running| !running)),
     })
 }
 
@@ -349,6 +378,10 @@ pub fn resolve(rule: &EventRule, input: &HookInput) -> Result<Op, InputProblem> 
             Some(false) => Op::Write(State::Background),
             None => return Err(InputProblem::NoIdle),
         },
+        Action::EndUnlessRunning(_) => match input.idle {
+            Some(false) => Op::Write(State::Working),
+            Some(true) | None => Op::Delete,
+        },
     })
 }
 
@@ -359,6 +392,8 @@ struct RawInput {
     event: Option<String>,
     version: Option<String>,
     idle: Option<bool>,
+    /// Whether the event's [`Running`] field holds its running value; its text is never kept.
+    running: Option<bool>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -368,11 +403,15 @@ enum Key {
     Event,
     Version,
     Idle,
+    Running,
     Other,
 }
 
 /// Names a key by comparing it with the table, so a key is never kept.
-struct KeySeed<'a>(&'a InputFields);
+struct KeySeed<'a> {
+    fields: &'a InputFields,
+    running: Option<Running>,
+}
 
 impl<'de> DeserializeSeed<'de> for KeySeed<'_> {
     type Value = Key;
@@ -390,7 +429,7 @@ impl<'de> Visitor<'de> for KeySeed<'_> {
     }
 
     fn visit_str<E: de::Error>(self, key: &str) -> Result<Key, E> {
-        let fields = self.0;
+        let fields = self.fields;
         let named = |name: Option<&str>| name == Some(key);
         Ok(if key == fields.chat {
             Key::Chat
@@ -402,13 +441,80 @@ impl<'de> Visitor<'de> for KeySeed<'_> {
             Key::Version
         } else if named(fields.idle) {
             Key::Idle
+        } else if named(self.running.map(|running| running.field)) {
+            Key::Running
         } else {
             Key::Other
         })
     }
 }
 
-struct InputSeed<'a>(&'a InputFields);
+/// Whether a value is the given string. Any other value or type is no match, never a parse error, so a changed field
+/// type only ends the chat as a plain end would.
+struct IsText(&'static str);
+
+impl<'de> DeserializeSeed<'de> for IsText {
+    type Value = bool;
+
+    fn deserialize<D: Deserializer<'de>>(self, d: D) -> Result<bool, D::Error> {
+        d.deserialize_any(self)
+    }
+}
+
+impl<'de> Visitor<'de> for IsText {
+    type Value = bool;
+
+    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("any value")
+    }
+
+    fn visit_str<E: de::Error>(self, value: &str) -> Result<bool, E> {
+        Ok(value == self.0)
+    }
+
+    fn visit_bool<E: de::Error>(self, _: bool) -> Result<bool, E> {
+        Ok(false)
+    }
+
+    fn visit_i64<E: de::Error>(self, _: i64) -> Result<bool, E> {
+        Ok(false)
+    }
+
+    fn visit_u64<E: de::Error>(self, _: u64) -> Result<bool, E> {
+        Ok(false)
+    }
+
+    fn visit_f64<E: de::Error>(self, _: f64) -> Result<bool, E> {
+        Ok(false)
+    }
+
+    fn visit_unit<E: de::Error>(self) -> Result<bool, E> {
+        Ok(false)
+    }
+
+    fn visit_none<E: de::Error>(self) -> Result<bool, E> {
+        Ok(false)
+    }
+
+    fn visit_some<D: Deserializer<'de>>(self, d: D) -> Result<bool, D::Error> {
+        d.deserialize_any(self)
+    }
+
+    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<bool, A::Error> {
+        while seq.next_element::<IgnoredAny>()?.is_some() {}
+        Ok(false)
+    }
+
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<bool, A::Error> {
+        while map.next_entry::<IgnoredAny, IgnoredAny>()?.is_some() {}
+        Ok(false)
+    }
+}
+
+struct InputSeed<'a> {
+    fields: &'a InputFields,
+    running: Option<Running>,
+}
 
 impl<'de> DeserializeSeed<'de> for InputSeed<'_> {
     type Value = RawInput;
@@ -427,8 +533,12 @@ impl<'de> Visitor<'de> for InputSeed<'_> {
 
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<RawInput, A::Error> {
         let mut raw = RawInput::default();
-        let mut seen = Vec::with_capacity(5);
-        while let Some(key) = map.next_key_seed(KeySeed(self.0))? {
+        let mut seen = Vec::with_capacity(6);
+        let keys = || KeySeed {
+            fields: self.fields,
+            running: self.running,
+        };
+        while let Some(key) = map.next_key_seed(keys())? {
             if key == Key::Other {
                 map.next_value::<IgnoredAny>()?;
                 continue;
@@ -444,6 +554,10 @@ impl<'de> Visitor<'de> for InputSeed<'_> {
                 Key::Event => raw.event = map.next_value()?,
                 Key::Version => raw.version = map.next_value()?,
                 Key::Idle => raw.idle = map.next_value()?,
+                Key::Running => {
+                    let value = self.running.map_or("", |running| running.value);
+                    raw.running = Some(map.next_value_seed(IsText(value))?);
+                }
                 Key::Other => {}
             }
         }
@@ -749,8 +863,9 @@ fn op_for(rule: &EventRule, word: &str) -> Option<Op> {
         ("background", Action::Write(State::Background) | Action::StopIfIdle) => {
             Op::Write(State::Background)
         }
+        ("working", Action::EndUnlessRunning(_)) => Op::Write(State::Working),
         ("none", Action::DeleteIfTurn) => Op::DeleteIfTurn,
-        ("none", Action::Delete | Action::StopIfIdle) => Op::Delete,
+        ("none", Action::Delete | Action::StopIfIdle | Action::EndUnlessRunning(_)) => Op::Delete,
         _ => return None,
     };
     Some(op)
@@ -967,6 +1082,14 @@ mod tests {
             EventRule {
                 name: "stop",
                 action: Action::StopIfIdle,
+                prune: false,
+            },
+            EventRule {
+                name: "close",
+                action: Action::EndUnlessRunning(Running {
+                    field: "status",
+                    value: "running",
+                }),
                 prune: false,
             },
         ],
@@ -1199,6 +1322,44 @@ mod tests {
         );
     }
 
+    #[test]
+    fn an_end_that_names_a_running_turn_keeps_the_chat_working() {
+        let op = |text: String| {
+            let input = input("close", &text).expect("readable");
+            resolve(rule("close"), &input)
+        };
+        let with = |status: &str| format!(r#"{{"chat":"{CHAT}","turn":"t1","status":{status}}}"#);
+        assert_eq!(op(with(r#""running""#)), Ok(Op::Write(State::Working)));
+        // Any other value or type, or no field, ends the chat as a plain end does; none is a parse problem.
+        for other in [
+            r#""done""#,
+            r#""Running""#,
+            r#""running ""#,
+            r#""""#,
+            "null",
+            "true",
+            "7",
+            "1.5",
+            r#"["running"]"#,
+            r#"{"status":"running"}"#,
+        ] {
+            assert_eq!(op(with(other)), Ok(Op::Delete), "{other}");
+        }
+        assert_eq!(
+            op(format!(r#"{{"chat":"{CHAT}","turn":"t1"}}"#)),
+            Ok(Op::Delete)
+        );
+        // Only the event with the rule reads the field: for another event it is one more skipped value.
+        assert_eq!(input("gone", &with(r#""running""#)).unwrap().idle, None);
+        // Two values for it: which one the agent meant is unknown.
+        let twice = format!(r#"{{"chat":"{CHAT}","status":"done","status":"running"}}"#);
+        assert_eq!(problem_class("close", &twice), "data");
+        // Its Medium copy takes only what the event itself could do.
+        let mut values = checked(Op::Write(State::Working)).values();
+        values[5] = "background".to_owned();
+        assert_eq!(Checked::parse(&TEST_AGENT, rule("close"), &values), None);
+    }
+
     fn me() -> ProcessRef {
         ProcessRef {
             pid: 100,
@@ -1428,6 +1589,8 @@ mod tests {
             ("gone", Op::Delete),
             ("stop", Op::Delete),
             ("stop", Op::Write(State::Background)),
+            ("close", Op::Delete),
+            ("close", Op::Write(State::Working)),
             ("start", Op::Problem(Problem::Input)),
             ("end", Op::Problem(Problem::CommandLine)),
         ] {
