@@ -125,9 +125,13 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-cli-commands` | no; screen once (opens one file in the default app; global lane, review M6) | `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 30 tests; screen step ran once |
 | `p4-cli-restore` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09; nothing to add) | `p3-journal`, `p3-power-plan`, `p2-ownership-restore`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 10 tests |
 | `p4-live-claude` | optional: 3 minutes for the VS Code check; agent-session lane | `p4-watch-thread`, `p4-claude-transcript`, `p4-cli-run`, `p3-process`, the Claude parsing review (`docs/phases/02-06-lighter.md`) | done (committed 01:59): every live case passed (Claude Code 2.1.317); m6 fixed; the VS Code check waits for Haik |
-| `p4-live-codex` | yes: about 20 minutes (install or sign in, then type the steps) | `p4-live-copilot` (swapped 2026-11-06) | waits for Haik's Codex access |
-| `p4-live-copilot` | yes: about 20 minutes (install or sign in, then type the steps) | `p4-codex-source`, `p4-copilot-source` (swapped 2026-11-06) | next after the two source cards |
+| `p4-live-codex` | no: Codex logged in by Haik (2026-11-06); agents run it with `p4-live-harness` | `p4-contracts-r2`, `p4-live-harness`; one live card at a time | ready once those two are done (may run before `p4-live-copilot`) |
+| `p4-live-copilot` | only if the sign-in sitting is needed | `p4-contracts-r2`, `p4-live-harness`; one live card at a time | ready once those two are done |
 | `p4-watch-tick-flake` | no | `p4-watch-thread` | done (15:00: ticks wait for their check; data files written atomically; 20 serial and 24 of 24 load runs pass) |
+| `p4-contracts-r2` | no | the four 2026-11-06 source and research cards (done); runs alone among Rust cards | running (2026-11-06 15:35) |
+| `p4-antigravity-research` | no | none | running (2026-11-06 15:35) |
+| `p4-hooks-design` | no; a security review reads it before any build | `p4-cursor-gemini-research` | running (2026-11-06 15:35) |
+| `p4-live-harness` | yes: one short sign-in sitting after Part A | `p4-live-claude`; Part B after `p4-contracts-r2` | Part A running (2026-11-06 15:35) |
 
 Bundles (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p4-cli-args` + `p4-cli-run`;
 `p4-cli-commands` + `p4-cli-restore`; `p4-watch-reads` + `p4-watch-data`. Codex and Copilot moved to after v1 (Haik,
@@ -308,3 +312,12 @@ limit; Copilot waiting does not hold. The cards build these.
   rerun green). The tick test ticks once and waits for its check, three times (ticks that come while one runs count
   once); the failed-post test's last tick the same; a second flake found under load (two `Menu(Restore)` in 1 of 8):
   the rig now writes data folder files atomically, as the CLI does. 20 serial runs and 24 of 24 load runs pass.
+- 2026-11-06 15:35 (orchestrator, after a /clear): Round 1 of the bigger v1 started, four workers: `p4-contracts-r2`
+  (alone among Rust cards: SourceId variants and stubs, `WantedFile::Query`, `Liveness::ImageSince`, `FindTail` for
+  Codex reverted threads, whole-file reads of recently changed files, the `sqlite.rs` and `agent_hooks.rs` stubs),
+  `p4-antigravity-research` and `p4-hooks-design` (docs only), `p4-live-harness` Part A (installs, logins, a ConPTY
+  driver in `spikes/agent-drive/`, outside the workspace). Haik, about 15:30: Codex is installed and logged in (the
+  orchestrator found the desktop app: `~/.codex`, no `codex` on PATH, no `sessions` folder yet); test prompts use
+  minimum tokens. Orchestrator decision, for Haik's review: `p4-live-codex` may now run before `p4-live-copilot`
+  (Codex is logged in; Copilot may need the sign-in sitting); both still run one at a time. Haik was told the
+  optional steps before he went away (Copilot plan check, VS Code GitHub sign-in).
