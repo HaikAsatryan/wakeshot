@@ -178,7 +178,9 @@ fn wanted_lists_lock_names_then_tails_each_locked_session() {
 fn lock_names_are_filtered_before_any_open() {
     for name in [
         "inuse.4242.lock",
+        "inuse.4242.hold",
         "INUSE.1.LOCK",
+        "Inuse.1.HOLD",
         "inuse.abc.lock",
         "inuse.1.2.lock",
     ] {
@@ -186,16 +188,51 @@ fn lock_names_are_filtered_before_any_open() {
     }
     for name in [
         "inuse..lock",
+        "inuse..hold",
         "inuse.lock",
+        "inuse.hold",
         "inuse.4242.lock.tmp",
+        "inuse.4242.holder",
         "events.jsonl",
         "workspace.yaml",
+        ".workspace-fork.lock",
         "handshake.4242",
         "x.inuse.4242.lock",
         "",
     ] {
         assert!(!is_lock_file_name(name), "{name}");
     }
+}
+
+/// The in-use file Copilot keeps open (seen live: `inuse.<pid>.hold`, made just before its `.lock`).
+fn hold(id: &str) -> FileId {
+    FileId(state_dir().join(id).join("inuse.4242.hold"))
+}
+
+#[test]
+fn liveness_names_the_held_file_while_one_is_listed() {
+    let held = |s: &CopilotSource| match only(s).liveness {
+        Liveness::AnyProcess { lock_file, .. } => lock_file,
+        other => panic!("{other:?}"),
+    };
+    // In the order Copilot makes them, and the other way.
+    for order in [[hold(ID), lock(ID)], [lock(ID), hold(ID)]] {
+        let mut s = source();
+        for file in &order {
+            s.feed(file, Feed::Present);
+        }
+        assert_eq!(held(&s), hold(ID).0, "{order:?}");
+    }
+    // A `.hold` alone is a session too, and a `.lock` stands in once the `.hold` is gone.
+    let mut s = source();
+    s.feed(&hold(ID), Feed::Present);
+    assert_eq!(held(&s), hold(ID).0);
+    s.feed(&lock(ID), Feed::Present);
+    s.feed(&hold(ID), Feed::Gone);
+    assert_eq!(held(&s), lock(ID).0);
+    // A clean exit deletes both.
+    s.feed(&lock(ID), Feed::Gone);
+    assert!(s.sessions().is_empty());
 }
 
 #[test]
@@ -775,6 +812,123 @@ fn a_file_that_starts_over_without_a_link_is_replayed_from_scratch() {
     s.feed(&events(ID), Feed::Gone);
     s.feed(&events(ID), Feed::Appended(read_fixture("waiting.jsonl")));
     assert_eq!(only(&s), fed("waiting.jsonl"));
+}
+
+// Live logs (`fixtures/copilot/live/`, card `p4-live-copilot`, 2026-11-06), redacted.
+
+const LIVE: [&str; 3] = [
+    "tui-a.jsonl",
+    "tui-crash-mid-turn.jsonl",
+    "oneshot-npm.jsonl",
+];
+
+fn read_live(name: &str) -> Vec<u8> {
+    read_fixture(&Path::new("live").join(name).to_string_lossy())
+}
+
+/// Each point where a line by line replay changes the facts: the 1-based line, the activity and the timers after it.
+fn changes(bytes: &[u8]) -> Vec<(usize, Activity, Vec<i64>)> {
+    let mut s = source();
+    s.feed(&lock(ID), Feed::Present);
+    let mut out = Vec::new();
+    let mut last = (Activity::Idle, Vec::new());
+    for (i, line) in bytes.split_inclusive(|&b| b == b'\n').enumerate() {
+        s.feed(&events(ID), Feed::Appended(line.to_vec()));
+        let now = only(&s);
+        assert_eq!(now.format, FormatHealth::Ok, "line {}", i + 1);
+        let state = (now.activity, now.timers);
+        if state != last {
+            out.push((i + 1, state.0, state.1.clone()));
+            last = state;
+        }
+    }
+    out
+}
+
+#[test]
+fn every_live_fixture_is_listed_once() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/copilot/live");
+    let mut names: Vec<String> = fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|n| n != "README.md")
+        .collect();
+    names.sort();
+    let mut listed = LIVE.map(str::to_owned).to_vec();
+    listed.sort();
+    assert_eq!(names, listed);
+}
+
+/// TUI A: a 60 s command behind an approval left 60 s, an `ask_user` question left 2 min 40 s, a command stopped by
+/// Ctrl+C, `/every 2m` with one fire, its cancel, `/exit`.
+#[test]
+fn the_live_tui_session_moves_at_its_turn_events() {
+    const APPROVAL_1: i64 = 1_793_965_985_272; // 11:53:05.272 UTC
+    const ASK: i64 = 1_793_966_160_706; // 11:56:00.706
+    const APPROVAL_3: i64 = 1_793_966_444_665; // 12:00:44.665
+    const FIRST_FIRE: i64 = 1_793_966_621_381; // made 12:01:41.381, every 2 min
+    const SECOND_FIRE: i64 = 1_793_966_741_499; // fired 12:03:41.499 as `schedule-1`
+    let working = |line| (line, Activity::Working, vec![]);
+    let idle = |line| (line, Activity::Idle, vec![]);
+    assert_eq!(
+        changes(&read_live("tui-a.jsonl")),
+        [
+            working(5),
+            (19, waiting(APPROVAL_1), vec![]),
+            working(20),
+            idle(26),
+            working(28),
+            (40, waiting(ASK), vec![]),
+            working(42),
+            idle(47),
+            working(49),
+            (62, waiting(APPROVAL_3), vec![]),
+            working(63),
+            idle(65),
+            (67, Activity::Idle, vec![FIRST_FIRE]),
+            (68, Activity::Working, vec![SECOND_FIRE]),
+            (72, Activity::Idle, vec![SECOND_FIRE]),
+            idle(74),
+        ]
+    );
+}
+
+/// TUI B: a 60 s command, allowed up front, then its `copilot.exe` killed by pid while it ran. The log ends inside the
+/// turn, so the source says working; only the watch's liveness (the `.hold` lost its holder) ends the session.
+#[test]
+fn the_live_crash_ends_inside_its_turn() {
+    assert_eq!(
+        changes(&read_live("tui-crash-mid-turn.jsonl")),
+        [(5, Activity::Working, vec![])]
+    );
+}
+
+/// `copilot -p` through npm's own launcher: a 30 s command allowed up front, two turns that ask for tools, a last one
+/// that asks for none. A dry-run tray held from the prompt to that last turn's end.
+#[test]
+fn the_live_one_shot_works_until_its_last_turn_ends() {
+    assert_eq!(
+        changes(&read_live("oneshot-npm.jsonl")),
+        [(5, Activity::Working, vec![]), (22, Activity::Idle, vec![])]
+    );
+}
+
+#[test]
+fn live_logs_give_the_same_facts_in_any_pieces() {
+    for name in LIVE {
+        let bytes = read_live(name);
+        let whole = only(&fed_in(&bytes, &[]));
+        assert_eq!(
+            only(&fed_in(&bytes, &vec![1; bytes.len()])),
+            whole,
+            "{name}"
+        );
+        assert_eq!(
+            only(&fed_in(&bytes, &vec![4093; bytes.len() / 4093 + 1])),
+            whole,
+            "{name}"
+        );
+    }
 }
 
 // Whole and in pieces.

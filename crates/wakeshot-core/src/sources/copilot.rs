@@ -3,19 +3,23 @@
 //! Owner: `p4-copilot-source`; fixes by `p4-live-copilot`.
 //!
 //! Built from Copilot CLI 1.0.106's own schema (`copilot-sdk/generated/session-events.d.ts`) and strings in its
-//! bundle, read as data (`docs/tasks/p4-copilot-source.md`, Result). Not tested on a real install yet: the live test
-//! `p4-live-copilot` checks every rule marked "not verified" here.
+//! bundle, read as data (`docs/tasks/p4-copilot-source.md`, Result), then checked on a real 1.0.106 install
+//! (`docs/tasks/p4-live-copilot.md`, 2026-11-06). Rules still marked "not verified" were not seen live.
 //!
-//! - A session is a folder `<home>\session-state\<id>\` with an in-use lock file in it. The name is very likely
-//!   `inuse.<pid>.lock` (not verified), so any `inuse.*.lock` counts. Lock files are listed, never opened. The pid in
-//!   the name is not used: whether it names the holder, and whether it beats Restart Manager, is for the live test to
-//!   decide. With no lock left, the session is gone.
+//! - A session is a folder `<home>\session-state\<id>\` with in-use files in it: the process that has the session
+//!   open makes `inuse.<pid>.hold` and `inuse.<pid>.lock`, names both after its own pid, keeps the `.hold` open (the
+//!   `.lock`, a few bytes, is open by nobody), and deletes both at a clean exit; a crash leaves both, until
+//!   the next Copilot start deletes them (all seen live). So the session's liveness names the `.hold` file, the one
+//!   Restart Manager ties to the holder; a `.lock` stands in only while no `.hold` is listed. Both are listed, never
+//!   opened. The holder is the CLI's `copilot.exe`, or `copilot-runtime.exe` for VS Code's Copilot harness (seen
+//!   live), or another host; the watch takes the holder whose pid the name gives, whatever its image. With no in-use
+//!   file left, the session is gone.
 //! - Activity is the last relevant event of `events.jsonl` (`docs/research/other-agent-signals.md`, "GitHub Copilot
 //!   CLI"). Copilot persists no idle event (`session.idle` is ephemeral), so idle is read from the turn's end. Waiting
 //!   for approval never holds (Haik, 2026-11-03), so it is reported as waiting with `remote: false`.
 //! - Scheduled prompts (`/every`, `/after`, the `manage_schedule` tool) are timers. A fire is a `user.message` whose
-//!   `source` starts with `schedule-` (1.0.106's own code tests that prefix); that the rest is the schedule id is not
-//!   verified, so a fire that names no known id moves every interval schedule that was due by then. Interval and cron
+//!   `source` is `schedule-<id>` (seen live: `/every 2m` made schedule 1, and its fire's `source` was `schedule-1`); a
+//!   fire that names no known id moves every interval schedule that was due by then. Interval and cron
 //!   times also move past the newest event time in the file: an event proves the process was alive then, so a fire
 //!   this source failed to see cannot leave a due time in the past.
 //! - The log rotates (1.0.106): the old file becomes `events.<n>.jsonl` and a new `events.jsonl` starts with a
@@ -27,7 +31,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 use serde::de::IgnoredAny;
@@ -43,8 +47,9 @@ use crate::sources::{
 /// What the tooltip names a Copilot session.
 pub const LABEL: &str = "Copilot";
 
-/// The process that runs interactive sessions. SDK apps host theirs in `copilot-runtime.exe` instead (1.0.106 ships
-/// it); whether those write the same lock files is not verified.
+/// The process that runs the CLI's own sessions. VS Code's Copilot harness hosts its sessions in
+/// `copilot-runtime.exe`, with the same in-use files named after that process (seen live); the watch counts such a
+/// holder by the pid in the file name, not by this image.
 pub const IMAGE: &str = "copilot.exe";
 
 /// Each session's event log, in its folder.
@@ -63,6 +68,8 @@ pub const UNREADABLE: &str = "events file";
 const STATE_DIR: &str = "session-state";
 const LOCK_PREFIX: &str = "inuse.";
 const LOCK_SUFFIX: &str = ".lock";
+/// The in-use file the session's process keeps open.
+const HOLD_SUFFIX: &str = ".hold";
 const JOURNAL_LINK: &str = "session.journal_link";
 /// Copilot's built-in tool that asks the user a question; its `user_input.requested` is ephemeral, so the tool's
 /// start is the only trace of the wait.
@@ -85,17 +92,24 @@ const FIRE_SLACK_MS: i64 = 60_000;
 /// time), so it is dropped.
 const SPENT_MS: i64 = 60 * 60 * 1000;
 
-/// Whether a file name in a session folder is an in-use lock file: `inuse.<something>.lock`, case ignored as NTFS
-/// does. Only names pass through here; the file is never opened.
+/// Whether a file name in a session folder is an in-use file: `inuse.<something>.lock` or `inuse.<something>.hold`,
+/// case ignored as NTFS does. Only names pass through here; the file is never opened.
 pub fn is_lock_file_name(name: &str) -> bool {
     let len = name.len();
     len > LOCK_PREFIX.len() + LOCK_SUFFIX.len()
         && name
             .get(..LOCK_PREFIX.len())
             .is_some_and(|p| p.eq_ignore_ascii_case(LOCK_PREFIX))
-        && name
-            .get(len - LOCK_SUFFIX.len()..)
-            .is_some_and(|s| s.eq_ignore_ascii_case(LOCK_SUFFIX))
+        && [LOCK_SUFFIX, HOLD_SUFFIX].iter().any(|suffix| {
+            name.get(len - suffix.len()..)
+                .is_some_and(|s| s.eq_ignore_ascii_case(suffix))
+        })
+}
+
+/// An in-use file that its process keeps open: the one Restart Manager ties to the session's process.
+fn is_hold_file(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case(&HOLD_SUFFIX[1..]))
 }
 
 /// A session folder name as Copilot makes them (UUIDs). Dot folders such as `.session-operation-locks` are not
@@ -109,7 +123,7 @@ fn is_session_id(name: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
 }
 
-/// Copilot CLI's sessions, one per folder in `<home>\session-state` that holds an in-use lock file, each with the
+/// Copilot CLI's sessions, one per folder in `<home>\session-state` that holds an in-use file, each with the
 /// `events.jsonl` in that folder.
 ///
 /// The watch thread is expected to read a `Tail` from its start when it enters `wanted()`, keep its place while it
@@ -232,8 +246,14 @@ impl AgentSource for CopilotSource {
 
 impl Session {
     fn facts(&self, id: &str, zone: &dyn LocalOffset) -> Option<SessionFacts> {
-        // Several locks (a second client on one session) all name the same session; the first stands for them.
-        let lock_file = self.locks.iter().next()?.clone();
+        // Several in-use files (a second client on one session) all name the same session; the first held one stands
+        // for them, since a `.lock` has no holder for Restart Manager to name.
+        let lock_file = self
+            .locks
+            .iter()
+            .find(|path| is_hold_file(path))
+            .or_else(|| self.locks.iter().next())?
+            .clone();
         let replay = &self.log.replay;
         let activity = replay.activity();
         Some(SessionFacts {

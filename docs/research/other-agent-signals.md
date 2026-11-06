@@ -255,6 +255,84 @@ product, no modification. Verified.
   whether Free can use the CLI: **unverified**. The changelog mentions local models in `providers.json`, but
   sign-in may still be required (unverified).
 
+### Phase 4 live test (2026-11-06)
+
+Card `docs/tasks/p4-live-copilot.md`. Copilot CLI 1.0.106 (npm `@github/copilot`), Haik's `gh` login on Copilot
+Free (it works: the CLI takes `gh`'s login itself). Copilot Fusion (the default) picked `gpt-6-luna` each time; 7
+one-line prompts in all, one of them a schedule fire. Every
+session ran at Medium in a pseudo console (`spikes/agent-drive/`), with `agent-watch --source copilot --raw`, a
+change notice logger on `session-state\` and a Restart Manager script at Medium beside it. Redacted logs:
+`crates/wakeshot-core/tests/fixtures/copilot/live/`.
+
+What holds (checked live):
+
+- **In-use files.** At start, before any prompt, the process that opens a session makes the session folder,
+  `inuse.<pid>.hold` (0 bytes) and `inuse.<pid>.lock` (as many bytes as the pid has digits, plus one: very likely
+  the pid as text; content not read), named after its own pid. Restart Manager
+  names that process as the holder of the `.hold`; the `.lock` has no holder. So the earlier guess (`inuse.<pid>
+  .lock`, held) was half right: the name holds the pid, but the held file is the `.hold`. `/exit` writes
+  `session.shutdown`, then deletes both files in the same millisecond. A crash leaves both, with no holder; the next
+  Copilot start (any session) deletes them. The extracted package folder `%LOCALAPPDATA%\copilot\pkg\win32-x64\
+  <version>\` gets the same pair.
+- **Process tree.** VS Code's `copilot` shim comes first on PATH: shim `copilot.exe` > `cmd.exe` > `node.exe` (npm's
+  loader) > `copilot.exe` (`@github\copilot-win32-x64\copilot.exe`, the CLI). The in-use files name the inner
+  `copilot.exe`, and it is the holder. Killing the inner one ended the whole tree within 66 ms (the shim exits with
+  it).
+- **VS Code's Copilot harness** (sessions another card started through VS Code chat, never touched here): the same
+  `session-state` folder, files `inuse.2728.*`, where 2728 is the `copilot-runtime.exe` of Haik's VS Code (elevated;
+  path `...\resources\app\node_modules.asar.unpacked\@github\copilot-sdk-win32-x64\prebuilds\win32-x64\`). Restart
+  Manager asked from a Medium process named it, with its start time; the process list has it too. Their logs follow
+  the same rules (`user.message`, a tool with `permission.requested` and `permission.completed` 47 ms apart,
+  `assistant.turn_end`). This is research rule 8 of `copilot-vscode-signals.md`, now seen live.
+- **Write timing.** Nothing reaches `events.jsonl` until the first prompt; then `session.start` (from the start) and
+  the prompt's first lines come in one write. After that each event lands at once: the watch read lines 0.13 to
+  0.25 s after their `timestamp`, each write with a change notice. Nothing is written while a command runs or an
+  approval waits.
+- **Turn events.** `user.message`, `assistant.turn_start`, `assistant.message` with `toolRequests`, then
+  `tool.execution_start` **before** `permission.requested`; `permission.completed` after the answer;
+  `tool.execution_complete`; an `assistant.turn_end` that tools follow; a last `assistant.message` with no tools and
+  its `assistant.turn_end`. `ask_user`: `tool.execution_start` with `toolName` `ask_user`, then on the answer
+  `human_response.recorded` and `tool.execution_complete`. Many kinds the source skips came along without a format
+  problem (`model.*`, `hook.*`, `session.usage_*`, `instruction.update`, `system.message`, `session.model_change`,
+  `session.auto_mode_resolved`).
+- **Interrupt.** Esc did nothing while a shell command ran (the footer says "ctrl+c interrupt"). One Ctrl+C:
+  `assistant.turn_end`, then `abort` with `reason` `user_initiated`; the TUI stays.
+- **Schedules.** `/every` (alias `/loop`) is experimental: it needs `--experimental` (a flag for one run). `/every 2m
+  <prompt>` made schedule 1 with no run at creation: `session.schedule_created` with `id` 1, `intervalMs` 120000,
+  `recurring` true (no `at`, `cron` or `selfPaced`). It fired 2 min 0.12 s later as a `user.message` with `source`
+  `schedule-1`, so the id follows `schedule-`. `/every` alone opens "Scheduled prompts"; `x` deletes one:
+  `session.schedule_cancelled` with its `id`.
+- **Shutdown.** `session.shutdown` has `shutdownType` `routine` and `totalPremiumRequests` (4 for this TUI: one per
+  prompt or fire).
+
+What the source made of it (before and after the fix):
+
+- Activity and timers: right at every line (replay test `the_live_tui_session_moves_at_its_turn_events`); posts
+  0.13 to 0.24 s after each line: working, waiting since the request's time (approval and `ask_user`), idle after
+  the last turn end and after the abort; the timer at creation, moved to the next run at the fire, dropped at the
+  cancel.
+- **Liveness was wrong**: the source named the `.lock` file, which no process holds, so every live session was
+  `Gone` and never held. Fixed: the source lists `.hold` and `.lock` files and names the `.hold`; the watch counts a
+  Restart Manager holder whose pid the file name gives, whatever its image (so `copilot-runtime.exe` counts), and
+  when Restart Manager fails, only that pid (not the shim or another session's `copilot.exe`). After the fix, at
+  Medium: a new TUI session `alive=Yes` 0.5 s after its files appeared; VS Code's harness sessions `alive=Yes`; the
+  stale 11-03 session `Gone`.
+- **Crash.** The inner `copilot.exe` killed by pid during a 60 s command: working `Gone` posted 61 ms later (the
+  holder's exit wait), so no hold. Its log ends inside the turn.
+- **One-shot through npm's own launcher** (`%APPDATA%\npm\copilot.cmd -p ... -s --trust-folder --allow-tool
+  "shell(Start-Sleep)"`, no shim; tree `cmd.exe` > `node.exe` > `copilot.exe` > `pwsh.exe` for the command): the same
+  files and events as the TUI, with `COPILOT_HOME` on an empty scratch folder (Copilot made `session-state\` and its
+  other files there, and `gh`'s login still worked). Exit 0 after `session.shutdown`; the in-use files were gone.
+- **Through the app.** A dry-run tray (fixed build, at Medium, `COPILOT_HOME` on that folder, the other agents' homes
+  on empty folders): "Holding starts: Copilot" with `dry run: PowerSetRequest SYSTEM` 0.25 s after `user.message`,
+  "Holding ends; held by Copilot" 0.24 s after the last `assistant.turn_end`. On the first run the start came 26.7 s
+  late, at the tray's 30 s tick: `session-state\` did not exist when the tray started, and the watch thread lists a
+  missing folder only at the tick (the timing matches the tick; the cause is inferred, not traced).
+
+Not tested live: rotation (`session.journal_link`; no log grew large enough), sub-agents, `/after`, cron and
+self-paced schedules, `--resume`, VS Code Background sessions (`Code.exe` as holder), two clients on one session
+(`alreadyInUse` in `session.start`), what Copilot does with an empty `COPILOT_HOME` value, `/keep-alive`.
+
 ## Google Gemini CLI
 
 Source: `google-gemini/gemini-cli` main at commit `0ac57c0` (2026-11-02). Paths are under `packages/`. License

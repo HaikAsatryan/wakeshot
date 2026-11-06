@@ -16,8 +16,11 @@
 //! the `-shm`, which a read itself rewrites after the agent crashed.
 //!
 //! An `AnyProcess` session (Codex, Copilot) lives while a process running its image holds its lock file open, as
-//! Restart Manager tells ([`LockOwners`]); that process is then checked by pid and start like any other. If Restart
-//! Manager fails, any live process running the image counts, which can outlive its session (architecture section 7).
+//! Restart Manager tells ([`LockOwners`]); that process is then checked by pid and start like any other. A lock file
+//! whose name gives a pid (Copilot's `inuse.<pid>.hold`: the pid of the process that holds it, seen live
+//! 2026-11-06) also counts that holder whatever its image, since VS Code's Copilot harness holds it as
+//! `copilot-runtime.exe`. If Restart Manager fails, the process the name gives counts while it runs; a name with no
+//! pid (Codex) counts any live process running the image, which can outlive its session (architecture section 7).
 //! An `ImageSince` session lives while the system process list has a process running one of its images that started
 //! early enough; every such process goes to [`Snapshots::live`], so its exit is waited on.
 //!
@@ -436,11 +439,12 @@ struct LockFile<'a> {
     path: &'a Path,
 }
 
-/// `Yes` while a process running the image holds the lock file open; its holders go to `live`. The holders found
-/// are kept in `known` until the lock file changes ([`Slot::forget_owners`], a listing that feeds it) or all of them
-/// are gone, so Restart Manager is asked once per lock file, not on every call. A holder of another image (a virus
-/// scanner, say) does not count. If Restart Manager fails, any live process running the image counts while the
-/// source lists the lock file, and nothing goes to `live`.
+/// `Yes` while a process running the image, or the process the lock file's name gives ([`named_pid`]), holds the lock
+/// file open; its holders go to `live`. The holders found are kept in `known` until the lock file changes
+/// ([`Slot::forget_owners`], a listing that feeds it) or all of them are gone, so Restart Manager is asked once per
+/// lock file, not on every call. Another holder (a virus scanner, say) does not count. If Restart Manager fails: the
+/// process the name gives counts while it is listed, and goes to `live`; with no pid in the name, any live process
+/// running the image counts while the source lists the lock file, and nothing goes to `live`.
 fn any_process(
     liveness: &dyn Liveness,
     owners: &dyn LockOwners,
@@ -470,7 +474,9 @@ fn any_process(
         }
         known.remove(lock.path);
     }
+    let named = named_pid(lock.path);
     let of_image = |e: &ProcessEntry| e.image.eq_ignore_ascii_case(lock.image);
+    let counts = |e: &ProcessEntry| of_image(e) || named == Some(e.pid);
     match owners.holders(lock.path) {
         Ok(holders) => {
             let held: Vec<ProcessRef> = if holders.is_empty() {
@@ -484,7 +490,7 @@ fn any_process(
                     .into_iter()
                     .filter(|h| {
                         list.iter()
-                            .any(|e| e.pid == h.pid && e.start == h.start && of_image(e))
+                            .any(|e| e.pid == h.pid && e.start == h.start && counts(e))
                     })
                     .collect()
             };
@@ -501,17 +507,46 @@ fn any_process(
             problems.insert(Problem::NoLockOwner {
                 image: lock.image,
                 code: e.code,
+                named: named.is_some(),
             });
-            match liveness.list() {
-                Ok(list) if list.iter().any(of_image) => Alive::Yes,
-                Ok(_) => Alive::Gone,
-                Err(_) => {
-                    problems.insert(Problem::LivenessUnknown);
-                    Alive::Unknown
-                }
+            let Ok(list) = liveness.list() else {
+                problems.insert(Problem::LivenessUnknown);
+                return Alive::Unknown;
+            };
+            // A pid in the name is the holder's, so another process of the image (VS Code's `copilot` shim, a
+            // second session) says nothing about this one.
+            if let Some(pid) = named {
+                return match list.iter().find(|e| e.pid == pid) {
+                    Some(e) => {
+                        live.push(ProcessRef {
+                            pid: e.pid,
+                            start: e.start,
+                        });
+                        Alive::Yes
+                    }
+                    None => Alive::Gone,
+                };
+            }
+            if list.iter().any(of_image) {
+                Alive::Yes
+            } else {
+                Alive::Gone
             }
         }
     }
+}
+
+/// The pid a lock file's name gives: its first dot-separated part that is a whole number, such as `52300` in
+/// Copilot's `inuse.52300.hold`. A Codex lock (`<thread uuid>.lock`) gives none.
+fn named_pid(path: &Path) -> Option<u32> {
+    let name = path.file_name()?.to_str()?;
+    name.split('.')
+        .find(|part| {
+            !part.is_empty() && part.len() <= 10 && part.bytes().all(|b| b.is_ascii_digit())
+        })?
+        .parse::<u32>()
+        .ok()
+        .filter(|&pid| pid != 0)
 }
 
 /// `Yes` while `list` has a process running one of `images` (case ignored) that started at or before `since_wall_ms`
@@ -1642,7 +1677,12 @@ impl Slot {
 enum Problem {
     Unreadable(&'static str),
     UnknownValue(&'static str),
-    NoLockOwner { image: &'static str, code: u32 },
+    /// `named`: the lock file's name gives the holder's pid, so that process counts, not every one of the image.
+    NoLockOwner {
+        image: &'static str,
+        code: u32,
+        named: bool,
+    },
     LivenessUnknown,
     Unlisted(Option<i32>),
     Unread(Option<i32>),
@@ -1653,7 +1693,17 @@ impl Problem {
         match self {
             Problem::Unreadable(what) => format!("format problem in {what}"),
             Problem::UnknownValue(field) => format!("unknown value in {field}"),
-            Problem::NoLockOwner { image, code } => format!(
+            Problem::NoLockOwner {
+                code, named: true, ..
+            } => format!(
+                "Restart Manager could not tell which process holds a lock file (error {code}), so the process its \
+                 name gives counts"
+            ),
+            Problem::NoLockOwner {
+                image,
+                code,
+                named: false,
+            } => format!(
                 "Restart Manager could not tell which process holds a lock file (error {code}), so any running \
                  {image} counts"
             ),
@@ -2593,10 +2643,30 @@ mod tests {
         }
     }
 
+    /// A Copilot session as `CopilotSource` reports it: its liveness names the held in-use file.
+    fn copilot_session(lock_file: &Path) -> SessionFacts {
+        SessionFacts {
+            key: SessionKey {
+                source: SourceId::Copilot,
+                id: "0199c0de-0000-4000-8000-000000000001".to_owned(),
+            },
+            liveness: sources::Liveness::AnyProcess {
+                image: "copilot.exe",
+                lock_file: lock_file.to_path_buf(),
+            },
+            label: "Copilot",
+            ..codex_session(lock_file)
+        }
+    }
+
     /// `Agents` over one Codex source whose one session names `lock_file`, with fake holders.
     fn lock_agents(lock_file: &Path) -> (Agents, Arc<MemoryLog>, Shared, Owners) {
-        let source = Shared::new(SourceId::Codex);
-        let session = codex_session(lock_file);
+        lock_agents_for(codex_session(lock_file))
+    }
+
+    /// `Agents` over one source of `session`'s kind with that one session, with fake holders.
+    fn lock_agents_for(session: SessionFacts) -> (Agents, Arc<MemoryLog>, Shared, Owners) {
+        let source = Shared::new(session.key.source);
         source.set(|f| f.sessions = vec![session]);
         let owners = Owners::default();
         let log = Arc::new(MemoryLog::default());
@@ -2813,6 +2883,192 @@ mod tests {
         live.alive.lock().unwrap()[0].1 = Alive::Yes;
         assert_eq!(agents.snapshots(&live, START).events.len(), 1);
         assert_eq!(owners.asked(), 1, "asked once in the three calls");
+    }
+
+    // Copilot's in-use files (`p4-live-copilot`, 2026-11-06): the process that has a session open holds
+    // `inuse.<its pid>.hold`; for VS Code's Copilot harness that is `copilot-runtime.exe`, not `copilot.exe`.
+
+    #[test]
+    fn a_holder_whose_pid_the_lock_name_gives_counts_whatever_its_image() {
+        let lock = PathBuf::from(r"C:\Users\x\.copilot\session-state\s1\inuse.2728.hold");
+        let (mut agents, log, _source, owners) = lock_agents_for(copilot_session(&lock));
+        let live = FakeLiveness::default();
+        let runtime = process(2728);
+        let scanner = process(8);
+        owners.answer(Ok(vec![scanner, runtime]));
+        live.processes.lock().unwrap().extend([
+            entry(scanner, "MsMpEng.exe"),
+            entry(runtime, "copilot-runtime.exe"),
+        ]);
+        live.alive.lock().unwrap().push((runtime, Alive::Yes));
+
+        let snapshots = agents.snapshots(&live, START);
+        assert_eq!(only_alive(&snapshots), Alive::Yes);
+        assert_eq!(
+            snapshots.live,
+            [runtime],
+            "the scanner is not this session's"
+        );
+        assert!(lines(&log).is_empty());
+
+        // The runtime ended and only the scanner holds it: gone.
+        live.alive.lock().unwrap().clear();
+        owners.answer(Ok(vec![scanner]));
+        let snapshots = agents.snapshots(&live, START);
+        assert_eq!(only_alive(&snapshots), Alive::Gone);
+        assert!(snapshots.live.is_empty());
+
+        // A pid the name gives that started at another time is another process: still gone, until the list agrees.
+        agents.on_tick();
+        owners.answer(Ok(vec![runtime]));
+        live.processes.lock().unwrap()[1] = entry(
+            ProcessRef {
+                pid: 2728,
+                start: FileTime(1),
+            },
+            "copilot-runtime.exe",
+        );
+        let snapshots = agents.snapshots(&live, START);
+        assert!(snapshots.events.is_empty() && snapshots.live.is_empty());
+        agents.on_tick();
+        live.processes.lock().unwrap()[1] = entry(runtime, "copilot-runtime.exe");
+        assert_eq!(only_alive(&agents.snapshots(&live, START)), Alive::Yes);
+    }
+
+    #[test]
+    fn a_restart_manager_error_counts_only_the_process_the_lock_name_gives() {
+        let lock = PathBuf::from(r"C:\Users\x\.copilot\session-state\s1\inuse.52300.hold");
+        let (mut agents, log, _source, owners) = lock_agents_for(copilot_session(&lock));
+        let live = FakeLiveness::default();
+        owners.answer(Err(RM_FAILED));
+        // VS Code's `copilot` shim and another session's CLI run; the process the name gives does not.
+        live.processes.lock().unwrap().extend([
+            entry(process(47868), "copilot.exe"),
+            entry(process(9), "copilot.exe"),
+        ]);
+
+        let snapshots = agents.snapshots(&live, START);
+        assert_eq!(only_alive(&snapshots), Alive::Gone);
+        assert!(snapshots.live.is_empty());
+        assert_eq!(
+            lines(&log),
+            [
+                "Copilot CLI: Restart Manager could not tell which process holds a lock file (error 5), so the \
+                 process its name gives counts"
+            ]
+        );
+
+        // It runs, whatever its image: waited on like a holder.
+        live.processes
+            .lock()
+            .unwrap()
+            .push(entry(process(52300), "copilot-runtime.exe"));
+        let snapshots = agents.snapshots(&live, START);
+        assert_eq!(only_alive(&snapshots), Alive::Yes);
+        assert_eq!(snapshots.live, [process(52300)]);
+        assert_eq!(owners.asked(), 2, "nothing is kept from a failed answer");
+
+        *live.list_error.lock().unwrap() = Some(RM_FAILED);
+        let snapshots = agents.snapshots(&live, START);
+        assert_eq!(only_alive(&snapshots), Alive::Unknown);
+    }
+
+    #[test]
+    fn a_lock_name_gives_a_pid_only_as_a_whole_number_part() {
+        for (name, pid) in [
+            ("inuse.52300.hold", Some(52300)),
+            ("INUSE.2728.LOCK", Some(2728)),
+            ("inuse.9.x.hold", Some(9)),
+            ("0199aaaa-0000-7000-8000-000000000001.lock", None),
+            ("t1.lock", None),
+            ("inuse..hold", None),
+            ("inuse.0.hold", None),
+            ("inuse.-1.hold", None),
+            ("inuse.4294967296.hold", None),
+            ("inuse.12345678901.hold", None),
+        ] {
+            let path = Path::new(r"C:\Users\x\.copilot\session-state\s1").join(name);
+            assert_eq!(named_pid(&path), pid, "{name}");
+        }
+    }
+
+    /// The Copilot source on a made-up Copilot home, read through the real listing, tail and Restart Manager, with the
+    /// in-use files as Copilot 1.0.106 makes them: this process keeps `inuse.<its pid>.hold` open and has written
+    /// `inuse.<its pid>.lock`. Its image is not `copilot.exe`, so only the pid in the name makes it the holder.
+    #[test]
+    fn copilot_from_a_held_in_use_file_and_its_events() {
+        use wakeshot_core::sources::copilot::CopilotSource;
+        use wakeshot_core::sources::cron::FixedOffset;
+
+        const ID: &str = "0199c0de-0000-4000-8000-000000000001";
+        let home = TempDir::new("agents-copilot");
+        let me = crate::process::current().unwrap();
+        let hold = home.write(&format!(r"session-state\{ID}\inuse.{}.hold", me.pid), b"");
+        home.write(
+            &format!(r"session-state\{ID}\inuse.{}.lock", me.pid),
+            me.pid.to_string().as_bytes(),
+        );
+        let held = fs::File::open(&hold).unwrap();
+        home.write(
+            &format!(r"session-state\{ID}\events.jsonl"),
+            concat!(
+                r#"{"id":"a","timestamp":"2026-11-06T10:00:00.000Z","parentId":null,"type":"user.message","data":{"content":""}}"#,
+                "\n"
+            )
+            .as_bytes(),
+        );
+        let log = Arc::new(MemoryLog::default());
+        let source = CopilotSource::new(home.path().to_path_buf(), Box::new(FixedOffset(240)));
+        let mut agents = Agents::new(vec![Box::new(source)], log.clone());
+        let live = FakeLiveness::default();
+        live.processes
+            .lock()
+            .unwrap()
+            .push(entry(me, "copilot-runtime.exe"));
+        live.alive.lock().unwrap().push((me, Alive::Yes));
+
+        agents.on_tick();
+        // The tail joins once its session is listed, so a second round reads the log.
+        agents.on_tick();
+        assert_eq!(
+            agents.snapshots(&live, START),
+            Snapshots {
+                events: vec![Event::Sources {
+                    source: SourceId::Copilot,
+                    sessions: vec![(
+                        SessionFacts {
+                            activity: Activity::Working,
+                            ..copilot_session(&hold)
+                        },
+                        Alive::Yes
+                    )],
+                }],
+                live: vec![me],
+            }
+        );
+
+        // A clean exit closes the `.hold` and deletes both files.
+        drop(held);
+        for entry in fs::read_dir(hold.parent().unwrap()).unwrap() {
+            let path = entry.unwrap().path();
+            if path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("inuse.")
+            {
+                fs::remove_file(path).unwrap();
+            }
+        }
+        agents.on_tick();
+        assert_eq!(
+            agents.snapshots(&live, START).events,
+            [Event::Sources {
+                source: SourceId::Copilot,
+                sessions: vec![],
+            }]
+        );
+        assert!(lines(&log).is_empty());
     }
 
     /// The Codex source on a made-up Codex home, read through the real listing, finder, tail and Restart Manager; this
