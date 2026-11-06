@@ -42,6 +42,19 @@ the way an update would, and the installed app holds the PC for each agent and l
 6. Result: a table (agent, hold start delay, hold end delay, pass or fail), the build hash, anything that failed.
    A failing agent is listed, not fixed here.
 
+## Part 2 changes (orchestrator, 2026-11-06 21:56)
+
+- The v1 agent list is now: Claude Code, Codex CLI, Copilot CLI, Copilot in VS Code (Copilot harness chats only),
+  OpenCode 2.x, Cursor (editor only). Antigravity and VS Code's Local chats are out of v1 (`p4-vscode-local-off`);
+  check instead that the tray adds no Antigravity folder and does not hold for a Local chat.
+- Code changed since Part 1, so deliverables 1 and 2 run again first.
+- The Cursor turn uses `p4-live-cursor`'s fixed "Steps for Haik" (the Stop button, not Esc), including the chat
+  deleted while it runs (its open item). Set it up, then stop early and reply with exact short steps; the
+  orchestrator relays them and resumes you.
+- This orchestrator is itself a Claude Code session that works the whole time, so the new tray holds for it from
+  the start. Judge each agent's hold by the tray log lines for that agent and session, never by "no request at all";
+  name the orchestrator's own hold in the Result.
+
 ## Rules
 
 - Never run git, not even read-only (`git status`, `git diff`, `git --version`).
