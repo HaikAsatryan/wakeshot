@@ -116,12 +116,16 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-claude-transcript` | no | `p4-claude-status`, `p4-cron`, `p4-claude-live-shapes` | done (22:35): 46 tests; no contract change |
 | `p4-copilot-source` | no | `p4-cron` | done 2026-11-06 (schema of 1.0.106, not tested live; 42 tests) |
 | `p4-copilot-vscode-research` | no | none | done 2026-11-06: a partly reliable signal, medium confidence (`research/copilot-vscode-signals.md`); a source card follows, after a contracts change run alone |
-| `p4-opencode-source` | no | Part B after `p4-contracts-r2` | Part A done 2026-11-06 (`research/opencode-signals.md`); Part B (2.x only: 1.x needs the `message` table, outside Haik's yes) running (2026-11-06 ~16:25) |
+| `p4-opencode-source` | no | Part B after `p4-contracts-r2` | Part A done 2026-11-06 (`research/opencode-signals.md`); Part B done (2026-11-06 ~17:55, 1c58f43): 2.x only, 14 + 8 tests, the table test (caught a planted `JOIN message`), a log leak test; a VFS shim so a read never creates `-wal` or `-shm`; minimum SQLite 3.22.0; 1.x question for Haik (default no); review running (`docs/reviews/p4-opencode-db-read.md`) |
 | `p4-vscode-source` | no | `p4-contracts-r2` | done (2026-11-06 ~17:45, 5869c5c): 31 tests; `ImageSince` on `Code.exe` with the newest send time; label "Copilot in VS Code"; Insiders read, portable not (worker calls, for Haik's review); not live yet |
 | `p4-contracts-r3` | no | `p4-contracts-r2`, the hooks security review and its fixes; runs alone among Rust cards | ready once the review fixes pass; starts when the running Rust cards drain |
 | `p4-cursor-source` | only if the editor puts the payload on the command line (design Question 4) | `p4-contracts-r3`, the hooks review verify | card written 2026-11-06 |
 | `p4-agent-hooks-install` | no | `p4-contracts-r3`, the hooks review verify | card written 2026-11-06 |
 | `p4-antigravity-source` | only if its payload is on the command line | `p4-cursor-source`, `p4-agent-hooks-install` | card written 2026-11-06 |
+| `p4-live-vscode` | no | `p4-vscode-source`, `p4-live-harness`; live lane after `p4-live-copilot` | card written 2026-11-06 |
+| `p4-live-opencode` | no | `p4-opencode-source`, the OpenCode review fixes; live lane after `p4-live-vscode` | card written 2026-11-06 |
+| `p4-live-cursor` | only if the payload check finds the command line | `p4-cursor-source`, `p4-agent-hooks-install`, the hooks code review fixes; live lane after `p4-live-opencode` | card written 2026-11-06 |
+| `p4-live-antigravity` | only if its payload is on the command line | `p4-antigravity-source`, `p4-live-cursor` | card written 2026-11-06 |
 | `p4-cursor-gemini-research` | no | none | done 2026-11-06 (`research/cursor-gemini-signals.md`): Cursor big, Gemini CLI enterprise only since 2026-06-18; hooks question for Haik |
 | `p4-watch-data` | no | `p4-hold-files`, `p4-watch-reads` | done (21:12): 19 tests |
 | `p4-watch-agents` | no | `p4-watch-reads` | done (22:43): 19 tests; API changes for `p4-watch-thread` in its Result |

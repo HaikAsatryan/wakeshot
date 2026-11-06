@@ -1,7 +1,8 @@
 # Live test: Copilot CLI (with Haik)
 
-Phase: 4. Status: ready once `p4-codex-source` and `p4-copilot-source` are done (back in v1, Haik 2026-11-06; see "Round 2" at the end). Needs Haik: yes, about 20 minutes at the laptop: install or sign in to Copilot CLI with his
-own account, then type the numbered steps the worker gives. Agent: `wakeshot-worker`. Size: about 100K tokens.
+Phase: 4. Status: ready once `p4-live-codex` is done (back in v1, Haik 2026-11-06; see "Round 2" and "Round 3" at the
+end; Round 3 wins where they differ). Needs Haik: no (Round 3: agents run every step). Agent: `wakeshot-worker`.
+Size: about 130K tokens.
 Runs after: `p4-live-codex` (both may fix `lockowner.rs` and `watch/agents.rs`). Parallel with: code cards of any
 track that own none of the files below. Never at the same time as another live card or any card that needs Haik's
 hands or the screen.
@@ -92,3 +93,26 @@ Written by the orchestrator. Haik, 2026-11-06: Codex CLI and Copilot CLI ship in
 - From `p4-copilot-vscode-research` (2026-11-06): VS Code's "Copilot" harness and Background sessions write the same
   `session-state\<id>\events.jsonl` but run as `copilot-runtime.exe` or `Code.exe`; an `inuse.<pid>.hold` file was
   seen next to `inuse.<pid>.lock`. Check both on the real install.
+
+## Round 3: agents run it, no Haik (2026-11-06)
+
+Written by the orchestrator. This replaces "Needs Haik" and every "Haik types" step. Order: after `p4-live-codex`.
+
+- `p4-live-harness` installed Copilot CLI 1.0.106 for Haik's user (npm); it uses his `gh` login on Copilot Free
+  (`copilot -p` answered, no token passed). Read its Result: the runbook, the driver `spikes/agent-drive/`, and
+  `agent-watch.rs --source copilot`.
+- You run every session step yourself with the driver, at Medium through `explorer.exe`: a working turn (a command
+  that runs about 60 s), a permission prompt left 1 minute then approved, an `ask_user` question, Esc during a turn, a
+  schedule if cheap, a clean exit, and a crash: kill by PID a `copilot.exe` that you started. `copilot -p` for the
+  cheap checks, the TUI where a step needs it.
+- VS Code's `copilot` shim comes first on PATH and stays as a parent: shim `copilot.exe` > `cmd.exe` > `node.exe` >
+  `copilot.exe` (the CLI), and the in-use lock is named after the inner `copilot.exe` pid (`p4-live-harness`). Fix
+  the `AnyProcess` image fallback to match the lock holder or the full path, not the image name alone, with a test.
+  Also run the CLI by its npm path once, without the shim.
+- VS Code's Copilot harness and Background sessions (`copilot-runtime.exe`, `Code.exe` owners; `inuse.<pid>.hold`):
+  check them only if one starts from the command line; else mark "not tested live" (the `p4-live-vscode` card tests
+  VS Code's own chat files).
+- The "Rules for every live card of the bigger v1" in `docs/tasks/p4-live-vscode.md` apply (minimum tokens; Copilot
+  Free has a monthly limit, so count prompts).
+- Owns this round: the Copilot line in `tray_mode.rs` and `agent-watch.rs`, and the files in this card's
+  Deliverables.
