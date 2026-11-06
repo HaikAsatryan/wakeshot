@@ -426,3 +426,70 @@ was trusted. The screen was locked from 15:57:50 to 16:08:20, so no window lost 
 - Each `code chat` brings its window to the front, and a file opened from Explorer goes to the last active VS Code
   window: one of Haik's files opened in the test window. A live test beside a person must expect that.
 - Redacted copies: `crates/wakeshot-core/tests/fixtures/vscode/live/`.
+
+## Stop, approve and window close live test (2026-11-06)
+
+Card `p4-live-vscode-stop`, for Haik's "No guessing" rule (`docs/product.md`): is the end of each case seen exactly?
+VS Code 1.145.1, built-in Copilot extension 0.73.0, Copilot Free, the test laptop, 19:27 to 21:03 local time (UTC+4).
+
+**How it ran.** My own window inside Haik's elevated VS Code (a Medium `code` cannot join it): `code
+--extensionDevelopmentPath=<scratch extension> <test folder>`, an Extension Development Host window, so nothing was
+installed and the extension ran only there. It ran, from step files, the same commands the buttons run (read in the
+installed bundle `workbench.desktop.main.js`): `workbench.action.chat.cancel` is the Stop button (menu
+`ChatExecute`), calling `chatService.cancelCurrentRequestForSession`; `workbench.action.chat.acceptTool` presses the
+confirmation's primary button (Allow, one call); `workbench.action.chat.skipTool` is Skip;
+`workbench.action.closeWindow` is the window's close. Chats were opened with `workbench.action.chat.newLocalChat` and
+`workbench.action.chat.openNewSessionSidebar.agent-host-copilotcli`, prompts sent with `workbench.action.chat.open`
+and a query. No key, click or UI automation from my side. Readers: `agent-watch --source copilot,vscode` at Medium
+and a structure-only monitor (chat file kinds and `modelState`, Copilot event types, in-use file names, process
+images). Times below run from the command to the `agent-watch` post. 19 one-line prompts. The close of a window
+with a Local chat in progress asks "A session is in progress. Are you sure you want to close the window?"; Haik
+clicked Yes there (the dialog skips only under `--extensionTestsPath`, a mode that kills the whole VS Code process
+when its test ends, so not used).
+
+| Case | Copilot harness | Local |
+|---|---|---|
+| Stop during `sleep 60` (3 runs each) | `abort` (`reason` `user_initiated`), then `assistant.turn_end`, 34 to 58 ms after the command; idle posted 0.10 to 0.19 s after it. The command (`pwsh` under `copilot-runtime.exe`) is ended. **Exact** | The request is saved as Cancelled (`modelState` 2 with `completedAt`) at the window's next save, 39.5 to 51.6 s after the Stop; idle posted 28 to 54 ms after that save. The terminal is closed, so the command ends. **Exact, up to a minute late** |
+| Approval left 1 minute, then Allow | `permission.requested` posts waiting; `permission.completed` 10 ms after Allow posts working; idle at `assistant.turn_end`. **Exact** | NeedsInput (4) at a save, then Pending (0), then Complete (1), each at a save. **Exact, up to a minute late** |
+| Approval left 1 minute, then Skip | `permission.completed`, `tool.execution_complete` with `success` false, working until the model's short reply ends the turn. **Exact** | NeedsInput, then Complete at the next save. **Exact, up to a minute late** |
+| Window closed while a turn works | No dialog (the close veto asks only at quit for agent host chats). The agent host keeps the turn: the command ran to its end and `assistant.turn_end` came 51 s after the close; idle posted 79 ms later. **Exact** (the agent really worked on) | The last save before the close said Pending (20:51:34.856, request sent 20:47:37.119); Yes at 20:51:57.6, the window and its terminal ended at 57.8, and **nothing was written to the chat log** (only `chatEditingSessions\<id>\state.json` and the workspace `state.vscdb`, which rule 9 does not read). Opening the chat again in a new window and closing it wrote nothing either. `agent-watch` kept it working (`since Code.exe alive=Yes`): it holds until every VS Code started before the send has ended. **Not exact: a blocker** |
+
+**Also seen:**
+
+- **A Local turn does not stay working for a long command.** The terminal tool stops waiting after 5 minutes with
+  no output (`chat.tools.terminal.idleSilenceTimeoutMs`, restarted by any output; seen with `sleep 1800`: the tool
+  returned exactly 5 min after the command started) and, here, after about 2 minutes with output (`ping -n 1800`;
+  `elapsedMs` 146767; most likely the `timeout` the model passes, enforced by
+  `chat.tools.terminal.enforceTimeoutFromModel`;
+  which one was not seen). The model then answers, the turn is saved done, and the command runs on in the terminal
+  with nothing on disk saying so. So Wakeshot ends the hold while that command still runs: the same gap as the
+  background terminals above, and not a guess (the agent's turn did end). A later tool call in the same terminal
+  stops the old command (exit 1). The harness ran `sleep 60` to its end; longer harness commands were not tried.
+- **Local terminal calls ask every time on this PC.** VS Code's default auto approve rules (`sleep` among them) apply
+  only after their one-time warning is accepted (`chat.tools.terminal.autoApprove.warningAccepted`, set only by the
+  "enable" choice and its dialog). The primary Allow approves the one call and stores nothing. In the harness VS
+  Code approved `sleep` itself 5 to 12 ms after the runtime asked, and `ping` waited.
+- **No save at a Stop.** The Local file is not written when Stop is pressed; the Cancelled state waits for the next
+  60 s save (or a blur: one Pending reached the disk at a blur).
+- **Pre-warmed harness sessions.** Opening a window made two `session-state` folders with in-use files of
+  `copilot-runtime.exe` and no turn; one was released when the first harness chat began, the other 20 minutes
+  later. They read idle and hold nothing.
+- **Event times are UTC** in the harness `events.jsonl`, as in the CLI's.
+- **A minimized window can keep the foreground.** My window, minimized right after it opened, stayed the foreground
+  window until Haik clicked elsewhere, so a key typed meanwhile would have gone to it. A live test beside a person
+  should expect that.
+- Redacted copies: `crates/wakeshot-core/tests/fixtures/vscode/live/` (`stop-three-then-approve.jsonl`,
+  `deny-after-wait.jsonl`, `idle-silence-end.jsonl`, `close-while-working.jsonl` and
+  `harness/stop-approve-deny-close.jsonl`).
+
+**Local close: no exact signal found.** VS Code saves the chat log on its 60 s beat and when the model is disposed,
+but it does not cancel the running request first, and a log write with no change appends nothing; so the last state
+on disk stays Pending. The one file written at the close, `chatEditingSessions\<id>\state.json`, is the edit
+snapshot store: `ChatEditingSession.storeState` runs at the chat's dispose (`chatEditingServiceImpl.ts:91-95`) and
+at every storage flush for sessions marked global (lines 111-126, `startOrContinueGlobalEditingSession`). Here it was
+first written at the chat's first save (20:25:18.626, the log 5 ms before), so it is written while a turn works too
+(which chats are global was not checked); its time cannot tell a close from a live turn. The research claim that a
+reload heals the request to Cancelled on disk (`chatModel.ts:3432-3435`) was not seen: the reopened chat wrote
+nothing in 4.5 minutes nor at its window's close. Rule 7 still drops the leftover once VS Code starts anew. The same
+is expected for a Reload Window or a folder change mid-turn (same dispose path; not run). The leftover test chat was
+deleted after the fixture was taken, so no later dry-run tray on this PC holds on it.

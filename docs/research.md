@@ -5887,3 +5887,31 @@ interactive through `agent-drive`). Details and times: `agent-hooks.md`, "Phase 
   12 editor runs; all 6 prompts went through and Haik saw nothing. Verified live.
 - Not verified: an `error` turn, a chat deleted while it runs (code: `triggerStopHook` returns when the chat's data is
   gone), the "Cursor Agents" window, the CLI with a user `hooks.json` that opens its gate.
+
+## VS Code Stop, approve and close live test
+
+Card `p4-live-vscode-stop`, 2026-11-06. How checked: VS Code 1.145.1 with Copilot Free on the test laptop, in the
+card's own Extension Development Host window inside Haik's elevated VS Code; a scratch extension (not installed) ran
+the commands the buttons run (`workbench.action.chat.cancel`, `acceptTool`, `skipTool`, `closeWindow`, names and bodies
+read in the installed `workbench.desktop.main.js`); `agent-watch --source copilot,vscode` at Medium and a
+structure-only monitor timed each step. Details: `docs/research/copilot-vscode-signals.md`, "Stop, approve and window
+close live test (2026-11-06)".
+
+- **Copilot harness Stop writes `abort`** (`reason` `user_initiated`) and `assistant.turn_end` within 60 ms, and ends
+  the command. **Verified** live, 3 runs; idle posted 0.10 to 0.19 s after the Stop.
+- **Local Stop is saved as Cancelled** (`modelState` 2 with `completedAt`) at the window's next save, not at the
+  Stop. **Verified** live, 3 runs, 39.5 to 51.6 s after the Stop.
+- **Approve and Skip end exactly** in both kinds (harness `permission.requested` and `.completed`; Local NeedsInput,
+  then Pending or done at the next save). **Verified** live after waits of about 1 minute.
+- **Closing a window does not stop a Copilot harness turn**: no dialog, the agent host runs it to its end and writes
+  `assistant.turn_end`. **Verified** live.
+- **A Local chat closed while it works stays Pending on disk**: the window close (after Yes in "A session is in
+  progress...") wrote nothing to the chat log, nor did opening that chat again; Wakeshot keeps it working until every
+  VS Code started before the send has ended. **Verified** live (one run); no exact signal found, so this case is a
+  blocker under "No guessing".
+- **A Local turn ends while a long command still runs**: the terminal tool stops waiting after 5 minutes with no
+  output (`chat.tools.terminal.idleSilenceTimeoutMs`) and, here, after about 2 minutes with output (the model's
+  `timeout`, most likely; **not verified** which). **Verified** live: the turn was saved done while `sleep` or `ping`
+  went on.
+- **Local terminal calls ask for Allow every time** until the auto approve warning is accepted once
+  (`chat.tools.terminal.autoApprove.warningAccepted`). **Verified** in the bundle and live.

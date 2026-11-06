@@ -931,6 +931,91 @@ fn live_logs_give_the_same_facts_in_any_pieces() {
     }
 }
 
+// VS Code's Copilot harness (`fixtures/vscode/live/harness/`, card `p4-live-vscode-stop`, 2026-11-06): the same
+// event log, written by VS Code's `copilot-runtime.exe`, with kinds the CLI's logs did not have (hooks, `model.*`).
+
+const HARNESS: [&str; 1] = ["stop-approve-deny-close.jsonl"];
+
+fn harness_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/vscode/live/harness")
+}
+
+fn read_harness(name: &str) -> Vec<u8> {
+    let path = harness_dir().join(name);
+    fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+}
+
+#[test]
+fn every_harness_fixture_is_listed_once() {
+    let mut names: Vec<String> = fs::read_dir(harness_dir())
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    let mut listed = HARNESS.map(str::to_owned).to_vec();
+    listed.sort();
+    assert_eq!(names, listed);
+}
+
+/// One harness chat: three Stops while `sleep 60` ran, an approval left 61 s, a Skip after 60 s, then a turn whose
+/// window was closed while it ran. VS Code approves `sleep` itself 12 ms after asking, so each command start passes
+/// through a waiting that short. Every Stop ends the turn at its `abort`, and the closed window's turn at its own end.
+#[test]
+fn the_live_harness_chat_ends_at_each_stop_and_at_the_real_end() {
+    let working = |line| (line, Activity::Working, vec![]);
+    let idle = |line| (line, Activity::Idle, vec![]);
+    let asked = |line, since| (line, waiting(since), vec![]);
+    assert_eq!(
+        changes(&read_harness("stop-approve-deny-close.jsonl")),
+        [
+            working(9),
+            asked(17, 1_793_978_935_501), // 15:28:55.501 UTC
+            working(18),
+            idle(19), // Stop 1: `abort`
+            working(27),
+            asked(42, 1_793_978_980_857),
+            working(43),
+            idle(44), // Stop 2
+            working(51),
+            asked(77, 1_793_979_023_284),
+            working(78),
+            idle(79), // Stop 3
+            working(86),
+            asked(95, 1_793_979_101_072), // `ping`, left 61 s
+            working(102),
+            asked(113, 1_793_979_193_283), // the chat's rename, approved by VS Code
+            working(114),
+            idle(124),
+            working(133),
+            asked(148, 1_793_979_227_097), // `ping`, then Skip
+            working(149),
+            idle(155),
+            working(163),
+            asked(178, 1_793_979_335_963),
+            working(179),
+            idle(187), // the window was closed while this command ran; the turn ran on to its end
+        ]
+    );
+}
+
+#[test]
+fn the_live_harness_log_gives_the_same_facts_in_any_pieces() {
+    for name in HARNESS {
+        let bytes = read_harness(name);
+        let whole = only(&fed_in(&bytes, &[]));
+        assert_eq!(
+            only(&fed_in(&bytes, &vec![1; bytes.len()])),
+            whole,
+            "{name}"
+        );
+        assert_eq!(
+            only(&fed_in(&bytes, &vec![4093; bytes.len() / 4093 + 1])),
+            whole,
+            "{name}"
+        );
+    }
+}
+
 // Whole and in pieces.
 
 #[test]

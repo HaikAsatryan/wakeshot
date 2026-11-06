@@ -996,6 +996,60 @@ fn live_expected() -> Vec<LiveCase> {
             vec![(1, Activity::Idle)],
             Some(1_793_966_873_027),
         ),
+        // `p4-live-vscode-stop`, 19:37 to 19:48 local: three turns stopped with the Stop command while `sleep 60`
+        // ran, then a `ping` allowed after a minute's wait, then a turn with no tool call. Each Stop is saved as
+        // Cancelled (2) with `completedAt` at the window's next save, 40 to 52 s after it.
+        (
+            "stop-three-then-approve.jsonl",
+            vec![
+                (1, WAITING),
+                (2, Activity::Working),
+                (7, Activity::Idle),
+                (10, Activity::Working),
+                (14, Activity::Idle),
+                (17, Activity::Working),
+                (21, Activity::Idle),
+                (24, WAITING),
+                (25, Activity::Working),
+                (29, Activity::Idle),
+            ],
+            Some(1_793_980_097_552),
+        ),
+        // 19:50:50: a `ping` left waiting 73 s, then Skip; the model's short reply ended the turn.
+        (
+            "deny-after-wait.jsonl",
+            vec![(1, WAITING), (4, Activity::Idle)],
+            Some(1_793_980_250_220),
+        ),
+        // 19:54:15: `sleep 1800`; with no output for 5 minutes the terminal tool stopped waiting, the model answered
+        // and the turn was saved done while the command still ran.
+        (
+            "idle-silence-end.jsonl",
+            vec![(1, Activity::Working), (5, Activity::Idle)],
+            Some(1_793_980_455_947),
+        ),
+        // 20:24 to 20:51: six turns in one chat (pings; one stopped), the last one, sent 20:47:37.119, still running
+        // when the window was closed at 20:51:57. VS Code wrote nothing at the close, nor when the chat was opened
+        // again, so the file ends Pending: only a VS Code started after the send (rule 7) ends it.
+        (
+            "close-while-working.jsonl",
+            vec![
+                (1, Activity::Working),
+                (4, Activity::Idle),
+                (11, Activity::Working),
+                (14, Activity::Idle),
+                (21, Activity::Working),
+                (24, Activity::Idle),
+                (31, Activity::Working),
+                (35, Activity::Idle),
+                (38, Activity::Working),
+                (44, WAITING),
+                (50, Activity::Working),
+                (88, Activity::Idle),
+                (95, Activity::Working),
+            ],
+            Some(1_793_983_657_119),
+        ),
     ]
 }
 

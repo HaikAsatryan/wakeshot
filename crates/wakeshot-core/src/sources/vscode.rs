@@ -3,8 +3,9 @@
 //!
 //! Owner: `p4-vscode-source`; fixes by the VS Code live card.
 //!
-//! Built from VS Code 1.145.1's own code, read as data (`docs/tasks/p4-vscode-source.md`, Log). Not tested on a real
-//! chat yet: the live card checks every rule marked "not verified" here.
+//! Built from VS Code 1.145.1's own code, read as data (`docs/tasks/p4-vscode-source.md`, Log), then checked on real
+//! chats (`docs/tasks/p4-live-vscode.md`, `docs/tasks/p4-live-vscode-stop.md`). Rules still marked "not verified"
+//! were not seen live.
 //!
 //! - Each chat is one operation log: `<User>\workspaceStorage\<workspace>\chatSessions\<session id>.jsonl`, or
 //!   `<User>\globalStorage\emptyWindowChatSessions\<session id>.jsonl` for a window with no folder (every profile uses
@@ -24,8 +25,10 @@
 //!   retry from an error card keeps the first send time) or that has no usable time counts while any process of the
 //!   build runs.
 //! - A line that does not read, or a file with no Initial line, asks for one retry, then is `Unreadable`.
-//! - Not in the file (research): a background terminal still running after its tool returned. The file is written
-//!   about once a minute, so work shows up to a minute late and ends up to a minute late (not verified live).
+//! - Not in the file: a terminal command still running after its tool returned, which the terminal tool does after 5
+//!   minutes with no output or after about 2 minutes (seen live). Each window saves about once a minute, or when it
+//!   loses focus, so work shows up to a minute late and ends up to a minute late: a Stop is saved as Cancelled at
+//!   the next save (seen live, 40 to 52 s after it).
 
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
