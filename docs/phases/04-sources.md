@@ -126,6 +126,7 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-live-opencode` | no | `p4-opencode-source`, the OpenCode review fixes; live lane after `p4-live-vscode` | card written 2026-11-06 |
 | `p4-live-cursor` | only if the payload check finds the command line | `p4-cursor-source`, `p4-agent-hooks-install`, the hooks code review fixes; live lane after `p4-live-opencode` | card written 2026-11-06 |
 | `p4-live-antigravity` | only if its payload is on the command line | `p4-antigravity-source`, `p4-live-cursor` | card written 2026-11-06 |
+| `p4-core-linux-tests` | no | none | running (2026-11-06 ~19:55): CI `core-linux` red since fb0ebce |
 | `p4-cursor-gemini-research` | no | none | done 2026-11-06 (`research/cursor-gemini-signals.md`): Cursor big, Gemini CLI enterprise only since 2026-06-18; hooks question for Haik |
 | `p4-watch-data` | no | `p4-hold-files`, `p4-watch-reads` | done (21:12): 19 tests |
 | `p4-watch-agents` | no | `p4-watch-reads` | done (22:43): 19 tests; API changes for `p4-watch-thread` in its Result |
@@ -413,3 +414,10 @@ limit; Copilot waiting does not hold. The cards build these.
   minor fixes opened nothing new. Left, bounded: leftover files after a crash still get three reads per 30 s tick;
   `p4-live-opencode` runs that case. The OpenCode database read review has passed. `p4-live-opencode` starts when a
   build slot frees (four building now).
+- 2026-11-06 ~19:55: found at the orchestrator's CI check: CI's `core-linux` job has failed since fb0ebce (the last two
+  pushes of the session before this one, and 98c8795): 15 of 22 `codex_source.rs` tests hard-code Windows path
+  strings, which fail where `Path::join` uses `/`; cargo stops at the first failing test binary, so later core test
+  files never ran on Linux. The Windows jobs pass. `CLAUDE.md` "Checks" has no Linux core run, so local checks could
+  not catch it. Fix card `p4-core-linux-tests` started (owns the Codex and OpenCode test files; tries a Rust toolchain
+  in WSL for Haik's user, no sudo; lists other failing files). Orchestrator decision: it runs as a fifth Rust card,
+  since it builds only the core and CI is red. The running cards were told the path rule.
