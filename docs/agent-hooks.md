@@ -295,6 +295,32 @@ The notice, once, when Wakeshot adds the folder (`Notice::HooksAdded { agent: "C
   are Wakeshot's own forms (above); anyone of the same user can run them, which gives no more than deleting the
   folder or writing a state file by hand.
 
+**Built** (`p4-agent-hooks-install`, 2026-11-06): "Adding" and "Removing" in
+`crates/wakeshot-windows/src/agent_hooks.rs`, with these choices where the text above leaves room:
+
+- Entry points: `at_start` (the tray, through `app::startup::add_agent_hooks`, on a thread of its own, which posts
+  `Event::HooksAdded` per folder added; its call in `tray_mode::serve` comes with `p4-live-cursor`), `on_uninstall`
+  (from `RealHookEnv::remove_agent_hooks`), `remove_command` (for the CLI's `hook <agent> remove`, in `hook.rs`).
+  Antigravity adds one entry to `AGENTS`: its folders, fixed files, a `present` check (`agy.exe`) and a `contents`
+  function that refuses a path outside its allow list.
+- "Installed": the tray exe's folder is `%LocalAppData%\HaikAsatryan.Wakeshot\current` (ASCII case ignored); the hook
+  files name `wakeshot.exe` in it, and nothing is added when that file is missing.
+- A fixed file counts as Wakeshot's when it hashes to the marker's value or holds what this version writes, so a stop
+  between two writes of a rewrite (files first, the marker last, each with `store::write_atomic`) never turns the
+  folder into "changed by someone". A `write_atomic` temp file of a fixed name is a leftover, deleted, not an extra.
+- A staging folder also counts as Wakeshot's when a file holds only the start of this version's bytes, or the marker
+  is missing (a stop during the write).
+- The reparse check reads each part with `symlink_metadata` and refuses any reparse point (junctions, links, cloud
+  files); files are opened with `FILE_FLAG_OPEN_REPARSE_POINT` and refused if they turn out to be one.
+- Uninstall: the marker stays while a fixed file stays; empty fixed subfolders go anyway. The rename to
+  `.wakeshot-removed` never replaces a folder of that name. A file held open without delete sharing fails the delete
+  (32), and the folder's rename then fails too (5): one log line says to delete it by hand (tested).
+- An elevated uninstall starts a copy only for an agent whose `local` folder exists, and logs each copy's outcome; the
+  copy's own lines go to the `cli` log.
+- A record that does not read as version 1 (another version, a value but `added` or `removed`, not JSON) adds nothing
+  and is never rewritten: delete it to start over.
+- Not built: "Source turned off" (no version drops a source yet).
+
 ## Failure cases
 
 | Case | What happens |

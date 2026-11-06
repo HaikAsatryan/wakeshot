@@ -4,7 +4,8 @@
 //!
 //! `tray_mode::run` calls these on the loop (main) thread, in this order: `Boot::new`, `take_tray`, `open_log`,
 //! `install_panic_hook`, `startup_restore`, `try_settings`, `read_config`, `remove_stale_temps`; after the window and
-//! the other threads are up, `started`, then `locked_at_start`. The mutex locks are not `Send` (only the thread that
+//! the other threads are up, `started`, then `locked_at_start`. `add_agent_hooks` goes once the window's sink exists;
+//! its call in `tray_mode` comes with the source's registration (`p4-live-cursor`). The mutex locks are not `Send` (only the thread that
 //! took a mutex can release it), so the loop thread takes them and keeps them until the tray exits.
 //!
 //! A corrupt journal left by restore mode, the guard or a hook needs no function here: the executor's `startup` finds
@@ -13,6 +14,7 @@
 
 use std::io::ErrorKind;
 use std::os::windows::fs::MetadataExt;
+use std::path::Path;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -24,11 +26,13 @@ use wakeshot_core::process::{FileTime, Lookup, ProcessRef};
 use wakeshot_core::settings::JournalOwner;
 
 use crate::WinError;
+use crate::agent_hooks;
 use crate::log::{Level, Log, LogWriter, Proc};
 use crate::power::executor::{PowerExecutor, Startup};
 use crate::power::journal::{FileNet, GuardControl};
 use crate::process::{self, Liveness};
 use crate::session;
+use crate::sink::EventSink;
 use crate::store::{self, DataDir, DataFile, HeldMutex, NamedMutex, Names};
 
 const AREA: &str = "startup";
@@ -391,6 +395,87 @@ fn locked_from(state: Option<bool>, log: &dyn Log) -> bool {
     })
 }
 
+/// Adds or keeps Wakeshot's hook folders in the agents found (`agent_hooks::at_start`), once per start, and posts
+/// `Event::HooksAdded` for each folder it added (`docs/agent-hooks.md`, "Adding"). Call it once the loop window and
+/// its sink exist. The work runs on a thread of its own, so the loop never waits on another app's folders; a tray
+/// that quits during it leaves at most a staging folder, which the next start removes. A dry run, a tray not run from
+/// Velopack's `current` folder (a dev build, a Store build) and a tray above Medium touch no agent's folder. `None`:
+/// nothing to do, or the thread did not start (logged).
+pub fn add_agent_hooks(
+    boot: &Boot,
+    sink: Arc<dyn EventSink>,
+    log: Arc<dyn Log>,
+) -> Option<thread::JoinHandle<()>> {
+    if boot.dry_run {
+        return None;
+    }
+    let record = boot.dir.root().join(agent_hooks::RECORD);
+    let thread_log = Arc::clone(&log);
+    let spawned = thread::Builder::new()
+        .name("agent-hooks".to_owned())
+        .spawn(move || {
+            let log = &*thread_log;
+            let tray = std::env::current_exe().map_err(|e| WinError {
+                call: "GetModuleFileNameW",
+                code: e.raw_os_error().map_or(u32::MAX, |code| code as u32),
+            });
+            match tray.and_then(|tray| Ok((tray, agent_hooks::Folders::real()?))) {
+                Ok((tray, folders)) => agent_hooks_for(
+                    &tray,
+                    &folders,
+                    &record,
+                    process::current_above_medium(),
+                    &*sink,
+                    log,
+                ),
+                Err(e) => {
+                    let text = format!(
+                        "no agent hooks: the tray exe or the profile folder does not read: {} failed with {}",
+                        e.call, e.code
+                    );
+                    log.line(Level::Warn, AREA, &text);
+                }
+            }
+        });
+    match spawned {
+        Ok(handle) => Some(handle),
+        Err(e) => {
+            let text = format!("no agent hooks: their thread did not start ({e})");
+            log.line(Level::Warn, AREA, &text);
+            None
+        }
+    }
+}
+
+/// The thread's work, with every place passed in for tests.
+fn agent_hooks_for(
+    tray_exe: &Path,
+    folders: &agent_hooks::Folders,
+    record: &Path,
+    above_medium: Result<bool, WinError>,
+    sink: &dyn EventSink,
+    log: &dyn Log,
+) {
+    let Some(hook_exe) = agent_hooks::installed_hook_exe(tray_exe, &folders.local_app_data) else {
+        log.line(
+            Level::Info,
+            AREA,
+            "this tray is not Velopack's install, so it adds no agent hooks",
+        );
+        return;
+    };
+    for agent in agent_hooks::at_start(folders, record, &hook_exe, above_medium, log) {
+        if let Err(e) = sink.post(Event::HooksAdded { agent }) {
+            // The folder is there and the record says so, so the notice is lost for good: the log keeps it.
+            let text = format!(
+                "the notice that {agent} got hooks is lost: {} failed with {}",
+                e.call, e.code
+            );
+            log.line(Level::Warn, AREA, &text);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -408,6 +493,7 @@ mod tests {
     use crate::log::MemoryLog;
     use crate::power::journal::NoGuard;
     use crate::process::FakeLiveness;
+    use crate::sink::FakeEventSink;
 
     const BALANCED: Guid = Guid(0x381b4222_f694_41f0_9685_ff5bb260df2e);
     const ME: JournalOwner = JournalOwner {
@@ -1099,5 +1185,73 @@ mod tests {
         assert!(line.contains("startup test panic"), "{line}");
         // Cut to the limit: the message's tail never reaches the log.
         assert!(!line.contains(&"x".repeat(PANIC_TEXT_MAX)), "{line}");
+    }
+
+    #[test]
+    fn each_agent_folder_added_posts_hooks_added_once() {
+        let dir = TempDir::new("agent-hooks");
+        let folders = agent_hooks::Folders {
+            profile: dir.0.join("profile"),
+            local_app_data: dir.0.join("local"),
+        };
+        let current = folders
+            .local_app_data
+            .join(r"HaikAsatryan.Wakeshot\current");
+        fs::create_dir_all(&current).unwrap();
+        fs::write(current.join(agent_hooks::HOOK_EXE), b"MZ").unwrap();
+        fs::create_dir_all(folders.profile.join(".cursor")).unwrap();
+        let record = dir.0.join(r"Wakeshot\agent-hooks.json");
+        let tray = current.join("wakeshot-tray.exe");
+        let sink = FakeEventSink::default();
+        let log = MemoryLog::default();
+        agent_hooks_for(&tray, &folders, &record, Ok(false), &sink, &log);
+        assert_eq!(sink.events(), [Event::HooksAdded { agent: "Cursor" }]);
+        // The folder is there now: a second start says nothing.
+        agent_hooks_for(&tray, &folders, &record, Ok(false), &sink, &log);
+        assert_eq!(sink.events().len(), 1);
+
+        // A dev build's tray and a tray above Medium touch nothing and post nothing.
+        let plugins = folders.profile.join(r".cursor\plugins");
+        fs::remove_dir_all(&plugins).unwrap();
+        fs::remove_file(&record).unwrap();
+        let dev = dir.0.join(r"target\debug\wakeshot-tray.exe");
+        agent_hooks_for(&dev, &folders, &record, Ok(false), &sink, &log);
+        agent_hooks_for(&tray, &folders, &record, Ok(true), &sink, &log);
+        assert_eq!(sink.events().len(), 1);
+        assert!(!plugins.exists());
+        assert!(!record.exists());
+        let said = |part: &str| lines(&log).iter().any(|(_, _, text)| text.contains(part));
+        assert!(said(
+            "this tray is not Velopack's install, so it adds no agent hooks"
+        ));
+
+        // A post the loop does not take: the folder stays added, and the log says the notice is lost.
+        let failing = FakeEventSink {
+            fail_with: Some(WinError {
+                call: "PostMessageW",
+                code: 1816,
+            }),
+            ..FakeEventSink::default()
+        };
+        agent_hooks_for(&tray, &folders, &record, Ok(false), &failing, &log);
+        assert!(said(
+            "the notice that Cursor got hooks is lost: PostMessageW failed with 1816"
+        ));
+        assert!(plugins.join(r"local\wakeshot").is_dir());
+    }
+
+    #[test]
+    fn a_dry_run_adds_no_agent_hooks() {
+        let dir = TempDir::new("agent-hooks-dry");
+        let boot = Boot::at(
+            DataDir::at(dir.0.clone()),
+            Names::test("startup-agent-hooks-dry"),
+            true,
+        )
+        .unwrap();
+        let sink = Arc::new(FakeEventSink::default());
+        let started = add_agent_hooks(&boot, sink.clone(), Arc::new(MemoryLog::default()));
+        assert!(started.is_none());
+        assert!(sink.events().is_empty());
     }
 }

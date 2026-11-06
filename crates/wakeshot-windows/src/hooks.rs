@@ -25,12 +25,13 @@ use wakeshot_core::settings::JournalOwner;
 use windows::Win32::Foundation::{ERROR_INVALID_PARAMETER, ERROR_NO_UNICODE_TRANSLATION};
 
 use crate::WinError;
+use crate::agent_hooks::{self, Agent, CopyRun, Folders};
 use crate::install::{PathChange, UserPath};
 use crate::log::{self, Level, Log, Proc};
 use crate::notify::{NOTICE_APP_ID, NOTICE_ICON_FILE, NoticeAppId};
 use crate::power::journal::{FileNet, NoGuard, RUN_ONCE_NAME, reset_locked, restore_locked};
 use crate::power::plan::Win32Power;
-use crate::process::{Liveness, SystemLiveness};
+use crate::process::{self, Liveness, SystemLiveness};
 use crate::recovery::open_log;
 use crate::store::{AutoStart, DataDir, DataFile, Names, StartKey};
 
@@ -569,6 +570,8 @@ pub struct Places {
     /// The tray exe the Run value starts. Its folder is the Path entry (`wakeshot.exe` sits beside it) and holds the
     /// notice icon.
     pub exe: PathBuf,
+    /// Where the agents' hook folders are (`agent_hooks`).
+    pub agents: Folders,
 }
 
 /// The real `HookEnv`: `store::AutoStart` for the Run and RunOnce values and the Run value's `StartupApproved` value
@@ -588,7 +591,14 @@ pub struct RealHookEnv<P> {
     liveness: Box<dyn Liveness>,
     log: Arc<dyn Log>,
     epoch: Instant,
+    agents: Result<Folders, WinError>,
+    /// `process::current_above_medium`; tests pick the level.
+    above_medium: fn() -> Result<bool, WinError>,
+    /// `agent_hooks::medium_copy`; tests record the hand-off instead.
+    medium_copy: MediumCopy,
 }
+
+type MediumCopy = Box<dyn FnMut(&Path, &'static Agent) -> CopyRun>;
 
 impl RealHookEnv<Win32Power> {
     /// The installed app's: `%LocalAppData%\Wakeshot`, the real Run, RunOnce and Path values, the real mutex names,
@@ -616,6 +626,9 @@ impl RealHookEnv<Win32Power> {
             liveness: Box::new(SystemLiveness),
             log,
             epoch: Instant::now(),
+            agents: Folders::real(),
+            above_medium: process::current_above_medium,
+            medium_copy: Box::new(agent_hooks::medium_copy),
         }
     }
 }
@@ -635,6 +648,9 @@ impl<P: PlanIo> RealHookEnv<P> {
             liveness,
             log,
             epoch: Instant::now(),
+            agents: Ok(places.agents),
+            above_medium: process::current_above_medium,
+            medium_copy: Box::new(agent_hooks::medium_copy),
         }
     }
 
@@ -693,8 +709,32 @@ impl<P: PlanIo> HookEnv for RealHookEnv<P> {
         self.notices.remove()
     }
 
-    /// A stub until `p4-agent-hooks-install` fills it: no version adds agent hooks yet, so there is nothing to remove.
-    fn remove_agent_hooks(&mut self) {}
+    /// `agent_hooks::on_uninstall`, with the `wakeshot.exe` beside the tray exe: the one the hook files name, and the
+    /// one an elevated uninstall starts at Medium. Its lines go to this hook's log, area `agent-hooks`.
+    fn remove_agent_hooks(&mut self) {
+        let folders = match &self.agents {
+            Ok(folders) => folders,
+            Err(e) => {
+                let text = format!(
+                    "agent hook folders not removed: the profile folder does not read: {}",
+                    error_text(*e)
+                );
+                self.log(Level::Warn, &text);
+                return;
+            }
+        };
+        let hook_exe = self
+            .cli_folder()
+            .ok()
+            .map(|folder| folder.join(agent_hooks::HOOK_EXE));
+        agent_hooks::on_uninstall(
+            folders,
+            hook_exe.as_deref(),
+            (self.above_medium)(),
+            &mut *self.medium_copy,
+            &*self.log,
+        );
+    }
 
     fn remove_run_once(&mut self) -> Result<bool, WinError> {
         self.auto.remove(StartKey::RunOnce, RUN_ONCE_NAME)
@@ -917,6 +957,7 @@ mod tests {
     use std::collections::VecDeque;
     use std::os::windows::fs::OpenOptionsExt;
     use std::process::Command;
+    use std::rc::Rc;
     use std::sync::atomic::{AtomicU64, Ordering};
 
     use wakeshot_core::files::{JournalFile, JournalFileEntry, JournalKey};
@@ -1732,6 +1773,8 @@ mod tests {
         path: UserPath,
         notices: NoticeAppId,
         log: Arc<Tee>,
+        /// A profile folder and `%LocalAppData%` under `temp`, so no test ever reads the real `.cursor`.
+        agents: Folders,
     }
 
     impl Rig {
@@ -1750,6 +1793,10 @@ mod tests {
                 file: Some(LogWriter::open(&dir.logs(), Proc::Hook).unwrap()),
                 memory: MemoryLog::default(),
             });
+            let agents = Folders {
+                profile: temp.0.join("profile"),
+                local_app_data: temp.0.clone(),
+            };
             Self {
                 _temp: temp,
                 scratch,
@@ -1759,6 +1806,7 @@ mod tests {
                 path,
                 notices,
                 log,
+                agents,
             }
         }
 
@@ -1770,6 +1818,7 @@ mod tests {
                 notices: self.notices.clone(),
                 names: Names::test(self.scratch.path().rsplit('\\').next().unwrap_or("hooks")),
                 exe: self.exe.clone(),
+                agents: self.agents.clone(),
             };
             RealHookEnv::new(places, plans, liveness, self.log.clone())
         }
@@ -1869,6 +1918,52 @@ mod tests {
         assert!(!rig.dir.root().exists(), "the data folder is gone");
         assert!(rig.log.has("restore: the journal's values are back"));
         assert!(rig.log.has("data folder deleted"));
+    }
+
+    #[test]
+    fn real_uninstall_removes_agent_hooks_at_medium_and_hands_them_off_above() {
+        let rig = Rig::new(
+            "hooks::tests::real_uninstall_removes_agent_hooks_at_medium_and_hands_them_off_above",
+        );
+        // What a start of the installed tray at Medium added.
+        let cursor = rig.agents.profile.join(".cursor");
+        fs::create_dir_all(&cursor).unwrap();
+        fs::create_dir_all(rig.folder()).unwrap();
+        let hook_exe = rig.folder().join(agent_hooks::HOOK_EXE);
+        fs::write(&hook_exe, b"MZ").unwrap();
+        let record = rig.dir.root().join(agent_hooks::RECORD);
+        let added = agent_hooks::at_start(&rig.agents, &record, &hook_exe, Ok(false), &*rig.log);
+        assert_eq!(added, ["Cursor"]);
+        let plugin = cursor.join(r"plugins\local\wakeshot");
+
+        // Above Medium the step hands each agent to a Medium copy of `wakeshot.exe` and deletes nothing itself.
+        let asked = Rc::new(RefCell::new(Vec::new()));
+        let mut env = rig.env(applied(), Box::new(SystemLiveness));
+        env.above_medium = || Ok(true);
+        let seen = Rc::clone(&asked);
+        env.medium_copy = Box::new(move |exe, agent| {
+            seen.borrow_mut().push((exe.to_path_buf(), agent.key));
+            CopyRun::Ended { outside_tree: true }
+        });
+        env.remove_agent_hooks();
+        assert_eq!(*asked.borrow(), [(hook_exe.clone(), "cursor")]);
+        assert!(plugin.join(agent_hooks::MARKER).is_file());
+        assert!(
+            rig.log
+                .has("Cursor: hook folder removal handed to a Medium copy, which ended")
+        );
+
+        // At Medium it removes them in this process, by the fixed names, and keeps the folders it did not make.
+        let mut env = rig.env(applied(), Box::new(SystemLiveness));
+        env.above_medium = || Ok(false);
+        env.medium_copy = Box::new(|_, _| panic!("no copy at Medium"));
+        env.remove_agent_hooks();
+        assert!(!plugin.exists());
+        assert!(cursor.join(r"plugins\local").is_dir());
+        assert!(
+            rig.log
+                .has(r"Cursor: .cursor\plugins\local\wakeshot removed")
+        );
     }
 
     #[test]

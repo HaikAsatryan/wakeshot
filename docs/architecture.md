@@ -1096,6 +1096,8 @@ cut right after the move leaves: not tested.
 | `state.json` | tray, on change (1 s debounce) | tray pid and start, Automatic, what holds, what is overridden, stepped back |
 | `journal.json` | IO thread and every restore, under `Local\Wakeshot.Journal` | owned keys (below) |
 | `logs\wakeshot.log` | every process | text log (section 8) |
+| `agents\<agent>\<chat>.json`, `problem.json`, `blocked.json` | `wakeshot hook <agent> <event>` at Medium, under `Local\Wakeshot.AgentHooks` | one agent chat that works, or a hook input problem (`docs/agent-hooks.md`, "The files it writes"); the tray only reads them |
+| `agent-hooks.json` | installed tray at start, at Medium (`agent_hooks::at_start`) | `{ "version": 1, "cursor": "added" }`: `added` once Wakeshot added an agent's hook folder, `removed` once it found that folder gone, so it never adds it again; marks of agents a version does not know are kept. A file that does not read as version 1 adds nothing and stays as it is. Goes with the data folder at uninstall |
 
 Hold format:
 
