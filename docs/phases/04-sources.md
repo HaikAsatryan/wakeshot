@@ -131,7 +131,7 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-watch-tick-flake` | no | `p4-watch-thread` | done (15:00: ticks wait for their check; data files written atomically; 20 serial and 24 of 24 load runs pass) |
 | `p4-contracts-r2` | no | the four 2026-11-06 source and research cards (done); runs alone among Rust cards | running (2026-11-06 15:35) |
 | `p4-antigravity-research` | no | none | done (2026-11-06): CLI 1.5.2 (`agy.exe`) and IDE 2.6.0 both need hooks (a Wakeshot plugin folder under `~\.gemini\config\plugins\`); free test yes (Google's claim; Armenia listed); build in v1 (`research/antigravity-signals.md`) |
-| `p4-hooks-design` | no; a security review reads it before any build | `p4-cursor-gemini-research` | running (2026-11-06 15:35) |
+| `p4-hooks-design` | no; a security review reads it before any build | `p4-cursor-gemini-research` | done (2026-11-06): `docs/agent-hooks.md`; one command `wakeshot.exe hook <agent> <event>` from a Wakeshot plugin folder per agent, state files read with `Folder` and `Process`; `main.log` dropped; security review running (`docs/reviews/p4-hooks-design-security.md`) |
 | `p4-live-harness` | yes: one short sign-in sitting after Part A | `p4-live-claude`; Part B after `p4-contracts-r2` | Part A running (2026-11-06 15:35) |
 
 Bundles (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p4-cli-args` + `p4-cli-run`;
@@ -322,3 +322,11 @@ limit; Copilot waiting does not hold. The cards build these.
   minimum tokens. Orchestrator decision, for Haik's review: `p4-live-codex` may now run before `p4-live-copilot`
   (Codex is logged in; Copilot may need the sign-in sitting); both still run one at a time. Haik was told the
   optional steps before he went away (Copilot plan check, VS Code GitHub sign-in).
+- 2026-11-06 ~16:00: `p4-antigravity-research` done (CLI and IDE: hooks only, free test yes, build in v1) and
+  `p4-hooks-design` done (`docs/agent-hooks.md`). Security review of the design started (`wakeshot-reviewer`, report
+  `docs/reviews/p4-hooks-design-security.md`); no hooks build before it. Orchestrator decisions on the design's three
+  questions, for Haik's review (Haik away; each is the worker's default and easy to undo): 1. the Cursor CLI counts as
+  not covered until a live test shows its plugin prompt and stop hooks fire (Cursor's code says its interactive loop
+  skips plugin-only hooks; the editor fires them); 2. a Cursor or Antigravity approval wait holds, as Codex's does;
+  3. hooks the user removed stay removed, with no menu item in v1. The hooks contracts go into a third contracts card,
+  `p4-contracts-r3`, run alone after `p4-contracts-r2` and after the review.

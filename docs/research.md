@@ -5327,3 +5327,29 @@ Source: `microsoft/vscode` tag 1.145.1 read as data; the laptop runs the same bu
 - **`%APPDATA%\Code\code.lock` holds the VS Code main pid** as text, deleted at a clean exit. **Verified** in the
   source (`src/vs/code/electron-main/main.ts:143,154`) and seen on the laptop (5 bytes).
 - **Copilot Free includes agent mode** in VS Code (GitHub Docs "Copilot plans", read 2026-11-06).
+
+## Cursor hooks from a local plugin
+
+Card `p4-hooks-design`, 2026-11-06. How checked: Cursor CLI `2026.11.05-86047df` (`agent-cli-package.zip` for
+Windows x64) and Cursor editor `3.29.9` (Linux `.deb`, commit `306d153d51d7`; app JS shared with Windows) downloaded
+and unpacked as data in the card's scratch folder, read with a text search over the minified JS, then deleted.
+Nothing run or installed. Docs `cursor.com/docs/agent/hooks`, `/docs/plugins`, `/docs/reference/plugins`, read the
+same day. Design: `agent-hooks.md`.
+
+- **The CLI loads local plugins** from `<home>\.cursor\plugins\local\<name>\`, skipping dot names and links that
+  point outside the folder (`index.js`, `loadUserLocalPlugins`). **Verified** in code; `<home>` is `userHomeDir` or
+  `HOME`, which value the CLI passes: not verified.
+- **The editor fires plugin `beforeSubmitPrompt` and `stop`**: `hasHookForStep` counts plugin hooks
+  (`workbench.desktop.main.js`). **Verified** in code.
+- **The CLI's interactive loop does not fire plugin-only `beforeSubmitPrompt` or `stop`**: it calls them only when
+  the user's or the project's `hooks.json` has that event (`3026.index.js`). `sessionStart` and `sessionEnd` count
+  plugins. **Verified** in code; not run.
+- **Missing command: exit 127; any exit but 2 fails open; empty stdout is a failed hook; default timeout 60 s**
+  (CLI `index.js`; the editor's `extensionHostProcess.js` has the same exit 127 code). **Verified** in code.
+- **Results merge per field; `continue` is false if any hook says false** (CLI `index.js`, the merge function), so a
+  hook that prints `{}` changes nothing. **Verified** in code.
+- **The CLI hands the payload through a temp file** `%TEMP%\cursor-hooks-<random>\payload.json` read by PowerShell
+  with UTF-8 set; its other form puts the payload in the PowerShell command line (`619.index.js`,
+  `executeCommandScript`). **Verified** in code. The editor's form: not verified.
+- **Only a single-quoted command path works in both PowerShell forms** (`& <command>` and `$input | <command>`).
+  Read in code; not run.
