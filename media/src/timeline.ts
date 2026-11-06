@@ -2,6 +2,7 @@
 // every sound at the same frames and `scripts/check-pace.mjs` holds it all to the style rules of
 // `docs/research/promo-video.md`, so moving a moment moves its sound and its check with it. Plain types only: Node
 // runs this file too.
+import {chips} from './agents.ts';
 import {BEAT, beat} from './beat.ts';
 import {COPY} from './copy.ts';
 
@@ -23,35 +24,48 @@ export const LIGHT_ON_FRAMES = 13;
 export const LIGHT_OFF_FRAMES = 24;
 
 /**
- * The eight shots of the storyboard (`docs/research/promo-video.md`), in frames. Round 2 (Haik's notes): the speed
- * numbers fold into the end card, the tray shot shows Claude Code turning the icon green and back (5 s), the menu
- * shot has 6 s.
+ * The eight shots of the storyboard (`docs/research/promo-video.md`), in frames. Part C of
+ * `p6-agents-video-readme` (Haik, 2026-11-06): the pain first (the laptop sleeps mid-work, "Tired of sleepy
+ * laptops?"), the name, then the agents it works with; the tray proof, the lid, the settings and the sleep follow as
+ * signed off. The menu shot left so the pain and the agents get their time in the same 30 s.
  */
 export const SCENES = {
-  hook: {from: beat(0), len: beat(4)},
-  light: {from: beat(4), len: beat(6)},
-  tray: {from: beat(10), len: beat(10)},
-  lid: {from: beat(20), len: beat(8)},
-  settings: {from: beat(28), len: beat(6)},
-  sleeps: {from: beat(34), len: beat(6)},
-  menu: {from: beat(40), len: beat(12)},
+  hook: {from: beat(0), len: beat(8)},
+  light: {from: beat(8), len: beat(6)},
+  agents: {from: beat(14), len: beat(8)},
+  tray: {from: beat(22), len: beat(10)},
+  lid: {from: beat(32), len: beat(8)},
+  settings: {from: beat(40), len: beat(6)},
+  sleeps: {from: beat(46), len: beat(6)},
   end: {from: beat(52), len: beat(8)},
 } as const;
 
 /** Every moment the scenes and the sound share, in absolute frames. */
 export const T = {
+  /**
+   * The pain: an agent works on the laptop, then the laptop goes to sleep under it (`sleep`: the screen dims, the
+   * work freezes, the power light breathes), then the stage darkens under the question.
+   */
   hook: {
-    /** The first tool line; one more every `lineEvery` frames until the PC sleeps. */
+    /** The first tool line on the laptop's screen; one more every `lineEvery` frames until the laptop sleeps. */
     firstLine: 3,
-    lineEvery: 3,
+    lineEvery: 6,
     sleep: beat(2),
-    /** The stage dims to 10% over this many frames. */
-    dimLen: 9,
+    /** The screen dims over this many frames. */
+    dimLen: 12,
+    question: beat(4),
+    /** The stage darkens under the question over this many frames. */
+    darkLen: 12,
   },
-  /** `agents`: the row of agent names pops in under the tagline; it goes with the whip. */
-  light: {on: beat(4), name: beat(5), faintLines: beat(4) + 6, agents: beat(7)},
-  /** Claude Code starts and the icon turns holding; the tooltip under the cursor; the work ends and the icon lets go. */
-  tray: {whip: beat(10), whipLen: 12, start: beat(11), hover: beat(13), drift: beat(14), done: beat(16)},
+  light: {on: beat(8), name: beat(9)},
+  /**
+   * The agents: the light rises and shrinks to the top as the camera moves; the agent tiles come in one after another
+   * (`tileStep` frames apart, read as one group like the words of a line); the line; the light pulses: it holds for
+   * every one of them.
+   */
+  agents: {move: beat(14), tiles: beat(15), tileStep: 5, line: beat(17), pulse: beat(19)},
+  /** The agent starts and the icon turns holding; the tooltip under the cursor; the work ends and the icon lets go. */
+  tray: {whip: beat(22), whipLen: 12, start: beat(23), hover: beat(25), drift: beat(26), done: beat(28)},
   /**
    * The lid shuts, Wakeshot locks (the badge comes with the chime, as the app locks at the lid close) and the work goes
    * on behind it: at `work` a chip rises above the shut laptop with the agent's step under a turning spinner; at `done`
@@ -59,8 +73,8 @@ export const T = {
    * work going on, then clearly done, then the sleep). One caption and one chip step, so the shot is not the densest
    * stretch again (review M1 of round 4).
    */
-  lid: {cut: beat(20), settle: 15, close: beat(21), shut: beat(22), lock: beat(22), work: beat(24), orbit: beat(24), done: beat(27)},
-  settings: {move: beat(28), card: beat(29), row1: beat(31), row2: beat(32)},
+  lid: {cut: beat(32), settle: 15, close: beat(33), shut: beat(34), lock: beat(34), work: beat(36), orbit: beat(36), done: beat(39)},
+  settings: {move: beat(40), card: beat(41), row1: beat(43), row2: beat(44)},
   /**
    * A time cut: the frame goes to black into the cut, "Later" lands on the black, and the picture comes back under the
    * rest of the line; then the laptop goes to sleep. `dip` holds the frames where the black starts, is full, starts to
@@ -70,29 +84,25 @@ export const T = {
    * (Haik, 2026-11-06). No clock and no countdown on screen: Wakeshot sleeps a closed laptop once nothing has happened
    * for 5 minutes (`docs/product.md`), and the video claims no time it does not keep.
    */
-  sleeps: {cut: beat(34), dip: [beat(34) - 10, beat(34) - 1, beat(34) + 5, beat(35)], line: beat(34), sleep: beat(36), moon: beat(37)},
-  menu: {
-    cut: beat(40),
-    click1: beat(41),
-    keep: beat(43),
-    hour: beat(46),
-    pan: beat(46),
-    click2: beat(48),
-    ring: beat(48) + 3,
-  },
+  sleeps: {cut: beat(46), dip: [beat(46) - 10, beat(46) - 1, beat(46) + 5, beat(47)], line: beat(46), sleep: beat(48), moon: beat(49)},
   end: {cut: beat(52), line: beat(53), speed: beat(54), install: beat(55)},
 } as const;
 
 /** Camera moves between near places run this long; a whip is quicker (`promo-video.md`, "Motion"). */
 export const MOVE_LEN = 15;
-export const PAN_LEN = 12;
 
 /**
  * The places in the one large world the camera works over, centre and zoom. Near places sit side by side, so the
  * camera slides between them; far places are reached by a hard cut.
  */
 export const PLACES = {
-  hook: {x: 0, y: 0, zoom: 1},
+  // The pain's laptop: a laptop of its own, far from the lid shot's, so each keeps its own state.
+  hook: {x: -6000, y: 0, zoom: 0.86},
+  hookPush: {x: -6000, y: 10, zoom: 0.89},
+  light: {x: 0, y: 0, zoom: 1},
+  // Below the light: the camera moves down, so the light rises to the top of the frame over the agent tiles.
+  agents: {x: 0, y: 210, zoom: 1},
+  agentsPush: {x: 0, y: 210, zoom: 1.03},
   tray: {x: 0, y: 1600, zoom: 1},
   trayDrift: {x: 90, y: 1620, zoom: 1},
   lid: {x: 6000, y: 0, zoom: 1},
@@ -101,8 +111,6 @@ export const PLACES = {
   // A little wider than the lid's place (drawn parts only, so a zoom under 1 is allowed): the laptop, the badge, the
   // work chip and the card all fit without a cut edge.
   card: {x: 6500, y: 0, zoom: 0.92},
-  menu: {x: 12000, y: 1600, zoom: 1},
-  menuSub: {x: 11850, y: 1600, zoom: 1},
   end: {x: 20000, y: 0, zoom: 1},
 } as const;
 export type PlaceName = keyof typeof PLACES;
@@ -114,7 +122,11 @@ export type PlaceName = keyof typeof PLACES;
 export type CameraKey = {at: number; to: PlaceName; kind: 'cut' | 'move' | 'whip' | 'settle'; len: number};
 export const CAMERA: CameraKey[] = [
   {at: SCENES.hook.from, to: 'hook', kind: 'cut', len: 0},
-  {at: SCENES.light.from, to: 'hook', kind: 'cut', len: 0},
+  // The slow push of a hold on drawn parts (`promo-video.md`, "Motion"), through the pain.
+  {at: SCENES.hook.from, to: 'hookPush', kind: 'settle', len: SCENES.hook.len},
+  {at: SCENES.light.from, to: 'light', kind: 'cut', len: 0},
+  {at: T.agents.move, to: 'agents', kind: 'move', len: MOVE_LEN},
+  {at: T.agents.tiles, to: 'agentsPush', kind: 'settle', len: T.tray.whip - T.agents.tiles},
   {at: T.tray.whip, to: 'tray', kind: 'whip', len: T.tray.whipLen},
   {at: T.tray.drift, to: 'trayDrift', kind: 'move', len: MOVE_LEN},
   {at: T.lid.cut, to: 'lidNear', kind: 'cut', len: 0},
@@ -123,8 +135,6 @@ export const CAMERA: CameraKey[] = [
   {at: T.sleeps.cut, to: 'lid', kind: 'cut', len: 0},
   // The slow push of a hold on drawn parts (`promo-video.md`, "Motion"): no capture is in view here.
   {at: T.sleeps.cut, to: 'lidPush', kind: 'settle', len: SCENES.sleeps.len},
-  {at: T.menu.cut, to: 'menu', kind: 'cut', len: 0},
-  {at: T.menu.pan, to: 'menuSub', kind: 'move', len: PAN_LEN},
   {at: T.end.cut, to: 'end', kind: 'cut', len: 0},
 ];
 
@@ -141,8 +151,6 @@ export const FOCUS: FocusKey[] = [
   {at: T.settings.row1, target: 'row1'},
   {at: T.settings.row2, target: 'row2'},
   {at: T.sleeps.cut, target: null, cut: true},
-  {at: T.menu.ring, target: 'menuIcon', dim: false},
-  {at: T.end.cut, target: null, cut: true},
 ];
 
 /**
@@ -161,18 +169,20 @@ export const CAPTIONS: CaptionBlock[] = [
       {text: COPY.hook[0], at: 0, style: 'big', already: true},
       {text: COPY.hook[1], at: T.hook.sleep, style: 'big'},
     ],
-    until: SCENES.light.from,
+    until: T.hook.question,
     leave: 'cut',
   },
+  {id: 'question', lines: [{text: COPY.question, at: T.hook.question, style: 'big'}], until: SCENES.light.from, leave: 'cut'},
   {
     id: 'name',
     lines: [
       {text: COPY.name, at: T.light.name, style: 'name'},
       {text: COPY.tagline, at: T.light.name, style: 'caption', flow: true},
     ],
-    until: T.tray.whip,
+    until: T.agents.move,
     leave: 'fade',
   },
+  {id: 'agents', lines: [{text: COPY.agents, at: T.agents.line, style: 'caption'}], until: T.tray.whip, leave: 'fade'},
   {id: 'trayStart', lines: [{text: COPY.tray[0], at: T.tray.start, style: 'caption'}], until: T.tray.done, leave: 'fade'},
   {id: 'trayDone', lines: [{text: COPY.tray[1], at: T.tray.done, style: 'caption'}], until: T.lid.cut, leave: 'cut'},
   {
@@ -193,15 +203,6 @@ export const CAPTIONS: CaptionBlock[] = [
   {
     id: 'sleeps',
     lines: [{text: COPY.sleeps, at: T.sleeps.line, style: 'caption'}],
-    until: T.menu.cut,
-    leave: 'cut',
-  },
-  {
-    id: 'menu',
-    lines: [
-      {text: COPY.menu[0], at: T.menu.keep, style: 'caption'},
-      {text: COPY.menu[1], at: T.menu.click2, style: 'caption'},
-    ],
     until: T.end.cut,
     leave: 'cut',
   },
@@ -260,10 +261,10 @@ const range = (from: number, to: number, step: number) => {
 /** Every new thing on screen except the words, which `check-pace.mjs` adds from `CAPTIONS`. */
 export const EVENTS: PaceEvent[] = [
   ...range(T.hook.firstLine, T.hook.sleep, T.hook.lineEvery).map((at) => ({at, kind: 'stream' as const, what: 'tool line'})),
-  {at: T.hook.sleep, kind: 'pop', what: 'sleeping chip; the stage dims'},
+  {at: T.hook.sleep, kind: 'pop', what: 'the laptop sleeps: the screen dims, the work freezes, the sleeping chip'},
   {at: T.light.on, kind: 'light', what: 'the light comes on'},
-  {at: T.light.agents, kind: 'pop', what: 'the row of agent names'},
-  ...range(T.light.faintLines, T.tray.whip, 6).map((at) => ({at, kind: 'stream' as const, what: 'faint terminal line'})),
+  {at: T.agents.tiles, kind: 'pop', what: 'the agent tiles, one after another'},
+  {at: T.agents.pulse, kind: 'ring', what: 'the light pulses: it holds for every agent'},
   {at: T.tray.whip, kind: 'whip', what: 'the glyph flies into the tray and dims'},
   {at: T.tray.whip + T.tray.whipLen, kind: 'swap', what: 'the glyph lands on the idle icon'},
   {at: T.tray.start, kind: 'light', what: 'the agent starts: the icon turns holding at the same frame'},
@@ -280,13 +281,6 @@ export const EVENTS: PaceEvent[] = [
   {at: T.settings.row2, kind: 'count', what: 'second value rolls back'},
   {at: T.sleeps.sleep, kind: 'light', what: 'the power light fades: the laptop sleeps'},
   {at: T.sleeps.moon, kind: 'pop', what: 'moon'},
-  {at: T.menu.cut + 1, kind: 'stream', what: 'cursor glides in'},
-  {at: T.menu.click1, kind: 'click', what: 'click on the icon'},
-  {at: T.menu.click1, kind: 'pop', what: 'the menu'},
-  {at: T.menu.keep, kind: 'pop', what: 'Keep awake hovered, submenu'},
-  {at: T.menu.hour, kind: 'swap', what: '1 hour hovered'},
-  {at: T.menu.click2, kind: 'click', what: 'click on 1 hour, the icon holds'},
-  {at: T.menu.ring, kind: 'ring', what: 'ring on the icon; a lens rises with the holding glyph'},
   {at: T.end.cut, kind: 'light', what: 'the app icon lights'},
   {at: T.end.line, kind: 'pop', what: 'end line'},
   {at: T.end.speed, kind: 'pop', what: 'speed line'},
@@ -319,9 +313,18 @@ export const SOUNDS: Cue[] = [
   {at: 0, sound: 'enter', gain: 0.5},
   ...range(T.hook.firstLine, T.hook.sleep, T.hook.lineEvery).map((at) => ({at, sound: 'tick' as const, gain: 0.08, pan: 0.42})),
   {at: T.hook.sleep, sound: 'pop', gain: 0.35, pan: 0.7},
+  {at: T.hook.sleep, sound: 'lightOff', gain: 0.3},
   {at: T.light.on, sound: 'hit', gain: 0.15},
   {at: T.light.on, sound: 'lightOn', gain: 0.35},
-  {at: T.light.agents, sound: 'pop', gain: 0.18},
+  {at: T.agents.move, sound: 'whoosh', gain: 0.25},
+  // A soft tick per tile, at most 8 a second (`promo-video.md`, "Sound"): tiles 5 frames apart are 6 a second.
+  ...range(T.agents.tiles, T.agents.tiles + chips().length * T.agents.tileStep, T.agents.tileStep).map((at, i) => ({
+    at,
+    sound: 'tick' as const,
+    gain: 0.16,
+    pan: 0.3 + 0.08 * i,
+  })),
+  {at: T.agents.pulse, sound: 'lightOn', gain: 0.22},
   {at: T.tray.whip, sound: 'whip', gain: 0.5},
   {at: T.tray.start, sound: 'enter', gain: 0.45, pan: 0.4},
   {at: T.tray.start, sound: 'lightOn', gain: 0.3, pan: 0.6},
@@ -341,13 +344,6 @@ export const SOUNDS: Cue[] = [
   // The time cut: a soft whoosh into it, no more.
   {at: T.sleeps.cut, sound: 'whoosh', gain: 0.2, pan: 0.4},
   {at: T.sleeps.sleep, sound: 'sleepChime', gain: 1},
-  {at: T.menu.cut, sound: 'whoosh', gain: 0.35},
-  {at: T.menu.click1, sound: 'click', gain: 0.5, pan: 0.6},
-  {at: T.menu.click1, sound: 'pop', gain: 0.22, pan: 0.6},
-  {at: T.menu.keep, sound: 'pop', gain: 0.18, pan: 0.45},
-  {at: T.menu.pan, sound: 'whoosh', gain: 0.18, pan: 0.4},
-  {at: T.menu.click2, sound: 'click', gain: 0.5, pan: 0.45},
-  {at: T.menu.ring, sound: 'lightOn', gain: 0.22, pan: 0.55},
   // The end card is calm: one soft swell of air as its light comes on, no whoosh, no pops; the music lets go.
   {at: T.end.cut, sound: 'glow', gain: 0.3},
 ];
@@ -356,11 +352,12 @@ export const SOUNDS: Cue[] = [
 export const MUSIC = {
   /** Sparse until the PC sleeps; then it falls in pitch to a low hum; silent just before the light. */
   sparseTo: T.hook.sleep,
-  silentFrom: 56,
+  silentFrom: T.light.on - 4,
   full: T.light.on,
   /** Thinned around the lid chime, so it sits alone. */
   thin: [T.lid.cut, T.settings.move] as const,
-  lift: T.menu.cut,
+  /** The code bed lifts once the lid chime has passed, up to the end card. */
+  lift: T.settings.move,
   resolve: T.end.cut,
 };
 

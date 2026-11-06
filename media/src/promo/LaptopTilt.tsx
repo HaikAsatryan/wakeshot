@@ -60,16 +60,20 @@ const Keys: React.FC<{w: number; h: number}> = ({w, h}) => {
  * A laptop in three-quarter view, drawn with CSS 3D (perspective 1800 px): the base with its keys, touchpad, edges and
  * a power light on the front; the lid on its hinge with the terminal on its screen, a shell and a front edge that
  * carries the holding-green light when shut. `shut` 0 is open, 1 shut; `yaw` turns the laptop (the slow orbit);
- * `edge` and `led` are the lights' strength. Our own drawing in neutral graphite; it stands for any laptop.
+ * `edge` and `led` are the lights' strength; `screen` is the display's brightness and `stopAt` the frame the work on
+ * it freezes (the pain shot: the laptop sleeps under the agent). Our own drawing in neutral graphite; it stands for
+ * any laptop.
  */
-export const LaptopTilt: React.FC<{f: number; shut: number; yaw: number; edge: number; led: number; streamFrom: number}> = ({
-  f,
-  shut,
-  yaw,
-  edge,
-  led,
-  streamFrom,
-}) => {
+export const LaptopTilt: React.FC<{
+  f: number;
+  shut: number;
+  yaw: number;
+  edge: number;
+  led: number;
+  streamFrom: number;
+  stopAt?: number;
+  screen?: number;
+}> = ({f, shut, yaw, edge, led, streamFrom, stopAt = Infinity, screen = 1}) => {
   const {w, d, base, lid, bezel} = LAPTOP;
   const angle = OPEN + (SHUT - OPEN) * shut;
   const display = {w: w - 2 * bezel, h: d - 2 * bezel - 12};
@@ -173,8 +177,9 @@ export const LaptopTilt: React.FC<{f: number; shut: number; yaw: number; edge: n
             >
               <div style={{position: 'absolute', left: bezel, top: bezel, width: display.w, height: display.h, overflow: 'hidden', borderRadius: 3, background: DARK.terminal}}>
                 <div style={{transform: `scale(${scale})`, transformOrigin: '0 0'}}>
-                  <Terminal f={f} streamFrom={streamFrom} every={6} stopAt={Infinity} rows={9} />
+                  <Terminal f={f} streamFrom={streamFrom} every={6} stopAt={stopAt} rows={9} />
                 </div>
+                {screen < 1 ? <div style={{position: 'absolute', inset: 0, background: '#000', opacity: 1 - screen}} /> : null}
                 {/* Glass: a soft sheen from the top left. */}
                 <div style={{position: 'absolute', inset: 0, background: 'linear-gradient(125deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0) 40%)'}} />
               </div>

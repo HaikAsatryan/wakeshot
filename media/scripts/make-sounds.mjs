@@ -9,7 +9,7 @@
 // - The music: the track named in `data/music.json` (Haik's pick), fitted to the video on every build
 //   (`lib/fit-music.mjs`); the code bed when that file names none. `--music <file.wav>` puts a track already fitted
 //   by `scripts/music-candidate.mjs` in place of both; `--out <file.wav>` writes somewhere else.
-// The music ducks 4 dB under each chime; the mix is set to -15 LUFS integrated with its peaks held under -2 dBFS.
+// The music ducks 4 dB under each chime; the mix is set to -15 LUFS integrated with its peaks held under -2.5 dBFS.
 import {mkdirSync, readFileSync} from 'node:fs';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -34,8 +34,9 @@ const arg = (name) => {
 /** Target loudness of the music stem alone, so the code bed and a found track sit at the same level under the rest. */
 const MUSIC_LUFS = -20;
 const MIX_LUFS = -15;
-// Sample peaks at -2 dBFS keep the true peak (between samples, after AAC) under -1 dBTP; at -1.5 it read -0.9.
-const CEILING = 10 ** (-2 / 20);
+// Sample peaks at -2.5 dBFS keep the true peak (between samples, after AAC) under -1 dBTP with room to spare: at -1.5
+// it read -0.9, and at -2 the Part C cut read -1.01, so one more agent's tick could cross it.
+const CEILING = 10 ** (-2.5 / 20);
 const DUCK_DB = -4;
 
 // ---- Wakeshot's chimes, from chime.rs ----

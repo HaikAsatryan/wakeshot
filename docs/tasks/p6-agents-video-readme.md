@@ -1,6 +1,8 @@
 # Video and README for every AI agent, not Claude Code first
 
-Phase: 6. Status: Part C (Haik's new video scenario, 2026-11-06 18:45) running since 18:55; Part B: blocked: Part A done and approved (Haik, 2026-11-06 ~19:15); Part B steps that need no live
+Phase: 6. Status: Part C (Haik's new video scenario, 2026-11-06 18:45): steps 7 to 10 done ("Part C, round 1" and
+"round 2" in Result: storyboard, stills, logo rules, the list from the live cards, a draft and every check; `check`
+fails only on the two README paragraphs Part B writes); waits for Haik's look at the cut; Part B: blocked: Part A done and approved (Haik, 2026-11-06 ~19:15); Part B steps that need no live
 result done 2026-11-06 (draft rendered, checks pass); the rest waits for the live results, the new install and
 its speed numbers ("Part B: what waits" in Result) (new 2026-11-06, Haik). Part A starts when Haik answers the question below; Part B after
 the Round 3 live tests (the supported list and the tray text are final then). Needs Haik: yes: his yes to Part A's
@@ -124,7 +126,22 @@ well; his idea is the brief, not a script. This replaces the storyboard he appro
    Claude Code. They go stale once the bigger v1 ships; the plan has them measured again in Part B.
 3. `docs/research/promo-video.md` storyboard rows 2 and 3 still describe shot 2 without the name chips and shot 3's
    caption as "Claude Code starts". That file is not owned by this card's round 1, so not changed; it needs the two
-   rows (and the counts line) when the orchestrator hands it over.
+   rows (and the counts line) when the orchestrator hands it over. Done in Part C (the whole storyboard is new).
+4. Part C: the Antigravity terms say "You must not abuse, harm, interfere with, or disrupt the Service. This
+   includes, but is not limited to, using the Service in connection with products not provided by us." Their example
+   is reaching the service with its sign-in, which Wakeshot does not do. Not a legal reading; for Haik before a public
+   "Antigravity" claim (`promo-video.md`, "Agent logos").
+5. Part C: `agents.ts` still lists only Claude Code and Codex CLI as passed, while the orchestrator reports Copilot CLI
+   and OpenCode 2.x passed live too. Flipping them runs `npm run agent-lists`, which writes `README.md` and
+   `site/index.html` (not owned this round), and `npm run check` then asks for their README paragraphs. Not changed.
+   Round 2: flipped; the lists written; the two paragraphs still missing (Part B step 5), so `check` fails there.
+6. Part C: the five menu captures (`media/public/shots/menu-S1-dark.png`, `menu-S5a` to `S5d`), their credits and the
+   `menu` set in `data/shots.json` are no longer in the video. Not deleted (not made by this card); keep them for a
+   longer cut or delete them, the orchestrator's call.
+   Round 2: kept, since files refer to them (orchestrator's rule): `media/data/shots.json` (set `menu`),
+   `media/CREDITS.md` (five rows, and the grain note names `menu-S1-dark.png`), `media/src/promo/Capture.tsx` (the
+   `menu` set's sketch), `media/src/promo/world.ts` (`SET_AT.menu`), `media/README.md`, `promo-video.md` (captures
+   table); `build.mjs` refuses a final while any listed file is missing.
 
 ## Log
 
@@ -162,6 +179,59 @@ well; his idea is the brief, not a script. This replaces the storyboard he appro
   comment text shows, 5 tables. `site/check_page.py`: 0 errors, 7 spots wait (unchanged).
 - 2026-11-06: `check-rebuild` (loop, states, draft) ok: 11 outputs the same bytes. Round 1 Result written. Stopped
   here: the rest waits ("Part B: what waits"). The orchestrator resumes this card when the live results are in.
+- 2026-11-06: Part C round 1 started (worker): steps 7 and 8 only, then stop with the stills. Owned this round:
+  `media/`, `docs/research/promo-video.md`, this card, the build folder. Not `README.md`, `site/`, `docs/product.md`
+  or Rust. No screen captures. Agent list today: live passed Claude Code, Codex CLI, Copilot CLI, OpenCode 2.x;
+  Copilot in VS Code partly; Cursor testing; Antigravity may leave v1. A helper agent reads each owner's logo rules
+  (step 8) into the build folder's `logo-rules.md`.
+- 2026-11-06: read `media/` (timeline, copy, agents, Promo, world, laptop, terminal, pace check), the storyboard, the
+  `p6-media` round 2 to 6 notes. Design picked: 30 s and 8 shots kept, the same beat grid and music. New: the hook is
+  the drawn laptop asleep mid-work, then "Tired of sleepy laptops?"; the light and the name at 4 s; a new agents shot
+  (a grid of agent tiles, one per supported agent, from `agents.ts`), the light above it; then the tray proof, lid,
+  settings, sleep and end card as signed off, 180 frames later. Out: the menu shot (its 6 s pay for the hook and the
+  agents shot). Built in `media/` directly (owned this round), stills rendered from the real composition.
+- 2026-11-06: built: `timeline.ts` (new scenes, moments, captions, events, sounds, music marks), `copy.ts`,
+  `agents.ts` (`tiles()`, `previewTiles()`), `Promo.tsx` (pain laptop, the light rising to the top, agent tiles, the
+  whip from there; menu shot code out), `world.ts`, `LaptopTilt.tsx` (`stopAt`, `screen`), `check-pace.mjs` (name by
+  5 s), `build.mjs` (poster frame 180). Typecheck and `npm run check` ok. Test frames looked at and the pain laptop,
+  the tile band and the sleeping chip moved twice.
+- 2026-11-06: logo rules back from the helper (every page read, quotes exact): Anthropic and Google need approval,
+  OpenAI, Cursor and OpenCode unclear, GitHub allows with a written-permission line in the same page. Decision: names
+  only for every tile, no logo file in `media/`; caption "Stays awake for these agents." (not "works with", for
+  OpenAI's non-partner rule); a trademark line in the end card's small print (Google's legal line). The `mark` code
+  taken out again. `promo-video.md`: storyboard rows, counts line, name rule, framings, captures table, risk 6, new
+  "Agent logos" section. `media/README.md`: poster frame and the agents line.
+- 2026-11-06: stills rendered with the final look (no DRAFT), 21 frames plus a whole-cut sheet; looked at: 0, 50,
+  100, 180, 218, 280, 292 (two, four and six tiles), 336, 850 full size, the rest on the sheet. Stopped here for Haik's
+  look; steps 9 and 10 next.
+- 2026-11-06: Part C round 2 started (worker): steps 9 and 10, the agent list from the live cards, the unused menu
+  captures, names only (no logos), a draft render and every `p6-media` check. Haik has not answered on the contact
+  sheet yet, so the storyboard stays as it is. Owned: `media/`, `docs/research/promo-video.md`, this card, the build
+  folder, and in `README.md` and `site/` only the generated agent lists. No git, no Rust, no screen captures.
+- 2026-11-06: live cards read: Claude Code, Codex CLI, Copilot CLI (1.0.106), OpenCode (2.2.5) done and passed;
+  Copilot in VS Code done but no hold for a Local working chat seen (waiting and idle only), so `partly` (a new third
+  value, counted as not passed); Cursor in progress; Antigravity's exact-end card in progress. `agents.ts` set so;
+  `npm run agent-lists` wrote "Claude Code, Codex CLI, Copilot CLI and OpenCode" into `README.md` line 65 and
+  `site/index.html` line 57, nothing else. It then fails, as expected, on the two README rules paragraphs
+  (**Copilot CLI.**, **OpenCode.**): those are Part B step 5, not this round's README scope.
+- 2026-11-06: the five menu captures are still referred to (`data/shots.json` set `menu`, `CREDITS.md` rows and the
+  grain note, `src/promo/Capture.tsx` sketch, `src/promo/world.ts` `SET_AT.menu`, `media/README.md`,
+  `promo-video.md` captures table), and `build.mjs` checks every set's files before a final: kept.
+- 2026-11-06: no logo file or logo code in `media/` (checked by find and grep); the end card's trademark line is in
+  (`copy.ts` `trademarks`). `check.mjs` ok (89 files), `check-pace` ok (44 on the beat, 83 new things), typecheck ok,
+  `check-art` ok (9,458,740 pixels). `npm run draft` (2 min) ok, `check-video --draft` ok (30.02 s, 7.49 MB).
+  Loudness after AAC: -15.25 LUFS, -1.01 dBTP: inside the limit by 0.01 dB, so one more tile tick could cross it.
+  The mix's sample ceiling in `make-sounds.mjs` went from -2 to -2.5 dBFS (limiter now -2.2 dB at the loudest spot);
+  the draft again: -15.26 LUFS, -1.62 dBTP. `media/README.md` (also "the light at 2 s", now 4 s) and
+  `promo-video.md` say so.
+- 2026-11-06: draft frames 45, 180, 292, 360, 850 looked at (four tiles: Claude Code, Codex CLI, Copilot CLI,
+  OpenCode; the trademark line on the end card). For `check-rebuild --final` the final must sit in `media/out/`:
+  the signed-off `out/wakeshot-promo.mp4` (sha256 c35177c7...) and poster (5abbdc2b...) backed up to the build
+  folder's `out-backup\`; they go back after the check. If this run is cut off, copy them back over `media/out/`.
+- 2026-11-06: `npm run video` (final mode) ok, `check-video` ok (7.37 MB, 30.02 s), -1.62 dBTP. `check-rebuild --final`
+  ok: 15 outputs the same bytes. The new final copied to the build folder's `final-check\`; the round 6 final and
+  poster put back in `media/out/` (sha256 c35177c7... and 5abbdc2b... again); `out-backup\` deleted. `site/check_page.py`
+  0 errors; `gh api markdown` render of `README.md`: the new list, 5 tables, no marker text. Result written.
 
 ## Result
 
@@ -342,3 +412,157 @@ for a live result, rendered a draft and ran the checks.
    end card, the README line, the site hero.
 6. **The final render**: `npm run video` (the poster, frame 120, changes too: the chips are in by then), then
    `check-video`, `check-rebuild --final`, loudness at most -1 dBTP, and Haik's look.
+
+### Part C, round 1 (2026-11-06): steps 7 and 8, the new storyboard, stills and logo rules
+
+Status of steps 7 and 8: done. Steps 9 and 10 (the list from the live results, a draft render, every `p6-media`
+check) come next; the orchestrator resumes this card at once.
+
+#### The scenario in five lines
+
+1. **The pain (0 to 4 s):** a laptop, an agent at work on its screen; at 1 s the laptop sleeps under it (screen dims,
+   work freezes, power light breathes, "Sleeping"); then "Tired of sleepy laptops?" over the dark.
+2. **Wakeshot (4 to 7 s):** the light comes on, "Wakeshot", "keeps it awake while agents work."
+3. **The agents (7 to 11 s):** the light rises to the top, the agent tiles come in one after another under it (name,
+   example task, spinner; one per agent that passed live, from `agents.ts`), "Stays awake for these agents.", the
+   light pulses.
+4. **Proof, then the sleep as usual (11 to 26 s):** the light flies into the real tray: the agent starts, green, the
+   real tooltip, done, it lets go; the lid closes and the work goes on; settings back; later the same laptop sleeps
+   as usual.
+5. **End card (26 to 30 s):** as signed off, plus a trademark line in the small print. 30 s, the music, the beat grid
+   and every check kept; the menu shot is out.
+
+Full rows: `docs/research/promo-video.md`, "Storyboard: the 30 s main cut".
+
+#### Still frames (PNG, 1920 x 1080, final look, no DRAFT mark)
+
+In `C:\Users\haika\AppData\Local\Temp\claude\f7c2c08a8f04f07b\2a1d3942-3be1-4fdb-95cd-69265f507ad6\scratchpad\p6-agents-video-readme\stills\`:
+`00-whole-cut-every-half-second.png` (60 frames on one sheet), then per shot `01-pain-f000`, `f045`, `f100`;
+`02-name-f126`, `f180` (the new poster); `03-agents-f218`, `f240`, `f292-four-tiles-light-pulses`, and the same
+frame `if-two-agents` and `if-all-six` (the layout for any count); `04-tray-f336`, `f360`, `f385`, `f440`; `05-lid-f500`,
+`f560`, `f592`; `06-settings-f660`; `07-sleeps-f694`, `f745`; `08-end-f850`. The main set shows the four agents the
+orchestrator reports as passed live (Claude Code, Codex CLI, Copilot CLI, OpenCode) through the `preview` prop;
+`agents.ts` itself still says two.
+
+#### Agent logos (step 8)
+
+Every owner's page read (sources, quotes and verdicts in `promo-video.md`, "Agent logos"): Anthropic and Google need
+their approval; OpenAI, Cursor and OpenCode are unclear for a stranger; GitHub allows a "shows integration" logo but
+the same page also asks for prior written permission. **No logo goes in**: every tile shows the name in our type. No
+logo file was added to the repo (GitHub's files sit only in the build folder's `logos-raw\github\`, unused).
+
+#### Decisions (principal designer)
+
+1. **The pain uses the lid shot's laptop**, so the video opens and ends on the same laptop asleep: once too early,
+   once at the right time. Change it when Haik wants the old tilted terminal back as the hook.
+2. **The name lands at 4.5 s**; the pace rule moves from "by 3 s" to "by 5 s", since Haik's question needs its own
+   1.4 s. Change it when a viewer test shows people leave before the name.
+3. **Names only, no logos** (rules above). Change it when every shown agent's owner allows its logo for this use; the
+   logo then replaces the name in its tile, smaller than the Wakeshot name.
+4. **"Stays awake for these agents.", not "Works with these agents."**: it says what Wakeshot does and steers clear of
+   OpenAI's non-partner wording rule ("worked with"). Change it when Haik prefers "works with" and accepts that risk.
+5. **A trademark line in the end card's small print** ("Agent names are trademarks of their owners; Wakeshot is not
+   affiliated with them."), Google's legal line and the others' no-endorsement rules in one. Change it when the README
+   credits carry it and Haik wants a cleaner end card.
+6. **The menu shot is out** (Keep awake on demand): its 6 s pay for the pain and the agents in the same 30 s. Change it
+   when Haik wants Keep awake in the video (a longer cut, or in place of the settings shot, 1 to 2 s longer).
+7. **Each tile has an example task** ("fix the failing tests", ...) under the name, in the terminal's face, keyed by
+   name in `copy.ts` with a fallback, so the list can grow with no new copy. Change it when the grid reads busy at the
+   README's 900 px: drop the task lines.
+8. **The tiles lay themselves out**: one row up to three, two rows from four, at most six (the two Copilots share one
+   tile once both pass). A `preview` prop renders a layout for any names, for stills only; no build passes it.
+9. **The light stays lit over the tiles and pulses once at 9.5 s**: it holds while any of them works, and the pulse is
+   the one new thing the 2 s gap rule needs there.
+
+#### Files changed
+
+`media/src/timeline.ts`, `media/src/copy.ts`, `media/src/agents.ts`, `media/src/promo/Promo.tsx`,
+`media/src/promo/world.ts`, `media/src/promo/LaptopTilt.tsx`, `media/scripts/check-pace.mjs`, `media/scripts/build.mjs`,
+`media/README.md` (the poster row, the agents line), `docs/research/promo-video.md` (style rows, storyboard, counts,
+captures table, risk 6, "Agent logos"), this card. Not touched: `README.md`, `site/`, `docs/product.md`, Rust, any
+screen. No git.
+
+#### Checks (round 1 of Part C)
+
+| Check | Outcome |
+|---|---|
+| `npm run typecheck` | ok |
+| `npm run check` (dashes, emoji, credits, colours; pace; agent lists) | ok: 89 files, 31 assets credited, 18 colour pairs; pace: 44 starts on the beat, 9 framings of 2 to 4 s, 83 new things, longest gap 1.90 s, at most 5 things within 2 s, 14 lines of words; lists agree (2 of 7) |
+| Stills looked at | 0, 50, 100, 180, 218, 280, 292 (two, four, six tiles), 336, 850 full size; all 60 half-second frames on the sheet: no overlap, tiles clear of the light and the caption, the whip lands on the tray icon |
+| ASCII only, no em dash | ok in the card, `promo-video.md`, `media/README.md`; `check` covers `media/` |
+| Not run this round (step 10) | the draft render, `check-video`, `check-rebuild`, loudness, `check-art` |
+
+#### Open items for steps 9 and 10
+
+1. The list: `agents.ts` lags the live results ("Found outside scope" 5); flipping writes `README.md` and `site/`.
+2. Step 10: `npm run draft` and every check; the music's lift now lands on the light at 4 s (silent 116 to 119), the
+   tick per tile follows the list's length, the poster is frame 180.
+3. The unused menu captures ("Found outside scope" 6) and `media/README.md` decision 11's history of the menu shot.
+
+### Part C, round 2 (2026-11-06): steps 9 and 10, the list, a draft and every check
+
+Status of steps 9 and 10: done, except what waits for Part B (below). Haik had not answered on the contact sheet, so
+the storyboard of round 1 stands.
+
+#### Done
+
+- **The list from the live cards** (`media/src/agents.ts`): passed Claude Code, Codex CLI, Copilot CLI (1.0.106),
+  OpenCode (2.2.5); Copilot in VS Code is `partly`, a new third value that counts as not passed (its card is done,
+  but no Local working chat reached the disk, so no hold was seen live; waiting and idle were read right); Cursor and
+  Antigravity `pending` (Antigravity's card is now `p4-antigravity-exact-end`, which may take it out of v1). The
+  video shows four tiles: Claude Code, Codex CLI, Copilot CLI, OpenCode (not one "Copilot" tile, since only one
+  Copilot passed).
+- **`npm run agent-lists`** wrote "Claude Code, Codex CLI, Copilot CLI and OpenCode" into `README.md` (line 65) and
+  `site/index.html` (line 57), between the markers; nothing else changed there.
+- **The menu captures** (`media/public/shots/menu-S1-dark.png`, `menu-S5a` to `S5d-dark.png`): kept, since files
+  refer to them: `media/data/shots.json` (set `menu`), `media/CREDITS.md` (five rows, and the grain note names
+  `menu-S1-dark.png`), `media/src/promo/Capture.tsx` (the set's sketch), `media/src/promo/world.ts` (`SET_AT.menu`),
+  `media/README.md`, `docs/research/promo-video.md` (captures table); `build.mjs` refuses a final while any listed
+  file is missing. Deleting them means deleting those entries too: a longer cut would lose its Keep awake shot.
+- **No logos**: names only, as round 1 decided; no logo file or logo code in `media/` (find and grep). The end card's
+  small print keeps "Agent names are trademarks of their owners; Wakeshot is not affiliated with them."
+- **Loudness margin** (decision): the mix's sample ceiling in `make-sounds.mjs` went from -2 to -2.5 dBFS. At -2 the
+  draft read -1.01 dBTP after AAC, inside the -1 limit by 0.01 dB, and each agent tile adds a tick, so one more agent
+  could cross it. Now -1.62 dBTP, loudness unchanged (-15.3 LUFS). Change it when the limiter pulls more than about
+  3 dB (it pulls 2.2 now): then limit on 4x oversampled peaks instead of lowering the ceiling again.
+- **Docs**: `media/README.md` (the `live` values; the `menu` set kept and where; decision 11 notes the cut has 9
+  framings and no menu shot now; the light at 4 s; the new loudness), `docs/research/promo-video.md` (counts line with
+  the four agents, captures table row, the draft's size and loudness, why the true peak is measured on the render).
+
+#### Draft
+
+`C:\Users\haika\code\wakeshot\media\out\draft\wakeshot-promo-draft.mp4` (git ignores it): 7,492,783 bytes
+(7.49 MB), 30.02 s, H.264 and AAC, 1920 x 1080, 30 fps, BT.709; -15.26 LUFS integrated, -1.62 dBTP true peak, LRA
+6.8 LU (`loudnorm`, after AAC). Frames 45, 180, 292, 360, 850 looked at (four tiles, the trademark line).
+
+A copy of the same cut rendered as a final (no DRAFT mark, 0.1.0 speed numbers), for Haik's look:
+`C:\Users\haika\AppData\Local\Temp\claude\f7c2c08a8f04f07b\2a1d3942-3be1-4fdb-95cd-69265f507ad6\scratchpad\p6-agents-video-readme\final-check\wakeshot-promo.mp4`
+(7.37 MB, -1.62 dBTP). `media/out/wakeshot-promo.mp4` and its poster are the round 6 final again, byte for byte.
+
+#### Checks (round 2 of Part C)
+
+| Check | Outcome |
+|---|---|
+| `check.mjs` (dashes, emoji, credits, colours) | ok: 89 files, 31 assets credited, 18 colour pairs |
+| `check-pace.mjs` | ok: 44 starts on the beat, 9 framings of 2 to 4 s, 83 new things, longest gap 1.90 s, at most 5 things within 2 s, 14 lines of words |
+| `agent-lists.mjs --check` (third part of `npm run check`) | **FAIL, expected**: the lists agree (4 of 7), but `README.md` "When each hold counts" has no **Copilot CLI.** and no **OpenCode.** paragraph. Those are Part B step 5 (README text), not this round's README scope |
+| `npm run typecheck` | ok |
+| `check-art.mjs` | ok, all 9,458,740 pixels |
+| `npm run draft`, `check-video --draft` | ok: 30.02 s, 7.49 MB, codecs, size, BT.709 tags, loops and the 6 state icons |
+| `npm run video` (final mode, for the rebuild check), `check-video` | ok: 30.02 s, 7.37 MB |
+| Loudness after AAC (draft and final) | -15.26 LUFS, -1.62 dBTP (limit -1); before the ceiling change -1.01 |
+| `check-rebuild --final` | ok: a clean copy (`npm ci`, `check-art`, loop, states, draft, video) gives all 15 outputs the same bytes, the draft, the final and the soundtrack included; its temp folder is gone. Run with the new cut's final in `media/out/`, then the round 6 final put back (sha256 checked) |
+| `site/check_page.py site` | 0 errors, 7 spots wait (unchanged) |
+| GitHub render of `README.md` (`gh api markdown`) | the agents cell reads "Claude Code, Codex CLI, Copilot CLI and OpenCode", no marker text shows, 5 tables |
+| ASCII only, no em dash | ok in every file edited (`check` covers `media/`; a scan of the card and `promo-video.md`) |
+
+#### What is left
+
+1. **README paragraphs** for Copilot CLI and OpenCode in "When each hold counts" (tested versions, links to the
+   results, limits, parts not tested live), the OpenCode read-only line in Privacy, the README "Not tested live yet"
+   line with Copilot in VS Code: Part B step 5. Until then `npm run check` fails on them.
+2. **Cursor and Antigravity**: when their cards end, one word each in `agents.ts`, `npm run agent-lists`, the tiles
+   follow (five tiles lay out as 3 and 2).
+3. **Part B**: the two-agent tooltip capture and the speed numbers on the new install; then the final render into
+   `media/out/`, `check-video`, `check-rebuild --final`, loudness, and Haik's look.
+4. Haik's answer on the contact sheet and on this cut.

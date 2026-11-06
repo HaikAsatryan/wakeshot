@@ -11,7 +11,8 @@
 // - a caption holds at least 1.4 s after its last word lands; big words of 1 to 3 words at least 0.5 s;
 // - a caption line has 2 to 6 words (big words and the name 1 to 6; the end card's lines, which pop in whole, are free);
 // - at most two lines of words on screen at once before the end card (it holds still for 3 s and may show three);
-//   the name on screen by 3 s; the end card is the last 4 s;
+//   the name on screen by 5 s (Part C, 2026-11-06: the pain and Haik's question come first, 4 s); the end card is the
+//   last 4 s;
 // - frame 0 shows words already in, so the first frame is a full picture.
 import {BEAT} from '../src/beat.ts';
 import {CAMERA, CAPTIONS, END_CARD, EVENTS, ON_GRID, SCENES, VIDEO, lineIn, wordStarts, wordsOf} from '../src/timeline.ts';
@@ -96,7 +97,7 @@ for (let f = 0; f < END_CARD; f++) {
   }
 }
 const name = CAPTIONS.flatMap((b) => b.lines).find((l) => l.style === 'name');
-if (!name || name.at > 3 * fps) fail(`the name is not on screen by 3 s (${name ? s(name.at) : 'never'})`);
+if (!name || name.at > 5 * fps) fail(`the name is not on screen by 5 s (${name ? s(name.at) : 'never'})`);
 if (VIDEO.frames - SCENES.end.from !== 4 * fps) fail(`the end card lasts ${((VIDEO.frames - SCENES.end.from) / fps).toFixed(2)} s, not 4 s`);
 if (!CAPTIONS.some((b) => b.lines.some((l) => l.already && l.at === 0))) fail('frame 0 shows no words already in');
 

@@ -23,12 +23,12 @@ kind (counted frame by frame and from their sound), then set for Wakeshot.
 | Rule | Target |
 | --- | --- |
 | Beat grid | 120 BPM: one beat every 0.5 s (15 frames), one bar every 2 s (60 frames). Every cut, camera move, pop and caption start lands on a beat, within 1 frame |
-| Framing (one camera place) | 2 to 4 s, about 3 s on average; 10 framings in 30 s (built: the settings slide starts at 12 s and the menu shot pans once) |
+| Framing (one camera place) | 2 to 4 s, about 3 s on average; 9 framings in 30 s since Part C (the menu shot and its pan left) |
 | Something new on screen | on average every 0.5 to 1 s (a move, a pop, a click, a word, a number); never more than 2 s without one, except on the end card |
 | Most to take in | at most 5 things within any 2 s before the end card: cuts, moves, pops, clicks, lights, counts, rings, swaps and line starts (tool lines and single words not counted; a cut counts once with what it opens on). Added in round 4 after the review found the lid shot back at 6 to 8 in 2 s, the measure Haik's "a little fast" note was closed by |
 | Longest still hold | 3.5 s, and even then a slow push runs (below) |
 | First 2 s | a full picture from frame 0, the problem shown, sound from frame 0. Frame 0 is never black: the README player may show it before play |
-| Name on screen | by 3 s |
+| Name on screen | by 5 s (was 3 s; Part C of `p6-agents-video-readme`, 2026-11-06: the pain and Haik's question "Tired of sleepy laptops?" come first and take 4 s; the name lands at 4.5 s) |
 | End card | the last 4 s |
 
 ### Text
@@ -96,35 +96,45 @@ capture scaled by anything but a whole number (decision 4 in `media/README.md`).
 
 ## Storyboard: the 30 s main cut
 
+Part C of `docs/tasks/p6-agents-video-readme.md` (Haik, 2026-11-06 18:45: "show how one of agents working and laptop
+sleeps and tell tired of sleepy laptops and start our logo", the agents "dynamically", designed by us). It replaces
+the storyboard Haik signed off in round 6 (git history has it): the hook is now the pain on a laptop and the question,
+a new agents shot follows the name, the tray, lid, settings and sleep shots carry over 180 frames later, and the menu
+shot left. The brand, the music, the beat grid and the checks are kept.
+
 Frames at 30 fps; a beat is 15 frames. "Drawn" means made in code; "capture" means a real screen picture from the
-capture session (shot ids in the next section). The camera works over one large dark world: the terminal, the tray,
-the laptop, the settings card and the menu each have a place in it, so near moves are slides and far ones are cuts.
+capture session (shot ids in the next section). The camera works over one large dark world: the pain's laptop, the
+light and the agent tiles, the tray, the lid's laptop, the settings card and the end card each have a place in it, so
+near moves are slides and far ones are cuts.
 
 | # | Seconds (frames) | On screen | Motion | Text | Sound |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 0.0 to 2.0 (0 to 59) | **Hook.** A drawn terminal, large (1300 px wide), tilted 8 degrees, the prompt already typed: `> migrate billing to API v2 and run all tests`. "Agent working." already on screen at frame 0, so the first frame is a full picture | Enter at frame 0; tool lines stream in from frame 3, one every 3 frames, under a "Working" spinner; slow push. Frame 30: the stage dims to 10% in 9 frames, the spinner stops, a small "Sleeping" chip with a moon pops at the top right | Big words over the terminal: "Agent working." (from frame 0), then "PC sleeping." (frame 30, in by frame 42) | Enter key at frame 0; soft hat pulse; from frame 30 the music falls in pitch to a low hum; frames 56 to 59 silent |
-| 2 | 2.0 to 5.0 (60 to 149) | **The light.** Black stage, the tray glyph idle (the art port at 320 px, white outline; the loop already draws it at 128 px, so check 320 once). Behind it the terminal comes back, faint (7%, its letters soft, round 4 review), its lines moving again; it goes as the whip starts | Frames 60 to 73: the light comes on, the bloom spreads; frame 75: "Wakeshot" rises under it, and the line under the name follows word by word | "Wakeshot" (SemiBold 140 px), then "keeps it **awake** while agents work." (in by frame 102) | Low hit and the full beat at frame 60; a soft rising tone on the light |
-| 3 | 5.0 to 10.0 (150 to 299) | **Claude Code turns it green, then lets go** (round 2, Haik's note: show exactly that Claude Code starts work and the icon turns green, then goes back when it finishes). A drawn terminal (the cause) left of the real tray rectangle (the effect): the 200% tray set (S1 to S4) at 2x. The terminal shows only `claude`, a short prompt ("fix the failing tests") and one status line, at 30 px, so it can be read and ends left of the capture (round 4 review) | Whip, 12 frames: the big glyph, drawn from the port at each whole size, flies to where the capture's idle icon (S1) is on screen, lands on it at frame 158 and fades into it by 162. Frame 165: Enter, Claude Code starts, and at that frame the icon turns holding (S2), a ring of green spreading from it. The cursor comes to rest on the icon; frame 195 the holding tooltip (S3) rises, ringed (no dimming: the terminal stays in view). Frame 210 the camera drifts 90 px (15 frames). Frame 240 the terminal shows done and at that frame the icon is idle again with the idle tooltip (S4) | "Claude Code starts: it turns **green**." (frame 165, in by 189), then "Done: it lets **go**." (frame 240, in by 258) | Enter and a soft rise at 165; pop; a soft whoosh; a soft fall at 240 |
-| 4 | 10.0 to 14.0 (300 to 419) | **Lid, and the work goes on behind it** (round 4, Haik's note of 2026-11-06 00:56: show the closed laptop working, then the work clearly done, then the sleep). Cut to a drawn laptop (graphite, keys, touchpad, the terminal on its screen), three-quarter view; then shut, a thin holding-green light on the lid's front edge, breathing (2 s period). Above the shut laptop, in one row: a lock badge and a work chip (the terminal's spinner and the agent's step) | Camera settles back 15 frames; frames 315 to 330 the lid closes (ease in, a 2 degree settle); frame 330 the lock badge pops with the lid chime (the app locks at the lid close); frame 360 the work chip rises: "run npm test" under the turning spinner; frame 405 the chip says "Done. All 128 tests pass." with a check and at that frame the edge light goes off (24 frames): the hold ends; slow orbit of 6 degrees from frame 360 | "Close the lid: work goes **on**." (frame 315, in by 339), gone with a fade at 405, so no line says the work goes on once it is done (round 4 review: one line and one chip step, so this shot is not the densest stretch again) | Whoosh; soft thump and Wakeshot's lid chime at frame 330, no lock sound so the chime sits alone; the music dips under the chime; a pop at 360; a soft fall at 405 |
-| 5 | 14.0 to 17.0 (420 to 509) | **Done, settings back.** Frame 435: a drawn card pops right of the laptop: "Power settings", two rows from the capture log (S9). The work chip stays in view at the left with its done line | Camera slides right from frame 420 (15 frames) and widens a little (zoom 0.92, drawn parts only), so the laptop, the badge, the chip and the card all fit; each value rolls from Wakeshot's to the user's own (8 frames) at frames 465 and 480; the ring moves row to row | "Work done. Your settings, **back**." (frame 435, in by 456) | Whoosh; pop; two ticks |
-| 6 | 17.0 to 20.0 (510 to 599) | **Later, it sleeps.** A time cut back to the shut laptop, its edge dark, the lock badge alone above it. No clock and no countdown: Wakeshot sleeps a closed laptop once nothing has happened for 5 minutes (`docs/product.md`), and the video claims no time it does not keep | The frame goes to black from 501, is black 509 to 515 (the cut at 510 inside it) and is back by 525 (round 6); slow push of 3%; frame 540 the power light fades (24 frames) and the badge goes; frame 555 a moon rises | "Later, it sleeps as **usual**." (frame 510, on the black, "Later," in by 519, the line in by 531) | Soft whoosh at the cut; Wakeshot's going-to-sleep chime at frame 540 |
-| 7 | 20.0 to 26.0 (600 to 779) | **Keep awake on demand.** The menu set (one screen rect, five captures) at rest zoom, the drawn cursor | Cursor glides in and clicks the icon at frame 615; the menu (S5a) rises from the taskbar; frame 645 the cursor reaches Keep awake: S5b (hover, submenu open); frame 690 it reaches "1 hour": S5c, and the camera pans 150 px to the submenu (12 frames); click at frame 720; the menu closes and the icon turns holding (S5d); ring on the icon (no dimming) and a round lens rises above it with the tray glyph at 128 px, its light coming on (round 3: the frame had no subject after the click); the cursor fades. The battery figure is held at S5a's 97% throughout (it read 96% in S1) | "Keep awake on **demand**." (frame 645, in by 663), then "No second **tool**." (frame 720, in by 735) | Clicks at 615 and 720; pops |
-| 8 | 26.0 to 30.0 (780 to 899) | **End card.** The stacked lockup (icon 256 px): the app icon unlit, its light comes on at frames 780 to 793, "Wakeshot" under it. The speed numbers fold in here (round 2) | The lines under the lockup pop in whole (no word reveal); still for the last 3 s | Frame 795: "Free and open source. Windows 11, x64 and ARM64." Frame 810: "Idle: {ram} MB of memory, {cpu} ms of CPU in 10 minutes." at 40 px from `data/speed.json` (round 4: 4.3 and 109, `docs/research.md` "Speed numbers"), with "Measured on Wakeshot <build>, <date>, x64." at 28 px (0.1.0, 2026-11-06). Frame 825: the install line in mono | One soft swell of air as the light comes on; no whoosh, sweep or pops; the music plays on a beat, fades over 2.5 s into a soft echo and is silent 0.1 s before the end |
+| 1 | 0.0 to 4.0 (0 to 119) | **The pain.** The drawn laptop of the lid shot, open, three-quarter view, the terminal on its screen with an agent at work (`claude`, the billing prompt, tool lines). "Agent working." already on screen at frame 0, so the first frame is a full picture | Camera at zoom 0.86, a slow push to 0.89 over the shot (drawn parts only). Tool lines from frame 3, one every 6 frames. Frame 30: the laptop sleeps under the agent: the screen dims to 25% over 12 frames, the work freezes mid-task (the spinner stops, still readable), the power light breathes slowly (2 s), and a "Sleeping" chip with a moon pops beside the lid. Frame 60: the stage darkens to 14% over 12 frames under the question | Big words: "Agent **working**." (from frame 0) and "Laptop sleeping." (frame 30, in by 42); both go at 60. Then "Tired of sleepy laptops?" (frame 60, in by 78, holds 1.4 s; no green word: green means awake) | Enter key at 0; soft key ticks with the tool lines; a pop and a soft fall at 30; the music soft under the hook, silent from frame 116 |
+| 2 | 4.0 to 7.0 (120 to 209) | **The light.** A hard cut to the black stage: the tray glyph idle at 320 px, alone | Frames 120 to 133: the light comes on, the bloom spreads; frame 135: "Wakeshot" rises under it and the line under the name follows word by word | "Wakeshot" (SemiBold 140 px), then "keeps it **awake** while agents work." (in by 162) | Low hit and the full beat at 120 (the music's lift lands here); a soft rising tone on the light |
+| 3 | 7.0 to 11.0 (210 to 329) | **The agents.** The lit glyph at the top; under it one tile per agent whose live test passed (`media/src/agents.ts`, A to Z): the name in Instrument Sans SemiBold 46 px, an example task under it in the terminal's face (`copy.ts`, by name), a turning spinner. One row up to three tiles, two rows from four; at most six, since the two Copilots share one tile once both pass. Names only, no owner's logo ("Agent logos" below). An agent that drops out takes its tile with it; the grid centres itself | Frame 210: the camera moves down 210 px (15 frames) while the glyph rises with it and shrinks from 320 to 160 px, drawn from the port at each whole size; the name and its line fade. Frame 225: the tiles come in one after another, 5 frames apart, each rising 28 px with the pop's spring (one group, like the words of a line); a slow push to zoom 1.03 until the whip. Frame 285: a ring of the holding green spreads from the light: it holds for every one of them | "Stays **awake** for these agents." (frame 255, in by 276, holds 1.8 s). Not "works with": OpenAI asks non-partners not to write "worked with", and the line says what Wakeshot does | Whoosh at 210; one soft tick per tile (6 a second at most); a soft rise at 285 |
+| 4 | 11.0 to 16.0 (330 to 479) | **The agent turns it green, then lets go** (round 2, Haik's note, kept). The drawn terminal (`claude`, "fix the failing tests", one status line, 30 px) left of the real tray rectangle, the 200% tray set (S1 to S4) at 2x | Whip, 12 frames: the glyph flies from the top of the agents shot to the capture's idle icon (S1), going out as it flies, lands on it at frame 338 and fades into it by 342. Frame 345: Enter, the agent starts, and at that frame the icon turns holding (S2), a ring of green spreading from it. The cursor comes to rest on the icon; frame 375 the holding tooltip (S3) rises, ringed. Frame 390 the camera drifts 90 px. Frame 420 the terminal shows done and at that frame the icon is idle again with the idle tooltip (S4) | "Your agent starts: it turns **green**." (frame 345, in by 369), then "Done: it lets **go**." (frame 420, in by 438) | Enter and a soft rise at 345; pop; a soft whoosh; a soft fall at 420 |
+| 5 | 16.0 to 20.0 (480 to 599) | **Lid, and the work goes on behind it** (round 4, kept). Cut to the drawn laptop, three-quarter view; then shut, a thin holding-green light on the lid's front edge, breathing. Above it, in one row: a lock badge and a work chip | Camera settles back 15 frames; frames 495 to 510 the lid closes; frame 510 the lock badge pops with the lid chime; frame 540 the work chip rises: "run npm test" under the turning spinner; frame 585 the chip says "Done. All 128 tests pass." and at that frame the edge light goes off: the hold ends; slow orbit of 6 degrees from 540 | "Close the lid: work goes **on**." (frame 495, in by 519), gone with a fade at 585 | Whoosh; soft thump and Wakeshot's lid chime at 510, the music dips under it; a pop at 540; a soft fall at 585 |
+| 6 | 20.0 to 23.0 (600 to 689) | **Done, settings back** (kept). Frame 615: the "Power settings" card pops right of the laptop, two rows from the capture log (S9); the work chip stays in view with its done line | Camera slides right from 600 (15 frames), zoom 0.92 (drawn parts only); each value rolls back to the user's own at 645 and 660; the ring moves row to row | "Work done. Your settings, **back**." (frame 615, in by 636) | Whoosh; pop; two ticks |
+| 7 | 23.0 to 26.0 (690 to 779) | **Later, it sleeps** (round 6, kept). A time cut back to the shut laptop, its edge dark, the lock badge alone above it; the same laptop that slept under the agent in shot 1, now asleep once the work is done | Black from 681, full 689 to 695 (the cut at 690 inside it), back by 705; slow push of 3%; frame 720 the power light fades and the badge goes; frame 735 a moon rises | "Later, it sleeps as **usual**." (frame 690, on the black, "Later," in by 699) | Soft whoosh at the cut; Wakeshot's going-to-sleep chime at 720 |
+| 8 | 26.0 to 30.0 (780 to 899) | **End card** (kept). The stacked lockup, the app icon's light coming on at 780 to 793; the lines under it; the small print at the bottom now ends "Agent names are trademarks of their owners; Wakeshot is not affiliated with them." (Google asks for a trademark line where its names show) | The lines pop in whole; still for the last 3 s | Frame 795: "Free and open source. Windows 11, x64 and ARM64." Frame 810: the speed line from `data/speed.json` with the measured line and the trademark line at 28 px. Frame 825: the install line in mono | One soft swell of air as the light comes on; the music fades over 2.5 s into a soft echo and is silent 0.1 s before the end |
 
-Counts (round 4, after the review): 8 shots, 10 framings in 30 s (3 s on average), 14 lines of words (2 big words,
-the name, 8 captions, the end card's 3); `check-pace.mjs` counts 103 new things before the end card (tool lines and
-words included), the longest gap 1.8 s, at most 5 things to take in within any 2 s. Every caption holds 1.4 s or more after it is in; every start is on
-a beat.
+Counts (Part C, 2026-11-06, with the four agents that passed live: Claude Code, Codex CLI, Copilot CLI, OpenCode):
+8 shots, 9 framings in 30 s (2 to 4 s each), 14 lines of words (3 big words lines, the name, 7 captions, the end
+card's 3); `check-pace.mjs` counts 44 starts on the beat, 83 new things before the end card, the longest gap 1.9 s,
+at most 5 things to take in within any 2 s; the name at 4.5 s. The poster is frame 180 (the light on, the name and
+its line in).
 
-Round 2 (Haik's look at the first draft): "at some point maybe a little fast". The densest stretches were 8, 12 and
-19.5 s (6 events in 2 s each); the speed numbers folded into the end card, as planned, and their 3 s went to the
-menu shot (6 s) and to the new tray shot (5 s). A longer cut (about 45 s) can add, in this order: builds too
-(`wakeshot run -- npm run build` and its tooltip), the morning notice after a closed-lid night, the battery floor.
+Out of this cut: the menu shot ("Keep awake on demand", 6 s). Its time pays for the longer pain (4 s, was 2 s) and the
+agents shot (4 s). Keep awake stays in the README and the site. Change it when Haik wants Keep awake in the video: in
+a longer cut, or in place of the settings shot (the menu's clicks need 4 to 5 s, so the cut grows by 1 to 2 s). A
+longer cut (about 45 s) can add, in this order: Keep awake from the menu, builds (`wakeshot run -- npm run build` and
+its tooltip), the morning notice after a closed-lid night, the battery floor.
 
-Rules kept from the old storyboard: no fake numbers (shot 8 waits for the measurements, and the final render refuses
-stand-ins); no agent shown that v1 does not detect; the terminals are illustrations, not copies of Claude Code's
-screen, and use only our colours; nothing private in any capture. One more: every scene is our own idea; no scene,
-layout or line is taken from another app's video.
+Rules kept from the old storyboard: no fake numbers (the end card waits for the measurements, and the final render
+refuses stand-ins); no agent shown whose live test did not pass (`agents.ts`; the `preview` prop of the video exists
+only for stills of a layout and no build passes it); the terminals and the tiles are illustrations, not copies of any
+agent's screen, and use only our colours; no owner's logo without its rules allowing it; nothing private in any
+capture. Every scene is our own idea; no scene, layout or line is taken from another app's video.
 
 ## Real captures and drawn parts
 
@@ -138,15 +148,15 @@ and only the drawn layers move.
 
 | Id | Capture | Why real | Used in shot |
 | --- | --- | --- | --- |
-| Tray set: S1, S2, S3, S4 | One fixed rect over the tray icon and the space above it, at 200% on the DELL screen (round 2): idle icon (S1), holding icon (S2), the holding tooltip of a real Claude Code session, "Holding awake: Claude Code (1 session)" (S3), the idle tooltip (S4) | proof that it sees Claude Code and lets go when the work ends; the words are the app's | 3 |
-| Menu set: S1, S5a to S5d | One rect over the tray icon and the space the menu and submenu take: idle icon, menu closed (its own S1); menu open, no hover (S5a); Keep awake hovered with its submenu open (S5b); "1 hour" hovered (S5c); menu closed after the click, icon holding (S5d) | the menu words never change; the real hover look, so no drawn highlight is needed | 7 |
+| Tray set: S1, S2, S3, S4 | One fixed rect over the tray icon and the space above it, at 200% on the DELL screen (round 2): idle icon (S1), holding icon (S2), the holding tooltip of a real Claude Code session, "Holding awake: Claude Code (1 session)" (S3), the idle tooltip (S4) | proof that it sees Claude Code and lets go when the work ends; the words are the app's | 4 |
+| Menu set: S1, S5a to S5d | One rect over the tray icon and the space the menu and submenu take: idle icon, menu closed (its own S1); menu open, no hover (S5a); Keep awake hovered with its submenu open (S5b); "1 hour" hovered (S5c); menu closed after the click, icon holding (S5d) | the menu words never change; the real hover look, so no drawn highlight is needed | none since Part C (was the menu shot); kept for a longer cut, and still referred to by `data/shots.json` (set `menu`), `media/CREDITS.md` (its rows and the grain source), `src/promo/Capture.tsx` and `world.ts`; `build.mjs` checks every set's files before a final |
 | S9 | Before and after values of the lid action and sleep timers, from the capture session's log, as text | the card shows only real values | 5 |
 | Speed | The numbers from `measure-speed.ps1` | | 8 (end card) |
 | S6, S7 | The morning notice after a closed-lid hold; the tooltip while `wakeshot run -- npm run build` holds | README stills and the longer cut | none in this cut |
 
 For each menu capture, record the rows' boxes in capture pixels in `data/shots.json` (a `rows` list: name, x, y, w,
 h), measured once by a script from the picture, so the cursor and the ring land on the real rows at any zoom. The pop
-of the menu in shot 7 is the menu's part of S5a, masked out and scaled from the icon over S1.
+of the menu in the menu shot was the menu's part of S5a, masked out and scaled from the icon over S1.
 
 A real Claude Code session is needed only to make S3 (and to measure the hold delays). Its screen is not shown.
 
@@ -249,11 +259,12 @@ pleases him, the 120 BPM sequencer in code is the fallback. Every file, its link
 
 Built 2026-11-05 (Part C): the code bed is a 120 BPM sequencer in `make-sounds.mjs`, shaped as the "Sound" rules say.
 A found track is fitted by `scripts/music-candidate.mjs`: its tempo found by autocorrelation (not checked by ear),
-conformed with `atempo`, cut so the moment it lifts out of its intro lands on the light (2 s); the bars before the lift
-play softly under the hook with a short silence before the light (a found track cannot fall in pitch like the code
-bed), a 5 dB dip under the lid chime, a fade over the end card. The music stem is set to -20 LUFS before the mix, so
-every candidate sits at the code bed's level; the mix is -15 LUFS with sample peaks under -2 dBFS. Freesound needs a
-login to download, so the three candidates come from OpenGameArt and the Free Music Archive (`media/CREDITS.md`).
+conformed with `atempo`, cut so the moment it lifts out of its intro lands on the light (2 s then, 4 s since Part C);
+the bars before the lift play softly under the hook with a short silence before the light (a found track cannot fall
+in pitch like the code bed), a 5 dB dip under the lid chime, a fade over the end card. The music stem is set to -20 LUFS before the mix, so
+every candidate sits at the code bed's level; the mix is -15 LUFS with sample peaks under -2.5 dBFS (-2 until the
+Part C draft read -1.01 dBTP after AAC, too close to the limit). Freesound needs a login to download, so the three
+candidates come from OpenGameArt and the Free Music Archive (`media/CREDITS.md`).
 
 Round 2 (Haik's notes, 2026-11-05): his pick is candidate 3, "A Chill Fever (Loopable)" by Pro Sensory (CC0), now in
 `media/public/music/` and fitted on every build (`data/music.json`). "The ending sounds are not good": the track is
@@ -270,6 +281,42 @@ left the repo. The fit and the shape are unchanged: the same storyboard cut, the
 card's fade and echo. Tempo and key were found by script (A minor, so the C6 and G6 chimes are in key), not by ear.
 The options, their pages and their readings are in `docs/tasks/p6-media.md`, round 5.
 
+## Agent logos
+
+Step 8 of Part C: before any agent's logo goes in, each owner's own brand or trademark page was read for our use (a
+"works with" row in the video and the README of a free MIT app, the file committed to the public repo, drawn unchanged
+on the dark stage, no endorsement meant). Read 2026-11-06 by a helper agent of `p6-agents-video-readme` (WebFetch, and
+curl where WebFetch got 403); quotes are exact. A press kit download is not a permission.
+
+| Agent | Owner | Page read | The rule that decides it | Verdict |
+| --- | --- | --- | --- | --- |
+| Claude Code | Anthropic | `anthropic.com/legal/trademark-guidelines` (PDF "Effective Aug 1, 2024"); the press kit at `anthropic.com/press-kit` | "You may only use our trademarks as specifically permitted by us and only in materials we approve beforehand." Trademarks include "our names, logos, brand elements". The press kit has a Claude Code logo (Ivory, for dark) but no usage text | forbidden without Anthropic's prior approval |
+| Codex | OpenAI | `openai.com/brand` (with its "Non-partnerships" and "API Developers" boxes) | "Don't: Use the logo without permission or outside OpenAI's terms." "All co-branded materials must undergo an approval process by both brands". There is no Codex logo, only the OpenAI wordmark and Blossom. Non-partners: "please don't use "collaborated with," "worked with," or "partnered with," in any form." Allowed: "you may truthfully identify the OpenAI technology you use" | unclear, treated as no |
+| GitHub Copilot | GitHub | `brand.github.com/foundations/logo` (from `github.com/logos`), its Copilot and co-branding pages, `docs.github.com` logo policy | "Show integration: Use a permitted GitHub logo to inform others that your project integrates with GitHub." Also: less prominent than our own name, unchanged, never "combining with other words or design elements". But the same page: "Do not use GitHub trademarks, logos, or artwork without GitHub's prior written permission." Since 2025 Copilot has no standalone icon logo; the white "GitHub Copilot" lockup is in `brand.github.com/GitHub_Logos.zip` | allowed, with one open point (the written-permission line; not asked of GitHub) |
+| Cursor | Anysphere | `cursor.com/brand`, `cursor.com/terms-of-service` (no trademark or press page exists) | The brand page gives files "to represent Cursor" and nothing on third-party use; the terms: "There are no implied licenses". Name rule: "Refer to us as Cursor. Not Cursor AI" | unclear, treated as no |
+| Antigravity | Google | `antigravity.google/press`, Google's Partner Marketing Hub ("How to show that your business uses or works with Google technology", the trademark guidelines and terms) | Plain text is welcome: "you could say your product or service "works with," "is compatible with," or "integrates with" a Google product." Icons are not: "To use a Google product icon in your work, create a Partner Marketing Hub account ... and request permission through our approval form." With Google's names: "include a legal line in the footer or other appropriate area" | forbidden without Google's approval; plain text allowed with a legal line |
+| OpenCode | Anomaly (`anomalyco/opencode`; `sst/opencode` redirects there) | `opencode.ai/brand`, its terms; the next brand text in the repo (`services/site/src/lib/brand-content.ts`, not live) | The live page has assets and no rules; MIT covers the code, not the name. The repo's coming text allows "works with" only as an OpenCode badge or a partner lockup, and says do not "put other words next to the logo" | unclear today, treated as no |
+
+Our call (principal designer): **names only, in our own type, for every agent**; no logo file goes into `media/`.
+Why: four owners say no or say nothing a stranger can rely on, and the one that allows it (GitHub) also asks for
+written permission in the same page. One logo among five names would also make an uneven row and put one agent
+first by look, which the A to Z order is there to avoid. Three owners (GitHub, Google, the coming OpenCode text)
+forbid words next to their mark, so a logo would have to replace the name, not sit beside it.
+
+What the video does instead, from the same pages: the line over the tiles says "Stays awake for these agents." (not
+"works with", for OpenAI's non-partner rule); each name is written the owner's way ("Cursor", "OpenCode"); and the end
+card's small print says "Agent names are trademarks of their owners; Wakeshot is not affiliated with them." (Google's
+legal line; the others' no-endorsement rules).
+
+Change it when every owner of a shown agent allows its logo for this use, in writing or in rules a stranger can rely
+on: then the official file goes in `media/public/logos/` unchanged, credited in `media/CREDITS.md`, the logo takes the
+name's place in its tile (not beside it), smaller than the Wakeshot name, and this table gets the new source.
+
+Outside the logo question (not a legal reading, not verified how Google applies it): the Antigravity terms say "You
+must not abuse, harm, interfere with, or disrupt the Service. This includes, but is not limited to, using the Service
+in connection with products not provided by us." Their example is reaching the service with its sign-in, which
+Wakeshot does not do. Listed for Haik before a public "Antigravity" claim.
+
 ## Formats
 
 | Where | What plays | File |
@@ -285,7 +332,12 @@ Size: the dynamic cut will be larger than the 2.5 MB draft. Keep CRF 16 if the f
 then less dither. Measured on the first full draft (2026-11-05, stand-in captures): 7.8 MB at CRF 16; the round 2 draft was
 8.5 MB at CRF 16, so from round 3 (real captures) the build uses CRF 18. The final (round 6, 2026-11-06: the new
 music and the reshaped time cut) is 7.02 MB at CRF 18, BT.709 (converted and tagged; Remotion 4's default was BT.601
-with no tags), -15.3 LUFS, true peak -1.1 dBTP. The round 4 final was 7.14 MB, -15.4 LUFS, -1.4 dBTP.
+with no tags), -15.3 LUFS, true peak -1.1 dBTP. The round 4 final was 7.14 MB, -15.4 LUFS, -1.4 dBTP. The Part C
+draft (2026-11-06, four agent tiles) is 7.49 MB and 30.02 s, -15.3 LUFS, -1.62 dBTP; the same cut rendered as a
+final, 7.37 MB (a check only; the round 6 final stays in `media/out/` until Haik's look). Measure the true peak on
+the rendered MP4 (Remotion's ffmpeg, `loudnorm=print_format=json`, `input_tp`): the same WAV encoded by that ffmpeg
+directly (`-c:a aac -b:a 192k`) read -0.55 dBTP where Remotion's render of it read -1.01 (2026-11-06), so a quick
+encode is no stand-in for the render.
 
 ## Effort and risks
 
@@ -314,7 +366,8 @@ So: 2 agents in 2 rounds for the main cut, plus a reviewer; 3 rounds with the sq
 5. **Overlay alignment.** The cursor and ring must land on the real rows; the row boxes in `shots.json` fix that,
    measured per capture.
 6. **Truth.** Every number from the measurement, every setting value from the log, every UI word from a capture, no
-   agent but Claude Code. The final render already refuses stand-ins and missing numbers.
+   agent whose live test did not pass (`media/src/agents.ts`), no owner's logo. The final render already refuses
+   stand-ins and missing numbers.
 7. **Music taste.** Only Haik can judge it; three candidates keep that to one short listen.
 8. **Skill and version drift.** The skills track Remotion's newest version (4.0.541) and we pin 4.0.540; an API may be
    newer than ours. The brief says to check the installed types first.

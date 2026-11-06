@@ -6,8 +6,8 @@ import {PLACES} from '../timeline.ts';
 import {SETS, boxOf, type Box, type SetName} from './Capture.tsx';
 import {CARD, rowBox} from './SettingsCard.tsx';
 
-/** The hook's terminal: its centre, below the big words. */
-export const HOOK_TERMINAL = {x: PLACES.hook.x, y: PLACES.hook.y + 150, w: 1300};
+/** The pain's laptop: the top left of its box, below the big words. */
+export const PAIN_LAPTOP_AT = {x: PLACES.hook.x - 416, y: PLACES.hook.y + 63};
 /**
  * The tray shot's terminal, the cause: its top left, scale and width (terminal pixels), left of the tray capture, the
  * effect, level with the tooltip. At 0.88 its 34 px text reads at 30 px, the spec's least (review m1 of round 4); it
@@ -19,19 +19,57 @@ export const TRAY_TERMINAL = {x: PLACES.tray.x - 840, y: PLACES.tray.y - 170, sc
 export const HERO = (() => {
   const size = 320;
   const h = held(size);
-  const inkMid = PLACES.hook.y - 170;
+  const inkMid = PLACES.light.y - 170;
   const top = Math.round(inkMid - (h.top + h.lineY + h.t) / 2);
-  return {size, left: PLACES.hook.x - size / 2, top, light: {x: PLACES.hook.x, y: top + h.top + h.d / 2}};
+  return {size, left: PLACES.light.x - size / 2, top, inkMid, light: {x: PLACES.light.x, y: top + h.top + h.d / 2}};
 })();
+
+/** In the agents shot the hero glyph shrinks to this size as it rises to the top of the frame. */
+export const HUB_SIZE = 160;
+
+/** Where a glyph of `size` sits so its ink is centred on (x, inkMid): its top left, and its light's centre. */
+export function glyphAt(size: number, x: number, inkMid: number): {left: number; top: number; light: {x: number; y: number}} {
+  const h = held(size);
+  const top = Math.round(inkMid - (h.top + h.lineY + h.t) / 2);
+  const left = Math.round(x - size / 2);
+  return {left, top, light: {x: left + size / 2, y: top + h.top + h.d / 2}};
+}
+
+/**
+ * The agent tiles, in world pixels around the agents place: one row up to three, two rows from four (the top row
+ * takes the odd one), centred in the band between the light and the caption, so any count from 1 to 6 lays out with
+ * no new design.
+ */
+export const TILE = {w: 540, h: 150, gapX: 36, gapY: 32};
+export function tileBoxes(n: number): Box[] {
+  const rows = n <= 3 ? 1 : 2;
+  const top = Math.ceil(n / rows);
+  const midY = PLACES.agents.y;
+  const height = rows * TILE.h + (rows - 1) * TILE.gapY;
+  const out: Box[] = [];
+  for (let r = 0; r < rows; r++) {
+    const count = r === 0 ? top : n - top;
+    const width = count * TILE.w + (count - 1) * TILE.gapX;
+    for (let c = 0; c < count; c++) {
+      out.push({
+        x: Math.round(PLACES.agents.x - width / 2 + c * (TILE.w + TILE.gapX)),
+        y: Math.round(midY - height / 2 + r * (TILE.h + TILE.gapY)),
+        w: TILE.w,
+        h: TILE.h,
+      });
+    }
+  }
+  return out;
+}
 
 /** Captures sit at whole-number zoom; the top left of each set in the world. */
 export const SET_AT: Record<SetName, {x: number; y: number; zoom: number}> = {
   // At 2x the 200% capture shows the icon at 64 px and the tooltip's words large; right of the terminal, its
   // taskbar clear of the captions.
   tray: {x: PLACES.tray.x - 228, y: PLACES.tray.y - 210, zoom: 2},
-  // The 200% menu set at 1x fills the frame's height: its empty top rows run off the top, its taskbar stays clear of
-  // the captions.
-  menu: {x: PLACES.menu.x - 485, y: PLACES.menu.y - 560, zoom: 1},
+  // The menu set is not in the 30 s cut since Part C of `p6-agents-video-readme` (its shot made room for the pain and
+  // the agents); its spot is kept for the longer cut. At 1x the 200% set fills the frame's height.
+  menu: {x: 12000 - 485, y: 1600 - 560, zoom: 1},
 };
 
 /** A box of a set, in world pixels; `grow` widens it on every side. */

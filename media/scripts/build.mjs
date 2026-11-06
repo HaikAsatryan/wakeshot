@@ -21,7 +21,7 @@ const media = join(dirname(fileURLToPath(import.meta.url)), '..');
 const cli = join(media, 'node_modules', '@remotion', 'cli', 'remotion-cli.js');
 const concurrency = process.env.MEDIA_CONCURRENCY ?? '4';
 /** The poster: the light on and the name with its line in, the frame the README player shows before play. */
-const POSTER_FRAME = 120;
+const POSTER_FRAME = 180;
 
 function run(args) {
   const r = spawnSync(process.execPath, args, {cwd: media, stdio: 'inherit'});
