@@ -131,6 +131,7 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-vscode-local-off` | no | `p4-live-vscode-stop`, `p4-antigravity-exact-end` Part B (`tray_mode.rs`) | done (21:56): the tray starts five sources (Claude Code, Codex CLI, Copilot CLI, OpenCode, Cursor); VS Code Local chats and Antigravity unwired, their code and tests kept; at start only Cursor's hook folder is added, the Antigravity remove path stays; 4 new tests through the watch code; clippy x64 and ARM64 clean |
 | `p4-cursor-off` | no | `p6-agents-install-e2e`; runs alone among Rust cards | done (23:55): the tray starts four sources (Claude Code, Codex CLI, Copilot: CLI and VS Code harness chats, OpenCode); no start adds a hook folder; each start retires Wakeshot's Cursor and Antigravity folders through the uninstall's removal; why-comments on the unwired code (Haik); 7 tests fail with the old behavior; checks green x64 and ARM64 (1782 tests); Haik's install updated (Setup 12,481,433 bytes), the Cursor folder gone at start |
 | `p4-idle-cpu` | no | `p6-agents-video-readme` Part B; runs alone among Rust cards | running since 01:59 (idle CPU 1,016 ms per 10 min against 0.1.0's 109 ms; then Haik's install updated) |
+| `p4-live-claude-desktop` | yes: his sign-in; maybe clicks | `p4-idle-cpu` | blocked on Haik's sign-in (Claude Desktop 2.42304.2 installed 02:29, signed by Anthropic, PBC, at Medium) |
 | `p4-core-linux-tests` | no | none | done (2026-11-06 ~20:10, 750b023): Codex and OpenCode tests join one level at a time; CI core step runs `--no-fail-fast`; three VS Code tests sent to `p4-live-vscode`; no Linux run here (rustup in WSL refused by the permission check; no C compiler there) |
 | `p4-live-uninstall` | no | every other card of the bigger v1 (only when the work is fully finalized) | later (Haik, 2026-11-06 ~21:20) |
 | `p4-cursor-gemini-research` | no | none | done 2026-11-06 (`research/cursor-gemini-signals.md`): Cursor big, Gemini CLI enterprise only since 2026-06-18; hooks question for Haik |
@@ -571,3 +572,7 @@ limit; Copilot waiting does not hold. The cards build these.
 - 2026-11-06 23:55: `p4-cursor-off` done. Haik (23:3x): keep the dropped code with a short reason; kept compiled and tested
   but unwired, with why-comments (commented-out code is not built or tested). Left: two old Cursor chat files in
   Haik's `agents\cursor` data folder (for `p4-live-uninstall`).
+- 2026-11-07 02:29: Haik read the README: "I did not like that we did not check claude desktop." Claude Desktop 2.42304.2
+  installed for his user (winget `Anthropic.Claude` download, signature Anthropic, PBC, run at Medium through Explorer);
+  card `p4-live-claude-desktop` waits for his sign-in. He also asked why the README's Claude waits paragraph and the
+  `winget upgrade` limit are as they are (explained in chat; his answers go to the next orchestrator).
