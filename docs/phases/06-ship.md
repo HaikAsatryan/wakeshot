@@ -622,3 +622,10 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   fallback `rusqlite` bundled, under 900 KiB). Blocked on Haik: `opencode.db` also holds OpenCode's login tokens;
   the design opens it read only and queries only the session and schedule tables. Needs `SourceId::OpenCode`,
   `WantedFile::Query` and `Liveness::ImageSince` in the contracts card.
+- 2026-11-06 15:00: Haik: "You can do anything" (yes to: workers install agents and Ollama for his user; one
+  sign-in sitting only where a login cannot be reused; the orchestrator decides what is easy to undo and logs it;
+  computer use where a command line cannot drive an app; hooks from a Wakeshot-owned folder, added by itself with
+  one notice; Cursor in v1; Gemini CLI dropped; OpenCode `opencode.db` read only with a table test). Also: Antigravity
+  in v1 if a free option exists to test it; OpenCode 2.x first; he gets Codex himself; "minimum time to be involved
+  but you also need to test properly"; as much in parallel as possible. Pushed 47d38ac and fb0ebce (workspace checks
+  green on x64 and ARM64). The session ends here with a continuation prompt.

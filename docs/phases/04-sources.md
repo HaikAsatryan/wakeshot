@@ -116,7 +116,7 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-claude-transcript` | no | `p4-claude-status`, `p4-cron`, `p4-claude-live-shapes` | done (22:35): 46 tests; no contract change |
 | `p4-copilot-source` | no | `p4-cron` | done 2026-11-06 (schema of 1.0.106, not tested live; 42 tests) |
 | `p4-copilot-vscode-research` | no | none | done 2026-11-06: a partly reliable signal, medium confidence (`research/copilot-vscode-signals.md`); a source card follows, after a contracts change run alone |
-| `p4-opencode-source` | no | Part B after the contracts card | blocked: Part A done 2026-11-06 (`research/opencode-signals.md`); Haik's answer on opening `opencode.db`, which also holds login tokens |
+| `p4-opencode-source` | no | Part B after the contracts card | Part A done 2026-11-06 (`research/opencode-signals.md`); Part B waits for the contracts card (Haik: yes to the read-only open; 2.x first, 1.x only if cheap) |
 | `p4-cursor-gemini-research` | no | none | done 2026-11-06 (`research/cursor-gemini-signals.md`): Cursor big, Gemini CLI enterprise only since 2026-06-18; hooks question for Haik |
 | `p4-watch-data` | no | `p4-hold-files`, `p4-watch-reads` | done (21:12): 19 tests |
 | `p4-watch-agents` | no | `p4-watch-reads` | done (22:43): 19 tests; API changes for `p4-watch-thread` in its Result |

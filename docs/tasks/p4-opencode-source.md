@@ -163,3 +163,11 @@ High target not verified; undocumented class).
   image case).
 - Open items: a live card with a local model for both versions (list in the research file, "What is left");
   architecture sections 7 and 11 lines.
+
+## Haik's answers (2026-11-06)
+
+- Opening `opencode.db` read only, querying only the session and schedule tables: yes ("You can do anything"), with a
+  test that no other table is ever named in a query and nothing from the file reaches the log.
+- "open code v1 is not too important you can focus on v2 instead as we are focusing the future": Part B builds 2.x
+  first; 1.x only if it is cheap once 2.x works.
+- Part B starts after the contracts card adds `SourceId::OpenCode`, `WantedFile::Query` and `Liveness::ImageSince`.

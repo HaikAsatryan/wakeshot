@@ -44,11 +44,14 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
     until its own timeout (at most 1 hour). A task stopped from the app's UI ends when Claude Code queues its stop
     notice, which it writes to the transcript at once (2.1.317 code; not checked live; decided by the worker,
     2026-11-04, for Haik's review).
-- **Other agents**: Codex CLI and Copilot CLI ship in v1 (Haik, 2026-11-06; on 2026-11-03 they had moved to after
-  v1 to keep v1 small), and Copilot agent mode in VS Code too if its research finds a reliable signal (Haik,
-  2026-11-06; `p4-copilot-vscode-research`), and OpenCode (Haik, 2026-11-06; `p4-opencode-source`) (`research/other-agent-signals.md`). OpenCode next (reliable
-  signal, free to test). No reliable signal yet: Gemini CLI, Cursor CLI, Aider, Amp, Kiro. Logic may be ported from
-  the MIT rivals with credit. Haik has personal Codex and Copilot access for one live test each. Agents not tested
+- **Other agents** (v1 grows, Haik 2026-11-06; on 2026-11-03 v1 was Claude Code only): Codex CLI, Copilot CLI,
+  Copilot agent mode in VS Code (`research/copilot-vscode-signals.md`), OpenCode, Cursor (editor and CLI), and
+  Antigravity if a free option exists to test it (`research/cursor-gemini-signals.md`). OpenCode: 2.x first, 1.x only
+  if cheap ("we are focusing the future"); Wakeshot may open `opencode.db` read only and query only the session and
+  schedule tables, though the file also holds OpenCode's login tokens, with a test that no other table is ever read
+  (`research/opencode-signals.md`). Gemini CLI is dropped: since 2026-06-18 it serves only enterprise and paid-API
+  users. Not planned: Aider, Amp, Kiro. Logic may be ported from the MIT rivals with credit. Every agent gets a live
+  test, run by agents wherever they can (Haik wants minimum time at the laptop, but real tests); agents not tested
   live are marked so in the docs.
 - **`wakeshot run -- <command>`**: holds while the command runs. Writes a hold file, a small documented format that
   any tool or script can also write.
@@ -64,6 +67,10 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
 - Later, not v1: rules for any app ("while ffmpeg runs"). Claude Code inside WSL: its session files carry Linux pids,
   which Windows cannot check, so stale files would hold forever. Revisit with a helper inside WSL.
 - No plugins and no scripting. A new built-in source is new code.
+- Hooks (Haik, 2026-11-06): for an agent with no reliable file signal (Cursor, maybe Antigravity), Wakeshot may add
+  its own hook files in a folder it owns that the agent loads (a plugin or extension folder), never by editing the
+  user's own settings, and never for Claude Code. It adds them by itself when it finds the agent, says so once in a
+  notice, lists them in the README, and removes them at uninstall.
 
 ### Power behavior
 

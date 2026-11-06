@@ -296,8 +296,14 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   passing, review 0/1/10 with the major and nine minors fixed). README: Haik's story ("Why I built it", "What comes
   next"), the icon loop, pictures, state icons and numbers; the video spot waits for his upload. Community files added
   (`p6-repo-files`; GitHub's community profile 100%). His install updated to the latest code. Pushed; CI green.
-- Next (orchestrator): Haik's steps: watch the final video and say yes or what to change; upload it and paste its URL
-  into the README spot; turn on private vulnerability reporting; read the night's decisions (`06-ship.md` work log,
-  2026-11-06 lines, and the round 4 Results of `p6-media`, `p6-readme`, `p6-repo-files`); retake the Task Manager
-  captures after his next sign-out. Then the Pages finish (`p6-pages`), the website link on the repo once Pages is
-  live; Phase 7 field test; Phase 8 cleanup.
+- 2026-11-06 ~15:00: Haik approved the final video (music: "Funky Disco Beats", Fupi, CC0; a clear time cut) and a
+  new README written from scratch (`docs/research/readme.md`); both pushed. Then he grew v1: the upload, Pages and
+  launch wait, since the video may change. v1 agents: Claude Code, Codex CLI, Copilot CLI, Copilot in VS Code,
+  OpenCode (2.x first), Cursor, Antigravity if testable for free (`docs/product.md`). Done: `p4-codex-source`,
+  `p4-copilot-source` (pushed, workspace checks green on x64 and ARM64), research for VS Code, OpenCode, Cursor,
+  Gemini and hooks. Haik: "You can do anything": workers may install agents and Ollama for his user, the orchestrator
+  decides what is easy to undo and logs it for his review, computer use where a command line cannot drive an app,
+  hooks as in `product.md`. He gets the Codex subscription himself.
+- Next (orchestrator): the continuation prompt of 2026-11-06 (Phase 6 work log, last lines): one contracts card run
+  alone; then the OpenCode, VS Code, Cursor and Antigravity builds in parallel; live tests run by agents, one at a
+  time; README and site; then the video, upload, Pages, Phase 7 field test, Phase 8 cleanup.
