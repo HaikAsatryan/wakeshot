@@ -1,6 +1,6 @@
 # Live test: Cursor editor and CLI through Wakeshot's hooks
 
-Phase: 4. Status: blocked (2026-11-06 17:50) on "Steps for Haik"; the review fixes are done. Was: ready once `p4-cursor-source`, `p4-agent-hooks-install`, the hooks code review fixes and the live
+Phase: 4. Status: blocked (2026-11-06 19:28) on "Steps for Haik, round 2"; round 1 read (Log 19:15). Was: ready once `p4-cursor-source`, `p4-agent-hooks-install`, the hooks code review fixes and the live
 card before it in the lane are done (new 2026-11-06). Needs Haik: no (he signed in to Cursor and its CLI,
 2026-11-06 ~17:30); only if the payload check finds the command line (design Question 4).
 Agent: `wakeshot-worker`. Size: about 130K tokens.
@@ -75,7 +75,21 @@ not start.
 
 None (no product question). Steps Haik must do by hand: "Steps for Haik" below.
 
-## Steps for Haik (about 5 minutes; the card is blocked on them)
+## Steps for Haik, round 2 (about 4 minutes; the card is blocked on them)
+
+Why: round 1 worked for Wakeshot's hook, but my capture hook failed, so the Stop-button cancel, the prompt with the
+exe gone and the window close need one short run more. The CLI part needs nothing from you now.
+
+1. Use the Cursor window titled **cursor-live2 - Cursor** (open now; Wakeshot's test window, not your own).
+2. Send `This is an app test. Reply with one word: ok`. Wait for the answer, then 5 seconds.
+3. Send `This is an app test. Count from 1 to 10000, one number per line.` About 3 seconds after the numbers start,
+   click the Stop button (the square at the chat box). Wait 5 seconds.
+4. Send `This is an app test. Reply with one word: ok` again. Wakeshot's hook exe is gone for this one on purpose:
+   note any message Cursor shows. Wait for the answer, then 5 seconds.
+5. Close the window with its X; take the default if Cursor asks anything.
+6. Tell the orchestrator "done", with anything Cursor showed. Send each prompt once; if one goes wrong, say which.
+
+## Steps for Haik, round 1 (done 2026-11-06 ~19:00, not exactly as written; Log 19:05)
 
 Why: the Cursor CLI is not signed in for your user (`agent status` at Medium: "Not logged in"), and the editor's chat
 box takes no text through UI Automation, so a test prompt would need the keyboard focus while you work. Everything is
@@ -169,6 +183,27 @@ set up; my monitors record each step by themselves. Do not use your own "Cursor 
   clean (ARM64 libs clean now too). Nothing written in the real profile. The running conductor still uses the
   17:31 build (old rule: `.wakeshot-removed` in `local\`), which is what its editor dot-name test needs; the CLI part
   uses a rebuilt exe. Still blocked on "Steps for Haik".
+- 2026-11-06 ~19:05: second worker took over. Haik did the steps about 19:00, not as written: prompt 1 sent twice
+  (the first too slow), the 1-to-200 prompt ended before a cancel, his third prompt (count to 10K) is the cancel case,
+  cancelled with the Stop button (Esc did nothing); `cursor-live2` did not open. Reading the evidence first.
+- 2026-11-06 19:15: round 1 evidence. The capture plugin named `C:\Program Files\PowerShell\7\pwsh.exe`, which does
+  not exist here (pwsh is the Store build), so each capture run ended with exit 127 and `<S>\capture` stayed empty.
+  The conductor keyed on capture stops, so the exe was never renamed (test 5 not run) and `cursor-live2` never opened.
+  Wakeshot's own hook worked: 6 prompts in one chat (UUID-shaped id), each wrote a working file naming pid 48240 (a
+  `Cursor.exe` of window 1), each deleted by the next hook run 3.4 to 9.6 s later; one more hook run at 19:09:46 with
+  no file (the window close: which event, not verified). Cursor ran each hook as `powershell.exe -NoProfile
+  -NonInteractive -ExecutionPolicy Bypass -c "<UTF-8 setup>; Get-Content -LiteralPath '<temp file>' ..."`; the three
+  command lines the trace read (1024 to 1038 chars) had no `conversation_id`. agent-watch had ended at 18:47 (`^C` in
+  its console, before the prompts): no posts. `agent status` at Medium now: logged in (19:13).
+- 2026-11-06 19:27: round 2 set up. Conductor 46880 ended by PID. Capture plugin fixed (Windows PowerShell 5.1, a
+  path with no space) and it now redacts at capture time: no prompt text, e-mail or path reaches the disk. Debug build
+  of the current code in `<S>\bin` (a release build in `<S>\bin-release`: release ignores `WAKESHOT_DATA_DIR`, so it
+  would write the real data folder). agent-watch (debug) at Medium with no console (pid 48456, via `watch2.vbs`),
+  conductor `run\conductor2.ps1` at High (pid 56444; log `logs\conductor2.log`): counts only stops whose hook has my
+  data folder, renames the exe away after stop 2 and back after stop 3, logs the found process and its end after the
+  close. Window `cursor-live2` opened 19:26:45 (hwnd 2231074, new Cursor pids 520 2248 43016 49616 55048 55968, in
+  Haik's main 49860); no dialog in its UIA tree. An installed Wakeshot tray runs (pid 11424 since 04:34, guard 48172);
+  not touched. Blocked on "Steps for Haik" round 2.
 
 ## Result
 
