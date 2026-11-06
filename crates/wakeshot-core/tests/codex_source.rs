@@ -1,6 +1,7 @@
 //! `CodexSource` fed the way the watch thread feeds it: lock file names as `Present` and `Gone`, rollout bytes as
 //! `Appended` from the start of the file, whole and in pieces. Every rollout is a fixture in `fixtures/codex/`, built
-//! from the schema (its README). The source does no I/O, so the home folder is a made-up path.
+//! from the schema (its README), or in `fixtures/codex/live/`, redacted from live Codex CLI 0.167.0 sessions (its
+//! README). The source does no I/O, so the home folder is a made-up path.
 
 use std::ffi::OsStr;
 use std::fs;
@@ -161,8 +162,9 @@ fn wants_the_lock_folder_by_name_and_one_rollout_per_listed_thread() {
         Feed::Present,
     );
     let wanted = source.wanted();
-    assert_eq!(wanted.len(), 3, "{wanted:?}");
-    let tails: Vec<(PathBuf, u8, String)> = wanted[1..]
+    assert_eq!(wanted.len(), 4, "{wanted:?}");
+    assert_sessions_watch(&wanted[1]);
+    let tails: Vec<(PathBuf, u8, String)> = wanted[2..]
         .iter()
         .map(|w| match w {
             WantedFile::FindNewest {
@@ -188,12 +190,54 @@ fn wants_the_lock_folder_by_name_and_one_rollout_per_listed_thread() {
     );
 }
 
+/// The `sessions` listing is there only so the watch thread watches the tree (`p4-live-codex`): a subtree watch
+/// (depth 1 or more), and no name passes its filter, so it never feeds a file.
+fn assert_sessions_watch(want: &WantedFile) {
+    let WantedFile::Names { dir, depth, accept } = want else {
+        panic!("not the sessions listing: {want:?}");
+    };
+    assert_eq!(dir, &sessions_dir());
+    assert!(*depth >= 1, "a watch of the whole tree");
+    for name in [
+        format!("rollout-2026-11-06T12-00-00-{THREAD}.jsonl"),
+        format!("rollout-2026-11-06T12-00-00-{THREAD}_{OTHER}.jsonl"),
+        format!("{THREAD}.lock"),
+        "11".to_owned(),
+        "a.txt".to_owned(),
+    ] {
+        assert!(!accept(&name), "{name}");
+    }
+}
+
+#[test]
+fn the_sessions_tree_is_wanted_for_its_watch_only_while_a_thread_is_listed() {
+    let mut source = CodexSource::new(PathBuf::from(HOME));
+    assert_eq!(source.wanted().len(), 1, "the lock folder only");
+
+    source.feed(&lock(THREAD), Feed::Present);
+    let wanted = source.wanted();
+    assert_eq!(wanted.len(), 3, "{wanted:?}");
+    assert_sessions_watch(&wanted[1]);
+    assert!(matches!(wanted[2], WantedFile::FindNewest { .. }));
+
+    // A file the listing could ever name changes nothing: it takes no name, and the source ignores a stray feed.
+    let year = FileId(sessions_dir().join("2026").join("x.jsonl"));
+    assert_eq!(source.feed(&year, Feed::Present), Fed::Taken);
+    assert_eq!(source.sessions(), [idle(THREAD)]);
+
+    source.feed(&lock(THREAD), Feed::Gone);
+    assert_eq!(source.wanted().len(), 1, "no thread, no rollout to follow");
+}
+
 #[test]
 fn no_want_opens_a_lock_file() {
     let mut source = with_thread();
     append(&mut source, &rollout(THREAD), &fixture("running.jsonl"));
     for want in source.wanted() {
         match want {
+            WantedFile::Names { ref dir, .. } if *dir == sessions_dir() => {
+                assert_sessions_watch(&want);
+            }
             WantedFile::Names { dir, .. } => assert_eq!(dir, locks_dir()),
             WantedFile::FindNewest {
                 root, key, matches, ..
@@ -305,7 +349,7 @@ fn a_lock_file_gone_ends_the_session_and_what_its_rollout_said() {
 
     assert_eq!(source.feed(&lock(THREAD), Feed::Gone), Fed::Taken);
     assert_eq!(source.sessions(), [idle(OTHER)]);
-    assert_eq!(source.wanted().len(), 2, "its rollout is no longer wanted");
+    assert_eq!(source.wanted().len(), 3, "its rollout is no longer wanted");
 
     // The same thread opened again starts from what its rollout says from the start.
     source.feed(&lock(THREAD), Feed::Present);
@@ -573,4 +617,119 @@ fn the_home_folder_is_codex_home_when_set_else_dot_codex() {
         codex::codex_home(profile, Some(OsStr::new(r"D:\codex"))),
         PathBuf::from(r"D:\codex")
     );
+}
+
+// Live rollouts (`p4-live-codex`).
+
+fn live(name: &str) -> Vec<u8> {
+    fixture(&format!("live/{name}"))
+}
+
+/// A live rollout, the lines (counted from 1) after which the activity changes with the activity from there on, and
+/// the activity at its end.
+type LiveCase = (&'static str, Vec<(usize, Activity)>, Activity);
+
+fn live_expected() -> Vec<LiveCase> {
+    use Activity::{Idle, Working};
+    vec![
+        (
+            "tui-four-turns.jsonl",
+            vec![
+                (2, Working),
+                (31, Idle),
+                (33, Working),
+                (52, Idle),
+                (54, Working),
+                (71, Idle),
+                (73, Working),
+                (81, Idle),
+            ],
+            Idle,
+        ),
+        ("tui-reverted.jsonl", vec![(4, Working), (12, Idle)], Idle),
+        ("tui-crash-mid-turn.jsonl", vec![(2, Working)], Working),
+        ("exec-one-turn.jsonl", vec![(2, Working), (31, Idle)], Idle),
+    ]
+}
+
+#[test]
+fn every_live_fixture_is_listed_once() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codex/live");
+    let mut on_disk: Vec<String> = fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().into_string().unwrap())
+        .filter(|name| name.ends_with(".jsonl"))
+        .collect();
+    on_disk.sort();
+    let mut listed: Vec<String> = live_expected().iter().map(|e| e.0.to_owned()).collect();
+    listed.sort();
+    assert_eq!(on_disk, listed);
+}
+
+/// Line by line, as Codex wrote them: every real line reads (no format problem), only the turn events move the
+/// activity, and an item that ends after an aborted turn does not open it again.
+#[test]
+fn live_rollouts_move_the_activity_only_at_their_turn_events() {
+    for (name, changes, end) in live_expected() {
+        let mut source = with_thread();
+        let mut now = Activity::Idle;
+        let bytes = live(name);
+        for (i, line) in bytes.split_inclusive(|&b| b == b'\n').enumerate() {
+            append(&mut source, &rollout(THREAD), line);
+            if let Some((_, next)) = changes.iter().find(|(at, _)| *at == i + 1) {
+                now = *next;
+            }
+            assert_eq!(
+                source.sessions(),
+                [facts(THREAD, now, FormatHealth::Ok)],
+                "{name} line {}",
+                i + 1
+            );
+        }
+        assert_eq!(now, end, "{name}");
+
+        for size in [1, 7, 333, 4096] {
+            let mut source = with_thread();
+            for piece in bytes.chunks(size) {
+                append(&mut source, &rollout(THREAD), piece);
+            }
+            assert_eq!(
+                source.sessions(),
+                [facts(THREAD, end, FormatHealth::Ok)],
+                "{name} in pieces of {size}"
+            );
+        }
+    }
+}
+
+/// The feeds the watch thread gave during the live backtrack: Codex dropped and made the lock file twice; the first
+/// time the new file did not exist yet, so the old one was read again from its start; the second time the new one
+/// was the newest.
+#[test]
+fn the_live_backtrack_ends_on_the_reverted_rollout() {
+    let reverted = FileId(sessions_dir().join(r"2026\11\06").join(format!(
+        "rollout-2026-11-06T14-35-34-{THREAD}_{OTHER}.jsonl"
+    )));
+    let mut source = with_thread();
+    append(&mut source, &rollout(THREAD), &live("tui-four-turns.jsonl"));
+    assert_eq!(source.sessions(), [idle(THREAD)]);
+
+    source.feed(&lock(THREAD), Feed::Gone);
+    assert_eq!(source.sessions(), []);
+    source.feed(&lock(THREAD), Feed::Present);
+    append(&mut source, &rollout(THREAD), &live("tui-four-turns.jsonl"));
+    assert_eq!(source.sessions(), [idle(THREAD)]);
+
+    source.feed(&lock(THREAD), Feed::Gone);
+    source.feed(&lock(THREAD), Feed::Present);
+    let mut seen = Vec::new();
+    for line in live("tui-reverted.jsonl").split_inclusive(|&b| b == b'\n') {
+        append(&mut source, &reverted, line);
+        seen.push(source.sessions()[0].activity);
+    }
+    use Activity::{Idle, Working};
+    assert_eq!(seen[..3], [Idle; 3], "meta and settings");
+    assert_eq!(seen[3..11], [Working; 8], "the edited prompt's turn");
+    assert_eq!(seen[11], Idle);
+    assert_eq!(source.sessions(), [idle(THREAD)]);
 }

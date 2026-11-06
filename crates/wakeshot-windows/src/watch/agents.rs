@@ -2926,6 +2926,117 @@ mod tests {
         assert!(lines(&log).is_empty(), "{:?}", lines(&log));
     }
 
+    /// `p4-live-codex`: Codex appends to its open rollout and each append gives a change notice in milliseconds, but
+    /// with only the lock folder watched a turn's start and end waited for the 30 s tick. The source's `sessions`
+    /// listing gets the tree watched, so a notice there reads the rollout at once.
+    #[test]
+    fn a_codex_rollout_write_is_read_on_its_notice_without_a_tick() {
+        use wakeshot_core::sources::codex::CodexSource;
+
+        const ID: &str = "0199aaaa-0000-7000-8000-000000000001";
+        let home = TempDir::new("agents-codex-notice");
+        let lock = home.write(&format!(r"thread-writer-locks\{ID}.lock"), b"");
+        let held = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&lock)
+            .unwrap();
+        held.try_lock().unwrap();
+        let name = format!("rollout-2026-11-06T12-00-00-{ID}.jsonl");
+        let rollout = home.write(
+            &format!(r"sessions\2026\11\06\{name}"),
+            concat!(
+                r#"{"timestamp":"2026-11-06T10:00:00.000Z","ordinal":0,"type":"session_meta","payload":{}}"#,
+                "\n"
+            )
+            .as_bytes(),
+        );
+        let log = Arc::new(MemoryLog::default());
+        let mut agents = Agents::new(
+            vec![Box::new(CodexSource::new(home.path().to_path_buf()))],
+            log.clone(),
+        );
+        let me = crate::process::current().unwrap();
+        let live = FakeLiveness::default();
+        live.processes.lock().unwrap().push(entry(me, "codex.exe"));
+        live.alive.lock().unwrap().push((me, Alive::Yes));
+        let posted = |activity| {
+            vec![Event::Sources {
+                source: SourceId::Codex,
+                sessions: vec![(
+                    SessionFacts {
+                        activity,
+                        ..codex_session(&lock)
+                    },
+                    Alive::Yes,
+                )],
+            }]
+        };
+
+        agents.on_tick();
+        let sessions_dir = home.path().join("sessions");
+        assert_eq!(
+            agents.folders(),
+            [
+                WatchFolder {
+                    dir: sessions_dir.clone(),
+                    subtree: true,
+                },
+                WatchFolder {
+                    dir: home.path().join("thread-writer-locks"),
+                    subtree: false,
+                },
+            ]
+        );
+        assert_eq!(
+            agents.snapshots(&live, START).events,
+            posted(Activity::Idle)
+        );
+
+        append(
+            &rollout,
+            concat!(
+                r#"{"timestamp":"2026-11-06T10:00:05.000Z","ordinal":1,"type":"event_msg","payload":{"type":"task_started","turn_id":"t1"}}"#,
+                "\n"
+            )
+            .as_bytes(),
+        );
+        let changed = [PathBuf::from(format!(r"2026\11\06\{name}"))];
+        assert!(agents.on_change(&sessions_dir, Some(&changed)).is_empty());
+        assert_eq!(
+            agents.snapshots(&live, START).events,
+            posted(Activity::Working)
+        );
+
+        // A notice that lost its names reads the same.
+        append(
+            &rollout,
+            concat!(
+                r#"{"timestamp":"2026-11-06T10:01:00.000Z","ordinal":2,"type":"event_msg","payload":{"type":"task_complete","turn_id":"t1"}}"#,
+                "\n"
+            )
+            .as_bytes(),
+        );
+        agents.on_change(&sessions_dir, None);
+        assert_eq!(
+            agents.snapshots(&live, START).events,
+            posted(Activity::Idle)
+        );
+        assert!(lines(&log).is_empty(), "{:?}", lines(&log));
+
+        // No thread: the tree is no longer watched.
+        drop(held);
+        fs::remove_file(&lock).unwrap();
+        agents.on_tick();
+        assert_eq!(
+            agents.folders(),
+            [WatchFolder {
+                dir: home.path().join("thread-writer-locks"),
+                subtree: false,
+            }]
+        );
+    }
+
     #[test]
     fn no_event_when_nothing_changed() {
         let a = Shared::new(SourceId::ClaudeCode);

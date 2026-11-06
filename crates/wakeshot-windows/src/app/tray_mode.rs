@@ -33,6 +33,7 @@ use wakeshot_core::event::{Event, SessionChange};
 use wakeshot_core::ownership::io::PlanIo;
 use wakeshot_core::sources::AgentSource;
 use wakeshot_core::sources::claude::{ClaudeSource, claude_folder};
+use wakeshot_core::sources::codex::{CodexSource, codex_home};
 use wakeshot_core::text::NoticeClick;
 use wakeshot_core::view::{Cue, MenuCommand, Notice, TrayView};
 use windows::Win32::Foundation::{
@@ -87,6 +88,9 @@ const TASKBAR_SETTINGS: &str = "ms-settings:taskbar";
 
 /// Claude Code's own variable for its folder (`docs/tasks/p4-live-claude.md`, m6).
 const CLAUDE_CONFIG_DIR: &str = "CLAUDE_CONFIG_DIR";
+
+/// Codex CLI's own variable for its home folder (`sources::codex::codex_home`).
+const CODEX_HOME: &str = "CODEX_HOME";
 
 /// How long a lost-event reading waits for the lid on the loop thread. Its first callback came within 1 ms in every
 /// test (research, "Lid notification"), and a PC with no lid answers nothing, so the wait must stay short.
@@ -449,31 +453,57 @@ fn fatal(log: &dyn Log, what: &str, e: WinError) -> u8 {
     EXIT_FAILED
 }
 
-/// The watch thread's sources: Claude Code only in v1 (Codex and Copilot after v1; Haik, 2026-11-03). The folder is
-/// found the way Claude Code finds it: `CLAUDE_CONFIG_DIR`, else `.claude` in the profile folder, which
-/// `std::env::home_dir` reads in the same order as Node's `os.homedir` (`USERPROFILE` first). The zone logs its own
-/// failures: boxed into the source, nobody could ask it for them.
+/// The watch thread's sources: Claude Code and Codex CLI (Codex back in v1, Haik 2026-11-06). Each folder is found the
+/// way its agent finds it, from the profile folder, which `std::env::home_dir` reads in the same order as Node's
+/// `os.homedir` (`USERPROFILE` first).
 fn sources(log: &Arc<dyn Log>) -> Vec<Box<dyn AgentSource + Send>> {
     let Some(home) = std::env::home_dir() else {
         log.line(
             Level::Warn,
             AREA,
-            "the profile folder is unknown, so Claude Code is not watched",
+            "the profile folder is unknown, so Claude Code and Codex CLI are not watched",
         );
         return Vec::new();
     };
-    let config_dir = std::env::var_os(CLAUDE_CONFIG_DIR).filter(|dir| !dir.is_empty());
+    sources_in(
+        &home,
+        std::env::var_os(CLAUDE_CONFIG_DIR),
+        std::env::var_os(CODEX_HOME),
+        log,
+    )
+}
+
+/// [`sources`] for a profile folder and the two agents' variables, so a test gives them. Claude Code: `CLAUDE_CONFIG_DIR`,
+/// else `.claude`. Codex CLI: `CODEX_HOME`, else `.codex`. An empty value counts as unset for both. The zone logs its
+/// own failures: boxed into the source, nobody could ask it for them.
+fn sources_in(
+    home: &Path,
+    claude_config_dir: Option<OsString>,
+    codex_home_dir: Option<OsString>,
+    log: &Arc<dyn Log>,
+) -> Vec<Box<dyn AgentSource + Send>> {
+    let config_dir = claude_config_dir.filter(|dir| !dir.is_empty());
     let text = if config_dir.is_some() {
         "Claude Code is watched in the folder CLAUDE_CONFIG_DIR names"
     } else {
         "Claude Code is watched in .claude of the profile folder"
     };
     log.line(Level::Info, AREA, text);
-    let claude = claude_folder(&home, config_dir.as_deref());
-    vec![Box::new(ClaudeSource::in_folder(
-        claude,
-        Box::new(SystemZone::current_logged(Arc::clone(log))),
-    ))]
+    let claude = claude_folder(home, config_dir.as_deref());
+    let codex_dir = codex_home_dir.filter(|dir| !dir.is_empty());
+    let text = if codex_dir.is_some() {
+        "Codex CLI is watched in the folder CODEX_HOME names"
+    } else {
+        "Codex CLI is watched in .codex of the profile folder"
+    };
+    log.line(Level::Info, AREA, text);
+    vec![
+        Box::new(ClaudeSource::in_folder(
+            claude,
+            Box::new(SystemZone::current_logged(Arc::clone(log))),
+        )),
+        Box::new(CodexSource::new(codex_home(home, codex_dir.as_deref()))),
+    ]
 }
 
 /// The loop's own lines go to the IO thread as `Command::Log`, as the dispatcher's do, so the loop thread never
@@ -1595,6 +1625,54 @@ mod tests {
                 Command::Log("power, error: three".into()),
             ]
         );
+    }
+
+    #[test]
+    fn the_tray_watches_claude_code_and_codex_cli_where_each_writes() {
+        use wakeshot_core::sources::{SourceId, WantedFile};
+
+        let home = Path::new(r"C:\Users\x");
+        for (codex_env, codex_dir, text) in [
+            (
+                None,
+                r"C:\Users\x\.codex",
+                "Codex CLI is watched in .codex of the profile folder",
+            ),
+            (
+                Some(""),
+                r"C:\Users\x\.codex",
+                "Codex CLI is watched in .codex of the profile folder",
+            ),
+            (
+                Some(r"D:\cx"),
+                r"D:\cx",
+                "Codex CLI is watched in the folder CODEX_HOME names",
+            ),
+        ] {
+            let memory = Arc::new(MemoryLog::default());
+            let log: Arc<dyn Log> = memory.clone();
+            let picked = sources_in(home, None, codex_env.map(OsString::from), &log);
+            let ids: Vec<SourceId> = picked.iter().map(|s| s.id()).collect();
+            assert_eq!(
+                ids,
+                [SourceId::ClaudeCode, SourceId::Codex],
+                "{codex_env:?}"
+            );
+            let Some(WantedFile::Names { dir, .. }) = picked[1].wanted().into_iter().next() else {
+                panic!("Codex starts with its lock folder");
+            };
+            assert_eq!(dir, Path::new(codex_dir).join("thread-writer-locks"));
+            assert_eq!(
+                lines(&memory),
+                [
+                    (
+                        Level::Info,
+                        "Claude Code is watched in .claude of the profile folder".to_owned()
+                    ),
+                    (Level::Info, text.to_owned()),
+                ]
+            );
+        }
     }
 
     #[test]

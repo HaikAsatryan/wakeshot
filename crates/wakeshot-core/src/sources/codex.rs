@@ -1,6 +1,6 @@
 //! Codex CLI sessions (architecture section 7): one per thread lock file, working while the thread's rollout says a
-//! turn is open. Built from Codex 0.167.0's own source (`docs/tasks/p4-codex-source.md`, Log); not tested live until
-//! `p4-live-codex`.
+//! turn is open. Built from Codex 0.167.0's own source (`docs/tasks/p4-codex-source.md`, Log); tested live with Codex
+//! CLI 0.167.0 by `p4-live-codex` (its redacted rollouts are in `tests/fixtures/codex/live/`).
 //!
 //! What it reads, under Codex's home folder ([`codex_home`]):
 //!
@@ -13,11 +13,16 @@
 //!   event decides: `task_started` (or `turn_started`) is a turn running, `task_complete` (or `turn_complete`) and
 //!   `turn_aborted` end it. Approval prompts are not written, so a turn that waits for the user reads as working
 //!   (Haik, 2026-11-03, sign-off item 1: it holds with no limit).
+//! - `sessions\`, listed one level deep with a filter that takes no name, while a thread is listed: only so the watch
+//!   thread watches the folder tree, since a tail is read on each change in a folder of its source. Codex appends to
+//!   an open rollout, and each append gives a change notice within milliseconds; without the watch a turn's start
+//!   and end waited for the 30 s tick (1 to 29 s live, `p4-live-codex`), and a short turn was never seen.
 //!
 //! A thread reverted in the TUI (editing an earlier prompt of a paginated thread, the TUI's default in 0.167.0) goes
 //! on in a new file, `rollout-<time>-<thread id>_<rollout id>.jsonl`. Both names match the thread's
 //! `WantedFile::FindNewest`, so the watch thread follows the newest by modified time: it feeds the old file `Gone`,
-//! then the new one from its start (`p4-contracts-r2`). Not tested with a real revert yet (`p4-live-codex`).
+//! then the new one from its start (`p4-contracts-r2`). Tested live (`p4-live-codex`): the revert also drops and
+//! makes the lock file again (twice in under a second), so the thread starts over and then finds the new file.
 //! Compressed `.jsonl.zst` rollouts are only ever old ones without a live writer, so they are never asked for.
 //!
 //! Owner: `p4-codex-source`; fixes by `p4-live-codex`; reverted threads by `p4-contracts-r2`.
@@ -48,6 +53,16 @@ const SESSIONS_DIR: &str = "sessions";
 
 /// `sessions\YYYY\MM\DD`.
 const DATE_DEPTH: u8 = 3;
+
+/// The `sessions` listing that gets the tree watched: one level is enough for a watch of the whole tree, and it lists
+/// only the year folders.
+const WATCH_LEVELS: u8 = 1;
+
+/// The `sessions` listing's filter: the listing is there for its watch, and every file there is a rollout read by
+/// `FindNewest` or none of this source's.
+fn no_name(_: &str) -> bool {
+    false
+}
 
 /// A thread id as Codex writes it: a UUID, lowercase, with hyphens.
 const ID_LEN: usize = 36;
@@ -298,6 +313,13 @@ impl AgentSource for CodexSource {
             depth: 0,
             accept: is_lock_name,
         }];
+        if !self.threads.is_empty() {
+            wanted.push(WantedFile::Names {
+                dir: self.sessions_dir.clone(),
+                depth: WATCH_LEVELS,
+                accept: no_name,
+            });
+        }
         wanted.extend(self.threads.keys().map(|id| WantedFile::FindNewest {
             root: self.sessions_dir.clone(),
             depth: DATE_DEPTH,

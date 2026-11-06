@@ -114,6 +114,48 @@ with `codex-cli/`. License Apache-2.0 (`LICENSE`), verified.
 - Yes. `--oss` runs against a local Ollama or LM Studio model, no account. Verified: `utils/cli/src/shared_options.rs:26`,
   crates `ollama/`, `lmstudio/`. The rollout and turn events are the same code path (unverified by a run).
 
+### Phase 4 live test (2026-11-06)
+
+Card `docs/tasks/p4-live-codex.md`. Codex CLI 0.167.0 (npm), Haik's ChatGPT login shared with the desktop app, model
+`gpt-6-luna` at `low` effort, 7 one-line prompts. Every session ran at Medium in a pseudo console
+(`spikes/agent-drive/`), with `agent-watch --source codex` at Medium beside it and a change notice logger on
+`sessions\` and `thread-writer-locks\`. Redacted rollouts: `crates/wakeshot-core/tests/fixtures/codex/live/`.
+
+What holds (checked live):
+
+- **Lock file.** The TUI makes `thread-writer-locks\<thread id>.lock` at start, before any prompt; `codex exec`
+  makes it at start too. `/exit` and the end of `exec` delete it (posted `n=0` within 1 ms of the delete).
+- **Holder.** Restart Manager named the TUI's own `codex.exe` (the child of npm's `node.exe`), with the pid and start
+  time of that process, in both TUIs and in `exec`. No app-server daemon started in these runs, although
+  `daemon_auto_start` is on (`p4-live-harness` saw two more `codex.exe` at a first TUI start; why is not known). The
+  desktop app's two `codex.exe` (children of `ChatGPT.exe`) never held a CLI thread's lock.
+- **Crash.** The TUI's `codex.exe` killed by pid during a turn: posted working `Gone` 115 ms later, so no hold. The
+  lock file stays with no holder until the next Codex start, which deletes it (seen for a TUI start and an `exec`
+  start). So the "can outlive its session" mark goes for the Restart Manager rule (track note 7). It stays for the
+  fallback when Restart Manager fails: any `codex.exe` counts then, and the desktop app keeps two running.
+- **Turn events.** As the source rules say: `task_started`, `task_complete`, `turn_aborted` with `reason`
+  `interrupted` after Esc. Every real line read with no format problem. An approval wait writes nothing, so it reads
+  as working (held through a 60 s wait). An `item_completed` can come after `turn_aborted` (the command went on): it
+  does not open the turn again.
+- **Esc.** One Esc interrupts the turn, but a command run through unified exec goes on as a "background terminal"
+  (`/ps`) after the abort; the rollout says idle while it runs. Not tracked by Wakeshot (not checked further).
+- **Backtrack.** Esc Esc on an empty composer, left arrow, Enter: "Conversation reverted to this point". Codex
+  deleted and made the lock file again twice in 0.8 s and wrote `rollout-<time>-<thread id>_<rollout id>.jsonl`; the
+  next prompt's turn went there. The source followed it: the first new lock fed the old file again (the new one did
+  not exist yet), the second one the new file. A brief idle `Gone` was posted between the two locks; no harm.
+- **Write timing.** Codex appends to an open rollout, and each append gave a change notice in `sessions\` within
+  milliseconds. A folder listing showed the open file's creation time as its last write time. Before the fix the
+  source watched only the lock folder, so working and idle reached a post only at the 30 s tick: 1.3 to 29 s after
+  the line, and a 12 s turn was never seen. After the fix (the source lists `sessions\` so the tree is watched):
+  `task_started` to the working post 0.3 s, `task_complete` to the idle post 17 ms.
+- **Through the app.** A dry-run tray with the Codex source logged "Holding starts: Codex" and `PowerSetRequest
+  SYSTEM` 0.5 s after `task_started` of an `exec` turn, and "Holding ends; held by Codex" 17 ms after
+  `task_complete`.
+
+Not tested live: the app-server daemon as a holder; the desktop app's own threads (the app cannot be driven from the
+command line, so whether it writes the same lock and rollout files is not known); goals (`goals_1.sqlite`);
+`--oss`; a turn longer than a few minutes.
+
 ## GitHub Copilot CLI
 
 Source: npm `@github/copilot` 1.0.105 and `@github/copilot-win32-x64` 1.0.105 (build `845c22879d4`). The Windows
