@@ -51,6 +51,13 @@ to 6), redacted fixtures, fixes with tests, and the source wired into the tray.
   bug cannot lose anything; at the end compare the folder with the backup (only Wakeshot's folder may differ, and it
   is removed). Never restore over the user's files without telling the orchestrator.
 - If the hooks code review reports a blocker while you run, the orchestrator tells you; stop writing real folders.
+- First step (orchestrator, 2026-11-06 ~21:10): fix the hooks code review (`docs/reviews/p4-hooks-code.md`, 0
+  blockers, 1 major, 7 minors) in the files you own this round (`sources/hooked.rs`, `sources/cursor.rs`,
+  `wakeshot-cli/src/hook.rs`, `agent_hooks.rs`, `hooks.rs`, `app/startup.rs`, and the stale lines in
+  `docs/agent-hooks.md` and `docs/tasks/p4-agent-hooks-install.md`): M1 (run the command-line privacy check before
+  the parent walk gate, and also when the process list fails) and each minor that is right, with a test that fails
+  before each fix. Write a "Review fixes" table in your Result (Fixed, or Not fixed with the reason). Then the live
+  steps.
 
 ## Rules
 
