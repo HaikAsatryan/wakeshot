@@ -64,6 +64,9 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   2026-11-03). Two limits stay because they are product rules, not bug guards: Claude waiting for approval
   holds at most 1 hour (the `waiting` rule above), and the battery floor. Codex and Copilot: see "Answers to the
   track plan questions".
+- No guessing (Haik, 2026-11-06 18:45, on Antigravity's Esc, which fires no hook): "We cannot guess or randomly
+  sleep. It's better not support something or do so." If Wakeshot cannot see when an agent's work ends, it does not
+  support that agent or that case, rather than end the hold on a timer or keep it on a guess.
 - Later, not v1: rules for any app ("while ffmpeg runs"). Claude Code inside WSL: its session files carry Linux pids,
   which Windows cannot check, so stale files would hold forever. Revisit with a helper inside WSL.
 - No plugins and no scripting. A new built-in source is new code.

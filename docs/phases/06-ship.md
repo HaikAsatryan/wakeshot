@@ -177,7 +177,7 @@ those one at a time across all tracks.
 | `p6-menu-hc-status` | no (orchestrator decision for Haik's review) | `p6-menu-status-glyph` | done: status line and its glyph in `WindowText` in high contrast (WinUI's `TextFillColorSecondary` there); marks and chevron stay `ButtonText`; x64 and ARM64 checks clean |
 | `p6-media-captures` | stays off the PC while it runs (Haik ~21:50: "Dell is connected go on") | `p6-media` Part C first draft | done: 22 captures on the DELL at 200% (work set S1 to S4 and S7, menu set S1 and S5a to S5d, light and dark, README stills), S9 from the log; Haik's settings equal before and after; about 11 min of screen |
 | `p6-repo-files` | yes: reads the files; turns on private vulnerability reporting | none | done (2026-11-06): `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 3.0), two issue forms and `config.yml`, a PR template; 3 questions with defaults in the card |
-| `p6-agents-video-readme` | yes: his yes to the plan, then his look at the render and README | `p6-media`, `p6-readme`; Part B after the bigger v1 live tests | Part A done (2026-11-06 ~19:00); Haik: "Agree to everything" (~19:15); Part B running: all but the agent list, the tested-live marks and the tooltip capture, which wait for the live results |
+| `p6-agents-video-readme` | yes: his yes to the plan, then his look at the render and README | `p6-media`, `p6-readme`; Part B after the bigger v1 live tests | Part C (Haik's new scenario, 18:45 clock time: the pain of a sleeping laptop first, then Wakeshot, then the agents with their logos) running since 18:55; Part A done (2026-11-06 ~19:00); Haik: "Agree to everything" (~19:15); Part B: all but the agent list, the tested-live marks and the tooltip capture, which wait for the live results |
 | `p6-agents-install-e2e` | no | every `p4-live-*` card of the bigger v1 and its fixes; runs alone | card written 2026-11-06 ~21:40: whole-workspace checks, a fresh install over Haik's, one cheap turn per agent through the installed app; Part 1 done 18:28 (clock time): checks green on x64 and ARM64 (1752 tests), x64 Setup.exe 12.5 MB packed; Part 2 (install and turns) after `p4-live-cursor` and the Antigravity IDE turn |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
@@ -656,3 +656,8 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   passed, 0 failed) and release builds green on x64 and ARM64 at cd140e9; x64 packed as 0.1.0 (Setup.exe 12,508,502
   bytes, hashes in the card). No install, no tray start. Part 2 waits for `p4-live-cursor` and the Antigravity IDE
   turn. The checks pass, so the 32 commits since 98c8795 go out now.
+- 2026-11-06 18:55: Haik asked for a new video scenario (his words in `p6-agents-video-readme` "Part C"): the
+  agents with their logos from the start, one agent working while the laptop sleeps, "tired of sleepy laptops", then
+  the logo; designed by us, inspired by his idea. Part C runs now (storyboard and stills first; the orchestrator shows
+  them to Haik and resumes the worker without waiting). Orchestrator rule for his review: agent logos only from
+  official files and only as each owner's brand rules allow, else the name as text, since the repo is public.

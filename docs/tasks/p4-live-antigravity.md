@@ -67,6 +67,9 @@ Not blocking; defaults taken, details in Result, "For Haik (product)":
 1. After Esc, Antigravity holds until the next prompt ends or `agy` exits. Default: keep it so (no time cap).
 2. A background command holds only when `agy` sends `fullyIdle: false` (2 of 4 runs). Default: accept for v1.
 
+Haik, 2026-11-06 18:45, on both: "We cannot guess or randomly sleep. It's better not support something or do so."
+Both go to `p4-antigravity-exact-end` (an exact signal, or not supported). The IDE turn waits for its Part A.
+
 ## Found outside scope
 
 1. **`.wakeshot-removed` does not stop Antigravity's hooks** (`agent_hooks.rs`, owner `p4-live-cursor` this round;

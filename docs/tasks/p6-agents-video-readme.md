@@ -1,6 +1,6 @@
 # Video and README for every AI agent, not Claude Code first
 
-Phase: 6. Status: blocked: Part A done and approved (Haik, 2026-11-06 ~19:15); Part B steps that need no live
+Phase: 6. Status: Part C (Haik's new video scenario, 2026-11-06 18:45) running since 18:55; Part B: blocked: Part A done and approved (Haik, 2026-11-06 ~19:15); Part B steps that need no live
 result done 2026-11-06 (draft rendered, checks pass); the rest waits for the live results, the new install and
 its speed numbers ("Part B: what waits" in Result) (new 2026-11-06, Haik). Part A starts when Haik answers the question below; Part B after
 the Round 3 live tests (the supported list and the tray text are final then). Needs Haik: yes: his yes to Part A's
@@ -48,6 +48,40 @@ Keep awake, then sleeps as usual.
 6. `site/`: the same list and words. `docs/product.md`: the README entry (it still describes the old order) and the
    line "nothing that touches other apps" (hooks design review minor 13). The stale hooks lines in
    `docs/research/cursor-gemini-signals.md` (same minor).
+
+## Part C: a new video scenario (Haik, 2026-11-06 18:45)
+
+Haik's words, as he wrote them:
+
+> Let's change our video scenario.
+>
+> As we have multiple agent from start we can dynamically with logos show agents examples
+>
+> We can show how one of agents working and laptop sleeps and tell tiered of sleepy laptops and start our logo and
+> etc.
+>
+> This is idea but you should professionally design my requirement and redesign video.
+
+He wants it designed by us, "not strictly as I told, inspire by my imagination". So the scenario is yours to design
+well; his idea is the brief, not a script. This replaces the storyboard he approved earlier; keep the brand
+(`docs/brand.md`) and the music ("Funky Disco Beats", Fupi, CC0); the length and the time cut may change.
+
+7. A new storyboard: the pain first (an AI agent works, the laptop goes to sleep, the work stops; a line in the
+   spirit of "Tired of sleepy laptops?"), then Wakeshot (logo), then the many agents it works with, shown with their
+   logos and moving, then the PC sleeping as usual once the work ends, then the end card. Write it in
+   `docs/research/promo-video.md` (you own the storyboard rows and the counts line), with still frames (PNG, build
+   folder) of every shot. Then stop and reply with the stills' folder; the orchestrator shows them to Haik and resumes
+   you at once (no wait for his answer).
+8. Agent logos: before any logo goes in, read each owner's official brand or press page for logo use (Anthropic for
+   Claude Code, OpenAI for Codex, GitHub for Copilot, Anysphere for Cursor, Google for Antigravity, the OpenCode
+   project). Use only official files, unchanged, as their rules allow, and only to show "works with", never as an
+   endorsement. Where the rules forbid it or are unclear, show the name as text in Wakeshot's style. Write each source
+   and rule in `docs/research/promo-video.md`. The repo is public: a logo file in `media/` is published at the next
+   push.
+9. The agent list stays one data list (`media/src/agents.ts`); the final list comes from the live results (Cursor
+   pending; Antigravity may leave v1, `p4-antigravity-exact-end`), so an agent can drop out with no redesign.
+10. Render a draft and run every `p6-media` check. The tooltip capture and the speed numbers still wait for the new
+    install (Part B).
 
 ## Acceptance checks
 
