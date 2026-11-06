@@ -126,7 +126,7 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-live-opencode` | no | `p4-opencode-source`, the OpenCode review fixes; live lane after `p4-live-vscode` | card written 2026-11-06 |
 | `p4-live-cursor` | only if the payload check finds the command line | `p4-cursor-source`, `p4-agent-hooks-install`, the hooks code review fixes; live lane after `p4-live-opencode` | card written 2026-11-06 |
 | `p4-live-antigravity` | only if its payload is on the command line | `p4-antigravity-source`, `p4-live-cursor` | card written 2026-11-06 |
-| `p4-core-linux-tests` | no | none | running (2026-11-06 ~19:55): CI `core-linux` red since fb0ebce |
+| `p4-core-linux-tests` | no | none | done (2026-11-06 ~20:10, 750b023): Codex and OpenCode tests join one level at a time; CI core step runs `--no-fail-fast`; three VS Code tests sent to `p4-live-vscode`; no Linux run here (rustup in WSL refused by the permission check; no C compiler there) |
 | `p4-cursor-gemini-research` | no | none | done 2026-11-06 (`research/cursor-gemini-signals.md`): Cursor big, Gemini CLI enterprise only since 2026-06-18; hooks question for Haik |
 | `p4-watch-data` | no | `p4-hold-files`, `p4-watch-reads` | done (21:12): 19 tests |
 | `p4-watch-agents` | no | `p4-watch-reads` | done (22:43): 19 tests; API changes for `p4-watch-thread` in its Result |

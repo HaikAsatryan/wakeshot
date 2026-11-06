@@ -52,8 +52,8 @@ core test pass on Linux and on Windows without weakening what it checks.
 ## Found outside scope
 
 - CI's `core-linux` runs `cargo test` without `--no-fail-fast`, so one failing test binary hides every later one
-  (this is how the VS Code failures below stayed hidden). Adding the flag there would show them all in one run. CI
-  files are out of scope; not changed.
+  (this is how the VS Code failures below stayed hidden). Added `--no-fail-fast` at the orchestrator's request
+  (Log).
 - `tests/vscode_source.rs` (owner `p4-live-vscode`) fails on Linux by reading; see Result. Not edited.
 
 ## Log
@@ -77,6 +77,9 @@ core test pass on Linux and on Windows without weakening what it checks.
 - 2026-11-06: Windows checks pass (all core tests, clippy all targets). Facts added to `docs/research.md` ("Core
   tests on Linux: Windows path strings"). Build folder and scratch files deleted; WSL home has no `.cargo`,
   `.rustup` or work folder.
+- 2026-11-06: orchestrator follow-up: `.github/workflows/ci.yml`, `core-linux` step "Test the core", now runs
+  `cargo test -p wakeshot-core --locked --no-fail-fast`, so one failing test file no longer hides the others.
+  Nothing else in the file changed.
 
 ## Result
 

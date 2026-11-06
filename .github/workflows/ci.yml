@@ -122,7 +122,7 @@ jobs:
           restore-keys: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-
 
       - name: Test the core
-        run: cargo test -p wakeshot-core --locked
+        run: cargo test -p wakeshot-core --locked --no-fail-fast
 
       - name: The core depends on no windows crate, on any target
         run: |
