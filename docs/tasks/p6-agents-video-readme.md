@@ -1,7 +1,8 @@
 # Video and README for every AI agent, not Claude Code first
 
-Phase: 6. Status: blocked: Part A done 2026-11-06 (the plan in Result waits for Haik's yes); Part B after his yes
-and the live tests (new 2026-11-06, Haik). Part A starts when Haik answers the question below; Part B after
+Phase: 6. Status: blocked: Part A done and approved (Haik, 2026-11-06 ~19:15); Part B steps that need no live
+result done 2026-11-06 (draft rendered, checks pass); the rest waits for the live results, the new install and
+its speed numbers ("Part B: what waits" in Result) (new 2026-11-06, Haik). Part A starts when Haik answers the question below; Part B after
 the Round 3 live tests (the supported list and the tray text are final then). Needs Haik: yes: his yes to Part A's
 plan, then his look at the render and the README.
 Agent: `wakeshot-worker`. Size: about 200K tokens (Part A about 50K, Part B about 150K).
@@ -87,6 +88,9 @@ Keep awake, then sleeps as usual.
    `watch/agents.rs`) and the docs say "Codex CLI". Not a bug; the README will show the tooltip's words. Not changed.
 2. The speed numbers in `README.md`, `site/index.html` and the video's end card are from 0.1.0, which watched only
    Claude Code. They go stale once the bigger v1 ships; the plan has them measured again in Part B.
+3. `docs/research/promo-video.md` storyboard rows 2 and 3 still describe shot 2 without the name chips and shot 3's
+   caption as "Claude Code starts". That file is not owned by this card's round 1, so not changed; it needs the two
+   rows (and the counts line) when the orchestrator hands it over.
 
 ## Log
 
@@ -108,6 +112,22 @@ Keep awake, then sleeps as usual.
   today. Two before and after sheets made. Raw render folders deleted.
 - 2026-11-06: the draft edits saved as `draft-video.diff` in the build folder (for Part B); the 848 MB media copy
   deleted. Plan written below. Part A done; the card waits for Haik's yes.
+- 2026-11-06 ~19:15: Haik, via the orchestrator: "Agree to everything" (the plan and question 1's default). Part B
+  started with what needs no live result. Owned now: `media/`, `README.md`, `site/`, the README entry and the
+  "other apps" line of `docs/product.md`, the hooks lines of `docs/research/cursor-gemini-signals.md`.
+- 2026-11-06: one list of agents: `media/src/agents.ts` (all seven, each `passed` or `pending`; only `passed` ones
+  show). `scripts/agent-lists.mjs` writes the list between `<!-- agents -->` markers in `README.md` and
+  `site/index.html`; `--check` (now in `npm run check`) fails on a differing list or a README rules paragraph that
+  is missing or extra. Proven: with OpenCode flipped to `passed` it failed 3 ways, restored it passed. Chip rule
+  checked: both Copilots passed gives one "Copilot" chip, one passed gives "Copilot CLI".
+- 2026-11-06: video: chips (from `agents.ts`) and a soft pop at beat 7, the tray caption "Your agent starts", the
+  event names. README, site, `product.md` and the research doc edited (Result). `check` (89 files; pace 49 on the
+  beat; lists agree), typecheck, `check-art` (9,458,740 pixels) ok. `npm run draft` (2 min): `check-video --draft`
+  ok, 7.42 MB; loudness after AAC -15.3 LUFS, -1.1 dBTP. Draft frames 135 and 225 looked at (two chips; the new
+  caption). GitHub render of the README (`gh api markdown`): the agents cell reads "Claude Code and Codex CLI", no
+  comment text shows, 5 tables. `site/check_page.py`: 0 errors, 7 spots wait (unchanged).
+- 2026-11-06: `check-rebuild` (loop, states, draft) ok: 11 outputs the same bytes. Round 1 Result written. Stopped
+  here: the rest waits ("Part B: what waits"). The orchestrator resumes this card when the live results are in.
 
 ## Result
 
@@ -219,3 +239,72 @@ The draft code for Part B: `draft-video.diff` in the same build folder (54 lines
 | `check-pace` on the draft copy | ok: 49 starts on the beat, 10 framings, 104 new things, longest gap 1.80 s, at most 5 things in 2 s |
 | Stills looked at | frames 108, 135, 148, 190 and 225 after, 135 and 225 before, 135 with two agents: no overlap, the chips clear of the tagline and the frame edge |
 | Nothing written outside the card and the build folder | ok: renders ran in a copy; `media/`, `README.md`, `site/`, `docs/product.md` untouched; no git, no Rust build |
+
+### Part B, round 1 (2026-11-06): what needs no live result
+
+Haik's yes to the plan and to question 1's default came at about 19:15. This round did every step that does not wait
+for a live result, rendered a draft and ran the checks.
+
+#### Done
+
+- **One list of agents**: `media/src/agents.ts` holds all seven, A to Z, each `passed` or `pending`; only `passed`
+  ones show anywhere. Today: Claude Code and Codex CLI. When a live card passes, flip its word to `passed`, run
+  `npm run agent-lists` (it writes the list into `README.md` and `site/index.html` between `<!-- agents -->`
+  markers), then `npm run check`, which names the README rules paragraph to add. To drop one, delete its line. Two
+  Copilots share one "Copilot" chip only when both passed.
+- **Video** (`media/`): the name chips in shot 2 (from `agents.ts`, a pop and a soft pop sound at beat 7, gone with
+  the whip), the shot 3 caption "Your agent starts: it turns **green**.", the event names in `timeline.ts`. Files:
+  `src/agents.ts` (new), `src/copy.ts`, `src/timeline.ts`, `src/promo/Promo.tsx`, `scripts/agent-lists.mjs` (new),
+  `package.json` (`check` runs the list check; `npm run agent-lists`), `README.md` (the check row and "The supported
+  agents" under "When something changes"). Rendered: `out/draft/` only; the final and its poster are not rebuilt.
+- **`README.md`**: the "AI agents" row with the list; "The list grows with each version."; the state table example
+  `Holding awake: Codex (1 session)`; "knows only the agents listed above"; "More agents and more reasons to stay
+  awake will come."; the rules summary; a **Codex CLI** paragraph (what it reads, approval waits, the holder process,
+  tested live with 0.167.0 and a link to the results); the Automatic lines; the notice example "What held it:
+  Codex."; the menu block's top line `Holding awake: Codex (1 session), cargo`; the "Update Wakeshot" row; Limits
+  (an agent not on the list, Codex approval waits, `CODEX_HOME`, Codex CLI inside WSL, the Codex parts not tested
+  live).
+- **`site/index.html`**: both descriptions, the hero's 0.1 s line gone, the "AI agents" card with the list, the
+  tooltip example, "For an agent not on the list", night steps 1 and 3.
+- **`docs/product.md`**: the README entry rewritten from Haik's 2026-11-06 words (install first, every agent A to Z,
+  none first, lightweight is enough, small table low); "nothing that touches other apps" now names the hooks rule as
+  its one exception.
+- **`docs/research/cursor-gemini-signals.md`**: section 5 starts with a "Superseded" note (one command, not a helper
+  exe; added by Wakeshot with one notice, not opt-in; hooks, not `main.log`, for the Cursor editor; pointing to
+  `docs/agent-hooks.md`); section 6 says it was answered. The old text stays as the record.
+
+#### Checks (round 1)
+
+| Check | Outcome |
+|---|---|
+| `npm run check` | ok: 89 files, 31 assets credited, 18 colour pairs; pace: 49 starts on the beat, 10 framings, 104 new things, longest gap 1.80 s, at most 5 things in 2 s; lists agree (2 of 7 passed) |
+| The list check catches drift | ok: OpenCode flipped to `passed` gave 3 FAIL lines (README list, site list, missing paragraph); restored, ok |
+| `npm run typecheck` | ok |
+| `node scripts/check-art.mjs` | ok, all 9,458,740 pixels |
+| `npm run draft`, then `check-video --draft` | ok: h264, aac, 7.42 MB; loops and the 6 state icons ok |
+| Loudness of the draft (`loudnorm`, after AAC) | -15.3 LUFS, -1.1 dBTP (the limit is -1 dBTP) |
+| `npm run check-rebuild` (loop, states, draft) | ok: a clean copy (`npm ci`, every build command) gives all 11 outputs the same bytes, the draft and its soundtrack included; its temp folder is gone |
+| Draft frames looked at | 135 (two chips, centred) and 225 (the new caption), taken from the MP4 |
+| GitHub render of `README.md` (`gh api markdown`) | the agents cell reads "Claude Code and Codex CLI", no comment text shows, 5 tables, the new links render |
+| `site/check_page.py site` | 0 errors, 7 spots wait (unchanged) |
+| ASCII only, LF, no em dash | ok in every file edited |
+| `check-video` final, `check-rebuild --final` | not run: the final waits (below) |
+
+#### Part B: what waits
+
+1. **The final agent list and the "tested live" lines.** Passed live: Claude Code, Codex CLI. Pending: Copilot CLI,
+   Copilot in VS Code, OpenCode, Cursor, Antigravity. For each that passes: its line in `agents.ts`, `npm run
+   agent-lists`, its README rules paragraph with its tested version and results link, its limits and the parts not
+   tested live, and the README's "Not tested live yet" line.
+2. **Hooks lines**, only if Cursor or Antigravity passes: the README main text (the hook folders, the one notice, the
+   prompts line, from `docs/agent-hooks.md` "README lines"), "What it changes on your PC", the hooks notice row (its
+   title from `text.rs`), Uninstall; on the site, "never touches other apps" and Privacy. Until then those lines stay
+   true as written.
+3. **OpenCode lines**, if it passes: its read-only database line in Privacy; a SQLite credit if a bundled copy ships.
+4. **The tooltip capture on the new install**: Claude Code and Codex working at once, light and dark, for the
+   README's holding tooltip picture and its alt text; plus one check capture each of the tray and menu sets against
+   `public/shots/`.
+5. **Speed numbers on the new install** (a window with no agent at work, as the 0.1.0 run): `data/speed.json`, the
+   end card, the README line, the site hero.
+6. **The final render**: `npm run video` (the poster, frame 120, changes too: the chips are in by then), then
+   `check-video`, `check-rebuild --final`, loudness at most -1 dBTP, and Haik's look.

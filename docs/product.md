@@ -255,7 +255,9 @@ The README says so.
   with an unknown `status` value, which counts as working while the session process lives. It shows once per Wakeshot
   start for each agent, plus a log line; the tooltip does not repeat it (Haik, 2026-11-03).
 - When a restore fails: a warning notification.
-- No "Pause", no icon style choice, no "Efficiency mode", nothing that touches other apps.
+- No "Pause", no icon style choice, no "Efficiency mode", nothing that touches other apps, with one exception: the
+  hooks rule above (a hook folder of Wakeshot's own that an agent with no reliable file signal loads; never an edit
+  of the user's own settings).
 - No telemetry. The log stays on the PC.
 
 ### Distribution (free options only)
@@ -264,13 +266,16 @@ The README says so.
   and spikes go public as they are; secrets never (a secret scan before each push) (Haik, 2026-11-03). Before the
   public launch (winget), a cleanup phase leaves a clean README and a short `CLAUDE.md`, removes internal planning and
   junk, and squashes the history to one initial commit. A GitHub Pages page at v1.
-- README (Haik, 2026-11-04): long and detailed is fine, but never boring. The top says what we solve (the PC stays
-  awake while an AI agent works, then sleeps as usual with the user's settings back; keep awake on demand comes with
-  it, so nobody needs a second tool), shows a short animation of the icon and the measured speed numbers, then a side
-  by side table against the 2 or 3 most popular keep-awake options only (many thousands of stars or users), agent
-  aware or not, compared on features, so it shows what Wakeshot gives beyond a plain keep awake like PowerToys Awake
-  (Haik, 2026-11-04: "I want to compete with popular options"). Details sit below in folded sections. It says macOS is
-  planned for later. Pictures of the menu and tooltip, light and dark.
+- README (Haik, 2026-11-04; order and focus from his words of 2026-11-06): long and detailed is fine, but never
+  boring. The top says what it does (the PC stays awake while an AI agent or another long job works, then sleeps as
+  usual with the user's settings back; keep awake on demand comes with it, so nobody needs a second tool), then the
+  video, then install, super simple, winget first. Then what holds the PC awake, as a list that grows: every
+  supported AI agent, A to Z, none first ("The focus should not be directly on Claude Code"), each tested live, plus
+  any command, hold files and Keep awake. Lightweight is enough: one measured line deep in the details, no tech or
+  size numbers near the top. A small side by side table against the 2 or 3 most popular keep-awake options only
+  (many thousands of stars or users), few rows, low on the page (Haik, 2026-11-04: "I want to compete with popular
+  options"). Details sit below in folded sections. It says macOS comes if Wakeshot gets popular or gets donations.
+  Pictures of the menu and tooltip, light and dark.
 - A 30 second promo video with sound and effects, animated in code from the real icon art and screenshots, showing
   only what Wakeshot really does (Haik, 2026-11-04). For the README, the Pages page and the Store listing.
 - Velopack pack id `HaikAsatryan.Wakeshot` (install folder `%LocalAppData%\HaikAsatryan.Wakeshot`); data folder

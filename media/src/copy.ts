@@ -6,8 +6,12 @@ export const COPY = {
   name: 'Wakeshot',
   hook: ['Agent *working*.', 'PC sleeping.'],
   tagline: 'keeps it *awake* while agents work.',
-  /** The tray shot: Claude Code starts and the icon turns holding; the work ends and it lets go. */
-  tray: ['Claude Code starts: it turns *green*.', 'Done: it lets *go*.'],
+  /**
+   * The tray shot: the agent starts and the icon turns holding; the work ends and it lets go. Claude Code is the
+   * example on screen, the words say any agent (Haik, 2026-11-06). The name chips under the tagline come from
+   * `agents.ts`.
+   */
+  tray: ['Your agent starts: it turns *green*.', 'Done: it lets *go*.'],
   /** One line for the lid shot (round 4 review, M1); the lock badge shows the lock. */
   lid: 'Close the lid: work goes *on*.',
   settings: 'Work done. Your settings, *back*.',

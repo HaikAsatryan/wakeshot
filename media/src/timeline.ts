@@ -48,7 +48,8 @@ export const T = {
     /** The stage dims to 10% over this many frames. */
     dimLen: 9,
   },
-  light: {on: beat(4), name: beat(5), faintLines: beat(4) + 6},
+  /** `agents`: the row of agent names pops in under the tagline; it goes with the whip. */
+  light: {on: beat(4), name: beat(5), faintLines: beat(4) + 6, agents: beat(7)},
   /** Claude Code starts and the icon turns holding; the tooltip under the cursor; the work ends and the icon lets go. */
   tray: {whip: beat(10), whipLen: 12, start: beat(11), hover: beat(13), drift: beat(14), done: beat(16)},
   /**
@@ -261,10 +262,11 @@ export const EVENTS: PaceEvent[] = [
   ...range(T.hook.firstLine, T.hook.sleep, T.hook.lineEvery).map((at) => ({at, kind: 'stream' as const, what: 'tool line'})),
   {at: T.hook.sleep, kind: 'pop', what: 'sleeping chip; the stage dims'},
   {at: T.light.on, kind: 'light', what: 'the light comes on'},
+  {at: T.light.agents, kind: 'pop', what: 'the row of agent names'},
   ...range(T.light.faintLines, T.tray.whip, 6).map((at) => ({at, kind: 'stream' as const, what: 'faint terminal line'})),
   {at: T.tray.whip, kind: 'whip', what: 'the glyph flies into the tray and dims'},
   {at: T.tray.whip + T.tray.whipLen, kind: 'swap', what: 'the glyph lands on the idle icon'},
-  {at: T.tray.start, kind: 'light', what: 'Claude Code starts: the icon turns holding at the same frame'},
+  {at: T.tray.start, kind: 'light', what: 'the agent starts: the icon turns holding at the same frame'},
   {at: T.tray.hover, kind: 'pop', what: 'the holding tooltip under the cursor'},
   {at: T.tray.drift, kind: 'move', what: 'the camera drifts toward the tray'},
   {at: T.tray.done, kind: 'light', what: 'the work ends: the icon lets go, the idle tooltip'},
@@ -319,6 +321,7 @@ export const SOUNDS: Cue[] = [
   {at: T.hook.sleep, sound: 'pop', gain: 0.35, pan: 0.7},
   {at: T.light.on, sound: 'hit', gain: 0.15},
   {at: T.light.on, sound: 'lightOn', gain: 0.35},
+  {at: T.light.agents, sound: 'pop', gain: 0.18},
   {at: T.tray.whip, sound: 'whip', gain: 0.5},
   {at: T.tray.start, sound: 'enter', gain: 0.45, pan: 0.4},
   {at: T.tray.start, sound: 'lightOn', gain: 0.3, pan: 0.6},

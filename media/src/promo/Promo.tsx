@@ -4,6 +4,7 @@ import {Audio} from '@remotion/media';
 import speedData from '../../data/speed.json';
 import {AppIcon, TrayGlyph} from '../art/Glyph.tsx';
 import {ON_DARK, plated} from '../art/heldLight.ts';
+import {chips} from '../agents.ts';
 import {COPY} from '../copy.ts';
 import {MONO, SANS} from '../fonts.ts';
 import {At, World, toScreen, velocityAt, viewAt, type View} from '../motion/Camera.tsx';
@@ -26,6 +27,7 @@ import {ABOVE_LAPTOP, CARD_AT, HERO, HOOK_TERMINAL, LAPTOP_AT, LAPTOP_SCALE, LID
 export type PromoProps = {draft: boolean};
 
 const SIZE = {width: VIDEO.width, height: VIDEO.height};
+const AGENT_CHIPS = chips();
 const within = (f: number, from: number, to: number) => f >= from && f < to;
 const centre = (b: Rect) => ({x: b.x + b.w / 2, y: b.y + b.h / 2});
 
@@ -576,6 +578,20 @@ export const Promo: React.FC<PromoProps> = ({draft}) => {
         {dim > 0 ? <AbsoluteFill style={{background: '#000', opacity: dim}} /> : null}
         <FlyingGlyph f={f} />
         <Focus rect={focus.rect} amount={focus.amount} dim={focus.dim} width={VIDEO.width} height={VIDEO.height} />
+        {/* The agents Wakeshot supports, by name: the viewer learns at once that it is not one agent's tool. */}
+        {within(f, T.light.agents, T.tray.whip + 6) ? (
+          <div style={{position: 'absolute', left: 0, right: 0, top: 862, display: 'flex', justifyContent: 'center'}}>
+            <Pop at={T.light.agents} out={T.tray.whip}>
+              <div style={{display: 'flex', gap: 18}}>
+                {AGENT_CHIPS.map((name) => (
+                  <Chip key={name} style={{height: 64, padding: '0 28px', fontSize: 32, borderRadius: 32}}>
+                    {name}
+                  </Chip>
+                ))}
+              </div>
+            </Pop>
+          </div>
+        ) : null}
         {within(f, T.hook.sleep, SCENES.light.from) ? (
           <div style={{position: 'absolute', right: 80, top: 70}}>
             <Pop at={T.hook.sleep} origin="100% 0%">

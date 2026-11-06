@@ -222,6 +222,12 @@ work in January 2026. If Haik wants a Google agent, Antigravity is the one to re
 
 ## 5. Hooks as a signal, per agent
 
+**Superseded (2026-11-06).** The design is `docs/agent-hooks.md`: one command, `wakeshot.exe hook <agent> <event>`,
+not a separate helper exe; a Wakeshot plugin folder per agent, which Wakeshot adds by itself when it finds the agent
+and names once in a notice (not opt-in per agent: Wakeshot has no settings window), and removes at uninstall; for the
+Cursor editor, hooks, not `main.log`. Haik's answer to section 6 is in `docs/product.md` ("Hooks"). The text below is
+the first proposal, kept as the record of this research.
+
 What Wakeshot would add: one small helper exe (`wakeshot-hook`) and a config entry per agent that runs it on turn
 start, turn end and session end. The helper writes a tiny state file in Wakeshot's data folder (like the hold file
 of `wakeshot run`) and exits at once; the tray reads those files. So the tray does not need to run for the hook to
@@ -273,6 +279,9 @@ changelog; Antigravity as above. Docs only; no hook was run.
   stable than log text or private files.
 
 ## 6. Product question for Haik
+
+Answered by Haik on 2026-11-06: hooks from a folder Wakeshot owns, added by Wakeshot itself with one notice, never for
+Claude Code; Cursor in v1; Gemini CLI dropped (`docs/product.md`). The question as asked:
 
 May Wakeshot install hooks for agents that have no other reliable signal (today: Gemini CLI and Cursor CLI)? My
 default: yes, but only opt-in per agent ("Connect Gemini CLI" in settings, off by default), only as a file or folder

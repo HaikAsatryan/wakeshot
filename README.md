@@ -62,13 +62,13 @@ PC sleeps as usual, and your settings are your own again. Today these can hold:
 
 | What | The PC stays awake while |
 |---|---|
-| **Claude Code** | a session works, runs background tasks, or has a scheduled run due within the hour. Wakeshot reads the small status file Claude Code keeps: no hooks, no change to its settings |
+| **AI agents**: <!-- agents -->Claude Code and Codex CLI<!-- /agents --> | an agent works on your task, or runs work it started in the background. Wakeshot reads the small files each agent keeps and never changes an agent's settings |
 | **Any command**: `wakeshot run -- <command>` | that command runs: a build, a test suite, a backup, a download |
 | **Any script**: a [hold file](docs/hold-files.md) | the process named in the file runs |
 | **You**: Keep awake in the menu | the time you picked runs: 30 minutes, 1, 2 or 4 hours, or until you turn it off |
 
-The list grows with each version: Codex CLI and Copilot CLI are next. **Automatic**, on by default, is the switch for
-the first three; Keep awake works either way. The exact rules: [When each hold counts](#when-each-hold-counts).
+The list grows with each version. **Automatic**, on by default, is the switch for the first three; Keep awake works
+either way. The exact rules: [When each hold counts](#when-each-hold-counts).
 
 ## How it works
 
@@ -100,7 +100,7 @@ The icon tells you what is going on, and its tooltip names what holds the PC awa
 
 | Icon | State | The tooltip says | What it means |
 |---|---|---|---|
-| <picture><source media="(prefers-color-scheme: dark)" srcset="media/out/state-holding-dark.png"><img src="media/out/state-holding-light.png" alt="A filled light over a line" width="16" height="16"></picture> | Holding | `Holding awake: Claude Code (1 session)` | Something needs the PC. It stays awake, and closing the lid does not stop it. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/out/state-holding-dark.png"><img src="media/out/state-holding-light.png" alt="A filled light over a line" width="16" height="16"></picture> | Holding | `Holding awake: Codex (1 session)` | Something needs the PC. It stays awake, and closing the lid does not stop it. |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="media/out/state-idle-dark.png"><img src="media/out/state-idle-light.png" alt="An outlined light over a line" width="16" height="16"></picture> | Idle | `Not holding, the PC sleeps as usual` | Automatic is on, and nothing needs the PC right now. |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="media/out/state-off-dark.png"><img src="media/out/state-off-light.png" alt="An outlined light over a line, struck through" width="16" height="16"></picture> | Off | `Automatic is off, the PC sleeps as usual` | Wakeshot watches nothing. Keep awake still works. |
 
@@ -149,7 +149,7 @@ say that closing the lid still puts the laptop to sleep.
 
 Where the others lead: years of use and many users. They run on Windows 10 too, and Caffeine and Don't Sleep are tiny
 downloads. Don't Sleep can also block a shutdown and shut the PC down on a schedule. Wakeshot is new, runs on Windows
-11 only and knows one AI agent today.
+11 only and knows only the agents listed above.
 
 ## Why I built it
 
@@ -172,7 +172,7 @@ own cases. I tried to get each one right, down to every notice and every sound. 
 
 ### What comes next
 
-More reasons to stay awake will come, Codex CLI and Copilot CLI first.
+More agents and more reasons to stay awake will come.
 
 Wakeshot runs on Windows only, because I built it for myself and I use Windows. Its design is ready for other systems:
 the part that decides when to hold has no Windows code, so a port adds only the parts that talk to the system. A macOS
@@ -200,7 +200,7 @@ Everything else, folded. Open what you need.
 ### When each hold counts
 
 <details>
-<summary>Claude Code, <code>wakeshot run</code>, hold files and Keep awake, exactly</summary>
+<summary>AI agents, <code>wakeshot run</code>, hold files and Keep awake, exactly</summary>
 
 **Claude Code.** Wakeshot reads the small status file Claude Code keeps for each session (in `~/.claude/sessions`),
 and that session's transcript for timers and background tasks. It reads only the fields it needs, never stores or
@@ -216,6 +216,13 @@ A session counts only while its process lives, so a crashed session or a file le
 Code changes its files and Wakeshot cannot read them, a notice says "Update Wakeshot". Tested live with Claude Code
 2.1.317, in the terminal and through the SDK ([results](docs/research/claude-code-signals.md#phase-4-end-to-end-2026-11-04)).
 
+**Codex CLI.** Wakeshot lists the lock files Codex CLI keeps for each open thread (in `.codex` of your user folder,
+or the folder `CODEX_HOME` names) and reads that thread's session log for its turns. It reads only the fields it
+needs, never stores or logs your prompts, adds no hooks and never edits Codex's settings. A thread holds while a
+turn runs, also while Codex waits for your approval (it writes nothing while it waits, so the wait looks like work),
+and only while the `codex.exe` that holds the thread lives, so a crash ends the hold. Tested live with Codex CLI
+0.167.0, in the terminal and with `codex exec` ([results](docs/research/other-agent-signals.md#phase-4-live-test-2026-11-06)).
+
 **`wakeshot run -- <command>`.** Holds while that command runs: a build, a test suite, a backup, anything. Such as
 `wakeshot run -- npm test`. The command always runs, gets its arguments exactly as typed and keeps its exit code.
 
@@ -227,7 +234,8 @@ off, with Keep screen on if you want it. It works whether Automatic is on or off
 apply to it the same way. It ends at sign-out or restart, so a forgotten "Until I turn it off" never survives a
 reboot.
 
-**Automatic** (on by default) is the switch for the first three. Off: only Keep awake holds.
+**Automatic** (on by default) is the switch for the agents, `wakeshot run` and hold files. Off: only Keep awake
+holds.
 
 </details>
 
@@ -312,7 +320,7 @@ Wakeshot never lowers your security.
   your hands. If it has not slept 5 minutes later, Wakeshot hibernates it. If hibernate is off or fails, a notice says
   so, and until the lid opens Wakeshot locks it whenever it is idle for 5 minutes.
 - **Open the lid and sign in.** A notice says how long the PC ran with the lid closed and what held it, such as "The
-  PC kept running for 2 h 15 min with the lid closed. What held it: Claude Code."
+  PC kept running for 2 h 15 min with the lid closed. What held it: Codex."
 - **Battery floor.** Wakeshot uses Windows' own energy saver level (20% when energy saver is set to Never or Always);
   there is no Wakeshot setting for it. Below it, once the laptop has been on battery for 30 seconds, Wakeshot steps
   back: it ends its power request, puts your settings back, plays a sound and says "Battery low: the PC may sleep
@@ -338,7 +346,7 @@ screen's audio (HDMI or DisplayPort, often with no speakers); then on the laptop
 Click the tray icon:
 
 ```text
-Holding awake: Claude Code (2 sessions)
+Holding awake: Codex (1 session), cargo
 ---------------------------------------
 Automatic                           [x]
 Keep awake                           >    Off
@@ -352,7 +360,7 @@ Quit                                      4 hours
 ```
 
 - **The top line** says what holds right now, in the same words as the tooltip.
-- **Automatic**: watch Claude Code, `wakeshot run` and hold files. On by default, and kept across restarts.
+- **Automatic**: watch AI agents, `wakeshot run` and hold files. On by default, and kept across restarts.
 - **Keep awake**: hold for a time, or until you turn it off. **Keep screen on** keeps the screen on too, while Keep
   awake is on.
 - **Restore my power settings**: put your lid and sleep settings back now (see above).
@@ -376,7 +384,7 @@ notice:
 | Battery low: the PC may sleep now | The battery is below the floor, and the laptop has been on battery for 30 seconds |
 | Wakeshot locked the PC | Keep screen on, and you were away past your sleep timeout |
 | Wakeshot updated to (version) | After an update, with no sound |
-| Update Wakeshot | Claude Code changed its files, and Wakeshot cannot fully read them |
+| Update Wakeshot | An AI agent changed its files, and Wakeshot cannot fully read them |
 | Wakeshot cannot change power settings | Something, such as a company policy, blocked the change |
 | Wakeshot cannot keep the PC awake | Windows did not accept the power request |
 | Could not put back your power settings | A restore failed; Wakeshot keeps trying, and the log has your old values |
@@ -510,20 +518,25 @@ until you start it from the Start menu. While it is off, nothing keeps the PC aw
 winget installed Wakeshot, `winget upgrade --all` skips it, since Wakeshot updates itself. If you installed from
 GitHub, `winget pin add HaikAsatryan.Wakeshot` makes `--all` skip it too (not tested on Wakeshot yet).
 
-**One AI agent in v1: Claude Code.** Codex CLI and Copilot CLI come next. Until then, `wakeshot run -- <agent>` holds
-for as long as the agent runs, idle or not; or write a hold file.
+**An agent not on the list.** `wakeshot run -- <agent>` holds for as long as the agent runs, idle or not; or write a
+hold file.
 
 **Some Claude Code waits do not hold.** Waiting for your answer holds only with Remote Control on, for at most 1
 hour; without it the PC may sleep while Claude waits for you. A scheduled run more than 1 hour away does not hold: the
 PC may sleep, and the job runs once it wakes.
 
-**`CLAUDE_CONFIG_DIR`.** Wakeshot follows it when it is set as a user variable in Windows, so Wakeshot gets it too.
-A value set only in one terminal is not seen, and those sessions do not hold.
+**Codex approval waits hold with no limit.** Codex writes nothing while it waits for your answer, so a turn that waits
+holds for as long as `codex.exe` runs. The battery floor still steps back.
 
-**Not in v1:** Claude Code inside WSL (its sessions carry Linux process ids, which Windows cannot check); rules for
+**`CLAUDE_CONFIG_DIR` and `CODEX_HOME`.** Wakeshot follows them when they are set as user variables in Windows, so
+Wakeshot gets them too. A value set only in one terminal is not seen, and those sessions do not hold.
+
+**Not in v1:** Claude Code inside WSL (its sessions carry Linux process ids, which Windows cannot check), Codex CLI
+inside WSL (its files sit in Linux's own home folder, which Wakeshot does not read); rules for
 any app, such as "while ffmpeg runs"; macOS and Linux; languages other than English.
 
-**Not tested live yet:** the Claude Code extension for VS Code and the Desktop app.
+**Not tested live yet:** the Claude Code extension for VS Code and the Desktop app; the Codex desktop app's own
+threads, and its app-server as the process that holds a thread.
 
 **With the lid closed, no time limit and no heat guard.** Wakeshot holds as long as the work runs. The hardware's own
 protection applies, the same as for a lid set to Do nothing by hand: the CPU slows itself when it gets too hot (not

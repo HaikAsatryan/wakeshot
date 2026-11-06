@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>Wakeshot: your PC stays awake while your AI agent works</title>
-  <meta name="description" content="Wakeshot keeps a Windows 11 PC awake while Claude Code or a long command works, then lets it sleep as usual with your own power settings back. Free and open source.">
+  <meta name="description" content="Wakeshot keeps a Windows 11 PC awake while an AI agent or a long command works, then lets it sleep as usual with your own power settings back. Free and open source.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://haikasatryan.github.io/wakeshot/">
   <meta property="og:title" content="Wakeshot: your PC stays awake while your AI agent works">
-  <meta property="og:description" content="Wakeshot keeps a Windows 11 PC awake while Claude Code or a long command works, then lets it sleep as usual with your own power settings back. Free and open source.">
+  <meta property="og:description" content="Wakeshot keeps a Windows 11 PC awake while an AI agent or a long command works, then lets it sleep as usual with your own power settings back. Free and open source.">
   <meta property="og:image" content="https://haikasatryan.github.io/wakeshot/social-card.png">
   <meta property="og:image:width" content="1280">
   <meta property="og:image:height" content="640">
@@ -41,7 +41,6 @@
       <p class="fine">
         Small and quiet: <a href="https://github.com/HaikAsatryan/wakeshot/blob/main/docs/research.md#speed-numbers">4.3 MB of private memory</a> and
         <a href="https://github.com/HaikAsatryan/wakeshot/blob/main/docs/research.md#speed-numbers">109 ms of CPU in 10 idle minutes</a> (0.018% of one core).
-        It starts holding the PC awake <a href="https://github.com/HaikAsatryan/wakeshot/blob/main/docs/research.md#speed-numbers">about 0.1 s</a> after Claude Code starts work.
         Measured on 0.1.0, x64, 2026-11-06.
       </p>
     </div>
@@ -54,8 +53,8 @@
       <!-- waits for p5-haik-check: menu words in this section (Keep awake, Keep screen on, Automatic) and the tooltip line; match them to the shipped menu. -->
       <div class="cards">
         <article>
-          <h3>Claude Code</h3>
-          <p>Wakeshot reads the small status file Claude Code keeps for each session. A session holds while it works, also while its background tasks run. No hooks, no edits to Claude's settings, and your prompts are never stored or logged.</p>
+          <h3>AI agents</h3>
+          <p><!-- agents -->Claude Code and Codex CLI<!-- /agents -->. Wakeshot reads the small files each agent keeps, and a session holds while it works on your task. No edits to an agent's settings, and your prompts are never stored or logged. The exact rules for each agent are in the <a href="https://github.com/HaikAsatryan/wakeshot#when-each-hold-counts">README</a>.</p>
         </article>
         <article>
           <h3><code>wakeshot run</code></h3>
@@ -70,18 +69,18 @@
           <p>From the menu: 30 minutes, 1, 2 or 4 hours, or until you turn it off, with Keep screen on if you want it. It ends at sign-out or restart, so a forgotten one never survives a reboot.</p>
         </article>
       </div>
-      <p>The tray icon shows the state: a filled light while something holds, the same light as an outline when nothing does, and the outline struck through when Automatic is off. Its tooltip names what holds the PC awake, such as "Holding awake: Claude Code (1 session)".</p>
+      <p>The tray icon shows the state: a filled light while something holds, the same light as an outline when nothing does, and the outline struck through when Automatic is off. Its tooltip names what holds the PC awake, such as "Holding awake: Codex (1 session)".</p>
       <!-- waits for p6-media: pictures of the three icon states and of the menu with Keep awake open, each a <picture> with a dark and a light PNG (<source media="(prefers-color-scheme: dark)">), copied into site/media/. Alt text as in the README. -->
-      <p>Claude Code is the agent Wakeshot knows in v1. Codex CLI and Copilot CLI come next. Until then, <code>wakeshot run -- &lt;agent&gt;</code> holds for as long as the agent runs.</p>
+      <p>For an agent not on the list, <code>wakeshot run -- &lt;agent&gt;</code> holds for as long as the agent runs.</p>
     </section>
 
     <section id="a-night">
       <h2>A night with Wakeshot</h2>
       <!-- waits for p6-media: the 30 second video here. <video controls muted playsinline preload="none" poster="media/promo-poster.png"> with media/promo.mp4 (H.264 and AAC, 1920 x 1080, under 10 MB) copied into site/media/ (no other host), and a one-line caption. Research (docs/research/launch.md, "Specs") says autoplay and loop; with sound and 30 s length, prefer controls, no autoplay. -->
       <ol class="steps">
-        <li><strong>You give Claude Code a long task and walk away.</strong> The icon's light comes on. Your screen still turns off on its usual timer; only sleep waits.</li>
+        <li><strong>You give your AI agent a long task and walk away.</strong> The icon's light comes on. Your screen still turns off on its usual timer; only sleep waits.</li>
         <li><strong>You close the lid.</strong> A short chime says the laptop keeps running, and Wakeshot locks it, so a closed laptop never runs unlocked.</li>
-        <li><strong>Claude finishes in the night.</strong> Wakeshot puts your lid and sleep settings back at once. After 5 minutes with no input, a soft "going to sleep" sound plays and the laptop goes to sleep, where Windows would have put it when you closed the lid.</li>
+        <li><strong>The agent finishes in the night.</strong> Wakeshot puts your lid and sleep settings back at once. After 5 minutes with no input, a soft "going to sleep" sound plays and the laptop goes to sleep, where Windows would have put it when you closed the lid.</li>
         <li><strong>Morning.</strong> You open the lid and sign in. A notice says how long the PC ran with the lid closed, and what kept it running.</li>
         <li><strong>The battery ran low instead?</strong> Below Windows' own energy saver level, Wakeshot steps back and puts your settings back. A closed laptop then goes to sleep after 5 minutes with no input.</li>
       </ol>

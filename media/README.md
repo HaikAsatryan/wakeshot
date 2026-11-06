@@ -41,7 +41,7 @@ takes about 2 minutes on the test laptop. The motion parts each have a small com
 | Check | Command |
 |---|---|
 | The art port draws exactly what `art.rs` draws, no tolerance: every pixel of the three review sheets (tray glyphs at 16 to 48 px in four rows, dark, light and high contrast), the 14 frames of `assets/wakeshot.ico` and the notice picture | `node scripts/check-art.mjs`; CI runs it on every push (job `art-port`, Node 26, no `npm ci`: it needs only `node:` modules and the `.ts` port) |
-| No em dash, en dash or emoji in the text files; every asset credited; every text colour pair in `src/theme.ts` at 4.5:1 or more and every graphic pair at 3:1; and the pace check | `npm run check` |
+| No em dash, en dash or emoji in the text files; every asset credited; every text colour pair in `src/theme.ts` at 4.5:1 or more and every graphic pair at 3:1; the pace check; and the agent lists in `README.md` and `site/index.html` equal to `src/agents.ts`, with a rules paragraph in the README for each agent that passed and none for one that did not | `npm run check` |
 | Pace (`scripts/check-pace.mjs`, from the timeline data): every cut, move, pop, click and caption start on the 120 BPM grid within 1 frame; something new at least every 2 s before the end card; framings 2 to 4 s; captions hold 1.4 s after their last word (big words of 1 to 3 words 0.5 s); at most 5 things to take in within any 2 s (cuts, moves, pops, clicks, lights, counts, rings, swaps, line starts); 2 to 6 words a caption line; at most two lines on screen; the name by 3 s; the end card the last 4 s; frame 0 not empty | `npm run check-pace` |
 | Video: H.264 and AAC, 1920 x 1080, 30 fps, 30 s plus or minus 2, under 10 MB; loops, read frame by frame: GIF, 480 x 240, 4 to 6 s, forever, under 1 MB, last frame equal to the first, a 40 px border of every frame exactly GitHub's page colour, the first frame the port's idle glyph and a held stretch its holding glyph, every pixel; the six state icons, each laid on its taskbar colour, equal to the cell of art.rs's own review sheet for that state at 32 px, every pixel, and see-through around the glyph | `npm run check-video` (add `-- --draft` for the draft) |
 | A clean checkout rebuilds the same bytes | `npm run check-rebuild` (add `-- --final` once the final video exists) |
@@ -57,6 +57,9 @@ takes about 2 minutes on the test laptop. The motion parts each have a small com
   from that file. If the file changes shape, the script stops with the name of what it could not find.
 - **The menu or tooltip words**: new captures into `public/shots/`, then update the set in `data/shots.json` (file,
   `standIn: false`, the set's size and scale, and the boxes and rows measured from the pictures).
+- **The supported agents** (a live test passed, or an agent is dropped): its line in `src/agents.ts`, then
+  `npm run agent-lists` (writes the lists in `README.md` and `site/index.html`), then `npm run check`, which names any
+  README rules paragraph to add or delete. The video's name chips (shot 2) follow on the next render.
 - **The words on screen**: `src/copy.ts`. **The timing**: `src/timeline.ts` (on the grid of `src/beat.ts`); the
   sounds and `check-pace` follow it.
 - **The speed numbers**: `data/speed.json`, from the measure script's output.
