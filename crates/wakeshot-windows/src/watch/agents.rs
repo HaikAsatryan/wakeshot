@@ -10,7 +10,12 @@
 //! A file is opened only as a source asked: a `Folder` file whose name the want's `accept` passes (checked again at
 //! the open by `read_whole`), a `Tail` path, and the file a `FindTail` found. `Names` are listed, never opened.
 //!
-//! Owner: `p4-watch-agents`; fixes by `p4-live-claude`, `p4-live-codex`, `p4-live-copilot`.
+//! An `AnyProcess` session (Codex, Copilot) lives while a process running its image holds its lock file open, as
+//! Restart Manager tells ([`LockOwners`]); that process is then checked by pid and start like any other. If Restart
+//! Manager fails, any live process running the image counts, which can outlive its session (architecture section 7).
+//!
+//! Owner: `p4-watch-agents`; the `AnyProcess` check `p4-codex-source`; fixes by `p4-live-claude`, `p4-live-codex`,
+//! `p4-live-copilot`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
@@ -24,8 +29,9 @@ use wakeshot_core::sources::{
 };
 use wakeshot_core::time::Now;
 
+use crate::lockowner::{LockOwners, RestartManager};
 use crate::log::{Level, Log};
-use crate::process::Liveness;
+use crate::process::{Liveness, ProcessEntry};
 use crate::watch::read::{Finder, Tail, names, read_whole};
 
 /// How long after a call that returned [`Retry`]s the caller runs [`Agents::retry`]: Claude truncates its status file,
@@ -70,8 +76,8 @@ pub struct Snapshots {
     /// One `Event::Sources` per source whose sessions or their liveness changed since the last call, in source order;
     /// every source on the first call and after [`Agents::forget_posted`] (track note 14).
     pub events: Vec<Event>,
-    /// The process of every live session of every source, sorted, so the caller can wait on its exit; the session
-    /// then shows as `Gone` at the next call.
+    /// The process of every live session of every source (for a lock file session, the holders that keep it alive),
+    /// sorted, so the caller can wait on its exit; the session then shows as `Gone` at the next call.
     pub live: Vec<ProcessRef>,
 }
 
@@ -79,13 +85,24 @@ pub struct Snapshots {
 pub struct Agents {
     slots: Vec<Slot>,
     log: Arc<dyn Log>,
+    owners: Box<dyn LockOwners>,
 }
 
 impl Agents {
     pub fn new(sources: Vec<Box<dyn AgentSource + Send>>, log: Arc<dyn Log>) -> Self {
+        Self::with_owners(sources, log, Box::new(RestartManager))
+    }
+
+    /// [`new`](Self::new) with lock file holders from `owners`, so tests give the answer.
+    pub fn with_owners(
+        sources: Vec<Box<dyn AgentSource + Send>>,
+        log: Arc<dyn Log>,
+        owners: Box<dyn LockOwners>,
+    ) -> Self {
         Self {
             slots: sources.into_iter().map(Slot::new).collect(),
             log,
+            owners,
         }
     }
 
@@ -115,6 +132,8 @@ impl Agents {
     pub fn on_tick(&mut self) -> Vec<Retry> {
         let mut retries = Vec::new();
         for (i, slot) in self.slots.iter_mut().enumerate() {
+            // A lock file nobody held is asked about again, in case a notice of its change was lost.
+            slot.owners.retain(|_, held| !held.is_empty());
             slot.run(&Scope::All, i, &mut retries);
         }
         retries
@@ -129,6 +148,7 @@ impl Agents {
         let mut retries = Vec::new();
         for (i, slot) in self.slots.iter_mut().enumerate() {
             if slot.watches(folder) {
+                slot.forget_owners(folder, names);
                 slot.run(&scope, i, &mut retries);
             }
         }
@@ -152,22 +172,44 @@ impl Agents {
     /// changed. Logs format and read problems, at most one line per source per minute of `now.mono_ms`.
     pub fn snapshots(&mut self, liveness: &dyn Liveness, now: Now) -> Snapshots {
         let mut out = Snapshots::default();
+        let lock_owners = &*self.owners;
         for slot in &mut self.slots {
             let mut problems = slot.io_problems();
+            let mut known = std::mem::take(&mut slot.owners);
+            let mut named = BTreeSet::new();
             let sessions: Vec<(SessionFacts, Alive)> = slot
                 .source
                 .sessions()
                 .into_iter()
                 .map(|session| {
-                    let alive = check(liveness, &session.liveness, &mut problems);
-                    if let (Alive::Yes, sources::Liveness::Process { pid, start }) =
-                        (alive, &session.liveness)
-                    {
-                        out.live.push(ProcessRef {
-                            pid: *pid,
-                            start: *start,
-                        });
-                    }
+                    let alive = match &session.liveness {
+                        sources::Liveness::Process { pid, start } => {
+                            let process = ProcessRef {
+                                pid: *pid,
+                                start: *start,
+                            };
+                            let alive = check(liveness, process, &mut problems);
+                            if alive == Alive::Yes {
+                                out.live.push(process);
+                            }
+                            alive
+                        }
+                        sources::Liveness::AnyProcess { image, lock_file } => {
+                            named.insert(lock_file.clone());
+                            let lock = LockFile {
+                                image,
+                                path: lock_file,
+                            };
+                            any_process(
+                                liveness,
+                                lock_owners,
+                                &mut known,
+                                &lock,
+                                &mut problems,
+                                &mut out.live,
+                            )
+                        }
+                    };
                     match session.format {
                         FormatHealth::Ok => {}
                         FormatHealth::Unreadable(what) => {
@@ -181,6 +223,8 @@ impl Agents {
                     (session, alive)
                 })
                 .collect();
+            known.retain(|path, _| named.contains(path));
+            slot.owners = known;
             slot.log_problems(&*self.log, now, problems);
             if slot.posted.as_ref() != Some(&sessions) {
                 out.events.push(Event::Sources {
@@ -209,27 +253,94 @@ const _: () = {
     is_send::<Agents>();
 };
 
-fn check(
+fn check(liveness: &dyn Liveness, process: ProcessRef, problems: &mut BTreeSet<Problem>) -> Alive {
+    let alive = liveness.check(process);
+    if alive == Alive::Unknown {
+        problems.insert(Problem::LivenessUnknown);
+    }
+    alive
+}
+
+/// An `AnyProcess` session's lock file and the image of the process that may hold it.
+struct LockFile<'a> {
+    image: &'static str,
+    path: &'a Path,
+}
+
+/// `Yes` while a process running the image holds the lock file open; its holders go to `live`. The holders found
+/// are kept in `known` until the lock file changes ([`Slot::forget_owners`], a listing that feeds it) or all of them
+/// are gone, so Restart Manager is asked once per lock file, not on every call. A holder of another image (a virus
+/// scanner, say) does not count. If Restart Manager fails, any live process running the image counts while the
+/// source lists the lock file, and nothing goes to `live`.
+fn any_process(
     liveness: &dyn Liveness,
-    session: &sources::Liveness,
+    owners: &dyn LockOwners,
+    known: &mut BTreeMap<PathBuf, Vec<ProcessRef>>,
+    lock: &LockFile<'_>,
     problems: &mut BTreeSet<Problem>,
+    live: &mut Vec<ProcessRef>,
 ) -> Alive {
-    match session {
-        sources::Liveness::Process { pid, start } => {
-            let alive = liveness.check(ProcessRef {
-                pid: *pid,
-                start: *start,
-            });
-            if alive == Alive::Unknown {
-                problems.insert(Problem::LivenessUnknown);
-            }
+    if let Some(held) = known.get(lock.path) {
+        if held.is_empty() {
+            return Alive::Gone;
+        }
+        let answers: Vec<(ProcessRef, Alive)> =
+            held.iter().map(|&p| (p, liveness.check(p))).collect();
+        let yes: Vec<ProcessRef> = answers
+            .iter()
+            .filter(|(_, alive)| *alive == Alive::Yes)
+            .map(|(p, _)| *p)
+            .collect();
+        if !yes.is_empty() {
+            live.extend(yes);
+            return Alive::Yes;
+        }
+        if answers.iter().any(|(_, alive)| *alive == Alive::Unknown) {
+            problems.insert(Problem::LivenessUnknown);
+            return Alive::Unknown;
+        }
+        known.remove(lock.path);
+    }
+    let of_image = |e: &ProcessEntry| e.image.eq_ignore_ascii_case(lock.image);
+    match owners.holders(lock.path) {
+        Ok(holders) => {
+            let held: Vec<ProcessRef> = if holders.is_empty() {
+                holders
+            } else {
+                let Ok(list) = liveness.list() else {
+                    problems.insert(Problem::LivenessUnknown);
+                    return Alive::Unknown;
+                };
+                holders
+                    .into_iter()
+                    .filter(|h| {
+                        list.iter()
+                            .any(|e| e.pid == h.pid && e.start == h.start && of_image(e))
+                    })
+                    .collect()
+            };
+            let alive = if held.is_empty() {
+                Alive::Gone
+            } else {
+                live.extend(&held);
+                Alive::Yes
+            };
+            known.insert(lock.path.to_path_buf(), held);
             alive
         }
-        // Only Codex and Copilot ask for this, and they come after v1: the check of which process holds the lock file
-        // moved to `p4-codex-source` with them (Haik, 2026-11-03). Until then the honest answer is Unknown.
-        sources::Liveness::AnyProcess { .. } => {
-            problems.insert(Problem::NoLockCheck);
-            Alive::Unknown
+        Err(e) => {
+            problems.insert(Problem::NoLockOwner {
+                image: lock.image,
+                code: e.code,
+            });
+            match liveness.list() {
+                Ok(list) if list.iter().any(of_image) => Alive::Yes,
+                Ok(_) => Alive::Gone,
+                Err(_) => {
+                    problems.insert(Problem::LivenessUnknown);
+                    Alive::Unknown
+                }
+            }
         }
     }
 }
@@ -364,6 +475,8 @@ struct Slot {
     listings: BTreeMap<(PathBuf, u8), ListingState>,
     tails: BTreeMap<TailKey, TailState>,
     finder: Finder,
+    /// The holders found for each lock file an `AnyProcess` session names; an empty list: nobody held it.
+    owners: BTreeMap<PathBuf, Vec<ProcessRef>>,
     posted: Option<Vec<(SessionFacts, Alive)>>,
     logged: BTreeSet<Problem>,
     last_line_ms: Option<u64>,
@@ -405,6 +518,7 @@ impl Slot {
             listings: BTreeMap::new(),
             tails: BTreeMap::new(),
             finder: Finder::new(),
+            owners: BTreeMap::new(),
             posted: None,
             logged: BTreeSet::new(),
             last_line_ms: None,
@@ -418,6 +532,20 @@ impl Slot {
             WantedFile::Folder { dir, .. } | WantedFile::Names { dir, .. } => dir == folder,
             WantedFile::Tail(_) | WantedFile::FindTail { .. } => false,
         })
+    }
+
+    /// A change notice in `folder`: the holders of the lock files it names are asked again, every one under `folder`
+    /// when the notice lost its names. A lock file deleted and made again between two listings lists the same, so
+    /// the notice is what tells.
+    fn forget_owners(&mut self, folder: &Path, names: Option<&[PathBuf]>) {
+        match names {
+            Some(names) => {
+                for name in names {
+                    self.owners.remove(&folder.join(name));
+                }
+            }
+            None => self.owners.retain(|path, _| !path.starts_with(folder)),
+        }
     }
 
     /// Feeds one file and asks the source what it wants now (wants change only after a feed: the `AgentSource`
@@ -663,6 +791,7 @@ impl Slot {
         let new: Vec<PathBuf> = listed.difference(&state.listed).cloned().collect();
         for path in gone {
             state.listed.remove(&path);
+            self.owners.remove(&path);
             self.feed(path, Feed::Gone);
             if !wants_listing(&self.wants, dir, depth) {
                 return false;
@@ -670,6 +799,7 @@ impl Slot {
         }
         for path in new {
             state.listed.insert(path.clone());
+            self.owners.remove(&path);
             self.feed(path, Feed::Present);
             if !wants_listing(&self.wants, dir, depth) {
                 return false;
@@ -809,7 +939,7 @@ impl Slot {
 enum Problem {
     Unreadable(&'static str),
     UnknownValue(&'static str),
-    NoLockCheck,
+    NoLockOwner { image: &'static str, code: u32 },
     LivenessUnknown,
     Unlisted(Option<i32>),
     Unread(Option<i32>),
@@ -820,15 +950,18 @@ impl Problem {
         match self {
             Problem::Unreadable(what) => format!("format problem in {what}"),
             Problem::UnknownValue(field) => format!("unknown value in {field}"),
-            Problem::NoLockCheck => {
-                "a session needs the lock file check this version does not have, so its liveness is unknown"
-                    .to_owned()
-            }
+            Problem::NoLockOwner { image, code } => format!(
+                "Restart Manager could not tell which process holds a lock file (error {code}), so any running \
+                 {image} counts"
+            ),
             Problem::LivenessUnknown => {
                 "a session's process could not be checked, so its liveness is unknown".to_owned()
             }
             Problem::Unlisted(code) => {
-                format!("a folder it reads could not be listed ({})", code_text(*code))
+                format!(
+                    "a folder it reads could not be listed ({})",
+                    code_text(*code)
+                )
             }
             Problem::Unread(code) => {
                 format!("a file it reads could not be read ({})", code_text(*code))
@@ -1688,35 +1821,394 @@ mod tests {
         );
     }
 
-    #[test]
-    fn any_process_gives_unknown_without_a_check() {
-        let mut codex = session(7);
-        codex.key.source = SourceId::Codex;
-        codex.liveness = sources::Liveness::AnyProcess {
-            image: "codex.exe",
-            lock_file: PathBuf::from(r"C:\Users\x\.codex\sessions\thread.lock"),
-        };
+    /// Lock file holders the test sets, one answer for every path, and every path asked about.
+    #[derive(Clone, Default)]
+    struct Owners(Arc<Mutex<OwnersInner>>);
+
+    #[derive(Default)]
+    struct OwnersInner {
+        answer: Option<Result<Vec<ProcessRef>, crate::WinError>>,
+        asked: Vec<PathBuf>,
+    }
+
+    impl Owners {
+        fn inner(&self) -> MutexGuard<'_, OwnersInner> {
+            self.0.lock().unwrap_or_else(PoisonError::into_inner)
+        }
+
+        fn answer(&self, answer: Result<Vec<ProcessRef>, crate::WinError>) {
+            self.inner().answer = Some(answer);
+        }
+
+        /// How many times it was asked since the last call.
+        fn asked(&self) -> usize {
+            std::mem::take(&mut self.inner().asked).len()
+        }
+    }
+
+    impl LockOwners for Owners {
+        fn holders(&self, path: &Path) -> Result<Vec<ProcessRef>, crate::WinError> {
+            let mut inner = self.inner();
+            inner.asked.push(path.to_path_buf());
+            inner.answer.clone().unwrap_or(Ok(Vec::new()))
+        }
+    }
+
+    const RM_FAILED: crate::WinError = crate::WinError {
+        call: "RmGetList",
+        code: 5,
+    };
+
+    fn codex_session(lock_file: &Path) -> SessionFacts {
+        SessionFacts {
+            key: SessionKey {
+                source: SourceId::Codex,
+                id: "0199aaaa-0000-7000-8000-000000000001".to_owned(),
+            },
+            liveness: sources::Liveness::AnyProcess {
+                image: "codex.exe",
+                lock_file: lock_file.to_path_buf(),
+            },
+            activity: Activity::Working,
+            timers: vec![],
+            open_tasks: 0,
+            label: "Codex",
+            format: FormatHealth::Ok,
+        }
+    }
+
+    fn entry(process: ProcessRef, image: &str) -> ProcessEntry {
+        ProcessEntry {
+            pid: process.pid,
+            start: process.start,
+            image: image.to_owned(),
+        }
+    }
+
+    /// `Agents` over one Codex source whose one session names `lock_file`, with fake holders.
+    fn lock_agents(lock_file: &Path) -> (Agents, Arc<MemoryLog>, Shared, Owners) {
         let source = Shared::new(SourceId::Codex);
-        source.set(|f| f.sessions = vec![codex.clone()]);
-        let (mut agents, log) = agents(&[&source]);
+        let session = codex_session(lock_file);
+        source.set(|f| f.sessions = vec![session]);
+        let owners = Owners::default();
+        let log = Arc::new(MemoryLog::default());
+        let agents =
+            Agents::with_owners(vec![source.boxed()], log.clone(), Box::new(owners.clone()));
+        (agents, log, source, owners)
+    }
+
+    fn only_alive(snapshots: &Snapshots) -> Alive {
+        match snapshots.events.as_slice() {
+            [Event::Sources { sessions, .. }] => {
+                assert_eq!(sessions.len(), 1);
+                sessions[0].1
+            }
+            other => panic!("one event with one session: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_lock_file_session_lives_while_a_holder_running_its_image_lives() {
+        let lock = PathBuf::from(r"C:\Users\x\.codex\thread-writer-locks\t1.lock");
+        let (mut agents, log, _source, owners) = lock_agents(&lock);
         let live = FakeLiveness::default();
+        owners.answer(Ok(vec![process(7)]));
+        live.processes
+            .lock()
+            .unwrap()
+            .push(entry(process(7), "Codex.EXE"));
+        live.alive.lock().unwrap().push((process(7), Alive::Yes));
+
+        let first = agents.snapshots(&live, START);
+        assert_eq!(
+            first,
+            Snapshots {
+                events: vec![Event::Sources {
+                    source: SourceId::Codex,
+                    sessions: vec![(codex_session(&lock), Alive::Yes)],
+                }],
+                live: vec![process(7)],
+            },
+            "the holder is waited on like any session process"
+        );
+        assert_eq!(owners.asked(), 1);
+        assert!(lines(&log).is_empty());
+
+        // Known now: only its pid and start are checked.
+        let again = agents.snapshots(&live, START);
+        assert_eq!((again.events.len(), again.live), (0, vec![process(7)]));
+        assert_eq!(owners.asked(), 0, "Restart Manager is not asked again");
+        assert_eq!(*live.checked.lock().unwrap(), [process(7)]);
+
+        // The holder ended: asked again; nobody holds it now.
+        live.alive.lock().unwrap().clear();
+        owners.answer(Ok(vec![]));
+        let ended = agents.snapshots(&live, START);
+        assert_eq!(only_alive(&ended), Alive::Gone);
+        assert!(ended.live.is_empty());
+        assert_eq!(owners.asked(), 1);
+
+        // "Nobody" is kept too, until the tick asks again.
+        agents.snapshots(&live, START);
+        assert_eq!(owners.asked(), 0);
+        agents.on_tick();
+        agents.snapshots(&live, START);
+        assert_eq!(owners.asked(), 1);
+    }
+
+    #[test]
+    fn a_holder_of_another_image_or_start_does_not_count() {
+        let lock = PathBuf::from(r"C:\Users\x\.codex\thread-writer-locks\t1.lock");
+        let (mut agents, _, _source, owners) = lock_agents(&lock);
+        let live = FakeLiveness::default();
+        let scanner = process(8);
+        let reused = ProcessRef {
+            pid: 9,
+            start: FileTime(1),
+        };
+        owners.answer(Ok(vec![scanner, process(9), process(7)]));
+        live.processes.lock().unwrap().extend([
+            entry(scanner, "MsMpEng.exe"),
+            entry(reused, "codex.exe"),
+            entry(process(7), "codex.exe"),
+        ]);
+        live.alive.lock().unwrap().push((process(7), Alive::Yes));
 
         let snapshots = agents.snapshots(&live, START);
-        assert_eq!(
-            snapshots.events,
-            [Event::Sources {
-                source: SourceId::Codex,
-                sessions: vec![(codex, Alive::Unknown)],
-            }]
-        );
+        assert_eq!(only_alive(&snapshots), Alive::Yes);
+        assert_eq!(snapshots.live, [process(7)]);
+
+        // Only the scanner holds it after the codex process ended: gone.
+        live.alive.lock().unwrap().clear();
+        owners.answer(Ok(vec![scanner]));
+        let snapshots = agents.snapshots(&live, START);
+        assert_eq!(only_alive(&snapshots), Alive::Gone);
         assert!(snapshots.live.is_empty());
-        assert!(live.checked.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_change_notice_or_a_listing_of_the_lock_file_asks_again() {
+        let dir = TempDir::new("agents-lock-owners");
+        let lock = dir.write("t1.lock", b"");
+        let (mut agents, _, source, owners) = lock_agents(&lock);
+        source.set(|f| {
+            f.wanted = vec![WantedFile::Names {
+                dir: dir.path().to_path_buf(),
+                depth: 0,
+                accept: lock_name,
+            }];
+        });
+        let live = FakeLiveness::default();
+        owners.answer(Ok(vec![process(7)]));
+        live.processes
+            .lock()
+            .unwrap()
+            .push(entry(process(7), "codex.exe"));
+        live.alive.lock().unwrap().push((process(7), Alive::Yes));
+        agents.on_tick();
+        assert_eq!(source.fed(), [present(&lock)]);
+        agents.snapshots(&live, START);
+        assert_eq!(owners.asked(), 1);
+
+        // A tick that lists the same names keeps what is known; so does a notice about another file.
+        agents.on_tick();
+        agents.on_change(dir.path(), Some(&[PathBuf::from("t2.lock")]));
+        agents.snapshots(&live, START);
+        assert_eq!(owners.asked(), 0);
+
+        // A notice that names it, or one that lost its names: the file may have been made again.
+        agents.on_change(dir.path(), Some(&[PathBuf::from("t1.lock")]));
+        agents.snapshots(&live, START);
+        assert_eq!(owners.asked(), 1);
+        agents.on_change(dir.path(), None);
+        agents.snapshots(&live, START);
+        assert_eq!(owners.asked(), 1);
+
+        // A listing that feeds it gone (the fake source still lists the session).
+        fs::remove_file(&lock).unwrap();
+        agents.on_tick();
+        assert_eq!(source.fed(), [gone(&lock)]);
+        agents.snapshots(&live, START);
+        assert_eq!(owners.asked(), 1);
+    }
+
+    #[test]
+    fn a_restart_manager_error_counts_any_live_process_running_the_image() {
+        let lock = PathBuf::from(r"C:\Users\x\.codex\thread-writer-locks\t1.lock");
+        let (mut agents, log, _source, owners) = lock_agents(&lock);
+        let live = FakeLiveness::default();
+        owners.answer(Err(RM_FAILED));
+        live.processes
+            .lock()
+            .unwrap()
+            .push(entry(process(9), "codex.exe"));
+
+        let snapshots = agents.snapshots(&live, START);
+        assert_eq!(only_alive(&snapshots), Alive::Yes);
+        assert!(
+            snapshots.live.is_empty(),
+            "no one process is this session's"
+        );
         assert_eq!(
             lines(&log),
             [
-                "Codex CLI: a session needs the lock file check this version does not have, so its liveness is unknown"
+                "Codex CLI: Restart Manager could not tell which process holds a lock file (error 5), so any running \
+                 codex.exe counts"
             ]
         );
+
+        // Nothing is kept from a failed answer.
+        live.processes
+            .lock()
+            .unwrap()
+            .push(entry(process(10), "other.exe"));
+        live.processes.lock().unwrap().remove(0);
+        let snapshots = agents.snapshots(&live, START);
+        assert_eq!(only_alive(&snapshots), Alive::Gone);
+        assert_eq!(owners.asked(), 2);
+
+        *live.list_error.lock().unwrap() = Some(RM_FAILED);
+        let snapshots = agents.snapshots(&live, START);
+        assert_eq!(only_alive(&snapshots), Alive::Unknown);
+    }
+
+    #[test]
+    fn a_failed_process_list_or_holder_check_is_unknown() {
+        let lock = PathBuf::from(r"C:\Users\x\.codex\thread-writer-locks\t1.lock");
+        let (mut agents, log, _source, owners) = lock_agents(&lock);
+        let live = FakeLiveness::default();
+        owners.answer(Ok(vec![process(7)]));
+        *live.list_error.lock().unwrap() = Some(RM_FAILED);
+
+        let snapshots = agents.snapshots(&live, START);
+        assert_eq!(only_alive(&snapshots), Alive::Unknown);
+        assert!(snapshots.live.is_empty());
+        assert_eq!(
+            lines(&log),
+            ["Codex CLI: a session's process could not be checked, so its liveness is unknown"]
+        );
+        agents.snapshots(&live, START);
+        assert_eq!(owners.asked(), 2, "an unknown answer is not kept");
+
+        // Known, then its check fails: unknown, and the holder stays known.
+        *live.list_error.lock().unwrap() = None;
+        live.processes
+            .lock()
+            .unwrap()
+            .push(entry(process(7), "codex.exe"));
+        live.alive.lock().unwrap().push((process(7), Alive::Yes));
+        assert_eq!(only_alive(&agents.snapshots(&live, START)), Alive::Yes);
+        live.alive.lock().unwrap()[0].1 = Alive::Unknown;
+        let snapshots = agents.snapshots(&live, START);
+        assert_eq!(only_alive(&snapshots), Alive::Unknown);
+        assert!(snapshots.live.is_empty());
+        live.alive.lock().unwrap()[0].1 = Alive::Yes;
+        assert_eq!(agents.snapshots(&live, START).events.len(), 1);
+        assert_eq!(owners.asked(), 1, "asked once in the three calls");
+    }
+
+    /// The Codex source on a made-up Codex home, read through the real listing, finder, tail and Restart Manager; this
+    /// process holds the lock file the way Codex does and passes for `codex.exe` in the fake process list.
+    #[test]
+    fn codex_from_a_held_lock_file_and_its_rollout() {
+        use wakeshot_core::sources::codex::CodexSource;
+
+        const ID: &str = "0199aaaa-0000-7000-8000-000000000001";
+        let home = TempDir::new("agents-codex");
+        let lock = home.write(&format!(r"thread-writer-locks\{ID}.lock"), b"");
+        home.write(r"thread-writer-locks\.coordination.lock", b"");
+        let held = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&lock)
+            .unwrap();
+        held.try_lock().unwrap();
+        let start = concat!(
+            r#"{"timestamp":"2026-11-06T10:00:00.000Z","ordinal":0,"type":"session_meta","payload":{"id":"0199aaaa-0000-7000-8000-000000000001"}}"#,
+            "\n",
+            r#"{"timestamp":"2026-11-06T10:00:05.000Z","ordinal":1,"type":"event_msg","payload":{"type":"task_started","turn_id":"t1"}}"#,
+            "\n",
+        );
+        let rollout = home.write(
+            &format!(r"sessions\2026\11\06\rollout-2026-11-06T12-00-00-{ID}.jsonl"),
+            start.as_bytes(),
+        );
+        let log = Arc::new(MemoryLog::default());
+        let mut agents = Agents::new(
+            vec![Box::new(CodexSource::new(home.path().to_path_buf()))],
+            log.clone(),
+        );
+        let me = crate::process::current().unwrap();
+        let live = FakeLiveness::default();
+        live.processes.lock().unwrap().push(entry(me, "codex.exe"));
+        live.alive.lock().unwrap().push((me, Alive::Yes));
+        let locks_dir = home.path().join("thread-writer-locks");
+        assert_eq!(
+            agents.folders(),
+            [WatchFolder {
+                dir: locks_dir.clone(),
+                subtree: false,
+            }]
+        );
+
+        let facts = |activity| SessionFacts {
+            activity,
+            ..codex_session(&lock)
+        };
+        agents.on_tick();
+        let first = agents.snapshots(&live, START);
+        assert_eq!(
+            first,
+            Snapshots {
+                events: vec![Event::Sources {
+                    source: SourceId::Codex,
+                    sessions: vec![(facts(Activity::Working), Alive::Yes)],
+                }],
+                live: vec![me],
+            }
+        );
+
+        append(
+            &rollout,
+            concat!(
+                r#"{"timestamp":"2026-11-06T10:01:00.000Z","ordinal":2,"type":"event_msg","payload":{"type":"task_complete","turn_id":"t1"}}"#,
+                "\n"
+            )
+            .as_bytes(),
+        );
+        agents.on_tick();
+        assert_eq!(
+            agents.snapshots(&live, START).events,
+            [Event::Sources {
+                source: SourceId::Codex,
+                sessions: vec![(facts(Activity::Idle), Alive::Yes)],
+            }]
+        );
+
+        // Listing, finding and asking left the lock as Codex took it: a second taker is still refused.
+        let second = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&lock)
+            .unwrap();
+        assert!(matches!(
+            second.try_lock(),
+            Err(std::fs::TryLockError::WouldBlock)
+        ));
+        drop(second);
+
+        // Codex closes the lock file, then deletes it.
+        drop(held);
+        fs::remove_file(&lock).unwrap();
+        agents.on_change(&locks_dir, Some(&[PathBuf::from(format!("{ID}.lock"))]));
+        assert_eq!(
+            agents.snapshots(&live, START).events,
+            [Event::Sources {
+                source: SourceId::Codex,
+                sessions: vec![],
+            }]
+        );
+        assert!(lines(&log).is_empty(), "{:?}", lines(&log));
     }
 
     #[test]

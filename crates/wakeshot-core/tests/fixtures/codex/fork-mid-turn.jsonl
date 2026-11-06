@@ -1,0 +1,7 @@
+{"timestamp":"2026-11-06T11:00:00.000Z","ordinal":0,"type":"session_meta","payload":{"session_id":"0199aaaa-0000-7000-8000-0000000000aa","id":"0199aaaa-0000-7000-8000-000000000002","forked_from_id":"0199aaaa-0000-7000-8000-000000000001","timestamp":"2026-11-06T11:00:00.000Z","cwd":"C:\\code\\demo","originator":"codex_cli_rs","cli_version":"0.167.0"}}
+{"timestamp":"2026-11-06T11:00:00.001Z","ordinal":1,"type":"event_msg","payload":{"type":"task_started","turn_id":"019a0000-0000-7000-8000-000000000101","model_context_window":272000}}
+{"timestamp":"2026-11-06T11:00:00.002Z","ordinal":2,"type":"response_item","payload":{"type":"message","role":"assistant","content":[]}}
+{"timestamp":"2026-11-06T11:00:00.003Z","ordinal":3,"type":"event_msg","payload":{"type":"turn_aborted","turn_id":"019a0000-0000-7000-8000-000000000101","reason":"interrupted","started_at":1793959205}}
+{"timestamp":"2026-11-06T11:00:00.004Z","ordinal":4,"type":"event_msg","payload":{"type":"thread_settings_applied","thread_id":"0199aaaa-0000-7000-8000-000000000002","thread_settings":{}}}
+{"timestamp":"2026-11-06T11:00:05.000Z","ordinal":5,"type":"event_msg","payload":{"type":"task_started","turn_id":"019a0000-0000-7000-8000-000000000201","model_context_window":272000}}
+{"timestamp":"2026-11-06T11:00:40.000Z","ordinal":6,"type":"event_msg","payload":{"type":"task_complete","turn_id":"019a0000-0000-7000-8000-000000000201","last_agent_message":"Done"}}

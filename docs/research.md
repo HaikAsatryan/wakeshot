@@ -5274,3 +5274,56 @@ From `p6-repo-files`, 2026-11-06 04:00 to 04:30.
   (`app/tray_mode.rs`, `CARGO_PKG_VERSION`); `wakeshot status` does not print a version. **Verified** (code).
 - **`rustup toolchain install` with no toolchain name installs the pin.** CI runs it to read `rust-toolchain.toml`,
   and the CI runs of 2026-11-05 passed on both runners. **Verified** (CI result), not run here.
+
+## Restart Manager: who holds a lock file
+
+From `p4-codex-source`, 2026-11-06, the `lockowner.rs` tests on the test laptop (Windows 11 Pro 10.0.26300), run
+from an elevated agent shell.
+
+- **Restart Manager names the process that holds a file the way Codex 0.167.0 holds its thread lock files**
+  (`OpenOptions` read, write, create, no truncate, then `File::try_lock`, an exclusive lock): one `RmStartSession`,
+  `RmRegisterResources` with that one file, `RmGetList` gave exactly that process, for this process and for a child
+  process; once the file is closed, an empty list. **Verified** (tests
+  `a_file_this_process_holds_names_this_process_and_stays_locked`,
+  `another_process_holding_the_file_is_named_with_its_start`).
+- **Its start time is the one Windows gives elsewhere.** `RM_UNIQUE_PROCESS.ProcessStartTime` equals the
+  `GetProcessTimes` creation time (`process::current`, `process::start_of`) and the start in the system process list
+  (`SystemLiveness::list`), so a holder can be checked by pid and start and matched with its image. **Verified**
+  (same tests).
+- **Asking does not disturb the holder.** After the call the file is still locked (a second handle's `try_lock` gives
+  `WouldBlock`) and the holder still writes to it. **Verified** (first test). How Restart Manager finds the holders
+  inside: not checked.
+- **A missing file has no holders.** `RmRegisterResources` takes a path that does not exist, and `RmGetList` then
+  gives an empty list, not an error. **Verified** (test `a_file_nobody_holds_or_that_is_missing_has_no_holders`).
+- **No privilege is needed.** The child's file gives the same holder under an impersonated token of the same user with
+  every privilege removed (`CreateRestrictedToken`, `DISABLE_MAX_PRIVILEGE`), so `SeDebugPrivilege` is not what
+  answers. **Verified** for privileges; under a Medium (unelevated) token: not verified.
+- **Sessions do not pile up.** 200 calls in a row, each ending its session, all answered. **Verified** (test
+  `many_calls_leave_no_session_behind`). The size of Restart Manager's session limit: not verified.
+- Whether it sees a real `codex.exe` holding its lock: not verified (`p4-live-codex`).
+
+## Copilot in VS Code
+
+From `p4-copilot-vscode-research`, 2026-11-06. Details, paths and line numbers: `docs/research/copilot-vscode-signals.md`.
+Source: `microsoft/vscode` tag 1.145.1 read as data; the laptop runs the same build (commit `6bab64e2d1`).
+
+- **Copilot Chat moved into the VS Code repo.** `microsoft/vscode-copilot-chat` is archived (last release v0.43.0,
+  2026-04-07); the extension is `extensions/copilot` (0.73.0) and ships built in. Checked with `gh api` and the
+  install folder.
+- **The default "Local" harness saves each chat as an operation log**,
+  `%APPDATA%\Code\User\workspaceStorage\<id>\chatSessions\<session id>.jsonl`, with each request's raw `modelState`
+  (`0` Pending, `4` NeedsInput, `1`/`2`/`3` done). Written about every 60 s, on window blur and on close, not on each
+  change; compaction after 1024 lines rewrites the file in place. **Verified** in the source; never seen live.
+- **The "Copilot" harness (agent host) and Background sessions write the Copilot CLI's files** in `~\.copilot\
+  session-state\`. The agent host runs `copilot-runtime.exe --stdio`, not `copilot.exe`. **Verified** in the source
+  and in the process list (the runtime was running with no chat in progress).
+- **Copilot CLI lock names seen on the laptop** (names only): `session-state\<id>\inuse.9260.lock` (5 bytes) and
+  `inuse.9260.hold` (0 bytes) with no `events.jsonl` next to them, pid 9260 not running. Which file is held open: not
+  verified.
+- **VS Code does not keep a Modern Standby PC awake for Copilot.** The extension takes Electron's
+  `prevent-app-suspension` per model call (released 2 minutes after the last one), and Chromium `main` maps that to
+  `PowerRequestExecutionRequired` only (`power_save_blocker_win.cc:106-110`, read 2026-11-06). **Verified** in the
+  source; not tested.
+- **`%APPDATA%\Code\code.lock` holds the VS Code main pid** as text, deleted at a clean exit. **Verified** in the
+  source (`src/vs/code/electron-main/main.ts:143,154`) and seen on the laptop (5 bytes).
+- **Copilot Free includes agent mode** in VS Code (GitHub Docs "Copilot plans", read 2026-11-06).

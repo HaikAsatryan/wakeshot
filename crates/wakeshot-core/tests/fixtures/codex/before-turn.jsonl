@@ -1,0 +1,2 @@
+{"timestamp":"2026-11-06T10:00:00.000Z","ordinal":0,"type":"session_meta","payload":{"session_id":"0199aaaa-0000-7000-8000-0000000000aa","id":"0199aaaa-0000-7000-8000-000000000001","timestamp":"2026-11-06T10:00:00.000Z","cwd":"C:\\code\\demo","originator":"codex_cli_rs","cli_version":"0.167.0","history_mode":"paginated"}}
+{"timestamp":"2026-11-06T10:00:00.010Z","ordinal":1,"type":"event_msg","payload":{"type":"thread_settings_applied","thread_id":"0199aaaa-0000-7000-8000-000000000001","thread_settings":{}}}

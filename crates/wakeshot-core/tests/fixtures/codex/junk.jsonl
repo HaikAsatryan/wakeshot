@@ -1,0 +1,12 @@
+{"timestamp":"2026-11-06T10:00:00.000Z","ordinal":0,"type":"session_meta","payload":{"session_id":"0199aaaa-0000-7000-8000-0000000000aa","id":"0199aaaa-0000-7000-8000-000000000001","timestamp":"2026-11-06T10:00:00.000Z","cwd":"C:\\code\\demo","originator":"codex_cli_rs","cli_version":"0.167.0","history_mode":"paginated"}}
+not json at all, but it says event_msg and task_complete
+
+[1,2,3]
+"event_msg"
+{"timestamp":"2026-11-06T10:00:05.000Z","ordinal":1,"type":"event_msg","payload":{"type":"task_started","turn_id":"019a0000-0000-7000-8000-000000000101","started_at":1793959205,"model_context_window":272000,"collaboration_mode_kind":"default"}}
+{"timestamp":"2026-11-06T10:00:06.000Z","ordinal":2,"type":"event_msg","payload":{"type":"task_complete","turn_id":"019a0000-0000-7000
+{"timestamp":"2026-11-06T10:00:07.000Z","ordinal":3,"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\",\"turn_id\":\"t\"}}"}]}}
+{"timestamp":"2026-11-06T10:00:08.000Z","ordinal":4,"type":"event_msg_v2","payload":{"type":"task_complete","turn_id":"019a0000-0000-7000-8000-000000000101"}}
+{"timestamp":"2026-11-06T10:00:09.000Z","ordinal":5,"type":"event_msg","payload":{"type":"agent_message","message":"working on it"}}
+{"timestamp":"2026-11-06T10:00:10.000Z","ordinal":6,"type":"compacted","payload":{"message":"summary"}}
+{"timestamp":"2026-11-06T10:00:11.000Z","ordinal":7,"type":7,"payload":{"type":"task_complete","turn_id":"event_msg"}}
