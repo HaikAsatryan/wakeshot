@@ -5743,3 +5743,95 @@ the repo or a run named here.
   (`every_input_answers_an_empty_object_with_exit_0_and_is_read_to_its_end`). **Verified**.
 - **`serde_json` names the place after a bad value**: a number for `conversation_id` on line 2 reports line 3 (the
   reader had moved past the newline). Logged as is; **verified** (`a_parse_problem_keeps_its_place_and_no_text`).
+
+## Antigravity hook payload form
+
+Card `p4-antigravity-source`, step 1, 2026-11-06 (design live test 0 for `agy`). How checked: the installed
+`%LocalAppData%\agy\bin\agy.exe` and `%USERPROFILE%\.gemini\bin\agy.exe` (both 1.5.2, `agy.version.json`; the same
+SHA-256 `3F6F64A3...0030B61E`, so the CLI and the IDE's hub run one binary) read as data: function names and entry
+points from the Go `pclntab`, the calls and RIP-relative string loads of single functions with a Python scan and
+`llvm-objdump` (Build Tools), and text search. The IDE 2.6.0 install (`%LocalAppData%\Programs\Antigravity IDE`) by
+text search of its JS. Nothing run, no plugin added, nothing under `.gemini` read but `bin\`.
+
+- **The hook command runs as `cmd /c <command>`, with the payload on stdin.**
+  `jsonhook.executeCommandModeHook` (package `cortex/customization/hooks/jsonhook`) calls `expandHome`,
+  `context.WithTimeout`, then `os/exec.CommandContext` with the strings `cmd` and `/c` and the command; it appends
+  `ANTIGRAVITY_CONVERSATION_ID=%s` to `syscall.Environ()`; then `marshalHookArgs` makes the payload, which goes into
+  a `bytes.Reader` (the itab whose method is `bytes.(*Reader).Read`, so `Cmd.Stdin`), stderr into a `bytes.Buffer`,
+  and `jexec.(*Cmd).Output` runs it (`jexec` only adds the environment, then calls `os/exec`). Errors: `command
+  failed: %w, stderr: %s`, logged as `JSON hook command stderr: %s`. The embedded hooks doc says the same ("run via `sh
+  -c` on Unix, `cmd /c` on Windows", input on stdin, working folder the one holding `hooks.json`). **Verified** in
+  code. So the payload never reaches a command line, and the hook's parent is `cmd.exe`, whose parent is `agy.exe`:
+  read in code, not run.
+- **Go quotes the command for `cmd`.** `os/exec` joins the arguments with its `CommandLineToArgvW` rules (Go docs;
+  not re-read today), so a command with spaces reaches `cmd` as `/c "<command>"`, and `cmd` strips the outer quotes
+  when the text inside is not one file name (`cmd /?`; not re-read today). A quote inside the command would become
+  `\"`, which `cmd` does not read as an escape: so only a bare path without spaces or quotes is safe. Checked with
+  this PC's `cmd.exe` (build 26300) by a raw command line: `cmd /d /c "<pwsh path> -NoProfile -Command echo ok"`
+  printed `ok`; `cmd /d /c "\"<pwsh path>\" -NoProfile -Command echo ok"` failed with `'\"C:\...\pwsh.exe\"' is not
+  recognized`. The test `a_hook_under_agy_and_cmd_writes_the_chats_file_and_a_full_stop_deletes_it` (CLI, ignored,
+  run with `--ignored`: passed) runs the hook the same way, a `cmd.exe` copy named `agy.exe` starting `cmd /c "<exe>
+  hook antigravity <event>"` with the input on stdin. **Verified** for `cmd`'s side; Go's own quoting from its docs,
+  **not re-read**; `agy` itself not run. `expandHome` expands only a leading `~/` (it compares the first two bytes),
+  so a `~` inside a path is left as it is: **verified** in code.
+- **The IDE runs no hook itself.** In `resources\app\out\main.js`, `jetskiAgent\main.js` and
+  `vs\workbench\workbench.desktop.main.js`, `hooks.json` appears only in a settings view that reads and writes
+  `<geminiDir>\hooks.json` (the user's global file); `extensions\agy\bridge.js` and `vscode\extension.js` hold only
+  the protobuf schemas of the hook messages. No JS runs a hook command. **Verified** by text search.
+- **`fullyIdle` is always in a `Stop` payload.** `marshalHookArgs` calls `protojson.MarshalOptions.marshal` twice (the
+  common fields, then the event's), each time with the byte at offset `0x1b` of the options set to 1: that is
+  `EmitUnpopulated` in protobuf-go's field order (`Multiline`, `Indent`, `AllowPartial`, `UseProtoNames`,
+  `UseEnumNumbers`, `EmitUnpopulated`; the order from memory of the protobuf-go source, **not re-read**). The
+  descriptor of `exa.hooks_pb.StopHookArgs` gives `fully_idle` as field 4, type bool, no `proto3_optional`, no oneof.
+  So `false` is written too. Then the two objects are flattened into one and internal fields are deleted
+  (`utils.GetInternalFieldsJSONNames`). **Verified** in code, except the field order.
+- **What the payload holds.** `exa.hooks_pb.HookArgsCommon`: `conversation_id`, `workspace_paths`, `transcript_path`,
+  `artifact_directory_path`, `execution_id`, `model_name`, `is_battle_mode`, `last_user_input`, `agent_name`,
+  `parent_conversation_id`, `caller_context`, `root_conversation_id` (several with field options, likely the internal
+  ones deleted: **not verified**). `PreInvocationHookArgs`: `invocation_num`, `initial_num_steps`. `StopHookArgs`:
+  `execution_num`, `termination_reason`, `error`, `fully_idle`, `final_model_output`. No event name and no version
+  field. JSON names are camelCase (`conversationId`, `fullyIdle`). **Verified** in the descriptors.
+- **A disabled plugin is kept elsewhere now.** `customizations.RestorePluginManifests` logs "Plugin enablement seeding:
+  restored %s for a plugin recorded as disabled" and renames `plugin.json.disabled` back to `plugin.json`, and a JSON
+  type with `enabledPlugins` exists: so the old rename of the manifest is migrated away, and the switch no longer
+  changes the plugin's own folder. Where `enabledPlugins` lives, and whether a dropped plugin starts enabled: **not
+  verified**.
+- **Dot-named plugin folders are likely listed.** `customizations.isValidPluginDirName` refuses only an empty name,
+  `.`, `..` and a name holding `/` or `\` (disassembly: two compares, then `strings.IndexAny` with `/\`), and
+  `customizations.dirNames`, which `pluginDirNames` and `GlobalPluginDirNames` (`<config>\plugins`) call, has no
+  compare with `.`. So `.wakeshot-new-*` and `.wakeshot-removed` would be listed like any plugin folder, unlike
+  Cursor's CLI. **Verified** in code that no dot check is there; whether the hook loader uses this listing and
+  loads a folder without `plugin.json`: **not verified** (live test 7).
+- **Antigravity makes `config\plugins` itself**: on this PC `%USERPROFILE%\.gemini\config\plugins` exists, empty,
+  created 2026-11-06 13:48:32, 4 s after the IDE's `.gemini\bin\agy.exe` (folder times read, nothing in it read).
+- **So the privacy Gate holds for `agy` 1.5.2 (CLI, the IDE 2.6.0's hub)**: the Antigravity plugin may ship. The check
+  is repeated for each Antigravity version Wakeshot claims. The Antigravity App (2.29.0) is not installed here and was
+  not read: **not verified** for it.
+
+## OpenCode live test
+
+Card `docs/tasks/p4-live-opencode.md`, 2026-11-06; detail in `docs/research/opencode-signals.md`, "Phase 4 live test
+(2026-11-06)". OpenCode 2.2.5 (npm) on Ollama `qwen3:4b-instruct`, everything at Medium, on the card's own scratch
+`XDG_DATA_HOME`.
+
+- **OpenCode leaves `opencode.db-wal` and `-shm` after a clean `opencode service stop`** as after a crash. Verified:
+  file list after each stop; Haik's real folder had both from a stop at 14:06.
+- **A commit gives no change notice.** The `-wal` keeps one size (11,684,352 bytes from the first start) and its
+  listed write time stays stale while open. Verified: a `FileSystemWatcher` with Wakeshot's filter logged nothing in
+  46 s with two commits; `agent-watch` saw turns only at the 30 s tick.
+- **The `-shm`'s first 48 bytes change with each commit and never with a read.** Verified: unit and cross-process tests
+  in `sqlite.rs` (a writer's commits, three reads, a killed writer's files rebuilt twice give the same bytes) and the
+  live poll. The meaning (`iChange` "incremented with each transaction"): sqlite.org/walformat.html, read 2026-11-06.
+- **Reads during `opencode service stop` fail at prepare with `SQLITE_IOERR` for about 20 ms.** Verified: a scratch
+  build of the probe that printed the code, 24 failures at two stops in a 1 ms read loop, none from the shim's refused
+  delete; Wakeshot now treats it as busy.
+- **Timing with the 2 s header poll**: working posted 0.07 to 1.9 s after `time_busy`, idle 0.85 to 2.0 s after
+  `time_idle`, the dry-run tray's hold lines within the same times. Verified: probe timeline against `agent-watch` and
+  the tray log.
+- **Cost**: release `agent-watch` with no OpenCode running, 172 ms of CPU in 120 s; a process list (413 processes,
+  8,539 threads) costs about 14 ms, so the poll never lists. Verified: `TotalProcessorTime` over 120 s.
+- **OpenCode is not blocked by the reads**: its own log (944 lines) has no busy, locked or I/O error. **Read only**: a
+  handle check of `agent-watch` at Medium saw only read rights on the db and `-wal`. Verified as described in the
+  research file.
+- **A schedule made through `opencode api POST /api/experimental/schedule` fires on time while the service runs**;
+  the model did not get the schedule tools with `experimental.schedules` on (why: not verified).

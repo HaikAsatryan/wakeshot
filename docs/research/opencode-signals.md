@@ -274,3 +274,74 @@ Windows build turns out to lack the DLL or JSON: then `rusqlite` with `bundled`.
   working query, so it shows "update Wakeshot". Which 2.x release added the column: not verified.
 - Still to check live (the live card): every item of "What is left", plus that the `-wal` and `-shm` exist whenever
   OpenCode 2.x has the file open (the reader answers nothing otherwise).
+
+## Phase 4 live test (2026-11-06)
+
+Card `docs/tasks/p4-live-opencode.md`, which has every time. `@opencode/cli` 2.2.5 (npm), Ollama 0.40.15 with
+`qwen3:4b-instruct`, no login. OpenCode, the harness driver, `agent-watch --source opencode` and the dry-run tray (only
+OpenCode could hold) all ran at Medium. Each OpenCode I started had `XDG_DATA_HOME` and `XDG_STATE_HOME` on a scratch
+folder, so the test database was mine; Haik's real file was only read once. About 20 one-line prompts to the local
+model. Marks as above: verified means seen live here.
+
+### What holds
+
+- **The 2.x rule** (`time_busy > time_idle`, `ImageSince` from `time_busy`) gave the right answer at every step:
+  TUI turns, a 60 s permission wait, Esc, a schedule's turn, two crashes, a resumed turn, `opencode run`.
+- **Permission prompt**: one busy span from the prompt to the turn's end; the approval writes no new `time_busy`. The
+  60 s wait read as working and the tray held through it (the house rule: a waiting prompt holds).
+- **Esc**: two Esc 0.35 s apart interrupt (one does nothing, as `p4-live-harness` saw); OpenCode ends the tool's tree
+  with `taskkill.exe`; idle 0.5 s after the second Esc.
+- **Files stay.** OpenCode 2.2.5 leaves `opencode.db-wal` and `-shm` after a clean `opencode service stop`, after
+  `/exit`, and after a crash (Haik's real file too: left by a stop at 14:06). So a `-wal` never says OpenCode runs.
+- **No change notice for a commit.** The `-wal` reached 11,684,352 bytes at the first start and kept that size
+  (SQLite writes it again from the start after a checkpoint and never truncates it), and its listed write time stays
+  stale while OpenCode holds it. A `FileSystemWatcher` on the folder with Wakeshot's filter logged no notice in 46 s
+  with two commits. Before the fix Wakeshot saw turns only at the 30 s tick (15 s and 8.5 s late) and missed a 3 s
+  turn.
+- **The fix**: the watch thread reads the first 48 bytes of `<db>-shm` every 2 s, SQLite's WAL-index header, whose
+  `iChange` counts every transaction (sqlite.org/walformat.html), and reads the database only when they changed since
+  its last read. Verified: a read beside OpenCode never changes them, each commit does, and on files a stopped
+  OpenCode left each rebuild writes the same header (unit and cross-process tests in `sqlite.rs`). With it: working
+  posted 0.07 to 1.9 s after `time_busy` (by where the 2 s poll fell), idle 0.85 to 2.0 s after `time_idle`; the tray
+  "Holding starts" and "Holding ends" lines within the same times. A turn shorter than 2 s can be missed (two 1 to 2 s
+  one-shots were), which needs no hold.
+- **Schedules** fire at their due time while a server runs (1 to 2 ms late); the fired one-shot is `done` in the same
+  commit as its session's new `time_busy`. A schedule 2 h out posts a timer and no hold; one 3 min out holds at once
+  (the 1 hour rule), and the hold runs on into the fired turn with no gap. The model never got the schedule tools
+  ("not in its list", for both `schedule_create` and the real name `opencode_schedule_create`, with
+  `experimental.schedules` true in the project's `opencode.jsonc`); `opencode api POST /api/experimental/schedule`
+  made them. Why the tools were missing: not verified.
+- **Crash, TUI alive** (the service killed by pid mid-turn): the row stayed working through the older TUI (the known
+  `ImageSince` limit). 5 s later the TUI started a new service, which resumed the claimed turn: new `time_busy`,
+  `resume_attempts` 1, "Continuing after restart"; it then ended normally. So the stale stretch was 5 s.
+- **Crash, whole tree** (TUI and service killed mid-turn): `alive=Gone` 66 ms later (exit wait); the row stays busy
+  with `time_suspended` set. A newer `opencode run --standalone` beside it did not resume it, and the row stayed
+  `Gone` (every live `opencode.exe` started after its `time_busy`): the crash-leftover rule holds. The managed service
+  started again resumed it within 0.3 s and finished it in 3 s.
+- **`opencode run`** uses the background service and starts it (about 5 s) when none runs; the service stays after the
+  run ends.
+- **Never blocked**: OpenCode's own log (944 lines, all `INFO`) has no `SQLITE_BUSY`, "database is locked" or I/O
+  error, with up to three readers, one in a 1 ms loop.
+- **Read only**: a handle check at Medium (`NtQueryInformationProcess` class 51 on `agent-watch`'s own handle table,
+  then `DuplicateHandle` and `GetFinalPathNameByHandleW`, millions of polls) saw the db and `-wal` opened `0x120089`
+  (read) and `0x100080` (attributes), the `-shm` `0x12019F` by SQLite (read and write, as every WAL reader) and
+  `0x120089` by the header read; never a write right on the db or `-wal`, and nothing held between reads. Db and
+  `-wal` size and write time did not change from Wakeshot's reads on the real file. A missing `-wal` or `-shm` never
+  happened live; the unit tests cover it.
+- **No row value in a log**: the harness `log` lines and the tray log hold no session id, prompt word or path (a
+  marker word in every prompt was searched for). The harness `sources` lines show OpenCode's session ids, by design,
+  on its console only.
+- **An I/O error at stop**: reads during `opencode service stop` failed at prepare with `SQLITE_IOERR` for about 20 ms,
+  then read fine; not from the shim (it refused no delete then). Before the fix a read in that window showed "format
+  problem" and the "update Wakeshot" entry for 2 s, at 2 of 2 stops. Now such an error is busy: no feed, read again
+  at the next look; 4 later stops gave no problem.
+- **Cost**: one read of the three queries on Haik's real file (11.6 MB db, 11.7 MB `-wal` left over): 11.4 ms with
+  the DLL load, then 1.7 and 2.8 ms. Beside a running OpenCode: 0.6 to 4 ms a query. Release `agent-watch`, no
+  OpenCode running: 172 ms of CPU in 120 s with the header poll; the first design (a process list every 2 s, 413
+  processes and 8,539 threads here) cost 859 ms, so it was dropped.
+
+### Not tested live
+
+The desktop app (`opencode-cli.exe`), a file only 1.x wrote, `job` rows (a background shell), `OPENCODE_DB` or a
+channel file, subagent sessions, an elevated OpenCode beside a Medium Wakeshot, a schedule with `retry_at`, a
+`/schedule` slash command, and a long-used database (the test file was one day old).

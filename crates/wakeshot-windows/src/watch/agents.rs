@@ -10,10 +10,12 @@
 //! A file is opened only as a source asked: a `Folder` or `Recent` file whose name the want's `accept` passes (checked
 //! again at the open), a `Tail` path, and the file a `FindTail` or `FindNewest` found. `Names` are listed, never
 //! opened. A `Recent` file last written more than [`RECENT_WINDOW`] ago, and before `Agents` was made, is not opened
-//! until it changes. A `Query` runs through [`AgentIo::query`] only while the database's `-wal` file exists,
-//! at most once per [`QUERY_EVERY_MS`] for each want; a run held back by the limit is due later
-//! ([`Agents::next_due`], [`Agents::run_due`]). A notice runs it only when it names the database or its `-wal`, never
-//! the `-shm`, which a read itself rewrites after the agent crashed.
+//! until it changes. A `Query` runs through [`AgentIo::query`] only while the database's `-wal` file exists, at most
+//! once per [`QUERY_EVERY_MS`] for each want. While the database is there it is due every [`QUERY_POLL_MS`], and a
+//! run held back by the limit is due later ([`Agents::next_due`], [`Agents::run_due`]): OpenCode's commits give no
+//! change notice. A run on the poll or the tick reads only when the `-shm`'s WAL-index header changed since the last
+//! read ([`sqlite::wal_index_header`]), so files a stopped agent left are read once. A notice runs it only when it
+//! names the database or its `-wal`, never the `-shm`, which a read itself rewrites on such files.
 //!
 //! An `AnyProcess` session (Codex, Copilot) lives while a process running its image holds its lock file open, as
 //! Restart Manager tells ([`LockOwners`]); that process is then checked by pid and start like any other. A lock file
@@ -26,7 +28,7 @@
 //!
 //! Owner: `p4-watch-agents`; the `AnyProcess` check `p4-codex-source`; `FindNewest`, `Recent`, `Query` and
 //! `ImageSince` by `p4-contracts-r2`; fixes by `p4-live-claude`, `p4-live-codex`, `p4-live-copilot`,
-//! `p4-contracts-r3`.
+//! `p4-contracts-r3`; the `Query` poll by `p4-live-opencode`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -68,6 +70,11 @@ const AREA: &str = "watch";
 /// The least run time between two runs of one `Query` want: one database write gives several notices (the db and its
 /// `-wal`), and an agent that streams may write many times a second.
 pub const QUERY_EVERY_MS: u64 = 1_000;
+
+/// How often a `Query` looks for a commit while its database is there: OpenCode keeps its `-wal` open at one size, so
+/// a commit gives no change notice (`docs/tasks/p4-live-opencode.md`). A look reads 48 bytes of the `-shm`
+/// ([`sqlite::wal_index_header`]), and the query reads the database only when they changed since its last read.
+pub const QUERY_POLL_MS: u64 = 2_000;
 
 /// How far back a `Recent` want reads at start (VS Code rule 3): up to 400 old sessions per workspace stay unread.
 pub const RECENT_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
@@ -299,8 +306,8 @@ impl Agents {
         again
     }
 
-    /// When the first `Query` run held back by [`QUERY_EVERY_MS`] is due, in [`AgentIo::now`] time: the caller then
-    /// calls [`run_due`](Self::run_due).
+    /// When the first `Query` run is due, its poll or a run held back by [`QUERY_EVERY_MS`], in [`AgentIo::now`] time:
+    /// the caller then calls [`run_due`](Self::run_due).
     pub fn next_due(&self) -> Option<Instant> {
         self.slots
             .iter()
@@ -309,7 +316,14 @@ impl Agents {
             .min()
     }
 
-    /// Runs the `Query` wants whose held-back run is due, and every tail of their sources.
+    /// How many feeds and query reads ran so far. A caller that woke only for the `Query` poll publishes when this
+    /// moved: a look at the `-shm` that found no commit changes nothing, and [`snapshots`](Self::snapshots) would list
+    /// every process again for nothing.
+    pub fn changes(&self) -> u64 {
+        self.slots.iter().map(|slot| slot.changes).sum()
+    }
+
+    /// Runs the `Query` wants whose run is due, and every tail of their sources.
     pub fn run_due(&mut self) -> Vec<Retry> {
         let ctx = Ctx::new(&self.io, self.started);
         let mut retries = Vec::new();
@@ -898,6 +912,8 @@ struct Slot {
     posted: Option<Vec<(SessionFacts, Alive)>>,
     logged: BTreeSet<Problem>,
     last_line_ms: Option<u64>,
+    /// Feeds and query reads so far ([`Agents::changes`]).
+    changes: u64,
 }
 
 struct FolderState {
@@ -934,8 +950,13 @@ struct QueryState {
     /// Run at the next call, whatever its scope: the want is new.
     fresh: bool,
     last_run: Option<Instant>,
-    /// A run held back by the limit, due then.
+    /// The next run without a notice: the poll, or a run held back by the limit.
     due: Option<Instant>,
+    /// A notice named the database since the last read, so the next run reads whatever the header says.
+    noticed: bool,
+    /// The WAL-index header after the last read that answered; `None` until one did. A run reads again only when
+    /// the header differs, as only a commit changes it.
+    header: Option<Option<[u8; sqlite::HEADER_LEN]>>,
     fed: QueryFed,
 }
 
@@ -971,6 +992,7 @@ impl Slot {
             posted: None,
             logged: BTreeSet::new(),
             last_line_ms: None,
+            changes: 0,
         };
         slot.sync();
         slot
@@ -1005,6 +1027,7 @@ impl Slot {
     /// promise). The state of every want that left goes at once, so a want that leaves and comes back within one call
     /// starts over: a resumed session whose leftover status file was fed `Gone` first gets its transcript from byte 0.
     fn feed(&mut self, path: PathBuf, data: Feed) -> Fed {
+        self.changes += 1;
         let fed = self.source.feed(&FileId(path), data);
         self.wants = self.source.wanted();
         self.prune();
@@ -1095,6 +1118,8 @@ impl Slot {
                     fresh: true,
                     last_run: None,
                     due: None,
+                    noticed: false,
+                    header: None,
                     fed: QueryFed::Nothing,
                 })
                 .sql = sql;
@@ -1119,7 +1144,9 @@ impl Slot {
                 Unit::Folder(dir) => self.read_folder(dir, scope, slot, retries),
                 Unit::Names(dir, depth) => self.list(dir, *depth),
                 Unit::Recent(key) => self.read_recent(key, scope, slot, retries, ctx),
-                Unit::Query(key) => self.run_query(key, ctx),
+                Unit::Query(key) => {
+                    self.run_query(key, ctx, matches!(scope, Scope::Change(..)));
+                }
                 Unit::Tail(key) => self.poll_tail(key),
             }
             done.insert(unit);
@@ -1295,12 +1322,15 @@ impl Slot {
         true
     }
 
-    /// Runs one query, unless its last run was less than [`QUERY_EVERY_MS`] ago: then a run is due at that time.
-    fn run_query(&mut self, key: &QueryKey, ctx: &Ctx<'_>) {
+    /// Runs one query, unless its last read was less than [`QUERY_EVERY_MS`] ago: then a run is due at that time. While
+    /// the database is there, the next run is due [`QUERY_POLL_MS`] later. `noticed`: a change notice named the
+    /// database or its `-wal`; any other run reads only when the WAL-index header changed since the last read.
+    fn run_query(&mut self, key: &QueryKey, ctx: &Ctx<'_>, noticed: bool) {
         let Some(mut state) = self.queries.remove(key) else {
             return;
         };
         state.fresh = false;
+        state.noticed |= noticed;
         let every = Duration::from_millis(QUERY_EVERY_MS);
         if let Some(next) = state.last_run.map(|last| last + every)
             && ctx.now < next
@@ -1309,22 +1339,35 @@ impl Slot {
             self.queries.insert(key.clone(), state);
             return;
         }
-        state.due = None;
-        state.last_run = Some(ctx.now);
+        let there = key.db.is_file();
+        // A database not made yet needs no poll: the notice of its making names it.
+        state.due = there.then(|| ctx.now + Duration::from_millis(QUERY_POLL_MS));
         let mut wal = key.db.clone().into_os_string();
         wal.push("-wal");
         // The `-wal` file lives while the agent has the database open, and a read without it could make one.
-        let open = key.db.is_file() && Path::new(&wal).is_file();
-        let feed = if open {
+        let open = there && Path::new(&wal).is_file();
+        let feed = if !open {
+            state.header = None;
+            state.noticed = false;
+            matches!(state.fed, QueryFed::Answer(_)).then_some(Feed::Gone)
+        } else if !state.noticed && state.header == Some(sqlite::wal_index_header(&key.db)) {
+            // No commit since the last read: the same rows. Files a stopped agent left are so read once, not on each
+            // tick.
+            None
+        } else {
+            state.last_run = Some(ctx.now);
+            state.noticed = false;
+            self.changes += 1;
             match (ctx.query)(&key.db, state.sql) {
+                // The header is kept from before, so the next look reads again.
                 sqlite::Answer::Busy => None,
                 sqlite::Answer::Json(bytes) => {
+                    // After the read: on files a stopped agent left, the read itself rebuilt the header.
+                    state.header = Some(sqlite::wal_index_header(&key.db));
                     let same = matches!(&state.fed, QueryFed::Answer(last) if *last == bytes);
                     (!same).then_some(Feed::Whole(bytes))
                 }
             }
-        } else {
-            matches!(state.fed, QueryFed::Answer(_)).then_some(Feed::Gone)
         };
         if let Some(feed) = feed {
             state.fed = match &feed {
@@ -3666,16 +3709,20 @@ mod tests {
 
     const ROWS: &[u8] = br#"{"rows":[["ses_1",1793750400000]]}"#;
 
+    fn query_want(db: &Path, name: &'static str, sql: &'static str) -> WantedFile {
+        WantedFile::Query {
+            db: db.to_path_buf(),
+            name,
+            sql,
+        }
+    }
+
     impl QueryRig {
         fn new(tag: &str) -> Self {
             let dir = TempDir::new(tag);
             let db = dir.path().join("opencode.db");
             let source = Shared::new(SourceId::OpenCode);
-            let want = WantedFile::Query {
-                db: db.clone(),
-                name: "tables",
-                sql: "SELECT name FROM sqlite_master",
-            };
+            let want = query_want(&db, "tables", "SELECT name FROM sqlite_master");
             source.set(|f| f.wanted = vec![want]);
             let fake = Arc::new(Mutex::new(FakeDb {
                 answer: sqlite::Answer::Json(ROWS.to_vec()),
@@ -3701,6 +3748,18 @@ mod tests {
                 fake,
                 clock,
             }
+        }
+
+        fn now(&self) -> Instant {
+            *self.clock.lock().unwrap()
+        }
+
+        /// A `-shm` whose WAL-index header is `mark`, as after the agent's commit number `mark`; the read marks and
+        /// lock bytes after it are `rest`.
+        fn shm(&self, mark: u8, rest: u8) {
+            let mut bytes = vec![mark; sqlite::HEADER_LEN];
+            bytes.resize(32_768, rest);
+            self.dir.write("opencode.db-shm", &bytes);
         }
 
         fn open(&self) {
@@ -3777,10 +3836,11 @@ mod tests {
     #[test]
     fn a_change_of_the_database_files_runs_a_query_at_most_once_a_second() {
         let mut rig = QueryRig::new("agents-query-limit");
+        let poll = Duration::from_millis(QUERY_POLL_MS);
         rig.open();
         rig.agents.on_tick();
         assert_eq!(rig.runs(), 1);
-        assert_eq!(rig.agents.next_due(), None);
+        assert_eq!(rig.agents.next_due(), Some(rig.now() + poll), "the poll");
 
         // Other files in the folder do not run it.
         rig.later(2_000);
@@ -3805,7 +3865,11 @@ mod tests {
         rig.later(400);
         rig.agents.run_due();
         assert_eq!(rig.runs(), 1, "the held-back run, once");
-        assert_eq!(rig.agents.next_due(), None);
+        assert_eq!(
+            rig.agents.next_due(),
+            Some(rig.now() + poll),
+            "the poll again"
+        );
         rig.agents.run_due();
         assert_eq!(rig.runs(), 0);
 
@@ -3824,6 +3888,7 @@ mod tests {
         rig.open();
         rig.agents.on_tick();
         assert_eq!(rig.runs(), 1);
+        let poll = rig.agents.next_due();
         for name in [
             "opencode.db-shm",
             "OPENCODE.DB-SHM",
@@ -3835,7 +3900,7 @@ mod tests {
             rig.later(2_000);
             rig.change(&[name]);
             assert_eq!(rig.runs(), 0, "{name}");
-            assert_eq!(rig.agents.next_due(), None, "{name}");
+            assert_eq!(rig.agents.next_due(), poll, "{name}: only the poll");
         }
         for name in ["opencode.db-wal", "OpenCode.DB", "OPENCODE.DB-WAL"] {
             rig.later(2_000);
@@ -3851,17 +3916,20 @@ mod tests {
         rig.agents.on_tick();
         assert_eq!(rig.source.fed().len(), 1);
 
+        rig.shm(1, 0);
         rig.later(1_000);
         rig.agents.on_tick();
         assert_eq!(rig.runs(), 2);
         assert!(rig.source.fed().is_empty(), "the same answer");
 
         rig.answer(sqlite::Answer::Busy);
+        rig.shm(2, 0);
         rig.later(1_000);
         rig.agents.on_tick();
         assert_eq!(rig.runs(), 1);
         assert!(rig.source.fed().is_empty(), "busy: the last answer stands");
 
+        // No commit since, but the busy read took nothing, so it reads again.
         let error = br#"{"error":"open"}"#.to_vec();
         rig.answer(sqlite::Answer::Json(error.clone()));
         rig.later(1_000);
@@ -3876,11 +3944,8 @@ mod tests {
         let db = rig.db.clone();
         rig.source.inner().after_feed = Some(Box::new(move |fake, file| {
             if file.0.ends_with("opencode.db?tables") && fake.wanted.len() == 1 {
-                fake.wanted.push(WantedFile::Query {
-                    db: db.clone(),
-                    name: "v2",
-                    sql: "SELECT id FROM session_v2",
-                });
+                fake.wanted
+                    .push(query_want(&db, "v2", "SELECT id FROM session_v2"));
             }
         }));
         rig.agents.on_tick();
@@ -3901,6 +3966,119 @@ mod tests {
         );
         let fed: Vec<FileId> = rig.source.fed().into_iter().map(|(f, _)| f).collect();
         assert_eq!(fed, [FileId(rig.id()), FileId::query(&rig.db, "v2")]);
+    }
+
+    /// A commit of OpenCode's gives no change notice (`p4-live-opencode`), so a query is due again two seconds after
+    /// each run while its database is there, and reads when the `-shm`'s header changed.
+    #[test]
+    fn a_query_is_polled_while_its_database_is_there() {
+        let mut rig = QueryRig::new("agents-query-poll");
+        let poll = Duration::from_millis(QUERY_POLL_MS);
+        rig.agents.on_tick();
+        assert_eq!(rig.agents.next_due(), None, "no database: no poll");
+
+        rig.open();
+        rig.shm(1, 0);
+        rig.later(QUERY_EVERY_MS);
+        rig.change(&["opencode.db"]);
+        assert_eq!(rig.runs(), 1, "its making is a notice");
+        let first = rig.now();
+        assert_eq!(rig.agents.next_due(), Some(first + poll));
+
+        // A commit: the header changes, and no notice comes.
+        rig.answer(sqlite::Answer::Json(br#"{"rows":[]}"#.to_vec()));
+        rig.shm(2, 0);
+        rig.later(QUERY_POLL_MS - 1);
+        rig.agents.run_due();
+        assert_eq!(rig.runs(), 0, "not due yet");
+        rig.later(1);
+        rig.agents.run_due();
+        assert_eq!(rig.runs(), 1);
+        assert_eq!(
+            rig.source.fed(),
+            [
+                (FileId(rig.id()), Feed::Whole(ROWS.to_vec())),
+                (FileId(rig.id()), Feed::Whole(br#"{"rows":[]}"#.to_vec()))
+            ],
+            "the commit is read with no notice and no tick"
+        );
+        assert_eq!(rig.agents.next_due(), Some(first + 2 * poll));
+
+        fs::remove_file(&rig.db).unwrap();
+        rig.later(QUERY_POLL_MS);
+        rig.agents.run_due();
+        assert_eq!(rig.agents.next_due(), None, "the database went");
+    }
+
+    /// OpenCode leaves its `-wal` and `-shm` after it stops (`p4-live-opencode`), so a look that finds the header as
+    /// it was after the last read does not read: same header, same rows. Readers write past it (read marks, locks).
+    #[test]
+    fn a_query_reads_again_only_when_the_wal_index_header_changed() {
+        let mut rig = QueryRig::new("agents-query-header");
+        rig.open();
+        rig.shm(1, 0);
+        rig.agents.on_tick();
+        assert_eq!(rig.runs(), 1, "the first read");
+
+        for (tick, rest) in [(false, 0), (true, 0), (false, 9), (true, 7)] {
+            rig.shm(1, rest);
+            rig.later(QUERY_POLL_MS);
+            if tick {
+                rig.agents.on_tick();
+            } else {
+                rig.agents.run_due();
+            }
+            assert_eq!(rig.runs(), 0, "tick {tick}, bytes after the header {rest}");
+        }
+
+        rig.shm(2, 0);
+        rig.later(QUERY_POLL_MS);
+        rig.agents.run_due();
+        assert_eq!(rig.runs(), 1, "a commit");
+
+        // A notice reads whatever the header says.
+        rig.later(QUERY_POLL_MS);
+        rig.change(&["opencode.db-wal"]);
+        assert_eq!(rig.runs(), 1);
+
+        // The `-shm` went: that is a change too, once.
+        fs::remove_file(rig.dir.path().join("opencode.db-shm")).unwrap();
+        rig.later(QUERY_POLL_MS);
+        rig.agents.run_due();
+        assert_eq!(rig.runs(), 1);
+        rig.later(QUERY_POLL_MS);
+        rig.agents.run_due();
+        assert_eq!(rig.runs(), 0, "and then no more");
+    }
+
+    /// The header is taken after the read: on files a stopped agent left, the read itself rebuilds it.
+    #[test]
+    fn a_read_that_rewrites_the_header_is_no_change_for_the_next_look() {
+        let rig = QueryRig::new("agents-query-rebuild");
+        rig.open();
+        rig.shm(1, 0);
+        let shm = rig.dir.path().join("opencode.db-shm");
+        let db_fake = Arc::clone(&rig.fake);
+        let now = Arc::clone(&rig.clock);
+        let io = AgentIo {
+            query: Box::new(move |db, sql| {
+                let mut bytes = vec![5u8; sqlite::HEADER_LEN];
+                bytes.resize(32_768, 0);
+                fs::write(&shm, bytes).unwrap();
+                let mut fake = db_fake.lock().unwrap();
+                fake.calls.push((db.to_path_buf(), sql.to_owned()));
+                fake.answer.clone()
+            }),
+            now: Box::new(move || *now.lock().unwrap()),
+            ..AgentIo::default()
+        };
+        let mut agents =
+            Agents::with_io(vec![rig.source.boxed()], Arc::new(MemoryLog::default()), io);
+        agents.on_tick();
+        assert_eq!(rig.runs(), 1);
+        rig.later(QUERY_POLL_MS);
+        agents.on_tick();
+        assert_eq!(rig.runs(), 0, "the header the read wrote is the one kept");
     }
 
     const OPENCODE: &[&str] = &["opencode.exe", "opencode-cli.exe"];

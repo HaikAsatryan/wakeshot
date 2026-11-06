@@ -331,6 +331,96 @@ fn feeds_for_anything_else_change_nothing() {
     assert_eq!(wanted(&source), ["tables", "working", "schedules"]);
 }
 
+// Answers a real OpenCode 2.2.5 gave (`fixtures/opencode/live/README.md`, card `p4-live-opencode`).
+
+const LIVE: [&str; 8] = [
+    "schedules-after-fire.json",
+    "schedules-two.json",
+    "tables.json",
+    "working-crash-and-newer.json",
+    "working-none.json",
+    "working-resumed.json",
+    "working-schedule-fired.json",
+    "working-tui-turn.json",
+];
+
+fn live_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("opencode")
+        .join("live")
+}
+
+fn feed_live(source: &mut OpenCodeSource, sql: Sql, name: &str) {
+    let bytes = fs::read(live_dir().join(name)).unwrap();
+    assert_eq!(source.feed(&id(sql), Feed::Whole(bytes)), Fed::Taken);
+}
+
+#[test]
+fn every_live_fixture_is_listed_once() {
+    let mut on_disk: Vec<String> = fs::read_dir(live_dir())
+        .unwrap()
+        .map(|e| e.unwrap().file_name().into_string().unwrap())
+        .filter(|name| name.ends_with(".json"))
+        .collect();
+    on_disk.sort();
+    assert_eq!(on_disk, LIVE);
+}
+
+/// The live test's steps in order, each answer as the reader gave it: every one reads with no format problem.
+#[test]
+fn the_live_answers_give_the_facts_the_live_test_saw() {
+    const TUI: &str = "ses_live0000000000000000000001";
+    const SESSION: &str = "ses_live0000000000000000000004";
+    const NEWER: &str = "ses_live0000000000000000000013";
+    const IN_3_MIN: i64 = 1_793_970_487_652;
+    const IN_2_H: i64 = 1_793_977_470_699;
+    let mut source = OpenCodeSource::new(db());
+    feed_live(&mut source, TABLES, "tables.json");
+    assert_eq!(wanted(&source), ["tables", "working", "schedules"]);
+
+    feed_live(&mut source, WORKING, "working-tui-turn.json");
+    assert_eq!(source.sessions(), [working(TUI, 1_793_968_233_535, &[])]);
+    feed_live(&mut source, WORKING, "working-none.json");
+    assert!(
+        source.sessions().is_empty(),
+        "an idle session is not listed"
+    );
+
+    feed_live(&mut source, SCHEDULES, "schedules-two.json");
+    assert_eq!(
+        source.sessions(),
+        [idle(SESSION, &[IN_3_MIN, IN_2_H])],
+        "both timers on their session, which waits for any OpenCode"
+    );
+
+    feed_live(&mut source, WORKING, "working-schedule-fired.json");
+    feed_live(&mut source, SCHEDULES, "schedules-after-fire.json");
+    assert_eq!(
+        source.sessions(),
+        [working(SESSION, 1_793_970_487_664, &[IN_2_H])],
+        "the fired one is gone, its turn runs"
+    );
+
+    feed_live(&mut source, WORKING, "working-crash-and-newer.json");
+    assert_eq!(
+        source.sessions(),
+        [
+            working(SESSION, 1_793_972_637_404, &[IN_2_H]),
+            working(NEWER, 1_793_972_673_569, &[])
+        ],
+        "the crash left its row; each row keeps its own busy time, so the newer process counts only for its own"
+    );
+
+    feed_live(&mut source, WORKING, "working-resumed.json");
+    assert_eq!(
+        source.sessions(),
+        [working(SESSION, 1_793_972_717_888, &[IN_2_H])],
+        "the managed service resumed the claimed turn"
+    );
+}
+
 // The table test (Haik, 2026-11-06): the file also holds OpenCode's login tokens, so no query may name a table but
 // these.
 

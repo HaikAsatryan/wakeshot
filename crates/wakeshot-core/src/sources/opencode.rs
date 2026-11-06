@@ -1,6 +1,6 @@
 //! OpenCode 2.x sessions (architecture section 7): rows of `opencode.db` read through `WantedFile::Query`, alive
 //! through `Liveness::ImageSince`. Built from `@opencode/cli` 2.2.5's own source (`docs/research/opencode-signals.md`,
-//! `docs/tasks/p4-opencode-source.md`); not tested with a live OpenCode yet.
+//! `docs/tasks/p4-opencode-source.md`) and tested on a live 2.2.5 (`docs/tasks/p4-live-opencode.md`).
 //!
 //! What it reads, in `<data>\opencode\opencode.db` ([`opencode_db`]), and nothing else in that file:
 //!
@@ -18,7 +18,7 @@
 //! A permission prompt lives in OpenCode's memory only, so a session waiting on one reads as working (Haik,
 //! 2026-11-03, sign-off item 1). `job` rows are not read: one can stay `running` after its job ended.
 //!
-//! Owner: `p4-opencode-source`.
+//! Owner: `p4-opencode-source`; fixes by `p4-live-opencode`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsStr;

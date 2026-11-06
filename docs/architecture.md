@@ -1143,9 +1143,10 @@ a source's name filter runs before any open; lock files are listed, never opened
 sessions) last written more than 24 hours ago, and before the tray started, is not opened until it changes; it is read
 whole, up to 64 MiB (`watch::read::RECENT_CAP`). A `Query` (OpenCode's `opencode.db`) opens the database read only
 through Windows' `winsqlite3.dll` (`sqlite.rs`), and only while the db, its `-wal` and its `-shm` exist; SQLite's own
-opens share read and write only, so an agent's delete or rename of those files fails while a read runs. A killed
-agent leaves the `-wal` and `-shm`, and each read then rebuilds the `-shm`, so only a change notice of the db or its
-`-wal` runs a query (`p4-contracts-r3`). The queries name only the session and schedule tables (Haik, 2026-11-06,
+opens share read and write only, so an agent's delete or rename of those files fails while a read runs. OpenCode
+leaves the `-wal` and `-shm` after a crash and after a clean stop, and each read then rebuilds the `-shm`, so only a
+change notice of the db or its `-wal` runs a query at once (`p4-contracts-r3`), and the poll reads only after the
+`-shm`'s first 48 bytes changed (`p4-live-opencode`); those 48 bytes are read with every sharing flag. The queries name only the session and schedule tables (Haik, 2026-11-06,
 `docs/tasks/p4-opencode-source.md`).
 
 Registry values Wakeshot writes, all under HKCU, all removed by uninstall: `...\CurrentVersion\Run\Wakeshot` (start at
@@ -1238,17 +1239,23 @@ What a source can ask the watch thread for (`WantedFile`; the full rules are in 
   200 ms later on `RetryOnce` (a last line cut by a write). The listing's size and write time tell a changed file, a
   hash of its bytes an unchanged one, so a big file is not kept in memory. The root is watched with its subtree.
 - `Query` (`p4-contracts-r2`, OpenCode): read-only SQL on a SQLite database through `sqlite::query`, fed as JSON
-  (`{"rows":[...]}` or `{"error":"<kind>"}`) under `FileId::query(db, name)`. It runs only while `<db>-wal` exists, on
-  a change notice of `<db>` or `<db>-wal` in its folder (never `-shm`, below), at most once a second per want (a run
-  held back comes when due, with no tick), and on the safety tick; `Gone` once the db or its `-wal` goes; `SQLITE_BUSY` gives no feed. `sqlite.rs`
+  (`{"rows":[...]}` or `{"error":"<kind>"}`) under `FileId::query(db, name)`. It runs only while `<db>-wal` exists:
+  on a change notice of `<db>` or `<db>-wal` in its folder (never `-shm`, below), and every 2 s (`QUERY_POLL_MS`, while
+  the db exists) and on the safety tick when the `-shm`'s first 48 bytes, SQLite's WAL-index header, which every
+  commit changes (sqlite.org/walformat.html), differ from those after its last read; at most once a second per want (a
+  run held back comes when due, with no tick). The poll is there because OpenCode's commits give no notice: its `-wal`
+  keeps one size and its listed write time stays stale while it is open (`p4-live-opencode`). A wake that was only a
+  poll and read nothing posts nothing, since a snapshot of an `ImageSince` session lists every process (about 14 ms).
+  `Gone` once the db or its `-wal` goes; `SQLITE_BUSY`, and an I/O error other than the shim's refused delete (each
+  `opencode service stop` gave `SQLITE_IOERR` for about 20 ms), give no feed. `sqlite.rs`
   (`p4-opencode-source`) loads Windows' `winsqlite3.dll` (3.22.0 or later, else `no_sqlite`) and reads through a VFS
   shim that opens the db and its `-wal` read only, never creates them and refuses every delete; it reads only while
   the db, `-wal` and `-shm` exist, skips the checkpoint on close, and finalizes and closes on every call, so it never
   blocks the agent's writes or checkpoints. A killed or crashed agent leaves its `-wal` and `-shm`; each read then
   rebuilds the `-shm` (only that file changes). A `-shm` notice would so run the next read, a loop of three reads a
   second, so the watch thread never runs a query on one (`p4-contracts-r3`; review `p4-opencode-db-read` major 1). An
-  agent's commit always writes the `-wal`, a checkpoint the db. The safety tick still reads a crash leftover once per
-  tick.
+  agent's commit always writes the `-wal`, a checkpoint the db. Files a stopped agent left are read once, then not
+  again until the header changes (the rebuild writes the same header each time, tested across processes).
 
 `Liveness::ImageSince` (`p4-contracts-r2`): alive while the system process list (no rights needed) has a process of
 one of the images, case ignored, that started at or before `since_wall_ms` plus 2 s (`IMAGE_SINCE_SLACK_MS`), or at
@@ -1325,13 +1332,22 @@ VS Code chat (in v1, Haik 2026-11-06; built by `p4-vscode-source`, started by th
   start) when such a request has no usable time or went back from done to Pending (a retry keeps its first time).
   Rule 6 (`AnyProcess` on `state.vscdb`) is not used.
 
-Cursor, editor and CLI (in v1, Haik 2026-11-06; built by `p4-cursor-source`, not yet started by the tray:
-`p4-live-cursor` adds `sources::cursor::source(data.root())`): no file of Cursor's own is read. Wakeshot's hook
+Cursor, editor and CLI (in v1, Haik 2026-11-06; built by `p4-cursor-source`, started by the tray since
+`p4-antigravity-source`, `tray_mode::hooked_sources`): no file of Cursor's own is read. Wakeshot's hook
 (section 12, `agent-hooks.md`) writes `agents\cursor\<chat>.json` while a turn runs, and the source reads that folder
 (`WantedFile::Folder`): one `Working` session per file, `Liveness::Process` on the Cursor process the hook's walk
 found, label "Cursor" or "Cursor CLI" from the source's own strings; `problem.json` and `blocked.json` give the
 "update Wakeshot" notice while their process lives. The shared code is `sources::hooked` (`HookedSource` and the
 `Agent` table), so Antigravity adds only its table.
+
+Antigravity, CLI and IDE (built by `p4-antigravity-source`, 2026-11-06; started by the tray beside Cursor): the same
+way, from `agents\antigravity\<chat>.json`. `agy` 1.5.2 runs each hook as `cmd /c <command>` with the input on stdin
+(`research.md`, "Antigravity hook payload form"). `PreInvocation` (before every model call) writes the chat's file as
+`working`, skipped when it already says so; `Stop` deletes it when `fullyIdle` is true and rewrites it as `background`
+when false, which the source gives as `Idle` with one open task. There is no session end event, so every session
+lives only while the `agy.exe` the walk found runs (`Liveness::Process`): label "Antigravity CLI" under
+`%LocalAppData%\agy\bin`, else "Antigravity" (the IDE's hub in `.gemini\bin`). A `Stop` with no plain `fullyIdle` is
+unreadable input: `problem.json`, the "update Wakeshot" notice.
 
 ## 8. Errors and logging
 
@@ -1540,3 +1556,11 @@ from `.gemini\config\plugins\wakeshot\` with `PreInvocation` and `Stop`):
   files, `store::temp_target` for the prune, `store::local_app_data`; `Event::HooksAdded` and `Notice::HooksAdded`
   with their words; `HookEnv::remove_agent_hooks`, called right after `remove_notices`, a stub; the stubs
   `sources/hooked.rs` (owner `p4-cursor-source`) and `agent_hooks.rs` (owner `p4-agent-hooks-install`).
+- Since `p4-antigravity-source` (2026-11-06): Antigravity's folder `.gemini\config\plugins\wakeshot\` (`plugin.json`,
+  `hooks.json` and the marker, no subfolder) runs `<exe> hook antigravity PreInvocation` and `... Stop` with the exe
+  as a bare path, since `agy` runs each hook as `cmd /c <command>` and only a path with no space, quote or `cmd`
+  sign survives that; any other path gets no Antigravity hooks. The tray starts both hooked sources
+  (`tray_mode::hooked_sources`) and calls `startup::add_agent_hooks` once per start (`tray_mode::start_agent_hooks`).
+  An agent whose own folder (`.cursor`, `.gemini\config`) is gone at a start is dropped from the record, so a
+  reinstall of that agent gets the hooks again; only Wakeshot's folder gone, the agent's still there, stays "removed"
+  (orchestrator decision, for Haik's review).

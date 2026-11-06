@@ -24,7 +24,11 @@
 //! An answer names what failed with a fixed word, never SQLite's text, so nothing from the file reaches a log. A text
 //! cell longer than [`MAX_CELL`] bytes ends the read before it is copied.
 //!
-//! Owner: `p4-opencode-source`; the signature by `p4-contracts-r2`.
+//! [`wal_index_header`] reads the first 48 bytes of the `-shm`, which every commit changes, so the watch thread reads
+//! again only after a commit: a commit gives no change notice (OpenCode keeps its `-wal` open at one size), and the
+//! agent leaves its files after it stops (`docs/tasks/p4-live-opencode.md`).
+//!
+//! Owner: `p4-opencode-source`; the signature by `p4-contracts-r2`; [`wal_index_header`] by `p4-live-opencode`.
 
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::path::Path;
@@ -45,8 +49,8 @@ pub enum Answer {
     /// `step`, `type` (a real or blob cell) or `size` (more than [`MAX_ROWS`] rows, or a text cell over [`MAX_CELL`]
     /// bytes).
     Json(Vec<u8>),
-    /// `SQLITE_BUSY`, or the database closed before or during the read: no feed, so the source keeps the last
-    /// answer.
+    /// `SQLITE_BUSY`, an I/O error while the agent closes the database, or the database closed before or during the
+    /// read: no feed, so the source keeps the last answer.
     Busy,
 }
 
@@ -72,6 +76,7 @@ pub const VFS_NAME: &CStr = c"wakeshot-readonly";
 
 const SQLITE_OK: c_int = 0;
 const SQLITE_BUSY: c_int = 5;
+const SQLITE_IOERR: c_int = 10;
 const SQLITE_CANTOPEN: c_int = 14;
 const SQLITE_ROW: c_int = 100;
 const SQLITE_DONE: c_int = 101;
@@ -145,6 +150,7 @@ type PrepareV2 = unsafe extern "system" fn(
 ) -> c_int;
 type OfConnection = unsafe extern "system" fn(*mut Connection) -> c_int;
 type BusyTimeout = unsafe extern "system" fn(*mut Connection, c_int) -> c_int;
+type ExtendedCodes = unsafe extern "system" fn(*mut Connection, c_int) -> c_int;
 /// `sqlite3_db_config` is the one `SQLITE_CDECL` export taken, and it has variable arguments.
 type DbConfig = unsafe extern "C" fn(*mut Connection, c_int, ...) -> c_int;
 type OfStatement = unsafe extern "system" fn(*mut Statement) -> c_int;
@@ -160,6 +166,7 @@ struct Api {
     open_v2: OpenV2,
     close: OfConnection,
     busy_timeout: BusyTimeout,
+    extended_codes: ExtendedCodes,
     db_config: DbConfig,
     prepare_v2: PrepareV2,
     step: OfStatement,
@@ -174,6 +181,33 @@ struct Api {
 /// Runs `sql` read only on the database `db`.
 pub fn query(db: &Path, sql: &str) -> Answer {
     read(api(), db, sql)
+}
+
+/// The length of the first copy of the WAL-index header at the start of a `-shm` file (sqlite.org/walformat.html).
+pub const HEADER_LEN: usize = 48;
+
+/// The first copy of the WAL-index header of `db`, so a caller can tell that the agent committed since it last
+/// looked: its `iChange` is "incremented with each transaction" (sqlite.org/walformat.html), and a reader beside the
+/// agent leaves it as it is (tested below). A read on files a stopped agent left rebuilds it, the same each time, so
+/// a caller takes it after its own read. `None` when the `-shm` is missing or shorter.
+///
+/// No SQLite call: the bytes are read with every sharing flag and the file is never made. They end before the read
+/// marks (bytes 100 to 119), which readers write, and the lock bytes (120 on), which Windows locks for real.
+pub fn wal_index_header(db: &Path) -> Option<[u8; HEADER_LEN]> {
+    use std::io::Read as _;
+    use std::os::windows::fs::OpenOptionsExt as _;
+    // FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, as every agent file Wakeshot opens.
+    const SHARE_ALL: u32 = 7;
+    let mut shm = db.as_os_str().to_owned();
+    shm.push("-shm");
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(SHARE_ALL)
+        .open(shm)
+        .ok()?;
+    let mut header = [0; HEADER_LEN];
+    file.read_exact(&mut header).ok()?;
+    Some(header)
 }
 
 /// The real DLL, loaded on the first query.
@@ -222,11 +256,13 @@ enum Fail {
 }
 
 fn fail(rc: c_int, kind: &'static str) -> Fail {
-    // Extended codes such as `SQLITE_BUSY_SNAPSHOT` keep the primary code in the low byte.
-    if rc & 0xff == SQLITE_BUSY {
-        Fail::Busy
-    } else {
-        Fail::Kind(kind)
+    // Extended codes such as `SQLITE_BUSY_SNAPSHOT` keep the primary code in the low byte. An I/O error other than the
+    // shim's refused delete comes while the agent closes the database: each `opencode service stop` gave
+    // `SQLITE_IOERR` at prepare for about 20 ms, then good reads (`p4-live-opencode`). So it is tried again, as busy.
+    match rc & 0xff {
+        SQLITE_BUSY => Fail::Busy,
+        SQLITE_IOERR if rc != SQLITE_IOERR_DELETE => Fail::Busy,
+        _ => Fail::Kind(kind),
     }
 }
 
@@ -285,6 +321,9 @@ fn open_on<'a>(api: &'a Api, db: &Path, vfs: *const c_char) -> Result<Open<'a>, 
     }
     // SAFETY: an open connection.
     unsafe { (api.busy_timeout)(conn.ptr, BUSY_MS) };
+    // So [`fail`] tells the shim's own refused delete from an I/O error of the agent's close.
+    // SAFETY: an open connection.
+    unsafe { (api.extended_codes)(conn.ptr, 1) };
     // SAFETY: an open connection; this option takes an int and an int pointer, which may be null.
     let rc = unsafe {
         (api.db_config)(
@@ -405,6 +444,7 @@ fn load(dll: &str) -> Option<Api> {
         open_v2: export!("sqlite3_open_v2" as OpenV2),
         close: export!("sqlite3_close" as OfConnection),
         busy_timeout: export!("sqlite3_busy_timeout" as BusyTimeout),
+        extended_codes: export!("sqlite3_extended_result_codes" as ExtendedCodes),
         db_config: export!("sqlite3_db_config" as DbConfig),
         prepare_v2: export!("sqlite3_prepare_v2" as PrepareV2),
         step: export!("sqlite3_step" as OfStatement),
@@ -1095,21 +1135,35 @@ mod tests {
         let (wal, shm) = (with(&db, "-wal"), with(&db, "-shm"));
         let mut child = OtherWriter::start(&db);
         let before = (stamp(&db), stamp(&wal));
+        let header = wal_index_header(&db);
+        assert!(header.is_some(), "the child's -shm");
         assert_eq!(rows_of(&query(&db, WORKING.sql)), set(&BOTH));
         assert_eq!(
             (stamp(&db), stamp(&wal)),
             before,
             "the reader wrote neither"
         );
+        assert_eq!(
+            wal_index_header(&db),
+            header,
+            "nor the header beside the agent"
+        );
 
         // A crash: both files stay, and a read rebuilds the `-shm` from the `-wal`, which holds the child's commit.
         child.kill();
         assert!(wal.exists() && shm.exists());
         let left = (stamp(&db), stamp(&wal));
+        let mut rebuilt = Vec::new();
         for _ in 0..2 {
             assert_eq!(rows_of(&query(&db, WORKING.sql)), set(&BOTH));
+            rebuilt.push(wal_index_header(&db));
         }
         assert_eq!((stamp(&db), stamp(&wal)), left, "only the -shm changes");
+        assert!(rebuilt[0].is_some());
+        assert_eq!(
+            rebuilt[0], rebuilt[1],
+            "each rebuild writes the same header, so a read is no change for the next"
+        );
         assert_eq!(
             names(&dir),
             ["opencode.db", "opencode.db-shm", "opencode.db-wal"]
@@ -1126,6 +1180,50 @@ mod tests {
         assert_eq!(names(&dir), ["opencode.db"], "its last close removed both");
         assert_eq!(query(&db, WORKING.sql), Answer::Busy);
         assert_eq!(names(&dir), ["opencode.db"]);
+    }
+
+    /// Live (`p4-live-opencode`): reads during `opencode service stop` failed at prepare with `SQLITE_IOERR` for about
+    /// 20 ms. That is the agent's close, not a format change, so it must not show "update Wakeshot".
+    #[test]
+    fn an_io_error_of_the_agents_close_is_busy_but_the_shims_refused_delete_is_not() {
+        const IOERR_SHORT_READ: c_int = SQLITE_IOERR | (2 << 8);
+        const BUSY_RECOVERY: c_int = SQLITE_BUSY | (1 << 8);
+        assert_eq!(fail(SQLITE_IOERR, "prepare"), Fail::Busy);
+        assert_eq!(fail(IOERR_SHORT_READ, "step"), Fail::Busy);
+        assert_eq!(fail(BUSY_RECOVERY, "prepare"), Fail::Busy);
+        assert_eq!(
+            fail(SQLITE_IOERR_DELETE, "prepare"),
+            Fail::Kind("prepare"),
+            "the shim's own refusal (`an_empty_database_keeps_its_wal`)"
+        );
+        assert_eq!(fail(1, "prepare"), Fail::Kind("prepare"), "SQLITE_ERROR");
+        assert_eq!(fail(SQLITE_CANTOPEN, "open"), Fail::Kind("open"));
+    }
+
+    #[test]
+    fn the_wal_index_header_changes_with_each_commit_and_never_with_a_read() {
+        let dir = TempDir::new("sqlite-header");
+        let (db, writer) = opencode_db(&dir);
+        let first = wal_index_header(&db).expect("the writer's -shm");
+        assert_eq!(first[..4], 3_007_000u32.to_ne_bytes(), "iVersion");
+        for _ in 0..3 {
+            query(&db, WORKING.sql);
+        }
+        assert_eq!(wal_index_header(&db), Some(first), "reads change nothing");
+
+        writer.exec(&session("ses_a", Some(5), None, None));
+        let second = wal_index_header(&db).unwrap();
+        assert_ne!(second, first, "a commit");
+        writer.exec(&session("ses_b", Some(6), None, None));
+        assert_ne!(wal_index_header(&db).unwrap(), second, "each commit");
+        drop(writer);
+
+        let other = TempDir::new("sqlite-header-none");
+        let none = other.path().join("opencode.db");
+        assert_eq!(wal_index_header(&none), None, "no -shm");
+        assert!(!with(&none, "-shm").exists(), "never made");
+        fs::write(with(&none, "-shm"), [1u8; HEADER_LEN - 1]).unwrap();
+        assert_eq!(wal_index_header(&none), None, "too short");
     }
 
     /// A process of OpenCode's image that started at the epoch, so every row time is later than it.

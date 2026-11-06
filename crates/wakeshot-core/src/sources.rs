@@ -47,8 +47,10 @@ pub struct SessionKey {
 /// How the adapter can check that a session is still running. The parser only describes it; the watch thread checks
 /// it, so a parser stays free of I/O.
 ///
-/// Owner: sources track (Phase 4). `AnyProcess`: a process running `image` that holds `lock_file` open (Restart
-/// Manager), else any live process with `image` while `lock_file` exists; that fallback can outlive its session
+/// Owner: sources track (Phase 4). `AnyProcess`: a process that holds `lock_file` open (Restart Manager) and runs
+/// `image`, or whose pid the lock file's name gives (a whole-number part, Copilot's `inuse.<pid>.hold`) whatever its
+/// image (VS Code's `copilot-runtime.exe`). If Restart Manager fails: the process the name gives while it runs; a name
+/// with no pid (Codex) counts any live process with `image` while `lock_file` exists, which can outlive its session
 /// (architecture section 7).
 ///
 /// `ImageSince`: alive while some process running one of `images` (exe names, ASCII case ignored) started at or
@@ -158,9 +160,12 @@ impl FileId {
 ///   sessions, which compaction rewrites). A file a change notice names is read: the change is new.
 /// - `Query`: `sql` run read only on the SQLite database `db`, fed as `Whole` under [`FileId::query`] with JSON
 ///   `{"rows":[[...],...]}` (each cell an integer, text or null) or `{"error":"<kind>"}` (a fixed word such as `open`,
-///   `prepare` or `no_sqlite`, never SQLite's own text). It runs only while `<db>-wal` exists (the agent has the
-///   database open), on a change of the db's files in its folder (at most once a second for each want) and on the
-///   safety tick. `Gone` once `<db>` or `<db>-wal` is missing after an answer; a busy database gives no feed, so the
+///   `prepare` or `no_sqlite`, never SQLite's own text). It runs only while `<db>-wal` exists: on a change of the db or
+///   its `-wal` in its folder, and about every 2 s while `<db>` exists and on the safety tick when the first 48 bytes
+///   of `<db>-shm` (SQLite's WAL-index header, which every commit changes) differ from those after its last read; at
+///   most once a second for each want. The look at the `-shm` is there because a commit gives no change notice
+///   (OpenCode keeps its `-wal` open at one size), and the agent leaves its files after it stops (live test
+///   2026-11-06). `Gone` once `<db>` or `<db>-wal` is missing after an answer; a busy database gives no feed, so the
 ///   last answer stands. For OpenCode's `opencode.db`.
 #[derive(Clone, Debug)]
 pub enum WantedFile {

@@ -288,6 +288,8 @@ impl Watcher {
             if woke.is_ok() {
                 self.wait_failing = false;
             }
+            let poll_only = matches!(woke, Ok(Woke::Timeout)) && self.only_queries_due();
+            let changes = self.agents.changes();
             match woke {
                 Ok(Woke::Extra(STOP)) => break,
                 Ok(Woke::Extra(TICK)) => self.tick(),
@@ -303,8 +305,20 @@ impl Watcher {
                 }
             }
             self.run_due();
+            // A `Query` poll that found no commit read nothing, so there is nothing to post; the process list a
+            // snapshot asks for costs about 14 ms here, each 2 s.
+            if poll_only && self.agents.changes() == changes {
+                continue;
+            }
             self.publish();
         }
+    }
+
+    /// No retry and no holds read is due: a timeout now is a `Query` run only.
+    fn only_queries_due(&self) -> bool {
+        let now = Instant::now();
+        let due = |at: Option<Instant>| at.is_some_and(|at| at <= now);
+        !due(self.retries.front().map(|(at, _)| *at)) && !due(self.holds_retry)
     }
 
     fn first_round(&mut self) {
@@ -603,7 +617,7 @@ mod tests {
     use std::fs;
     use std::path::Path;
     use std::process::{Child, Command, Stdio};
-    use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
     use std::sync::{Mutex, MutexGuard, PoisonError};
 
     use wakeshot_core::holds::{HoldId, HoldKind};
@@ -1443,7 +1457,15 @@ mod tests {
         count
     }
 
-    // Held-back query runs and `ImageSince` exits (`p4-contracts-r2`).
+    // Held-back query runs and `ImageSince` exits (`p4-contracts-r2`); the query poll (`p4-live-opencode`).
+
+    fn opencode_want(db: PathBuf) -> WantedFile {
+        WantedFile::Query {
+            db,
+            name: "tables",
+            sql: "SELECT 1",
+        }
+    }
 
     impl Rig {
         /// [`Rig::start`] with `io` for the agents.
@@ -1468,11 +1490,7 @@ mod tests {
         let db = rig.agent.path().join("opencode.db");
         let wal = rig.agent.write("opencode.db-wal", b"");
         rig.agent.write("opencode.db", b"");
-        let want = WantedFile::Query {
-            db: db.clone(),
-            name: "tables",
-            sql: "SELECT 1",
-        };
+        let want = opencode_want(db.clone());
         rig.source.set(|f| f.wanted = vec![want]);
         let runs = Arc::new(Mutex::new(Vec::new()));
         let seen = Arc::clone(&runs);
@@ -1523,12 +1541,7 @@ mod tests {
         rig.agent.write("opencode.db-wal", b"");
         rig.agent.write("opencode.db", b"");
         let shm = rig.agent.write("opencode.db-shm", b"");
-        let want = WantedFile::Query {
-            db,
-            name: "tables",
-            sql: "SELECT 1",
-        };
-        rig.source.set(|f| f.wanted = vec![want]);
+        rig.source.set(|f| f.wanted = vec![opencode_want(db)]);
         let runs = Arc::new(AtomicUsize::new(0));
         let seen = Arc::clone(&runs);
         let io = crate::watch::agents::AgentIo {
@@ -1542,11 +1555,137 @@ mod tests {
         rig.start_with(Config::default(), io);
         let count = || runs.load(Ordering::SeqCst);
         until(Instant::now(), || count() >= 1, || count().to_string());
-        // Three times the limit: the loop ran a read each second.
+        // Three times the limit: the loop ran a read each second. The poll finds the header the read wrote.
         std::thread::sleep(Duration::from_millis(
             3 * crate::watch::agents::QUERY_EVERY_MS,
         ));
         assert_eq!(count(), 1);
+    }
+
+    /// [`FakeLiveness`] that counts the process lists asked of it.
+    #[derive(Default)]
+    struct CountingLiveness {
+        inner: FakeLiveness,
+        lists: AtomicUsize,
+    }
+
+    impl Liveness for CountingLiveness {
+        fn check(&self, process: ProcessRef) -> Alive {
+            self.inner.check(process)
+        }
+
+        fn start_of_pid(&self, pid: u32) -> Lookup {
+            self.inner.start_of_pid(pid)
+        }
+
+        fn list(&self) -> Result<Vec<crate::process::ProcessEntry>, WinError> {
+            self.lists.fetch_add(1, Ordering::SeqCst);
+            self.inner.list()
+        }
+    }
+
+    /// A snapshot of an `ImageSince` session lists every process (about 14 ms on the test laptop), so a poll that
+    /// found no commit posts nothing and lists nothing (`p4-live-opencode`).
+    #[test]
+    fn a_poll_that_finds_no_commit_lists_no_process() {
+        let rig = Rig::new("query-quiet");
+        let db = rig.agent.path().join("opencode.db");
+        rig.agent.write("opencode.db-wal", b"");
+        rig.agent.write("opencode.db", b"");
+        rig.agent.write("opencode.db-shm", &[1; 32_768]);
+        let mut facts = session(ProcessRef {
+            pid: 4242,
+            start: FileTime(1),
+        });
+        facts.liveness = sources::Liveness::ImageSince {
+            images: &["opencode.exe"],
+            since_wall_ms: None,
+        };
+        rig.source.set(|f| {
+            f.wanted = vec![opencode_want(db.clone())];
+            f.sessions = vec![facts];
+        });
+        let io = crate::watch::agents::AgentIo {
+            query: Box::new(|_, _| crate::sqlite::Answer::Json(b"{\"rows\":[]}".to_vec())),
+            ..Default::default()
+        };
+        let liveness = Arc::new(CountingLiveness::default());
+        let agents = Agents::with_io(vec![rig.source.boxed()], rig.log.clone(), io);
+        let handle = WatchThread::spawn(
+            rig.dir.clone(),
+            Config::default(),
+            agents,
+            liveness.clone(),
+            rig.sink.clone(),
+            rig.log.clone(),
+        )
+        .unwrap();
+        let lists = || liveness.lists.load(Ordering::SeqCst);
+        until(
+            Instant::now(),
+            || lists() >= 1,
+            || "no first snapshot".to_owned(),
+        );
+        let before = lists();
+        let poll = Duration::from_millis(crate::watch::agents::QUERY_POLL_MS);
+        std::thread::sleep(2 * poll + QUIET);
+        assert_eq!(lists(), before, "two polls with no commit");
+
+        rig.agent.write("opencode.db-shm", &[2; 32_768]);
+        let took = until(Instant::now(), || lists() > before, || "no read".to_owned());
+        assert!(took <= poll + QUIET, "{took:?}");
+        assert!(handle.stop());
+    }
+
+    /// OpenCode's commits give no change notice (`p4-live-opencode`): a new answer reaches the source by the poll,
+    /// with no notice and no tick.
+    #[test]
+    fn a_commit_with_no_notice_is_read_by_the_poll() {
+        let mut rig = Rig::new("query-poll");
+        let db = rig.agent.path().join("opencode.db");
+        rig.agent.write("opencode.db-wal", b"");
+        rig.agent.write("opencode.db", b"");
+        rig.agent.write("opencode.db-shm", &[1; 32_768]);
+        rig.source
+            .set(|f| f.wanted = vec![opencode_want(db.clone())]);
+        let committed = Arc::new(AtomicBool::new(false));
+        let seen = Arc::clone(&committed);
+        let io = crate::watch::agents::AgentIo {
+            query: Box::new(move |_, _| {
+                let rows = if seen.load(Ordering::SeqCst) {
+                    &b"{\"rows\":[[\"ses_1\",1]]}"[..]
+                } else {
+                    &b"{\"rows\":[]}"[..]
+                };
+                crate::sqlite::Answer::Json(rows.to_vec())
+            }),
+            ..Default::default()
+        };
+        rig.start_with(Config::default(), io);
+        let id = FileId::query(&db, "tables");
+        until(
+            Instant::now(),
+            || !rig.source.fed().is_empty(),
+            || "no first run".to_owned(),
+        );
+        // The commit: the rows and the `-shm`'s header change; its notice runs no query.
+        let at = Instant::now();
+        committed.store(true, Ordering::SeqCst);
+        rig.agent.write("opencode.db-shm", &[2; 32_768]);
+        let new = (id, Feed::Whole(b"{\"rows\":[[\"ses_1\",1]]}".to_vec()));
+        let took = until(
+            at,
+            || rig.source.fed().contains(&new),
+            || "no poll".to_owned(),
+        );
+        println!(
+            "a commit with no notice was read {} ms later",
+            took.as_millis()
+        );
+        assert!(
+            took <= Duration::from_millis(crate::watch::agents::QUERY_POLL_MS + 500),
+            "{took:?}"
+        );
     }
 
     #[test]
