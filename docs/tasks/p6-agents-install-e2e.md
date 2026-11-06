@@ -1,6 +1,7 @@
 # The bigger v1 installed: checks, a fresh install over Haik's, and a hold per agent
 
-Phase: 6. Status: ready once every `p4-live-*` card of the bigger v1 and its fixes are done (new 2026-11-06). Needs
+Phase: 6. Status: in progress (Part 1 done 2026-11-06: deliverables 1 and 2; Part 2, deliverables 3 to 6, waits
+for the Cursor and Antigravity live cards). Needs
 Haik: no (he is at the laptop for normal work; the tray quit and start take seconds).
 Agent: `wakeshot-worker`. Size: about 150K tokens.
 Runs after: `p4-live-cursor`, `p4-live-antigravity`, `p4-live-opencode` (with its poll fix), and the hooks code
@@ -56,5 +57,68 @@ the way an update would, and the installed app holds the PC for each agent and l
 ## Log
 
 - 2026-11-06: card written by the orchestrator.
+- 2026-11-06: Part 1 started (deliverables 1 and 2 only, by the orchestrator's brief). Part 1 does no install, no
+  tray start, no agent runs, no `wakeshot hook` add or remove, and nothing in `.cursor` or `.gemini`: the Cursor and
+  Antigravity live cards still wait for Haik, and a new tray's `agent_hooks::at_start` would rewrite their plugin
+  folders. Build folder: `<scratchpad>\p6-agents-install-e2e\target`, kept for Part 2.
+- 2026-11-06: note for Part 2, from the orchestrator: one installed tray runs, not two. At 18:25 it was tray 11424
+  with its guard 7664 (`--guard 11424 ...`); the 26236 seen earlier was most likely a guard too (not verified).
+  `WM_CLOSE` goes to the one tray's `Wakeshot.Loop` window; the tray ends its own guard.
+- 2026-11-06: toolchain cargo and rustc 1.99.1 (pinned), `vpk` 1.2.161 at `%USERPROFILE%\.dotnet\tools`, no
+  `RUSTFLAGS`, no `VPK_*` variable set. ARM64 steps put `C:\Program Files (x86)\Microsoft Visual
+  Studio\18\BuildTools\VC\Tools\Llvm\x64\bin` first on PATH for those cargo commands only. Script and logs in
+  `<scratchpad>\p6-agents-install-e2e\` (`checks.ps1`, `logs\`).
+- 2026-11-06: power read only, before the checks (`logs\power-before.txt`): Balanced active; lid action AC 0 and DC
+  0 (Do nothing); sleep after AC 18000, DC 0 (Never). Not Haik's own values from `CLAUDE.md` (lid Sleep, DC 18000):
+  most likely the installed tray holding for the live Claude Code sessions (not verified). Part 1 writes no power
+  setting. Checks started in the background, one step after the other, stop at the first failure.
+- 2026-11-06 18:18 to 18:22: `cargo fmt --all --check` pass; x64 clippy `--all-targets` pass (73 s), x64 clippy
+  libs only pass (all four crates checked); `cargo test --workspace --locked` pass (176 s): 1752 passed, 0 failed,
+  64 ignored (the real-laptop and dry-run tray suites), over 19 test binaries; wakeshot-core lib 730, wakeshot-windows
+  lib 716, wakeshot-cli 101.
+- 2026-11-06 18:24: x64 `cargo build --release --workspace --locked` pass (112 s). The `release.yml` CRT check by
+  hand (`crt-check.ps1`, dumpbin `/dependents`): no Visual C++ runtime import in either exe. `wakeshot-tray.exe`
+  3,202,048 bytes, SHA-256 `16E41459E15E39477248FD09D5555B2CB4A3E8FE9C54E42D68D1842EDCD3A8A9`; `wakeshot.exe`
+  806,912 bytes, SHA-256 `3A87DDA815CDC746D202ECC3E9FEB843FB43AFEC64C51BCD2B6EA947739B3BCF`.
+- 2026-11-06 18:25 to 18:26: ARM64 clippy `--all-targets` pass (36 s; `ring` compiled with the Build Tools clang),
+  ARM64 clippy libs only pass, ARM64 release build pass (79 s). No CRT import; `wakeshot-tray.exe` 2,823,168 bytes,
+  SHA-256 `980FE828611A9006180584C75CDE4F6E3D502C753B216BE06E580817F0AB4205`; `wakeshot.exe` 773,120 bytes, SHA-256
+  `BE7650E86356E379F4BAEB5C0FE093E25A8C6DF68590242AF41F31102BCC559F`. No `warning` or `error` line in any log.
+  Deliverable 1 done: every check green on both targets.
+- 2026-11-06 18:27: x64 packed with `packaging/pack.ps1 -Version 0.1.0 -Cpu x64 -ExeDir
+  <target>\x86_64-pc-windows-msvc\release -OutDir <scratchpad>\p6-agents-install-e2e\pack-x64 -Icon
+  assets/wakeshot.ico` (no `-PreviousDir`: no earlier release, so no delta), exit 0. Version 0.1.0 is the
+  `Cargo.toml` version and the one Haik has installed (`06-ship.md` 2026-11-05 20:48 and 2026-11-06 04:35).
+  The exes are those of the deliverable 1 workspace release build, the same build `release.yml` packs.
+- 2026-11-06 18:28: `HaikAsatryan.Wakeshot-win-x64-Setup.exe` 12,508,502 bytes, SHA-256
+  `BF5A309AE1713F08BF99976DD4CD5A2F1A4AF860C02567CF3480307165CA1EB5`. `HaikAsatryan.Wakeshot-0.1.0-win-x64-full.nupkg`
+  4,809,046 bytes, SHA-256 `1D5E30192C90D1822BA1DC0433D57353D1E170BFB0D6708F332894E124D15DDD`. Portable zip
+  4,727,206 bytes; `releases.win-x64.json`, `assets.win-x64.json`, `RELEASES-win-x64` written. Inside the package
+  (`pack-check.ps1`, read as a zip): `lib/app/wakeshot-tray.exe`, `wakeshot.exe` and `wakeshot-notice.png` have the
+  same SHA-256 as the build and `assets/wakeshot-notice.png`. pack.ps1's TEMP staging folder is gone. Setup.exe not
+  run, nothing installed.
+- 2026-11-06 18:28: power read again (`logs\power-after.txt`): same bytes as before the checks. Part 1 stopped here,
+  at the brief's clean point; the build folder and `pack-x64` stay for Part 2.
 
 ## Result
+
+### Part 1 (deliverables 1 and 2), done 2026-11-06 18:28
+
+- Checks, all green, on `x86_64-pc-windows-msvc` and `aarch64-pc-windows-msvc`: `cargo fmt --all --check`; clippy
+  with and without `--all-targets` (`--locked`, `-D warnings`) on both targets; `cargo test --workspace --locked`
+  (1752 passed, 0 failed, 64 ignored); `cargo build --release --workspace --locked` on both targets. No warning in
+  any log. Both targets' exes import no Visual C++ runtime.
+- Code built: the working tree as this session found it. The session's start snapshot named HEAD `cd140e9` with a
+  clean tree (not checked with git, by the rules).
+- x64 pack (`packaging/pack.ps1`, version 0.1.0, no delta) in
+  `<scratchpad>\p6-agents-install-e2e\pack-x64`: `HaikAsatryan.Wakeshot-win-x64-Setup.exe` 12,508,502 bytes,
+  SHA-256 `BF5A309AE1713F08BF99976DD4CD5A2F1A4AF860C02567CF3480307165CA1EB5`. The package's exes are the build's
+  bytes. Part 2 checks the installed exe against the build's `wakeshot-tray.exe` SHA-256
+  `16E41459E15E39477248FD09D5555B2CB4A3E8FE9C54E42D68D1842EDCD3A8A9`.
+- Kept for Part 2: the build folder `<scratchpad>\p6-agents-install-e2e\target`, the pack, and the scripts
+  `checks.ps1`, `crt-check.ps1`, `pack-check.ps1` with `logs\`.
+- Not done (by the brief): no Setup.exe run, no install, no tray start, no agent run, no `wakeshot hook`, nothing in
+  `.cursor` or `.gemini`, no power write (power read before and after: the same).
+- Files changed: this card only.
+- Open: deliverables 3 to 6. They wait for the Cursor and Antigravity live cards, because a new tray's
+  `agent_hooks::at_start` would rewrite their plugin folders.

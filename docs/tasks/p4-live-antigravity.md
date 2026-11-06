@@ -84,7 +84,8 @@ Not blocking; defaults taken, details in Result, "For Haik (product)":
    data folder: seen live). Change it when a live card needs the first turn in `agent-watch`: point `--data` at the
    hook's data folder.
 4. **Two installed trays still run** (`wakeshot-tray.exe` 11424 from 04:34 and 26236 from 15:07, both from
-   `current`), as `p4-live-vscode` noted. Not touched.
+   `current`), as `p4-live-vscode` noted. Not touched. Orchestrator, 18:25: likely one tray and its guard. At 18:25
+   the two processes are tray 11424 and 7664, whose command line is `--guard 11424 ...`; 26236 not checked.
 
 ## Log
 
