@@ -286,9 +286,10 @@ The README says so.
   with an unknown `status` value, which counts as working while the session process lives. It shows once per Wakeshot
   start for each agent, plus a log line; the tooltip does not repeat it (Haik, 2026-11-03).
 - When a restore fails: a warning notification.
-- No "Pause", no icon style choice, no "Efficiency mode", nothing that touches other apps, with one exception: the
-  hooks rule above (a hook folder of Wakeshot's own that an agent with no reliable file signal loads; never an edit
-  of the user's own settings).
+- No "Pause", no icon style choice, no "Efficiency mode", nothing that touches other apps. The hooks rule above is the
+  one allowed exception (a hook folder of Wakeshot's own that an agent with no reliable file signal loads; never an
+  edit of the user's own settings), and v1 uses it for no agent: a v1 start only removes a folder an earlier test
+  build added.
 - No telemetry. The log stays on the PC.
 
 ### Distribution (free options only)
@@ -302,7 +303,8 @@ The README says so.
   usual with the user's settings back; keep awake on demand comes with it, so nobody needs a second tool), then the
   video, then install, super simple, winget first. Then what holds the PC awake, as a list that grows: every
   supported AI agent, A to Z, none first ("The focus should not be directly on Claude Code"), each tested live, plus
-  any command, hold files and Keep awake. Lightweight is enough: one measured line deep in the details, no tech or
+  any command, hold files and Keep awake. The agents left out ("No guessing") are named in Limits, each with its
+  one-line reason; v1 adds no hooks, so the README has no hook lines. Lightweight is enough: one measured line deep in the details, no tech or
   size numbers near the top. A small side by side table against the 2 or 3 most popular keep-awake options only
   (many thousands of stars or users), few rows, low on the page (Haik, 2026-11-04: "I want to compete with popular
   options"). Details sit below in folded sections. It says macOS comes if Wakeshot gets popular or gets donations.

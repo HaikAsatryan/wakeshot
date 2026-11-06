@@ -11,7 +11,7 @@ An AI agent at work, a long build or any other command, or Keep awake from the t
 PC stays awake, even with the laptop lid closed. When the work is done, your own power settings come back. A small,
 lightweight tray app: no window to learn, nothing else to install. Free and open source (MIT).
 
-<!-- Haik: paste the video URL here. Upload the final 30 second promo MP4 (where it is: media/README.md) to GitHub, by dragging it into a comment box on github.com or with `gh issue comment <n> --attach`. Then replace this whole comment with the bare https://github.com/user-attachments/assets/<id> URL on its own line, with a blank line above and below, so GitHub shows a player. Link nothing else for the video. -->
+<!-- Haik: paste the video URL here. Upload the final promo MP4 (where it is: media/README.md) to GitHub, by dragging it into a comment box on github.com or with `gh issue comment <n> --attach`. Then replace this whole comment with the bare https://github.com/user-attachments/assets/<id> URL on its own line, with a blank line above and below, so GitHub shows a player. Link nothing else for the video. -->
 
 ## Install
 
@@ -62,13 +62,15 @@ PC sleeps as usual, and your settings are your own again. Today these can hold:
 
 | What | The PC stays awake while |
 |---|---|
-| **AI agents**: <!-- agents -->Claude Code, Codex CLI, Copilot CLI, Copilot in VS Code and OpenCode<!-- /agents --> | an agent works on your task, or runs work it started in the background. Wakeshot reads the small files each agent keeps and never changes an agent's settings |
+| **AI agents**: <!-- agents -->Claude Code, Codex CLI, Copilot CLI, Copilot in VS Code and OpenCode<!-- /agents --> | an agent works on your task, or runs work it started in the background. Each one was tested live. Wakeshot reads the small files each agent keeps and never changes an agent's settings |
 | **Any command**: `wakeshot run -- <command>` | that command runs: a build, a test suite, a backup, a download |
 | **Any script**: a [hold file](docs/hold-files.md) | the process named in the file runs |
 | **You**: Keep awake in the menu | the time you picked runs: 30 minutes, 1, 2 or 4 hours, or until you turn it off |
 
-The list grows with each version. **Automatic**, on by default, is the switch for the first three; Keep awake works
-either way. The exact rules: [When each hold counts](#when-each-hold-counts).
+The list grows with each version. Wakeshot supports an agent only where it can see exactly when the work ends, so
+Cursor, Antigravity and VS Code's own Local chats are not on it yet ([why](#limits)). **Automatic**, on by default,
+is the switch for the first three; Keep awake works either way. The exact rules:
+[When each hold counts](#when-each-hold-counts).
 
 ## How it works
 
@@ -116,7 +118,7 @@ Click the icon for the menu:
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="media/public/shots/readme-holding-tooltip-dark.png">
-    <img src="media/public/shots/readme-holding-tooltip-light.png" alt="Wakeshot's tooltip while Claude Code works: Holding awake: Claude Code (1 session), over the filled tray icon" width="282" height="120">
+    <img src="media/public/shots/readme-holding-tooltip-light.png" alt="Wakeshot's tooltip while two agents work: Holding awake: Claude Code (1 session), Codex (1 session), over the filled tray icon" width="318" height="137">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="media/public/shots/readme-idle-tooltip-dark.png">
@@ -222,6 +224,30 @@ needs, never stores or logs your prompts, adds no hooks and never edits Codex's 
 turn runs, also while Codex waits for your approval (it writes nothing while it waits, so the wait looks like work),
 and only while the `codex.exe` that holds the thread lives, so a crash ends the hold. Tested live with Codex CLI
 0.167.0, in the terminal and with `codex exec` ([results](docs/research/other-agent-signals.md#phase-4-live-test-2026-11-06)).
+
+**Copilot CLI.** Wakeshot lists the in-use files Copilot CLI keeps in each session's folder (in `.copilot` of your
+user folder, or the folder `COPILOT_HOME` names) and reads that session's event log for its turns. It reads only the
+fields it needs, never stores or logs your prompts, adds no hooks and never edits Copilot's settings. A session holds
+while a turn runs, and while a scheduled prompt (`/every`) is due within 1 hour; and only while the process that has
+the session open lives, so a crash ends the hold. While Copilot waits for your approval or your answer, it does not
+hold. Tested live with Copilot CLI 1.0.106, in the terminal and with `copilot -p`
+([results](docs/research/other-agent-signals.md#phase-4-live-test-2026-11-06-1)).
+
+**Copilot in VS Code.** Chats that run on the Copilot harness (VS Code's setting `chat.defaultToCopilotHarness`) are
+Copilot CLI sessions of VS Code's own `copilot-runtime.exe`, so the Copilot CLI rules above apply to them. The hold
+ends at the turn's end or at Stop, and only while that `copilot-runtime.exe` lives. Close the window while such a chat
+works, and the agent goes on, so the hold lasts until the turn really ends. VS Code's own Local chats do not hold
+([why](#limits)). Tested live with VS Code 1.145.1 and its Copilot extension 0.73.0: a turn, Stop, approval allowed
+and skipped, and a window closed mid-turn ([results](docs/research/copilot-vscode-signals.md#stop-approve-and-window-close-live-test-2026-11-06)).
+
+**OpenCode.** For OpenCode 2.x, Wakeshot opens its database (`opencode\opencode.db` in `.local\share` of your user
+folder, or in the folder `XDG_DATA_HOME` names) read only, through Windows' own SQLite, and reads only the session and
+schedule tables. The same file holds OpenCode's login; no query touches those tables, and nothing from the file goes
+to the log. A session holds while it works on a turn, also while OpenCode waits for your approval (it keeps that wait
+only in memory, so the wait looks like work), and while a schedule is due within 1 hour; and only while an OpenCode
+process that was running when the turn started lives, so a crash ends the hold. Wakeshot looks for changes every 2
+seconds, so a turn shorter than that may not hold. OpenCode 1.x is not read. Tested live with OpenCode 2.2.5, in the
+terminal and with `opencode run` ([results](docs/research/opencode-signals.md#phase-4-live-test-2026-11-06)).
 
 **`wakeshot run -- <command>`.** Holds while that command runs: a build, a test suite, a backup, anything. Such as
 `wakeshot run -- npm test`. The command always runs, gets its arguments exactly as typed and keeps its exit code.
@@ -461,8 +487,10 @@ For your own lengths and labels, write a hold file: [docs/hold-files.md](docs/ho
 - No telemetry. The log stays on your PC: `%LocalAppData%\Wakeshot\logs\wakeshot.log`, plain English, rolled over at
   start once it passes 1 MB, three files kept. It never holds your prompts, transcript text or full command lines;
   `wakeshot run` keeps only the program's name.
-- Lightweight: at idle the tray app uses 4.3 MB of private memory and 109 ms of CPU in 10 minutes (0.018% of one
-  core), measured on 0.1.0, x64, on 2026-11-06 ([how](docs/research.md#speed-numbers)).
+- Wakeshot only reads the files each agent keeps. OpenCode's database it opens read only and queries only its session
+  and schedule tables, never the ones with OpenCode's login.
+- Lightweight: at idle the tray app uses 5 MB of private memory and 1 s of CPU in 10 minutes (0.17% of one core),
+  measured on the v1 build, x64, on 2026-11-07 ([how](docs/research.md#speed-numbers-final-v1-build-2026-11-07)).
 
 </details>
 
@@ -528,15 +556,33 @@ PC may sleep, and the job runs once it wakes.
 **Codex approval waits hold with no limit.** Codex writes nothing while it waits for your answer, so a turn that waits
 holds for as long as `codex.exe` runs. The battery floor still steps back.
 
-**`CLAUDE_CONFIG_DIR` and `CODEX_HOME`.** Wakeshot follows them when they are set as user variables in Windows, so
-Wakeshot gets them too. A value set only in one terminal is not seen, and those sessions do not hold.
+**Copilot waits do not hold.** While Copilot CLI, or a Copilot chat in VS Code, waits for your approval or your
+answer, the PC may sleep.
 
-**Not in v1:** Claude Code inside WSL (its sessions carry Linux process ids, which Windows cannot check), Codex CLI
-inside WSL (its files sit in Linux's own home folder, which Wakeshot does not read); rules for
-any app, such as "while ffmpeg runs"; macOS and Linux; languages other than English.
+**OpenCode approval waits hold with no limit.** OpenCode keeps a waiting prompt only in memory, so a turn that waits
+holds for as long as OpenCode runs. The battery floor still steps back.
+
+**`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `COPILOT_HOME` and `XDG_DATA_HOME`.** Wakeshot follows them when they are set as
+user variables in Windows, so Wakeshot gets them too. A value set only in one terminal is not seen, and those
+sessions do not hold. The same for Copilot's `--config-dir`, OpenCode's `OPENCODE_DB` and OpenCode's databases for
+other release channels.
+
+**Not supported, and why.** Wakeshot supports an agent only where it can see exactly when the work ends; it never
+ends a hold on a timer or keeps it on a guess. For these, use Keep awake from the menu:
+
+- Cursor: not supported. When you delete a chat while it works, Cursor gives no sign that the work stopped.
+- Antigravity: not supported. It leaves no reliable sign when you stop it with Esc.
+- VS Code's own Local chats (Copilot chats that do not run on the Copilot harness): not supported. When you close a
+  window mid-turn, VS Code writes nothing that shows the work ended.
+
+**Not in v1:** agents inside WSL (Wakeshot reads only the Windows side: their files sit in Linux's own home folder,
+and Claude Code's sessions there carry Linux process ids, which Windows cannot check); OpenCode 1.x; rules for any
+app, such as "while ffmpeg runs"; macOS and Linux; languages other than English.
 
 **Not tested live yet:** the Claude Code extension for VS Code and the Desktop app; the Codex desktop app's own
-threads, and its app-server as the process that holds a thread.
+threads, and its app-server as the process that holds a thread; Copilot CLI's sub-agents, `/after` and cron
+schedules, `--resume` and very long session logs; Copilot in VS Code without admin rights (our tests ran an elevated
+VS Code) and VS Code's Background chats; the OpenCode desktop app, its background jobs and sub-agents.
 
 **With the lid closed, no time limit and no heat guard.** Wakeshot holds as long as the work runs. The hardware's own
 protection applies, the same as for a lid set to Do nothing by hand: the CPU slows itself when it gets too hot (not

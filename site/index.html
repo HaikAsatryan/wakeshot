@@ -39,9 +39,9 @@
       </p>
       <!-- waits for p6-media: icon loop. One <picture> here: the tray icon going idle to working to idle, a dark and a light GIF (<source media="(prefers-color-scheme: dark)">), plus a still PNG for <source media="(prefers-reduced-motion: reduce)">, copied into site/media/ (no other host). Alt text: "Wakeshot's tray icon wakes while an agent works and rests when it is done". Spec: docs/research/launch.md, "Specs". -->
       <p class="fine">
-        Small and quiet: <a href="https://github.com/HaikAsatryan/wakeshot/blob/main/docs/research.md#speed-numbers">4.3 MB of private memory</a> and
-        <a href="https://github.com/HaikAsatryan/wakeshot/blob/main/docs/research.md#speed-numbers">109 ms of CPU in 10 idle minutes</a> (0.018% of one core).
-        Measured on 0.1.0, x64, 2026-11-06.
+        Small and quiet: <a href="https://github.com/HaikAsatryan/wakeshot/blob/main/docs/research.md#speed-numbers-final-v1-build-2026-11-07">5 MB of private memory</a> and
+        <a href="https://github.com/HaikAsatryan/wakeshot/blob/main/docs/research.md#speed-numbers-final-v1-build-2026-11-07">1 s of CPU in 10 idle minutes</a> (0.17% of one core).
+        Measured on the v1 build, x64, 2026-11-07.
       </p>
     </div>
   </header>
@@ -54,7 +54,7 @@
       <div class="cards">
         <article>
           <h3>AI agents</h3>
-          <p><!-- agents -->Claude Code, Codex CLI, Copilot CLI, Copilot in VS Code and OpenCode<!-- /agents -->. Wakeshot reads the small files each agent keeps, and a session holds while it works on your task. No edits to an agent's settings, and your prompts are never stored or logged. The exact rules for each agent are in the <a href="https://github.com/HaikAsatryan/wakeshot#when-each-hold-counts">README</a>.</p>
+          <p><!-- agents -->Claude Code, Codex CLI, Copilot CLI, Copilot in VS Code and OpenCode<!-- /agents -->, each one tested live. Wakeshot reads the small files each agent keeps, and a session holds while it works on your task. No edits to an agent's settings, and your prompts are never stored or logged. The exact rules for each agent are in the <a href="https://github.com/HaikAsatryan/wakeshot#when-each-hold-counts">README</a>.</p>
         </article>
         <article>
           <h3><code>wakeshot run</code></h3>
@@ -72,11 +72,12 @@
       <p>The tray icon shows the state: a filled light while something holds, the same light as an outline when nothing does, and the outline struck through when Automatic is off. Its tooltip names what holds the PC awake, such as "Holding awake: Codex (1 session)".</p>
       <!-- waits for p6-media: pictures of the three icon states and of the menu with Keep awake open, each a <picture> with a dark and a light PNG (<source media="(prefers-color-scheme: dark)">), copied into site/media/. Alt text as in the README. -->
       <p>For an agent not on the list, <code>wakeshot run -- &lt;agent&gt;</code> holds for as long as the agent runs.</p>
+      <p>Not supported yet: Cursor, Antigravity and VS Code's own Local chats. Each can stop without a sign that its work ended, and Wakeshot never guesses with a timer. <a href="https://github.com/HaikAsatryan/wakeshot#limits">Why, for each</a>.</p>
     </section>
 
     <section id="a-night">
       <h2>A night with Wakeshot</h2>
-      <!-- waits for p6-media: the 30 second video here. <video controls muted playsinline preload="none" poster="media/promo-poster.png"> with media/promo.mp4 (H.264 and AAC, 1920 x 1080, under 10 MB) copied into site/media/ (no other host), and a one-line caption. Research (docs/research/launch.md, "Specs") says autoplay and loop; with sound and 30 s length, prefer controls, no autoplay. -->
+      <!-- waits for p6-media: the promo video here. <video controls muted playsinline preload="none" poster="media/promo-poster.png"> with media/promo.mp4 (H.264 and AAC, 1920 x 1080, under 10 MB) copied into site/media/ (no other host), and a one-line caption. Research (docs/research/launch.md, "Specs") says autoplay and loop; with sound and a 38 s length, prefer controls, no autoplay. -->
       <ol class="steps">
         <li><strong>You give your AI agent a long task and walk away.</strong> The icon's light comes on. Your screen still turns off on its usual timer; only sleep waits.</li>
         <li><strong>You close the lid.</strong> A short chime says the laptop keeps running, and Wakeshot locks it, so a closed laptop never runs unlocked.</li>
@@ -137,6 +138,7 @@
         <li>No telemetry and no account.</li>
         <li>The only network calls are the update checks and downloads, to GitHub.</li>
         <li>The log stays on your PC. It never holds your prompts, transcript text or full command lines.</li>
+        <li>Wakeshot only reads the files each agent keeps. OpenCode's database it opens read only, and never the tables with OpenCode's login.</li>
         <li>This page has no scripts and no trackers, and loads nothing from other sites. GitHub Pages, which hosts it, logs each visitor's IP address for security, as GitHub's own docs say.</li>
       </ul>
     </section>

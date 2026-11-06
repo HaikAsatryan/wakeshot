@@ -64,7 +64,7 @@
           "what": "holding tooltip of a real Claude Code session, the icon hovered",
           "file": "shots/work-S3-dark.png",
           "standIn": false,
-          "from": "p6-media-captures 2026-11-05 22:09:25.889, DELL 200%, screen rect 2986,1920 564x240, from grab S3-dark.png; tray: Holding awake: Claude Code (1 session)"
+          "from": "p6-agents-video-readme 2026-11-07 01:18:38.913, installed final build, DELL 200%, screen rect 2932,1886 636x274, from grab tip-dark.png; TrafficMonitor and the battery button edge covered with plain taskbar; tray: Holding awake: Claude Code (1 session), Codex (1 session)"
         },
         "S4": {
           "what": "idle tooltip, the icon hovered",
@@ -272,16 +272,16 @@
       "from": "p6-media-captures 2026-11-05 22:11:59.431, DELL 200%, screen rect 3140,1610 700x550, from grab S5a-light.png; tray: Not holding, the PC sleeps as usual"
     },
     "readme-holding-tooltip-dark": {
-      "what": "README: the holding tooltip of a real Claude Code session (dark)",
+      "what": "README: the holding tooltip of a real Claude Code session and a real Codex CLI turn at once (dark)",
       "file": "shots/readme-holding-tooltip-dark.png",
       "standIn": false,
-      "from": "p6-media-captures 2026-11-05 22:09:25.889, DELL 200%, screen rect 2986,1920 564x240, from grab S3-dark.png; tray: Holding awake: Claude Code (1 session)"
+      "from": "p6-agents-video-readme 2026-11-07 01:18:38.913, installed final build, DELL 200%, screen rect 2932,1886 636x274, from grab tip-dark.png; TrafficMonitor and the battery button edge covered with plain taskbar; tray: Holding awake: Claude Code (1 session), Codex (1 session)"
     },
     "readme-holding-tooltip-light": {
-      "what": "README: the holding tooltip of a real Claude Code session (light)",
+      "what": "README: the holding tooltip of a real Claude Code session and a real Codex CLI turn at once (light)",
       "file": "shots/readme-holding-tooltip-light.png",
       "standIn": false,
-      "from": "p6-media-captures 2026-11-05 22:12:09.093, DELL 200%, screen rect 2986,1920 564x240, from grab S3-light.png; tray: Holding awake: Claude Code (1 session)"
+      "from": "p6-agents-video-readme 2026-11-07 01:17:55, installed final build, DELL 200%, screen rect 2932,1886 636x274, from grab tip-light.png; TrafficMonitor and the battery button edge covered with plain taskbar; tray: Holding awake: Claude Code (1 session), Codex (1 session)"
     },
     "readme-idle-tooltip-dark": {
       "what": "README: the idle tooltip (dark)",

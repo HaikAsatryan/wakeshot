@@ -6047,3 +6047,63 @@ runs sends no `stop`, only the `sessionEnd` that Ctrl+F4 also sends (section "In
   mutation check restored two files with `copy2`, the next test run used the mutated build (its result matched the
   mutation), and passed once the files were edited again. **Seen once**; the cause (cargo's fingerprint compares
   write times) is inferred, **not verified**. Restore with a plain write, or touch the files after.
+
+## Speed numbers, final v1 build (2026-11-07)
+
+Measured 2026-11-07 from 00:06 to 01:44 (UTC+4) for card `docs/tasks/p6-agents-video-readme.md` (Part B, last
+round), on the test laptop (x64), Haik's installed final v1 build: `ProductVersion` 0.1.0 of the installed
+`wakeshot-tray.exe` (the same string as the 2026-11-06 run's build, a different build), installed 2026-11-06 23:50 by
+the x64 Setup of `p4-cursor-off`. Claude Code, Codex CLI, Copilot CLI (and VS Code's Copilot harness) and OpenCode
+are all on this PC, so the tray watches four real agent folders; 0.1.0 of 2026-11-06 watched Claude Code only. Raw
+files and scripts: the card's build folder, `speed\` (not kept in the repo). **ARM64: not measured.**
+
+How it differs from "Speed numbers" above: the orchestrator's Claude Code session worked most of the time, so the
+installed tray held for it. Its idle numbers come from a detached watcher (`idle-watch.ps1`) that waited until the
+tray held nothing and ran no guard for 60 s, then sampled 10 minutes, as `measure-speed.ps1 -Mode idle` does; a
+quiet stretch came at 00:24 while the session was idle. The hold numbers are for that working Claude Code session, not
+`wakeshot run -- ping`. Delays are Codex CLI's, since a new Claude Code session joins a hold that is already on.
+Sampling ran from an elevated shell (the trays at Medium); `Get-Process` reads the same counters either way.
+
+| Number | Value | Notes |
+|---|---|---|
+| Tray, idle, private memory | median 4.99 MB, max 7.29 MB | installed tray, 59 samples 10 s apart, 00:24:11 to 00:34:15, no `Hold` line in its log, the Claude Code session `idle`. The video shows 5 MB |
+| Tray, idle, working set | median 23.44 MB, max 25.56 MB | |
+| Tray, idle, CPU | 1,015.625 ms in 10 minutes (0.17% of one core) | 0.1.0 of 2026-11-06: 109.375 ms. Why: below |
+| Tray, during a hold | private median 3.98 MB (max 4.95), working set 22.48 MB, CPU 1,140.625 ms in 10 minutes | 00:07:42 to 00:17:44, `Claude Code (1 session)` in all 60 reads of `state.json` |
+| Guard, during that hold | private 1.80 MB, working set 12.61 MB, CPU 0 ms in 10 minutes | alive through the whole window this time, so its CPU is recorded |
+| Start delay, Codex CLI | 284, 116, 47, 10, 306 ms: median 116 ms, max 306 ms | 5 `codex exec` one-word test turns at Medium; the rollout's `task_started` time to the dry-run tray's `Holding starts: Codex`; the installed tray's `Hold starts: Codex` came within 32 ms of the same |
+| End delay, Codex CLI | 9, 10, 11, 11, 12 ms: median 11 ms | `task_complete` to `Holding ends; held by Codex` (the installed tray: 10 to 52 ms) |
+| `Setup.exe` (x64) | 12,481,433 bytes | `p4-cursor-off`'s pack, the one Haik installed |
+| `wakeshot-tray.exe`, `wakeshot.exe` | 3,137,536 and 815,616 bytes | in `%LocalAppData%\HaikAsatryan.Wakeshot\current` |
+| Install folder | 14,785,776 bytes, 9 files | Velopack's own files included |
+
+**What costs the CPU at rest.** The same installed exe was run beside Haik's tray as `--dry-run` at Medium (its own
+data folder and mutex names), each time with some agent folders pointed at an empty scratch folder through the
+variables the tray reads, nothing held in its log during the window:
+
+| Folders the dry-run tray watched | CPU | Per 10 minutes |
+|---|---|---|
+| none (all four variables on the empty folder) | 15.625 ms in 5 min | about 31 ms |
+| Copilot only | 718.75 ms in 5 min | about 1,440 ms |
+| Codex and Copilot | 890.625 ms in 10 min | 891 ms |
+| Codex, Copilot and OpenCode (Claude Code's empty) | 1,140.625 ms in 10 min | 1,141 ms |
+
+- **OpenCode's database check**, about 250 ms in 10 minutes (the last two rows). While `opencode.db` is there,
+  each of the source's queries looks at the first 48 bytes of its `-shm` every 2 s (`QUERY_POLL_MS`,
+  `crates/wakeshot-windows/src/watch/agents.rs`), which OpenCode's commits need, since they give no change notice.
+- **Copilot's folder, most of the rest, and not steady** (1,440 and about 890 per 10 minutes in two windows). Most
+  likely cause, from the code and a timing of the calls: at each 30 s safety tick `Agents::on_tick` drops the cached
+  answer for every lock file no process held (`slot.owners.retain(|_, held| !held.is_empty())`, "in case a notice of
+  its change was lost"), so Restart Manager is asked about each of them again. One such question took 14 to 22 ms of
+  CPU here (20 runs each, `rm-cost.ps1`), and this PC has two Copilot sessions whose process died
+  (`inuse.8588.hold`, `inuse.9260.hold`): about 0.8 s per 10 minutes. A question about a file that
+  `copilot-runtime.exe` holds took about 135 ms; those answers are kept until the lock file's listing changes, and how
+  often VS Code's runtime makes that happen (pre-warmed sessions come and go) was not measured. **Inferred, not
+  verified** by counting the tray's own calls.
+- Codex's share is small (the lock file left in `thread-writer-locks` is `.coordination.lock`, which the source does
+  not list) and inside the noise of these windows. File change notices are not the cause: a 60 s count in all four
+  agent homes saw none.
+- Tick-based CPU times move in steps of 15.625 ms, so short windows are rough.
+- **Also seen:** the installed tray's private memory rose from a median of 3.98 MB (00:07 to 00:17) to 7.69 MB (01:21
+  to 01:44, 60 samples at 7.69, max 7.79) while it held for the busy Claude Code session; its idle window in between
+  read 4.99 (max 7.29). Not investigated: a leak is **not verified**.

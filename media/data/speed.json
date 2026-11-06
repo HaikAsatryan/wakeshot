@@ -1,16 +1,17 @@
 {
-  "note": "Measured 2026-11-06 02:09 to 02:32 (UTC+4) on Haik's installed build 0.1.0 (a local x64 release), by media/scripts/measure-speed.ps1 under a wrapper that ran its modes unattended; method and every raw value in docs/research.md, 'Speed numbers'. The video shows idleRamMb (the tray's private memory, median of 60 samples in 10 idle minutes, rounded to 0.1 MB) and idleCpuMsPer10Min (its CPU time in the same 10 minutes, rounded to whole ms).",
+  "note": "Measured 2026-11-07 on Haik's installed final v1 build (ProductVersion 0.1.0, the x64 Setup of p4-cursor-off, 12,481,433 bytes), with Claude Code, Codex CLI, Copilot CLI and OpenCode all present on the PC. Method and every raw value in docs/research.md, 'Speed numbers, final v1 build (2026-11-07)'. The video shows idleRamMb (the installed tray's private memory, median of 59 samples 10 s apart in 10 minutes with nothing held, rounded to 0.1 MB) and idleCpuMsPer10Min (its CPU time in the same 10 minutes, rounded to whole ms). startDelayS is Codex CLI's (task_started to Holding starts, median of 5), not Claude Code's as on 2026-11-06.",
   "measured": true,
   "build": "0.1.0",
-  "date": "2026-11-06",
-  "idleRamMb": 4.3,
-  "idleCpuMsPer10Min": 109,
-  "startDelayS": 0.114,
+  "date": "2026-11-07",
+  "idleRamMb": 5.0,
+  "idleCpuMsPer10Min": 1016,
+  "startDelayS": 0.116,
   "raw": {
-    "idle": {"minutes": 10, "holds": 0, "trayPrivateMedianMb": 4.27, "trayPrivateMaxMb": 4.3, "trayWorkingSetMedianMb": 17.14, "trayWorkingSetMaxMb": 17.14, "trayCpuMs": 109.375, "trayCpuPercentOfOneCore": 0.0182},
-    "hold": {"minutes": 10, "load": "wakeshot run -- ping -n 600 127.0.0.1", "trayPrivateMedianMb": 4.24, "trayWorkingSetMedianMb": 17.15, "trayCpuMs": 109.375, "guardPrivateMedianMb": 1.67, "guardPrivateMaxMb": 1.76, "guardWorkingSetMedianMb": 11.66, "guardCpuMs": null},
-    "startDelayMs": {"runs": [298, 114, 155, 104, 108], "median": 114, "max": 298},
-    "endDelayMs": null,
-    "bytes": {"Setup.exe": 12310500, "wakeshot-tray.exe": 2907648, "wakeshot.exe": 700416, "installFolder": 14269755}
+    "idle": {"minutes": 10, "samples": 59, "holds": 0, "from": "2026-11-07T00:24:11+04:00", "trayPrivateMedianMb": 4.99, "trayPrivateMaxMb": 7.29, "trayWorkingSetMedianMb": 23.44, "trayWorkingSetMaxMb": 25.56, "trayCpuMs": 1015.625, "trayCpuPercentOfOneCore": 0.1693},
+    "hold": {"minutes": 10, "samples": 60, "load": "one working Claude Code session (the orchestrator's)", "trayPrivateMedianMb": 3.98, "trayPrivateMaxMb": 4.95, "trayWorkingSetMedianMb": 22.48, "trayCpuMs": 1140.625, "guardPrivateMedianMb": 1.8, "guardPrivateMaxMb": 1.8, "guardWorkingSetMedianMb": 12.61, "guardCpuMs": 0.0},
+    "dryRunIdle": {"minutes": 10, "samples": 60, "note": "the same exe as --dry-run, CLAUDE_CONFIG_DIR on an empty folder, the other agents' homes real", "trayPrivateMedianMb": 2.66, "trayWorkingSetMedianMb": 16.8, "trayCpuMs": 1140.625},
+    "startDelayMs": {"agent": "Codex CLI", "runs": [284, 116, 47, 10, 306], "median": 116, "max": 306},
+    "endDelayMs": {"agent": "Codex CLI", "runs": [9, 10, 11, 11, 12], "median": 11, "max": 12},
+    "bytes": {"Setup.exe": 12481433, "wakeshot-tray.exe": 3137536, "wakeshot.exe": 815616, "installFolder": 14785776}
   }
 }

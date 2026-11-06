@@ -1,6 +1,7 @@
 # Video and README for every AI agent, not Claude Code first
 
-Phase: 6. Status: Part E (Haik's notes on the Part D renders, 2026-11-06 23:02): done (steps 15 to 17; Haik picked
+Phase: 6. Status: Part B, last round (README, site, speed numbers, tooltip capture, final render): done
+(2026-11-07; "Part B, last round" in Result). Part E (Haik's notes on the Part D renders, 2026-11-06 23:02): done (steps 15 to 17; Haik picked
 the current track and likes the video, ~23:50; its final is in `media/out/`; "Part E" in Result). Part B's README
 paragraphs, speed numbers and tooltip capture still wait. Part D (Haik's notes on the Part C draft, 2026-11-06 20:45): done (steps 11 to 14); waits for Haik's
 music pick from four renders ("Part D" in Result). Part C (Haik's new video scenario, 2026-11-06 18:45): steps 7 to 10 done ("Part C, round 1" and
@@ -201,7 +202,15 @@ He has not picked a track yet.
     README and site lists name all 5. Five tiles: delete the two `chip` fields in `agents.ts` (the tile layout takes 5
     as 3 and 2; "Copilot in VS Code" steps down to 40 px). Not changed.
 11. Part E: `agent-lists --check` (in `npm run check`) now names three missing README paragraphs: **Copilot CLI.**,
-    **Copilot in VS Code.**, **OpenCode.** (Part B step 5; README text is not owned this round).
+    **Copilot in VS Code.**, **OpenCode.** (Part B step 5; README text is not owned this round). Part B last round:
+    written; the check passes.
+12. Part B last round: idle CPU rose from 109 to 1,016 ms in 10 minutes. Causes and the two places in
+    `crates/wakeshot-windows/src/watch/agents.rs` in Result ("What costs the CPU at rest"). Not changed (no Rust here).
+13. Part B last round: the installed tray's private memory rose from 3.98 to 7.69 MB while it held for a busy Claude
+    Code session (about 1.5 hours). Not investigated.
+14. `docs/product.md` line "A 30 second promo video" (Distribution): the video is 38 s now. Not this card's line.
+15. Tooling: Remotion's bundled `ffmpeg.exe` has no `framemd5`, `md5` or `rawvideo` muxer and no `select` filter; frame
+    hashes go through `image2pipe` with the `rawvideo` codec (`compare-final.mjs` in the build folder).
 
 ## Log
 
@@ -388,8 +397,201 @@ He has not picked a track yet.
   draft built again with track 0 (`check-video --draft` ok, 9.10 MB); `check-video` on the final ok. `check.mjs`,
   `check-pace`, typecheck ok; `agent-lists --check` fails only on the three README paragraphs (Part B). Backups
   deleted. `promo-video.md`: the pick, options 1 to 3 "offered, not picked", the Part E size and loudness.
+- 2026-11-06: Part B last round started (worker): items 4 to 6 and "Part B: what waits", on the final v1 list
+  (Claude Code, Codex CLI, Copilot CLI, Copilot in VS Code, OpenCode 2.x; Cursor, Antigravity and VS Code Local chats
+  out; no hook folders in v1). Order: README and site, speed numbers on the installed final build (p4-cursor-off),
+  the two-agent tooltip capture (stop for Haik), then the final render and every check. Owned: `README.md`, `site/`,
+  `media/`, `docs/research/promo-video.md`, the README entry and the "other apps" line of `docs/product.md`, this
+  card, `docs/research.md` (additions). No git, no Rust.
+- 2026-11-07: README: "Each one was tested live." in the agents row; a line under the table (only agents whose end is
+  seen exactly; Cursor, Antigravity and VS Code Local chats not yet, link to Limits); the **Copilot CLI.**,
+  **Copilot in VS Code.** and **OpenCode.** paragraphs (from the live cards and research sections; anchors checked);
+  Limits: Copilot waits, OpenCode approval waits, the four folder variables, "Not supported, and why" (the
+  `agent-hooks.md` lines plus VS Code Local chats from `p4-vscode-local-off`), WSL for all agents, OpenCode 1.x, the
+  parts not tested live; Privacy: the OpenCode read only line; the video comment no longer says 30 seconds. No hook
+  lines (v1 adds none). Site: "each one tested live", a "Not supported yet" line, the privacy line. `product.md`:
+  the README entry and the "other apps" line. `agent-lists --check` ok (5 of 5). GitHub render (`gh api markdown`):
+  5 tables, 9 folds, no comment text; every in-repo link and anchor resolves (slugs made from the source, since the
+  API drops ids); external links all 200.
+- 2026-11-07 ~00:05 (orchestrator): Haik: "video approved" (the Part E render, 38 s). The final render changes
+  nothing but the end card's speed numbers, and only if the new measurement differs; same numbers: the approved MP4
+  stays, no re-render.
+- 2026-11-07 00:06 to 00:21, speed numbers on the installed final build (0.1.0 of `p4-cursor-off`, Setup
+  12,481,433 bytes). Installed tray 56164 held for the orchestrator's working Claude Code session the whole time
+  (`Claude Code (1 session)` in all 60 reads of `state.json`), with guard 41988. So, beside it, the same installed
+  exe as `--dry-run` at Medium (pid 9144, through `explorer.exe`) with `CLAUDE_CONFIG_DIR` on an empty scratch
+  folder, the other agents' homes real: its log has no hold in the 10 minutes. Sampled together, 60 samples 10 s
+  apart, 00:07:42 to 00:17:44: installed tray private median 3.98 MB (max 4.95), working set 22.48, CPU 1,140.625 ms
+  (0.19% of one core); guard private 1.80 MB, working set 12.61, CPU 0 ms; dry-run tray private median 2.66 MB (max
+  2.71), working set 16.80, CPU 1,140.625 ms. Then 5 `codex exec` one-word test turns at Medium: start delay (the
+  rollout's `task_started` to "Holding starts: Codex") 284, 116, 47, 10, 306 ms in the dry-run tray, the installed
+  tray's "Hold starts: Codex" within 32 ms of the same; end delay 9 to 12 ms (one 52). Dry-run tray quit by WM_CLOSE
+  to its `Wakeshot.Loop.DryRun` window, code 0; Haik's tray untouched. Power settings read before (the tray's hold
+  values; nothing written by me). The installed tray idle is still to be measured: a detached watcher (pid 31796,
+  `speed\idle-watch.ps1`, reads only, up to 4 h) samples it 10 minutes once it holds nothing for 60 s.
+- 2026-11-07 00:22: tooltip capture scripts ready (`tip\session.ps1`, `lib.ps1`, `backdrop.ps1`, from
+  `p6-media-captures`' method). The Wakeshot icon is in the `^` overflow since the reinstall, and a registry write of
+  `IsPromoted` is not picked up live (tested, put back), so Haik drags it to the taskbar. Stopping for Haik's steps.
+- 2026-11-07 00:24 to 00:34 (the watcher, while the orchestrator's session was idle): the installed tray idle, 59
+  samples, no hold line in its log: private median 4.99 MB (max 7.29), working set 23.44 MB, CPU 1,015.625 ms
+  (0.17% of one core). Watcher exited by itself.
+- 2026-11-07 ~01:14 (orchestrator): Haik did the steps (unlocked, icon on the taskbar, hands off 6 minutes).
+- 2026-11-07 01:15 to 01:19, the capture (`tip\session.ps1`). Run 1: one `codex exec` test turn at Medium
+  (`Start-Sleep -Seconds 240`, answered "0", exit 0 at 01:19:19); the tray held "Claude Code (1 session); Codex (1
+  session)" 2 s later; the DELL to 200%; the dark grab was right, then the script stopped: its tooltip variable
+  `$tip` is the same name as the folder variable `$TIP` (PowerShell names ignore case), so the log path broke. Its
+  `finally` still put the theme and scale back (checked: 0/0, 150%; no backdrop left). Runs 2 and 3 got no tooltip:
+  a cursor jump leaves the taskbar's hover on the icon (the base grab shows the icon highlighted), so a new hover is
+  no new entry. Fixed with small injected moves after each jump. Run 4: light ok at 01:17:55. Haik then said he had
+  moved the mouse (Telegram in the tray): run 1's dark grab still has Telegram's icon, the light one not, so dark
+  again, run 5: ok at 01:18:39. Each kept grab passed the pointer check (the cursor within 2 px of where the script
+  put it) and shows "Holding awake: Claude Code (1 session), Codex (1 session)". After every run: theme 0/0 and DELL
+  150% read back (the laptop screen stayed 125%); no backdrop process left; no headless Claude Code started (the
+  orchestrator's session held). The Wakeshot icon stays on the taskbar where Haik put it.
+- 2026-11-07 01:20: cut (`tip\cut.ps1`): 636 x 274 from screen 2932,1886, the same rect for both; TrafficMonitor and
+  the battery button's edge covered with plain taskbar. Looked at both. Copied over
+  `media/public/shots/readme-holding-tooltip-{dark,light}.png`; `data/shots.json`, `CREDITS.md` and the README's
+  alt text and size (318 x 137) follow.
+- 2026-11-07 01:21: A/B for the idle CPU: a dry-run tray again (pid 42964), now also `XDG_DATA_HOME` on the empty
+  folder, so it has no OpenCode database to poll; 10 minutes.
+- 2026-11-07 01:21 to 01:44, what costs the CPU at rest (dry-run trays at Medium, each quit by WM_CLOSE, code 0):
+  Codex and Copilot real 890.625 ms in 10 min; all four folders empty 15.625 ms in 5 min; Copilot alone 718.75 ms in
+  5 min. A 60 s count of change notices in the four agent homes: none. One Restart Manager question (`rm-cost.ps1`,
+  20 each): 14 to 22 ms CPU for a lock file nobody holds, about 135 ms for one `copilot-runtime.exe` holds. Code:
+  `Agents::on_tick` drops the cached answer of every unheld lock file at each 30 s tick, and this PC has two dead
+  Copilot sessions' `inuse.<pid>.hold`. Written up in `docs/research.md`, "Speed numbers, final v1 build
+  (2026-11-07)", with the installed tray's memory rising to 7.69 MB while holding (not investigated).
+- 2026-11-07 01:45: `data/speed.json` (5.0 MB, 1016 ms, 0.116 s, every raw value), `media/README.md` speed row, the
+  README Privacy line and the site hero (5 MB, 1 s in 10 minutes, link to the new section). `npm run check` ok.
+  README render and links again: 0 bad links (the new anchor too); `site/check_page.py`: 0 errors, 7 waits.
+- 2026-11-07 01:47: approved MP4 and poster backed up (`approved\`, sha256 123d674c... and b6f7302b...); typecheck,
+  `check-art` and `npm run video` started.
+- 2026-11-07 01:50: typecheck ok, `check-art` ok (9,458,740 pixels), `npm run video` ok. `check-video` ok. New
+  final 8,497,375 bytes, 38.016 s; loudness -15.32 LUFS, -1.47 dBTP, LRA 16.2 LU. Against the approved file, every
+  frame decoded and hashed: frames 0 to 1019 the same bytes, 1020 to 1139 (the end card) differ; the decoded sound the
+  same bytes. Frame 1030 differs by at most 3 (encoder), frame 1100 only in the speed and measured lines (looked
+  at). The poster is the same bytes as before (b6f7302b...). `npm run draft`, `check-video --draft` and
+  `check-rebuild --final` started (the draft also shows the speed line, so it must be rebuilt for the rebuild check).
+- 2026-11-07: `promo-video.md` Formats: Haik's approval and the new final's numbers.
+- 2026-11-07 01:58: `npm run draft` ok (9.10 MB), `check-video --draft` ok, `check-rebuild --final` ok (every output the
+  same bytes). Read again at 02:00: theme 0/0 (dark); the session is locked now and only the laptop screen is active, so
+  the DELL is not listed; its stored scale is `PerMonitorSettings` `DpiValue` 0, the recommended step, which read as
+  150% after every run (Windows writes that key at a scale change, as `p6-media-captures` saw; whether it existed
+  before this run was not checked). Result written.
 
 ## Result
+
+### Part B, last round (2026-11-07): README, site, speed numbers, tooltip capture, final render
+
+Status: done (check-rebuild: see Checks). The v1 list is final: Claude Code, Codex CLI, Copilot CLI, Copilot in VS
+Code (Copilot harness chats), OpenCode 2.x, each tested live; no hook lines (v1 adds none).
+
+#### README sections changed
+
+- **What keeps your PC awake**: "Each one was tested live." in the agents row; a new line under the table: Wakeshot
+  supports an agent only where it sees exactly when the work ends, so Cursor, Antigravity and VS Code's own Local
+  chats are not on the list yet, with a link to Limits.
+- **What you see**: the holding tooltip picture is new, two agents at once ("Holding awake: Claude Code (1 session),
+  Codex (1 session)"), light and dark, 318 x 137; alt text says two agents.
+- **When each hold counts**: new **Copilot CLI.**, **Copilot in VS Code.** and **OpenCode.** paragraphs (what is read,
+  what holds, what does not, tested versions, links to the live results). A to Z, so Claude Code's paragraph stays
+  first only by the alphabet.
+- **Updates and privacy**: the OpenCode read-only line; the speed line now 5 MB and 1 s of CPU in 10 minutes, v1
+  build, 2026-11-07, linked to the new research section.
+- **Limits**: "Copilot waits do not hold", "OpenCode approval waits hold with no limit", the four folder variables
+  (plus Copilot's `--config-dir`, `OPENCODE_DB` and channel databases), a new "Not supported, and why" list (Cursor
+  and Antigravity in `docs/agent-hooks.md`'s words, VS Code Local chats in `p4-vscode-local-off`'s), "Not in v1"
+  with agents inside WSL and OpenCode 1.x, and "Not tested live yet" per agent.
+- The video comment no longer says 30 seconds. "Why I built it" unchanged (Haik's words).
+
+`site/index.html`: "each one tested live", a "Not supported yet" line with a link to Limits, the OpenCode privacy line,
+the hero's speed line (5 MB, 1 s in 10 idle minutes, v1 build, 2026-11-07), the video comment's length. The line "never
+touches other apps" stays: true again with no hooks. `docs/product.md`: the README entry (left-out agents named in
+Limits with their reason; no hook lines in v1) and "nothing that touches other apps" (the hooks rule is the one allowed
+exception and v1 uses it for no agent).
+
+#### Speed numbers (installed final build, x64; method and every raw value in `docs/research.md`, "Speed numbers, final v1 build (2026-11-07)")
+
+| Number | 2026-11-06 (first 0.1.0, Claude Code only) | 2026-11-07 (final v1 build) |
+|---|---|---|
+| Idle private memory, median | 4.27 MB | 4.99 MB (end card: 5 MB) |
+| Idle CPU in 10 minutes | 109 ms (0.018% of one core) | 1,016 ms (0.17% of one core) |
+| During a hold | 4.24 MB, 109 ms (`wakeshot run -- ping`) | 3.98 MB, 1,141 ms (one working Claude Code session) |
+| Start delay | Claude Code, median 114 ms | Codex CLI, median 116 ms (max 306) |
+| `Setup.exe` | 12,310,500 bytes | 12,481,433 bytes |
+
+What differs from the old method, plainly: the orchestrator's Claude Code session worked most of the time, so the
+installed tray held for it; its idle numbers came from a detached watcher that waited for a quiet stretch (00:24 to
+00:34, the session idle, no hold line). Delays are Codex CLI's, since a new Claude Code session joins a hold already on.
+
+**What costs the CPU at rest** (both numbers: 109 ms on 2026-11-06, 1,016 ms now; dry-run copies of the same exe, each
+watching only some real agent folders): no agent folder 31 ms per 10 minutes; Codex and Copilot 891 ms; plus OpenCode
+1,141 ms; Copilot alone about 1,440 ms (5 minutes, doubled). So:
+
+1. **Copilot's folder, most of it, and not steady.** Most likely cause (code plus a timing of the calls, not verified
+   by counting the tray's own calls): `crates/wakeshot-windows/src/watch/agents.rs`, `Agents::on_tick`, drops the
+   cached answer for every lock file no process held (`slot.owners.retain(|_, held| !held.is_empty())`) at each 30 s
+   safety tick, so Restart Manager is asked about each again; one such question costs 14 to 22 ms of CPU here, and
+   this PC has two dead Copilot sessions' `inuse.<pid>.hold` files (a crash leaves them until the next Copilot start).
+   A question about a file `copilot-runtime.exe` holds costs about 135 ms; how often those are asked again was not
+   measured.
+2. **OpenCode's database check**, about 250 ms per 10 minutes: while `opencode.db` exists, its queries read 48 bytes
+   of the `-shm` every 2 s (`QUERY_POLL_MS`, same file), needed because a commit gives no change notice.
+3. Not the cause: file change notices (none in 60 s in the four agent homes), Codex (its leftover
+   `.coordination.lock` is not listed).
+
+Regression? Not a bug: both costs are by design and came with the new sources. It is a 9x rise in idle CPU that scales
+with leftover lock files, so it is worth a card for Haik: ask Restart Manager again about an unheld lock file only when
+its listing changed or a process of that image (or the pid in its name) started since the last ask; and poll the
+`-shm` only while an `opencode.exe` runs. A fix would lower the end card's CPU number, and the end card would be
+rendered again.
+
+#### Tooltip capture
+
+`media/public/shots/readme-holding-tooltip-dark.png` and `-light.png`, 636 x 274 (200% on the DELL), the installed
+final tray holding for the orchestrator's Claude Code session and one `codex exec` test turn: "Holding awake: Claude
+Code (1 session), Codex (1 session)". TrafficMonitor and the battery button's edge covered with plain taskbar. Haik's
+mouse move: the first dark grab still showed Telegram's icon (he then moved it out of the tray), so dark was taken
+again; each kept grab passed the pointer check. Afterwards the DELL is back at 150% and dark (read back after every
+run); the laptop screen stayed at 125%. The Wakeshot icon stays on the taskbar where Haik put it.
+
+#### The video
+
+`C:\Users\haika\code\wakeshot\media\out\wakeshot-promo.mp4`: 38.02 s (38.016), 8,497,375 bytes (8.50 MB), -15.32 LUFS,
+-1.47 dBTP, LRA 16.2 LU. Only the end card changed: "Idle: 5 MB of memory, 1016 ms of CPU in 10 minutes." and
+"Measured on Wakeshot 0.1.0, 2026-11-07, x64." Frames 0 to 1019 and the whole sound decode to the same bytes as the
+approved file; the poster is the same bytes. The approved file: the build folder's `approved\wakeshot-promo.mp4`.
+
+#### Checks
+
+| Check | Outcome |
+|---|---|
+| `npm run check` (dashes, emoji, credits, colours; pace; `agent-lists --check`) | ok: 108 files, 49 assets credited, 18 colour pairs; 47 starts on the beat; 5 of 5 agents, README and site lists agree |
+| `npm run typecheck`, `check-art.mjs` | ok, ok (9,458,740 pixels) |
+| `npm run video`, `check-video` | ok |
+| Loudness after AAC, at most -1 dBTP | ok: -1.47 dBTP, -15.32 LUFS |
+| Frames and sound against the approved final | only frames 1020 to 1139 differ; sound the same bytes |
+| `npm run draft`, `check-video --draft` | ok: 9.10 MB, loops and state icons |
+| `check-rebuild --final` | ok: a clean copy (`npm ci`, every build) gives every output the same bytes, the final, its poster, the draft and the soundtrack included |
+| GitHub render of `README.md` (`gh api markdown`) | 5 tables, 9 folds, no comment text; every in-repo link and anchor resolves; external links 200 |
+| `site/check_page.py site` | 0 errors, 7 spots wait (unchanged) |
+| No agent listed unless its live card passed; "not tested live" marked | ok (agents.ts: 5 passed; "Not tested live yet" per agent) |
+| ASCII, LF, no em dash | ok in every file edited |
+| Power settings | none written by this card; the tray's own hold values read before |
+
+#### Files changed
+
+`README.md`, `site/index.html`, `docs/product.md` (README entry, "other apps" line), `media/data/speed.json`,
+`media/data/shots.json`, `media/CREDITS.md`, `media/README.md`, `media/public/shots/readme-holding-tooltip-dark.png`
+and `-light.png`, `media/out/wakeshot-promo.mp4`, `docs/research/promo-video.md`, `docs/research.md` (new last
+section), this card. No Rust, no git.
+
+#### Open items
+
+1. The idle CPU card (above), Haik's call; a fix means one more end card render.
+2. The installed tray's private memory rose from 3.98 to 7.69 MB in about 1.5 hours while holding for a busy Claude
+   Code session. Not investigated; a leak is not verified.
+3. The video upload and the README's video URL stay Haik's (Phase 8).
 
 ### Part A: the plan (2026-11-06, for Haik's yes)
 

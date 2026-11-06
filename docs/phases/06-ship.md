@@ -697,3 +697,10 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   AI readers; treated as data, ignored, no file from it used.
 - 2026-11-07 00:05: Haik: "video approved" (the Part E render, 38 s). The final render may change only the end card's
   speed numbers, if the new measurement on the final install differs.
+- 2026-11-07 01:59: `p6-agents-video-readme` Part B done: README (agents row "tested live", the Copilot CLI, Copilot in VS
+  Code and OpenCode paragraphs, a two-agent tooltip picture in light and dark, "Not supported, and why" in Limits),
+  site and `docs/product.md` follow it; every p6-media check passes. End card now "Idle: 5 MB of memory, 1016 ms of CPU
+  in 10 minutes" (0.1.0: 109 ms): idle CPU is about 10 times 0.1.0's. Likely cause (inferred): the 30 s tick asks
+  Restart Manager again about dead Copilot lock files (14 to 22 ms each), plus OpenCode's 2 s check (about 250 ms);
+  both in `watch/agents.rs`. Memory while holding 4.0 to 7.7 MB, not looked into. Orchestrator decision, for Haik's
+  review: fix card `p4-idle-cpu` before the end card is final.

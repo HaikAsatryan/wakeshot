@@ -424,8 +424,11 @@ final, 7.37 MB (a check only; the round 6 final stays in `media/out/` until Haik
 with each of the four tracks: the same picture, AAC at 192 kbit/s. Over the 8 MB line above, under GitHub's 10 MB and
 `media/README.md` decision 9's 9 MB trigger. The Part E cut (2026-11-06, 38 s, the typing opening, the music from the
 light) with "Funky Disco Beats" is 8.50 MB (8,497,349 bytes), 38.02 s, -15.32 LUFS, -1.47 dBTP, LRA 16.2 LU (the quiet
-opening widens it; the music alone sits within 0.5 LU of its median), and is the final in `media/out/` since Haik's
-yes to it. Its draft, with the DRAFT mark, is 9.10 MB. Measure the true peak on
+opening widens it; the music alone sits within 0.5 LU of its median); Haik approved it 2026-11-07. The final in
+`media/out/` since 2026-11-07 is the same cut with the end card's speed numbers of the final v1 build (5 MB, 1016 ms,
+measured 2026-11-07): 8,497,375 bytes, 38.02 s, -15.32 LUFS, -1.47 dBTP; frames 0 to 1019 and the sound decode to
+the same bytes as the approved file, only the end card (1020 to 1139) differs. Its draft, with the DRAFT mark, is
+9.10 MB. Measure the true peak on
 the rendered MP4 (Remotion's ffmpeg, `loudnorm=print_format=json`, `input_tp`): the same WAV encoded by that ffmpeg
 directly (`-c:a aac -b:a 192k`) read -0.55 dBTP where Remotion's render of it read -1.01 (2026-11-06), so a quick
 encode is no stand-in for the render.
