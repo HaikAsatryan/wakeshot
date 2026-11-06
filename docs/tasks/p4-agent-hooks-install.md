@@ -68,11 +68,11 @@ plugin folder once, says so once, never fights the user, and the uninstall remov
 
 ## Found outside scope
 
-1. `crates/wakeshot-windows/src/app/tray_mode.rs` (not this card's): nothing calls `startup::add_agent_hooks` yet.
+1. Landed (`p4-antigravity-source`, `tray_mode::start_agent_hooks`). `crates/wakeshot-windows/src/app/tray_mode.rs` (not this card's): nothing calls `startup::add_agent_hooks` yet.
    One line in `serve`, after the window's `sink` exists, for example right after `Updater::start`:
    `let _agent_hooks = startup::add_agent_hooks(boot, Arc::clone(&sink), Arc::clone(log));` (it refuses a dry run by
    itself; the handle need not be joined). For `p4-live-cursor`, with the source's line.
-2. `crates/wakeshot-cli/src/hook.rs` (`p4-cursor-source`): `hook <agent> remove` must call
+2. Landed (`p4-cursor-source`; noted by `p4-live-cursor`, review m7). `crates/wakeshot-cli/src/hook.rs`: `hook <agent> remove` must call
    `wakeshot_windows::agent_hooks::remove_command(agent, log)` (it checks the token itself and ignores an agent it does
    not know), then print `{}` and exit 0 as every hook form does; the runtime transport check calls the same function.
    Until then an elevated uninstall's Medium copy (`wakeshot.exe hook cursor remove`) removes nothing; only a Medium
@@ -188,8 +188,9 @@ set (a recursive delete) failed the crafted-marker and rename tests. Both put ba
 `crates/wakeshot-windows/src/app/startup.rs`, `docs/architecture.md` (section 6, two rows), `docs/agent-hooks.md`
 ("Built" note), `docs/research.md` (new last section), this card. No contract, module list or `Cargo` change.
 
-**Open items:** Found outside scope 1 (the `tray_mode` call line) and 2 (the CLI's `remove` form); until both land, no
-installed tray adds hooks, and an elevated uninstall removes none. Live checks for `p4-live-cursor`: the installed tray
+**Open items:** none of Found outside scope 1 and 2 any more: the CLI's `remove` form landed with `p4-cursor-source`
+(`hook.rs`, `remove_command`), the `tray_mode` call with `p4-antigravity-source` (`start_agent_hooks` in `serve`), and
+item 3 changed there (an agent folder gone forgets the mark). Live checks for `p4-live-cursor`: the installed tray
 from `current` adds the folder and the notice shows; the editor skips the dot-named folders.
 
 **For Haik's review:** a Cursor uninstalled and installed again is taken as "the user removed the hooks" (Found outside

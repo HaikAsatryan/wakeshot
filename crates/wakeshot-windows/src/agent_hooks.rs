@@ -20,11 +20,13 @@ use std::iter;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use serde_json::Value;
-use windows::Win32::Foundation::ERROR_DIR_NOT_EMPTY;
+use windows::Win32::Foundation::{ERROR_ALREADY_EXISTS, ERROR_DIR_NOT_EMPTY, ERROR_FILE_EXISTS};
 use windows::Win32::Storage::FileSystem::{
-    FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_OPEN_REPARSE_POINT, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_OPEN_REPARSE_POINT, GetShortPathNameW,
+    MOVEFILE_WRITE_THROUGH, MoveFileExW,
 };
 use windows::Win32::System::Com::CoTaskMemFree;
 use windows::Win32::UI::Shell::{FOLDERID_Profile, KF_FLAG_DEFAULT, SHGetKnownFolderPath};
@@ -53,7 +55,7 @@ pub const HOOK_EXE: &str = "wakeshot.exe";
 /// Velopack's install folder under `%LocalAppData%`, and its folder whose path stays the same across updates.
 const INSTALL_DIR: &str = "HaikAsatryan.Wakeshot";
 const CURRENT_DIR: &str = "current";
-/// The uninstall waits this long for each agent's Medium copy.
+/// The uninstall waits this long for all agents' Medium copies together.
 pub const COPY_WAIT_MS: u32 = 5_000;
 /// A bigger fixed file is not Wakeshot's: what it writes is under 2 KB.
 const FILE_MAX: u64 = 64 * 1024;
@@ -232,7 +234,7 @@ const ANTIGRAVITY_EVENTS: [&str; 2] = ["PreInvocation", "Stop"];
 
 /// One named hook group, `wakeshot`, with one command per event: `agy` merges the groups of every plugin by event.
 fn antigravity_files(exe: &Path) -> Option<Vec<Vec<u8>>> {
-    let bare = cmd_bare(exe)?;
+    let bare = cmd_bare(exe, false).or_else(|| cmd_bare(&short_path(exe)?, true))?;
     let hooks: Vec<String> = ANTIGRAVITY_EVENTS
         .iter()
         .map(|event| {
@@ -255,15 +257,29 @@ fn antigravity_files(exe: &Path) -> Option<Vec<Vec<u8>>> {
 /// command in quotes and writes a quote in it as `\"`, which `cmd` does not read, and `cmd` gives `% ^ & ( ) ! @`
 /// their meaning (`research.md`, "Antigravity hook payload form"). So only a path that needs no quoting at all: each
 /// character one of `A-Z a-z 0-9 \ : . _ -` or a letter above ASCII. `None` for anything else (a space, a quote, `~`),
-/// or a path that is not Unicode.
-fn cmd_bare(exe: &Path) -> Option<String> {
+/// or a path that is not Unicode. `short`: an 8.3 form, whose `~` inside a name means nothing to `cmd` or `agy` (which
+/// expands only a leading `~/`).
+fn cmd_bare(exe: &Path, short: bool) -> Option<String> {
     let text = exe.to_str()?;
     let plain = |c: char| {
         c.is_ascii_alphanumeric()
             || matches!(c, '\\' | ':' | '.' | '_' | '-')
+            || (short && c == '~')
             || (!c.is_ascii() && c.is_alphabetic())
     };
-    (!text.is_empty() && text.chars().all(plain)).then(|| text.to_owned())
+    let shaped = !text.is_empty() && !text.starts_with('~');
+    (shaped && text.chars().all(plain)).then(|| text.to_owned())
+}
+
+/// The 8.3 form of `exe` (`GetShortPathNameW`), so a profile path with a space can still get Antigravity's hooks.
+/// Where a volume makes no short names, Windows gives the long form back, which [`cmd_bare`] then refuses again.
+fn short_path(exe: &Path) -> Option<PathBuf> {
+    let long = wide(exe);
+    let mut buffer = vec![0u16; 1024];
+    // SAFETY: `long` is NUL-terminated and lives for the call; the buffer's length goes with it.
+    let length = unsafe { GetShortPathNameW(PCWSTR(long.as_ptr()), Some(&mut buffer)) } as usize;
+    (length > 0 && length < buffer.len())
+        .then(|| PathBuf::from(OsString::from_wide(&buffer[..length])))
 }
 
 /// Where the agents' folders are: the real ones, or temp folders in tests.
@@ -410,7 +426,7 @@ fn start_one(
     };
     let local = parent_dir(folders, agent);
     if made == agent.parents.len() {
-        clean_staging(&local, agent, Some(&want), log)?;
+        clean_staging(&local, agent, Some(&want), log);
     }
     let dir = local.join(FOLDER);
     let shown_dir = shown_folder(agent);
@@ -552,14 +568,23 @@ fn rewrite(dir: &Path, agent: &Agent, want: &Wanted, look: &Look) -> Result<(), 
 
 /// Removes the staging folders a stop left in `local` (`.wakeshot-new-*`), each only when it holds nothing but fixed
 /// files that are Wakeshot's: what this version writes, the start of it (a stop during the write), or what the
-/// folder's own marker names. Anything else stays, one log line.
-fn clean_staging(
-    local: &Path,
-    agent: &Agent,
-    want: Option<&Wanted>,
-    log: &dyn Log,
-) -> Result<(), WinError> {
-    for name in list(local)? {
+/// folder's own marker names. Anything else stays, one log line. A leftover never blocks the main folder's work (review
+/// m3), so each problem here is a log line, never an error.
+fn clean_staging(local: &Path, agent: &Agent, want: Option<&Wanted>, log: &dyn Log) {
+    let names = match list(local) {
+        Ok(names) => names,
+        Err(e) => {
+            let text = format!(
+                "{}: {} does not list, so no staging folder is removed: {}",
+                agent.label,
+                shown(agent.parents),
+                failed(e)
+            );
+            line(log, Level::Warn, &text);
+            return;
+        }
+    };
+    for name in names {
         let staging = name.to_str().is_some_and(|n| {
             n.get(..STAGING_PREFIX.len())
                 .is_some_and(|start| start.eq_ignore_ascii_case(STAGING_PREFIX))
@@ -569,44 +594,53 @@ fn clean_staging(
         }
         let path = local.join(&name);
         let shown_staging = format!("{}\\{}", shown(agent.parents), name.to_string_lossy());
-        let ours = kind(&path)? == Kind::Folder && {
+        let ours = kind(&path).and_then(|kind| {
+            if kind != Kind::Folder {
+                return Ok(false);
+            }
             let look = look(&path, agent, want, true)?;
             let ours = !look.extra
                 && look.marker_seen != Seen::Other
                 && look.files.iter().all(|seen| *seen != Seen::Other);
-            ours && delete_ours(&path, agent, &look).gone
-        };
-        let (level, text) = if ours {
-            (
+            Ok(ours && delete_ours(&path, agent, &look).gone)
+        });
+        let (level, text) = match ours {
+            Ok(true) => (
                 Level::Info,
                 format!(
                     "{}: removed {shown_staging}, which a stop left",
                     agent.label
                 ),
-            )
-        } else {
-            (
+            ),
+            Ok(false) => (
                 Level::Warn,
                 format!(
                     "{}: {shown_staging} holds more than Wakeshot's own files, so Wakeshot leaves it",
                     agent.label
                 ),
-            )
+            ),
+            Err(e) => (
+                Level::Warn,
+                format!(
+                    "{}: {shown_staging} does not read, so Wakeshot leaves it: {}",
+                    agent.label,
+                    failed(e)
+                ),
+            ),
         };
         line(log, level, &text);
     }
-    Ok(())
 }
 
 /// The uninstall step (`hooks::on_uninstall`, right after the notice app id): at Medium in this process. Above
 /// Medium never in this process: for each agent whose folders are there, a copy of the hook command at Medium,
-/// `wakeshot.exe hook <agent> remove`, started under Explorer by `copy` ([`medium_copy`]). With the level unknown,
+/// `wakeshot.exe hook <agent> remove`, started under Explorer by `copy` ([`medium_copies`]). With the level unknown,
 /// nothing is removed. `hook_exe`: the `wakeshot.exe` the hook files name. Each outcome is a log line.
 pub fn on_uninstall(
     folders: &Folders,
     hook_exe: Option<&Path>,
     above_medium: Result<bool, WinError>,
-    copy: &mut dyn FnMut(&Path, &'static Agent) -> CopyRun,
+    copy: &mut dyn FnMut(&Path, &[&'static Agent]) -> Vec<CopyRun>,
     log: &dyn Log,
 ) {
     match above_medium {
@@ -616,20 +650,29 @@ pub fn on_uninstall(
             }
         }
         Ok(true) => {
-            for agent in AGENTS {
-                // A look at High, which writes nothing.
-                if matches!(kind(&parent_dir(folders, agent)), Ok(Kind::Missing)) {
-                    continue;
-                }
-                let Some(exe) = hook_exe else {
+            // A look at High, which writes nothing.
+            let present: Vec<&'static Agent> = AGENTS
+                .iter()
+                .filter(|agent| !matches!(kind(&parent_dir(folders, agent)), Ok(Kind::Missing)))
+                .collect();
+            let Some(exe) = hook_exe else {
+                for agent in present {
                     let text = format!(
                         "{}: hook folder not removed: the uninstall runs above Medium and has no {HOOK_EXE} to hand it to",
                         agent.label
                     );
                     line(log, Level::Warn, &text);
-                    continue;
-                };
-                let text = match copy(exe, agent) {
+                }
+                return;
+            };
+            if present.is_empty() {
+                return;
+            }
+            // One call for every agent, so all copies share one wait (review m1): the restore after this step counts
+            // its retries from the hook's start.
+            let runs = copy(exe, &present);
+            for (agent, run) in present.iter().zip(runs) {
+                let text = match run {
                     CopyRun::Ended { outside_tree: true } => format!(
                         "{}: hook folder removal handed to a Medium copy, which ended; its lines are in the cli log",
                         agent.label
@@ -681,21 +724,37 @@ pub enum CopyRun {
     Failed(WinError),
 }
 
-/// The real copy: `<exe> hook <agent> remove` through `process::spawn_outside_tree`, which gives an elevated caller a
-/// child with Explorer's Medium token, then a wait of at most [`COPY_WAIT_MS`].
-pub fn medium_copy(exe: &Path, agent: &'static Agent) -> CopyRun {
-    let args = ["hook", agent.key, "remove"].map(OsString::from);
-    match process::spawn_outside_tree(exe, &args) {
-        Ok(spawned) => {
-            let outside_tree = spawned.outside_tree;
-            match spawned.handle.wait(COPY_WAIT_MS) {
-                Ok(true) => CopyRun::Ended { outside_tree },
-                Ok(false) => CopyRun::StillRuns { outside_tree },
-                Err(e) => CopyRun::Failed(e),
+/// The real copies, one per agent in `agents`, in order: `<exe> hook <agent> remove` through
+/// `process::spawn_outside_tree`, which gives an elevated caller a child with Explorer's Medium token. All start before
+/// any wait, and the waits share [`COPY_WAIT_MS`].
+pub fn medium_copies(exe: &Path, agents: &[&'static Agent]) -> Vec<CopyRun> {
+    let started = Instant::now();
+    let spawned: Vec<_> = agents
+        .iter()
+        .map(|agent| {
+            let args = ["hook", agent.key, "remove"].map(OsString::from);
+            process::spawn_outside_tree(exe, &args)
+        })
+        .collect();
+    spawned
+        .into_iter()
+        .map(|spawned| match spawned {
+            Ok(spawned) => {
+                let outside_tree = spawned.outside_tree;
+                match spawned.handle.wait(wait_left(started.elapsed())) {
+                    Ok(true) => CopyRun::Ended { outside_tree },
+                    Ok(false) => CopyRun::StillRuns { outside_tree },
+                    Err(e) => CopyRun::Failed(e),
+                }
             }
-        }
-        Err(e) => CopyRun::Failed(e),
-    }
+            Err(e) => CopyRun::Failed(e),
+        })
+        .collect()
+}
+
+/// What is left of the copies' shared wait after `elapsed`. A wait of 0 still tells whether a copy ended.
+fn wait_left(elapsed: Duration) -> u32 {
+    COPY_WAIT_MS.saturating_sub(u32::try_from(elapsed.as_millis()).unwrap_or(u32::MAX))
 }
 
 /// `wakeshot hook <agent> remove` (`docs/agent-hooks.md`, "Removing"): the uninstall's Medium copy, and the hook's own
@@ -729,10 +788,10 @@ pub fn remove_command(agent: &str, log: &dyn Log) {
 }
 
 /// Removes `agent`'s plugin folder and its leftover staging folders by the fixed names, in this process: the caller
-/// checked the level. `hook_exe`: files this version would write for it count as Wakeshot's, also under an older
-/// marker. A folder that cannot be emptied (a file the user changed or added, a file held open) is renamed
-/// [`REMOVED`].
-pub fn remove(folders: &Folders, agent: &'static Agent, hook_exe: Option<&Path>, log: &dyn Log) {
+/// checked the level, so it stays private (review m6). `hook_exe`: files this version would write for it count as
+/// Wakeshot's, also under an older marker. A folder that cannot be emptied (a file the user changed or added, a file
+/// held open) is renamed to the first free name of [`removed_names`].
+fn remove(folders: &Folders, agent: &'static Agent, hook_exe: Option<&Path>, log: &dyn Log) {
     if let Err(e) = remove_one(folders, agent, hook_exe, log) {
         let text = format!("{}: hook folder not removed: {}", agent.label, failed(e));
         line(log, Level::Warn, &text);
@@ -755,7 +814,7 @@ fn remove_one(
     }
     let want = hook_exe.and_then(|exe| wanted(agent, exe));
     let local = parent_dir(folders, agent);
-    clean_staging(&local, agent, want.as_ref(), log)?;
+    clean_staging(&local, agent, want.as_ref(), log);
     let dir = local.join(FOLDER);
     let shown_dir = shown_folder(agent);
     match kind(&dir)? {
@@ -783,11 +842,11 @@ fn remove_one(
     let (level, text) = if emptied.gone {
         (Level::Info, format!("{}: {shown_dir} removed", agent.label))
     } else {
-        match move_folder(&dir, &local.join(REMOVED)) {
-            Ok(()) => (
+        match move_aside(&dir, &local) {
+            Ok(name) => (
                 Level::Info,
                 format!(
-                    "{}: {shown_dir} renamed {REMOVED}, so the agent stops loading it ({why})",
+                    "{}: {shown_dir} renamed {name}, so the agent stops loading it ({why})",
                     agent.label
                 ),
             ),
@@ -868,6 +927,30 @@ fn remove_file(path: &Path) -> Result<(), WinError> {
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
         other => other.map_err(|e| io_error("DeleteFileW", &e)),
     }
+}
+
+/// The names a folder the uninstall cannot empty is renamed to, in order: [`REMOVED`], then `-2` to `-9` after it, so
+/// a second uninstall never meets a name an earlier one took (review m4). All dot names, which the agent skips.
+fn removed_names() -> impl Iterator<Item = String> {
+    iter::once(REMOVED.to_owned()).chain((2..=9).map(|n| format!("{REMOVED}-{n}")))
+}
+
+/// Renames `dir` in `local` to the first free name of [`removed_names`], never over a folder that is there.
+fn move_aside(dir: &Path, local: &Path) -> Result<String, WinError> {
+    let mut taken = None;
+    for name in removed_names() {
+        match move_folder(dir, &local.join(&name)) {
+            Ok(()) => return Ok(name),
+            Err(e) if e.code == ERROR_ALREADY_EXISTS.0 || e.code == ERROR_FILE_EXISTS.0 => {
+                taken = Some(e);
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Err(taken.unwrap_or(WinError {
+        call: "MoveFileExW",
+        code: ERROR_ALREADY_EXISTS.0,
+    }))
 }
 
 /// A rename that fails when `to` exists: the folder the user may have left there is never replaced.
@@ -1411,7 +1494,8 @@ mod tests {
         }
 
         fn uninstall(&self) {
-            let mut copy = |_: &Path, _: &'static Agent| -> CopyRun { panic!("no copy at Medium") };
+            let mut copy =
+                |_: &Path, _: &[&'static Agent]| -> Vec<CopyRun> { panic!("no copy at Medium") };
             on_uninstall(
                 &self.folders,
                 Some(&self.exe),
@@ -1952,13 +2036,60 @@ mod tests {
         );
         assert!(w.has(r".cursor\plugins\local\wakeshot renamed .wakeshot-removed"));
 
-        // A later install adds a new folder; its uninstall cannot rename onto the first one, and says so.
+        // A later install adds a new folder; its uninstall takes the next free name, never the first one's (review m4),
+        // so the plugin stops loading again.
+        fs::remove_file(&w.record).unwrap();
+        assert_eq!(w.start(), ["Cursor"]);
+        fs::write(w.plugin().join("mcp.json"), b"{}").unwrap();
+        w.uninstall();
+        assert!(!w.plugin().exists());
+        assert_eq!(names(&w.local().join(".wakeshot-removed-2")), ["mcp.json"]);
+        assert_eq!(names(&removed), ["hooks", r"hooks\hooks.json", MARKER]);
+        assert!(w.has(r".cursor\plugins\local\wakeshot renamed .wakeshot-removed-2"));
+
+        // Every name taken: the folder stays, and the line says so.
+        for n in 3..=9 {
+            fs::create_dir(w.local().join(format!(".wakeshot-removed-{n}"))).unwrap();
+        }
         fs::remove_file(&w.record).unwrap();
         assert_eq!(w.start(), ["Cursor"]);
         fs::write(w.plugin().join("mcp.json"), b"{}").unwrap();
         w.uninstall();
         assert_eq!(names(&w.plugin()), ["mcp.json"]);
         assert!(w.has("or renamed (MoveFileExW failed with 183); delete it yourself"));
+    }
+
+    #[test]
+    fn the_copies_share_one_wait() {
+        assert_eq!(wait_left(Duration::ZERO), COPY_WAIT_MS);
+        assert_eq!(wait_left(Duration::from_millis(4_200)), 800);
+        assert_eq!(wait_left(Duration::from_secs(9)), 0);
+    }
+
+    #[test]
+    fn a_staging_folder_that_does_not_read_never_blocks_the_main_folder() {
+        let w = World::new("staging-unread");
+        assert_eq!(w.start(), ["Cursor"]);
+        let staging = w.local().join(".wakeshot-new-77");
+        fs::create_dir_all(staging.join("hooks")).unwrap();
+        let held = staging.join(r"hooks\hooks.json");
+        fs::write(&held, w.want().files[1].as_slice()).unwrap();
+        // Shares nothing, so the look's read fails (32).
+        let file = OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&held)
+            .unwrap();
+        w.uninstall();
+        assert!(!w.plugin().exists(), "the live plugin goes anyway");
+        assert!(
+            w.has(r".cursor\plugins\local\.wakeshot-new-77 does not read, so Wakeshot leaves it")
+        );
+        // The same at a start: the rewrite of the main folder is not skipped.
+        fs::remove_file(&w.record).unwrap();
+        assert_eq!(w.start(), ["Cursor"]);
+        drop(file);
+        assert!(staging.is_dir());
     }
 
     #[test]
@@ -2076,9 +2207,9 @@ mod tests {
             CopyRun::Failed(unknown),
         ];
         for answer in answers {
-            let mut copy = |exe: &Path, agent: &'static Agent| {
-                asked.push((exe.to_path_buf(), agent.key));
-                answer
+            let mut copy = |exe: &Path, agents: &[&'static Agent]| {
+                asked.extend(agents.iter().map(|agent| (exe.to_path_buf(), agent.key)));
+                vec![answer; agents.len()]
             };
             on_uninstall(&w.folders, Some(&w.exe), Ok(true), &mut copy, &w.log);
         }
@@ -2089,7 +2220,7 @@ mod tests {
         assert!(w.has("which did not end within 5 s"));
         assert!(w.has("the Medium copy did not run: OpenProcessToken failed with 5"));
 
-        let mut never = |_: &Path, _: &'static Agent| -> CopyRun { panic!("no copy") };
+        let mut never = |_: &Path, _: &[&'static Agent]| -> Vec<CopyRun> { panic!("no copy") };
         on_uninstall(&w.folders, Some(&w.exe), Err(unknown), &mut never, &w.log);
         assert_eq!(tree(&w.temp.0), before);
         // No agent folder: nothing to hand off.
@@ -2247,11 +2378,14 @@ mod tests {
         remove_command("zed", &log);
         assert!(log.lines.lock().unwrap().is_empty());
         let temp = Temp::new("missing-exe");
-        let run = medium_copy(&temp.0.join("wakeshot.exe"), &CURSOR);
-        assert!(
-            matches!(run, CopyRun::Failed(e) if e.call == "CreateProcessW"),
-            "{run:?}"
-        );
+        let runs = medium_copies(&temp.0.join("wakeshot.exe"), &[&CURSOR, &ANTIGRAVITY]);
+        assert_eq!(runs.len(), 2);
+        for run in runs {
+            assert!(
+                matches!(run, CopyRun::Failed(e) if e.call == "CreateProcessW"),
+                "{run:?}"
+            );
+        }
     }
 
     /// `path` by its long name, without the `\\?\` that `canonicalize` adds: a temp folder may come as a short name
@@ -2281,7 +2415,7 @@ mod tests {
                 .local_app_data
                 .join(r"HaikAsatryan.Wakeshot\current\wakeshot.exe");
             assert!(
-                cmd_bare(&exe).is_some(),
+                cmd_bare(&exe, false).is_some(),
                 "the test folder {} holds a character the Antigravity command refuses: set TEMP to a plain path",
                 exe.display()
             );
@@ -2425,9 +2559,10 @@ mod tests {
     #[test]
     fn a_path_cmd_would_split_gets_no_antigravity_hooks() {
         assert_eq!(
-            cmd_bare(Path::new(
-                r"C:\Users\Արթուր-Ёлка_2\AppData\Local\wakeshot.exe"
-            ))
+            cmd_bare(
+                Path::new(r"C:\Users\Արթուր-Ёлка_2\AppData\Local\wakeshot.exe"),
+                false
+            )
             .as_deref(),
             Some(r"C:\Users\Արթուր-Ёлка_2\AppData\Local\wakeshot.exe")
         );
@@ -2450,18 +2585,34 @@ mod tests {
             "C:\\Users\\a\tb\\wakeshot.exe",
             "",
         ] {
-            assert_eq!(cmd_bare(Path::new(bad)), None, "{bad:?}");
+            assert_eq!(cmd_bare(Path::new(bad), false), None, "{bad:?}");
             assert!(antigravity_files(Path::new(bad)).is_none(), "{bad:?}");
         }
 
-        // At a start: Antigravity gets nothing and one line says why; Cursor, whose command quotes, still gets its
-        // folder.
+        // An 8.3 form may hold `~` inside a name, never a space or a `~` at the start.
+        assert!(cmd_bare(Path::new(r"C:\Users\JOHNSM~1\wakeshot.exe"), true).is_some());
+        for bad in [r"~\wakeshot.exe", r"C:\Users\John Smith\wakeshot.exe"] {
+            assert_eq!(cmd_bare(Path::new(bad), true), None, "{bad:?}");
+        }
+
+        // At a start with a space in the exe's path: the 8.3 form where the volume makes short names, else nothing
+        // and one line says why. Cursor, whose command quotes, gets its folder either way.
         let w = World::gemini("agy-space");
         fs::create_dir_all(w.folders.profile.join(".cursor")).unwrap();
         let spaced = w.temp.0.join(r"my apps\wakeshot.exe");
         fs::create_dir_all(spaced.parent().unwrap()).unwrap();
         fs::write(&spaced, b"MZ").unwrap();
+        let short = short_path(&spaced).and_then(|short| cmd_bare(&short, true));
+        println!("the 8.3 form of the test exe: {short:?}");
         let added = at_start(&w.folders, &w.record, &spaced, Ok(false), &w.log);
+        if let Some(short) = short {
+            assert_eq!(added, ["Cursor", "Antigravity"]);
+            let hooks =
+                fs::read_to_string(w.gemini_plugins().join(r"wakeshot\hooks.json")).unwrap();
+            let command = json_string(&format!("{short} hook antigravity Stop"));
+            assert!(hooks.contains(&command), "{hooks}");
+            return;
+        }
         assert_eq!(added, ["Cursor"]);
         assert!(!w.gemini_plugins().exists());
         assert!(w.has(
@@ -2513,15 +2664,17 @@ mod tests {
         assert_eq!(w.start(), ["Cursor", "Antigravity"]);
         let before = tree(&w.temp.0);
         let mut asked = Vec::new();
-        let mut copy = |exe: &Path, agent: &'static Agent| {
-            asked.push((exe.to_path_buf(), agent.key));
-            CopyRun::Ended { outside_tree: true }
+        let mut copy = |exe: &Path, agents: &[&'static Agent]| {
+            asked.push((
+                exe.to_path_buf(),
+                agents.iter().map(|a| a.key).collect::<Vec<_>>(),
+            ));
+            vec![CopyRun::Ended { outside_tree: true }; agents.len()]
         };
         on_uninstall(&w.folders, Some(&w.exe), Ok(true), &mut copy, &w.log);
-        assert_eq!(
-            asked,
-            [(w.exe.clone(), "cursor"), (w.exe.clone(), "antigravity")]
-        );
+        // One call for both, so every copy starts before any wait and the waits share one budget (review m1).
+        assert_eq!(asked, [(w.exe.clone(), vec!["cursor", "antigravity"])]);
+        assert!(w.has("Antigravity: hook folder removal handed to a Medium copy, which ended"));
         assert_eq!(tree(&w.temp.0), before);
         assert_eq!(find("antigravity").map(|a| a.label), Some("Antigravity"));
     }

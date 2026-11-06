@@ -256,6 +256,11 @@ fn run(env: &dyn Env, agent: &str, event: &str, values: &[String], dll: Option<W
     // own agents, so the word goes to it as given.
     if event == REMOVE {
         env.remove_hooks(agent, log.sink());
+        // With the hooks gone no `stop` comes for a chat mid-turn (review m5). Also the elevated hook's own hand-off
+        // when it found its input on a command line but no agent process to name.
+        if medium && let Some(known) = AGENTS.iter().copied().find(|known| known.name == agent) {
+            end_chats(env, &log, &format!("{} {REMOVE}", known.name), known);
+        }
         return;
     }
     let Some(agent) = AGENTS.iter().copied().find(|known| known.name == agent) else {
@@ -295,10 +300,15 @@ fn hook(
     }
     let (list, me) = match (env.list(), env.me()) {
         (Ok(list), Ok(me)) => (list, me),
+        // Without the list the hook's parent has no name, so its command line cannot be read either: `process` has
+        // no call for this process's parent alone. Nothing is written, and the next hook run checks again.
         (Err(e), _) | (_, Err(e)) => {
             log.line(
                 Level::Warn,
-                &format!("{name}: cannot list processes: {}", error_text(e)),
+                &format!(
+                    "{name}: cannot list processes, so neither the agent nor the command line is checked: {}",
+                    error_text(e)
+                ),
             );
             return;
         }
@@ -313,18 +323,41 @@ fn hook(
         })
         .collect();
     let walk = hooked::walk(agent, &listed, me, &env.bases(), |p| env.image_path(p));
+    // Before the agent gate (review M1): an agent version that moves its input to a command line may also run its hooks
+    // from a process the walk does not know, and this check is the only backstop then.
+    let on_command_line = input_on_command_line(env, log, name, agent, walk.parent);
     let Some(found) = walk.agent else {
-        log.line(
-            Level::Info,
-            &format!(
-                "{name}: no {} process above the hook; nothing written",
-                agent.label
-            ),
-        );
+        if on_command_line {
+            log.line(Level::Warn, &format!(
+                    "{name}: {} put its input on a command line, where audit logs keep it; no {} process above the hook, so nothing kept or written, the hook folder removed",
+                    agent.label, agent.label
+                ),
+            );
+            if medium {
+                env.remove_hooks(agent.name, log.sink());
+                end_chats(env, log, name, agent);
+            } else {
+                env.hand_off(&remove_args(env.global(), agent));
+            }
+        } else {
+            log.line(
+                Level::Info,
+                &format!(
+                    "{name}: no {} process above the hook; nothing written",
+                    agent.label
+                ),
+            );
+        }
         return;
     };
     let input = parsed.input.as_ref();
-    let op = if input_on_command_line(env, log, name, agent, walk.parent) {
+    let op = if on_command_line {
+        log.line(Level::Warn, &format!(
+                "{name}: {} put its input on a command line, where audit logs keep it; nothing kept, {} written, the hook folder removed",
+                agent.label,
+                hooked::BLOCKED_FILE
+            ),
+        );
         Op::Problem(Problem::CommandLine)
     } else {
         match input
@@ -370,16 +403,7 @@ fn input_on_command_line(
         return false;
     };
     match env.command_line_has(parent, agent.payload_key) {
-        Ok(true) => {
-            log.line(Level::Warn, &format!(
-                    "{name}: {} put its input on a command line, where audit logs keep it; nothing kept, {} written, the hook folder removed",
-                    agent.label,
-                    hooked::BLOCKED_FILE
-                ),
-            );
-            true
-        }
-        Ok(false) => false,
+        Ok(found) => found,
         // The static check of each Cursor version stays the main gate.
         Err(e) => {
             log.line(
@@ -424,6 +448,16 @@ fn hand_off_args(
     }
     args.extend([HOOK, agent.name, rule.name, CHECKED].map(OsString::from));
     args.extend(checked.values().into_iter().map(OsString::from));
+    args
+}
+
+/// `hook <agent> remove` for the Medium copy: it needs no checked values, since it reads no input.
+fn remove_args(global: Global, agent: &Agent) -> Vec<OsString> {
+    let mut args = Vec::new();
+    if global.dry_run {
+        args.push(OsString::from(DRY_RUN));
+    }
+    args.extend([HOOK, agent.name, REMOVE].map(OsString::from));
     args
 }
 
@@ -514,9 +548,48 @@ fn apply(
     // So the leak ends with this one prompt: the tray then finds the folder gone and never adds it again ("Privacy").
     if checked.op == Op::Problem(Problem::CommandLine) {
         env.remove_hooks(agent.name, log.sink());
+        end_chats_in(log, name, &dir);
     }
     if rule.prune {
         prune(env, log, name, &dir);
+    }
+}
+
+/// The agent's hooks are gone, so no `stop` or session end comes for a chat of another tab that is mid-turn, and its
+/// file would hold while the process it names lives (review m5): each chat's file goes now, under the mutex.
+fn end_chats(env: &dyn Env, log: &Lines<'_>, name: &str, agent: &Agent) {
+    let Some(data) = env.data() else {
+        return;
+    };
+    let mutex = NamedMutex::open(MUTEX).ok();
+    let _held = mutex
+        .as_ref()
+        .and_then(|mutex| mutex.take(MUTEX_WAIT_MS).ok().flatten());
+    end_chats_in(log, name, &hooked::agent_folder(data.root(), agent));
+}
+
+/// By the id rule only: a plain file named `<chat id>.json`. `problem.json` and `blocked.json` stay for the notice.
+fn end_chats_in(log: &Lines<'_>, name: &str, dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut ended = 0;
+    for entry in entries.flatten() {
+        if !entry.file_type().is_ok_and(|kind| kind.is_file()) {
+            continue;
+        }
+        let file_name = entry.file_name();
+        let chat = file_name.to_str().and_then(|n| n.strip_suffix(".json"));
+        let is_chat = chat.is_some_and(|chat| hooked::chat_id(chat).as_deref() == Some(chat));
+        if is_chat && store::remove(&entry.path()).unwrap_or(false) {
+            ended += 1;
+        }
+    }
+    if ended > 0 {
+        log.line(
+            Level::Info,
+            &format!("{name}: removed {ended} files of chats the removed hooks would have ended"),
+        );
     }
 }
 
@@ -1144,6 +1217,88 @@ mod tests {
                 "cursor beforeSubmitPrompt: cannot read the parent's command line: NtQueryInformationProcess failed with 5"
             ]
         );
+    }
+
+    const OTHER_CHAT: &str = "11111111-2222-4333-8444-555555555555";
+
+    /// Another tab's chat, mid-turn, and a file of a name the id rule does not give.
+    fn other_files(fake: &Fake) {
+        fs::create_dir_all(fake.folder()).unwrap();
+        let text = hooked::state_text(EDITOR, TURN, "Cursor", State::Working);
+        fs::write(fake.folder().join(format!("{OTHER_CHAT}.json")), text).unwrap();
+        fs::write(fake.folder().join("notes.json"), "{}").unwrap();
+    }
+
+    #[test]
+    fn the_command_line_check_runs_without_an_agent_process_too() {
+        let mut fake = Fake::new("line-no-agent");
+        fake.list = vec![
+            entry(ME, SHELL.pid, "wakeshot.exe"),
+            entry(SHELL, 1, "powershell.exe"),
+        ];
+        fake.command_line = Ok(true);
+        other_files(&fake);
+        fake.run("beforeSubmitPrompt", &prompt());
+        assert_eq!(*fake.removed.borrow(), ["cursor"], "the plugin goes");
+        assert_eq!(
+            fake.files(),
+            BTreeSet::from([r"agents\cursor\notes.json".to_owned()]),
+            "no process to name, so no blocked.json; the other chat's file ends with the hooks"
+        );
+        assert_eq!(
+            fake.lines(),
+            [
+                "cursor beforeSubmitPrompt: Cursor put its input on a command line, where audit logs keep it; no Cursor process above the hook, so nothing kept or written, the hook folder removed",
+                "removed cursor",
+                "cursor beforeSubmitPrompt: removed 1 files of chats the removed hooks would have ended",
+            ]
+        );
+
+        // Elevated: nothing here, the removal goes to the Medium copy's `remove` form.
+        let mut fake = Fake::new("line-no-agent-high");
+        fake.list = vec![
+            entry(ME, SHELL.pid, "wakeshot.exe"),
+            entry(SHELL, 1, "powershell.exe"),
+        ];
+        fake.command_line = Ok(true);
+        fake.above = Ok(true);
+        other_files(&fake);
+        fake.run("stop", &fixture("editor-stop-completed.json"));
+        assert!(fake.removed.borrow().is_empty());
+        assert!(fake.lines().is_empty());
+        assert_eq!(fake.files().len(), 2, "nothing touched");
+        assert_eq!(*fake.handed.borrow(), [["hook", "cursor", "remove"]]);
+    }
+
+    #[test]
+    fn the_blocked_path_and_the_remove_form_end_every_chat_of_the_agent() {
+        let mut fake = Fake::new("blocked-ends");
+        other_files(&fake);
+        fake.command_line = Ok(true);
+        fake.run("beforeSubmitPrompt", &prompt());
+        assert_eq!(
+            fake.files(),
+            BTreeSet::from([
+                r"agents\cursor\blocked.json".to_owned(),
+                r"agents\cursor\notes.json".to_owned(),
+            ])
+        );
+
+        // The Medium copy of an elevated uninstall or hook: `hook cursor remove`.
+        let fake = Fake::new("remove-ends");
+        other_files(&fake);
+        fake.run_checked("remove", &[]);
+        assert_eq!(*fake.removed.borrow(), ["cursor"]);
+        assert_eq!(
+            fake.files(),
+            BTreeSet::from([r"agents\cursor\notes.json".to_owned()])
+        );
+        // Above Medium the form removes nothing itself and ends no chat.
+        let mut fake = Fake::new("remove-high");
+        fake.above = Ok(true);
+        other_files(&fake);
+        fake.run_checked("remove", &[]);
+        assert_eq!(fake.files().len(), 2);
     }
 
     #[test]

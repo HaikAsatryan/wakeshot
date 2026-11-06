@@ -594,11 +594,11 @@ pub struct RealHookEnv<P> {
     agents: Result<Folders, WinError>,
     /// `process::current_above_medium`; tests pick the level.
     above_medium: fn() -> Result<bool, WinError>,
-    /// `agent_hooks::medium_copy`; tests record the hand-off instead.
+    /// `agent_hooks::medium_copies`; tests record the hand-off instead.
     medium_copy: MediumCopy,
 }
 
-type MediumCopy = Box<dyn FnMut(&Path, &'static Agent) -> CopyRun>;
+type MediumCopy = Box<dyn FnMut(&Path, &[&'static Agent]) -> Vec<CopyRun>>;
 
 impl RealHookEnv<Win32Power> {
     /// The installed app's: `%LocalAppData%\Wakeshot`, the real Run, RunOnce and Path values, the real mutex names,
@@ -628,7 +628,7 @@ impl RealHookEnv<Win32Power> {
             epoch: Instant::now(),
             agents: Folders::real(),
             above_medium: process::current_above_medium,
-            medium_copy: Box::new(agent_hooks::medium_copy),
+            medium_copy: Box::new(agent_hooks::medium_copies),
         }
     }
 }
@@ -650,7 +650,7 @@ impl<P: PlanIo> RealHookEnv<P> {
             epoch: Instant::now(),
             agents: Ok(places.agents),
             above_medium: process::current_above_medium,
-            medium_copy: Box::new(agent_hooks::medium_copy),
+            medium_copy: Box::new(agent_hooks::medium_copies),
         }
     }
 
@@ -1941,9 +1941,10 @@ mod tests {
         let mut env = rig.env(applied(), Box::new(SystemLiveness));
         env.above_medium = || Ok(true);
         let seen = Rc::clone(&asked);
-        env.medium_copy = Box::new(move |exe, agent| {
-            seen.borrow_mut().push((exe.to_path_buf(), agent.key));
-            CopyRun::Ended { outside_tree: true }
+        env.medium_copy = Box::new(move |exe, agents| {
+            let keys = agents.iter().map(|agent| (exe.to_path_buf(), agent.key));
+            seen.borrow_mut().extend(keys);
+            vec![CopyRun::Ended { outside_tree: true }; agents.len()]
         });
         env.remove_agent_hooks();
         assert_eq!(*asked.borrow(), [(hook_exe.clone(), "cursor")]);

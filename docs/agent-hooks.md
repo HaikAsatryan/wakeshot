@@ -142,9 +142,9 @@ knows only a small table: the input field names, the events and the process imag
    `cursor-agent.exe` whose full image path lies under `%LocalAppData%\cursor-agent\` (CLI, label "Cursor CLI";
    install layout from `research/other-agent-signals.md`). The nearest is the process that ran the hook (an
    extension host, an agent daemon or the CLI), never a farther window or daemon above it. The path comes from
-   `process::image_path` (`QueryFullProcessImageNameW`, `PROCESS_QUERY_LIMITED_INFORMATION`). No match: write
-   nothing, one log line. Then the runtime transport check on the hook's parent (see "Privacy", "How the build
-   checks it").
+   `process::image_path` (`QueryFullProcessImageNameW`, `PROCESS_QUERY_LIMITED_INFORMATION`). Then, match or not, the
+   runtime transport check on the hook's parent (see "Privacy", "How the build checks it"). No match and nothing on
+   the command line: write nothing, one log line.
 4. File work runs only at Medium integrity or lower. The hook reads its own token's integrity level:
    - Medium or lower: it does step 5 itself.
    - Above Medium (an agent started from an admin terminal; every agent shell on the test laptop is High): it writes
@@ -152,7 +152,7 @@ knows only a small table: the input field names, the events and the process imag
      checked values as arguments: `hook <agent> <event> --checked <conversation> <generation> <pid> <procStart>
      <label> <state> <deadline>`, all from fixed character sets. `deadline` is the elevated hook's start plus 2 s, a
      FILETIME of the wall clock. It waits for that copy at most 2 s. The copy checks its own token again; if it is not
-     Medium (no Explorer, so `spawn_outside_tree` fell back to a normal child), it writes nothing, one log line. The
+     Medium (no Explorer, so `spawn_outside_tree` fell back to a normal child), it writes nothing and logs nothing. The
      copy runs the step 2 checks again on every value (UUID shape and lowercase, the generation's characters, digits
      for pid, start and deadline, the label and state from their fixed lists, the agent and event from the known
      table), since any process of the user can run it with any arguments; one failed check: nothing written, one log
@@ -231,7 +231,18 @@ hook payload form"). Where the build differs from the text above:
 - A newer `version` in a file is ignored with no log line: sources have no log (core). A bad file gets `RetryOnce`,
   then no session and no notice.
 - `hook <agent> remove` hands the agent word to `agent_hooks::remove_command` as given and reads no input.
-- For the tray (`p4-live-cursor`): `Box::new(sources::cursor::source(data.root()))`.
+- For the tray: `tray_mode::hooked_sources` (`p4-antigravity-source`).
+
+**Review fixes** (`p4-live-cursor`, `reviews/p4-hooks-code.md`):
+
+- The runtime check runs before the agent gate (M1). Found with no agent process above the hook: nothing written and
+  no `blocked.json` (no process to name), one log line, the plugin removed (above Medium: through the Medium copy's
+  `hook <agent> remove`). When the process list fails, the hook's parent has no name, so the check cannot run: one log
+  line, nothing written; the next hook run checks again (`process` has no call for one process's parent; change it
+  when one lands).
+- On the blocked path, and in every Medium `hook <agent> remove`, the agent's chat files (`<chat id>.json`, by the id
+  rule) are deleted under the mutex: with the hooks gone no `stop` would end them (m5). `problem.json` and
+  `blocked.json` stay.
 
 ### Cursor's `main.log`: dropped
 
@@ -297,15 +308,18 @@ The notice, once, when Wakeshot adds the folder (`Notice::HooksAdded { agent: "C
 - **Uninstall** (`hooks.rs`, `on_uninstall`): a new step `remove_agent_hooks` right after the notice app id, before
   the restore: the hook files name an exe the uninstall deletes, the same reason the Run value goes first.
   - At Medium it removes in-process. Above Medium (`winget uninstall` from an admin terminal: Velopack's hook keeps
-    that token, not tested) it starts `wakeshot.exe hook <agent> remove` at Medium through `spawn_outside_tree` and
-    waits at most 5 s per agent; if that copy is not Medium, nothing is removed, one log line.
+    that token, not tested) it starts `wakeshot.exe hook <agent> remove` at Medium through `spawn_outside_tree` for
+    every agent first, then waits at most 5 s for them all; if a copy is not Medium, nothing is removed, one log line.
   - For each agent folder that is ours, by the fixed names only: delete each fixed file whose hash still matches,
     then the marker, then `hooks\` and `.cursor-plugin\` if empty, then `wakeshot\` if empty. Never `local\` or
     `plugins\`, never a recursive delete, never through a link, never a path read from the marker.
   - If a fixed file cannot be deleted (changed by the user, or held open by Cursor), the folder is renamed to
-    `plugins\local\.wakeshot-removed` (a dot name, which the CLI skips; the editor and Antigravity: live test), so the
-    plugin stops loading and the user's edits stay on disk. If that rename fails too, one log line; the README's
-    uninstall line says which folder to delete.
+    `plugins\local\.wakeshot-removed`, or the first free one of `.wakeshot-removed-2` to `-9` (dot names, which the
+    CLI skips; the editor and Antigravity: live test), so the plugin stops loading and the user's edits stay on disk.
+    If that rename fails too, one log line; the README's uninstall line says which folder to delete. When the restore
+    then succeeds, the data folder step deletes that line with the logs, so the README is the only pointer (review m2,
+    accepted: keeping the logs needs a change of the `HookEnv` contract for a case that needs a changed or held file
+    and a failed rename; change it when a user reports hooks left after an uninstall).
   - The `.wakeshot-new-*` staging rule above runs here too. The record goes with the data folder step.
 - **Updated hook**: nothing. The command path does not change, and the next tray start rewrites older content.
 - **Source turned off** (a later version that drops the Cursor source, or a switch if Haik wants one): the tray runs
@@ -319,7 +333,7 @@ The notice, once, when Wakeshot adds the folder (`Notice::HooksAdded { agent: "C
 `crates/wakeshot-windows/src/agent_hooks.rs`, with these choices where the text above leaves room:
 
 - Entry points: `at_start` (the tray, through `app::startup::add_agent_hooks`, on a thread of its own, which posts
-  `Event::HooksAdded` per folder added; its call in `tray_mode::serve` comes with `p4-live-cursor`), `on_uninstall`
+  `Event::HooksAdded` per folder added; called by `tray_mode::start_agent_hooks` in `serve`), `on_uninstall`
   (from `RealHookEnv::remove_agent_hooks`), `remove_command` (for the CLI's `hook <agent> remove`, in `hook.rs`).
   Antigravity adds one entry to `AGENTS`: its folders, fixed files, a `present` check (`agy.exe`) and a `contents`
   function that refuses a path outside its allow list.
@@ -333,8 +347,10 @@ The notice, once, when Wakeshot adds the folder (`Notice::HooksAdded { agent: "C
 - The reparse check reads each part with `symlink_metadata` and refuses any reparse point (junctions, links, cloud
   files); files are opened with `FILE_FLAG_OPEN_REPARSE_POINT` and refused if they turn out to be one.
 - Uninstall: the marker stays while a fixed file stays; empty fixed subfolders go anyway. The rename to
-  `.wakeshot-removed` never replaces a folder of that name. A file held open without delete sharing fails the delete
-  (32), and the folder's rename then fails too (5): one log line says to delete it by hand (tested).
+  `.wakeshot-removed` (or `-2` to `-9`) never replaces a folder of that name. A file held open without delete sharing
+  fails the delete (32), and the folder's rename then fails too (5): one log line says to delete it by hand (tested).
+- A staging folder that does not list or read is one log line and stays; the main folder's work goes on (review m3).
+  `remove` is private: only `on_uninstall` and `remove_command`, which check the level, call it (m6).
 - An elevated uninstall starts a copy only for an agent whose `local` folder exists, and logs each copy's outcome; the
   copy's own lines go to the `cli` log.
 - A record that does not read as version 1 (another version, a value but `added` or `removed`, not JSON) adds nothing
@@ -433,6 +449,9 @@ form"). Where the build differs from or settles the table above:
 - Shell and command: settled by code, not by a live check. Go wraps the command in quotes for `cmd`, which strips them
   again; a quote inside would become `\"`, which `cmd` does not read (checked with this PC's `cmd`). So the allow list
   stays as designed, and `~` stays out too (`agy` expands only a leading `~/`, but no known folder holds a `~`).
+  Added by `p4-live-cursor`: a path the list refuses (a space in the profile path) uses its 8.3 form
+  (`GetShortPathNameW`) when that passes the list with `~` allowed inside a name; a volume that makes no short names
+  gives the long form back, so no hooks then, as before (tested on this PC's `C:`).
 - Input: `fullyIdle` is always in a `Stop` input (protojson `EmitUnpopulated`, a plain bool), so a `Stop` without a
   plain `true` or `false` there is unreadable input: `problem.json`, the "update Wakeshot" notice, the chat's file
   left as it was. The input has no event name, turn id or version field, so none is checked or logged.
@@ -471,7 +490,8 @@ For `p4-readme-agents`:
   it to a temp file or a command line first. Wakeshot's hook keeps none of it, and Wakeshot adds no hook to an agent
   that puts prompts on a command line."
 - Uninstall: "Uninstall also removes the hooks Wakeshot added to your agents (Cursor, Antigravity). If you changed
-  one, it is renamed to `.wakeshot-removed` in the same folder; delete that folder if you do not need it."
+  one, it is renamed to `.wakeshot-removed` (or `.wakeshot-removed-2` and so on) in the same folder; delete that
+  folder if you do not need it."
 - The notice gets no link: a notice click can only open the log or the taskbar settings (`NoticeClick`), and a
   link would be one more contract change for little gain; the README is where users look.
 
