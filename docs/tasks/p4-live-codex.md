@@ -1,7 +1,8 @@
 # Live test: Codex CLI (with Haik)
 
-Phase: 4. Status: waits for Haik's Codex access (back in v1, Haik 2026-11-06; see "Round 2" at the end). Needs Haik: yes, about 20 minutes at the laptop: install or sign in to Codex with his own
-account, then type the numbered steps the worker gives. Agent: `wakeshot-worker`. Size: about 100K tokens.
+Phase: 4. Status: ready once `p4-live-harness` Part B is done (back in v1, Haik 2026-11-06; see "Round 2" and "Round
+3" at the end; Round 3 wins where they differ). Needs Haik: no (Round 3: agents run every step). Agent:
+`wakeshot-worker`. Size: about 130K tokens.
 Runs after: `p4-live-claude` (the harness). Parallel with: code cards of any track that own none of the files below.
 Never at the same time as another live card or any card that needs Haik's hands or the screen.
 Build folder: `CARGO_TARGET_DIR=<scratchpad>\p4-live-codex\target`.
@@ -88,3 +89,30 @@ Written by the orchestrator. Haik, 2026-11-06: Codex CLI and Copilot CLI ship in
   `crates/wakeshot-windows/src/app/tray_mode.rs`, so the installed app holds for it, and test that through the app.
 - Haik's answers to sign-off items 1 and 2 (`docs/phases/02-06-signoff.md`) apply.
 - Access: Haik is not sure he can use Codex. OpenAI's pricing page (read 2026-11-06) lists the CLI for Plus, Pro, Business, Enterprise and Edu, and for an API key at API rates; Free and Go are not clear. Starts when Haik says he has access.
+
+## Round 3: agents run it, no Haik (2026-11-06)
+
+Written by the orchestrator. This replaces "Needs Haik", deliverable 1's "Set Status blocked and stop" and every
+"Haik types" step. Status: ready once `p4-live-harness` Part B is done.
+
+- Haik, about 15:30: Codex is installed and logged in. `p4-live-harness` installed Codex CLI 0.167.0 for his user
+  (npm); it uses the desktop app's login (`codex exec` answered). Read its Result: the runbook, the driver
+  `spikes/agent-drive/` (ConPTY, step files, started at Medium through `explorer.exe`), and `agent-watch.rs
+  --source codex`.
+- You run every session step yourself with the driver, at Medium: a working turn (a command that runs about 60 s),
+  an approval wait left 1 minute then approved, Esc during a turn, a TUI backtrack (Esc Esc, edit the earlier
+  prompt) so Codex writes a reverted thread file (`..._<rollout id>.jsonl`; `WantedFile::FindNewest` from
+  `p4-contracts-r2` must follow it), a clean exit, and a crash: kill by PID a `codex.exe` that you started. `codex
+  exec` for the cheap checks, the TUI where a step needs it.
+- Minimum tokens (Haik): each prompt says it is an app test and asks for one word or `0`, no reasoning; use the
+  lowest reasoning setting and the smallest model the login allows. Count the prompts in the Log.
+- The desktop app shares `~/.codex` (config and login) and turns on its MCP servers (`node_repl.exe` may show in the
+  CLI's tree). Never open `auth.json` or `.sandbox-secrets`. Whether the desktop app's own threads write the same
+  lock and rollout files: check only if the app can be started and driven from the command line; else mark it "not
+  tested live".
+- Time it: a folder listing showed a stale size and time for a file another process held open (`p4-live-harness`,
+  Found outside scope). Record how long a rollout write takes to reach a post, with the file open.
+- Wire the source into `crates/wakeshot-windows/src/app/tray_mode.rs` (Round 2), and test it through the app with
+  `--dry-run` (never beside another dry-run card; never quit Haik's installed tray).
+- Owns this round: `tray_mode.rs` (the Codex line), `examples/agent-watch.rs` (the Codex line, if Part B left one to
+  add), and the files in Deliverables 3 and 4. Rules as above: never run git, kill only your own PIDs.

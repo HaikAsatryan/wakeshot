@@ -1,8 +1,9 @@
 //! A live harness for the watch thread (card `p4-live-claude`): the real `WatchThread` with the real agent sources,
 //! `SystemLiveness` and the PC's zone, printing each event it posts as one redacted line, so a live test can compare
-//! what the thread posts with what an agent session does. A later source is one more entry in `sources`.
+//! what the thread posts with what an agent session does. `--source` picks the agents; a later source is one more
+//! row in `SOURCES`.
 //!
-//! Owner: `p4-live-claude`.
+//! Owner: `p4-live-harness` (made by `p4-live-claude`); each later live card adds its source's row to `SOURCES`.
 //!
 //! Build: `cargo build --locked -p wakeshot-windows --example agent-watch`. Then `agent-watch --help`. Ctrl+C or
 //! Ctrl+Break stops it.
@@ -27,6 +28,8 @@ use wakeshot_core::files::Config;
 use wakeshot_core::holds::HoldFacts;
 use wakeshot_core::process::Alive;
 use wakeshot_core::sources::claude::{ClaudeSource, claude_folder};
+use wakeshot_core::sources::codex::{CodexSource, codex_home};
+use wakeshot_core::sources::copilot::CopilotSource;
 use wakeshot_core::sources::cron::LocalOffset;
 use wakeshot_core::sources::{
     Activity, AgentSource, Fed, Feed, FileId, FormatHealth, Liveness as Seen, SessionFacts,
@@ -46,14 +49,43 @@ use windows::core::BOOL;
 const HELP: &str = "\
 agent-watch: runs the real watch thread and prints what it posts.
 
-  agent-watch [--data <folder>] [--raw <file>]
+  agent-watch [--source <names>] [--data <folder>] [--raw <file>]
 
+  --source <names> the agents to watch, comma separated or the flag again: claude, codex, copilot;
+                   default: claude
   --data <folder>  the data folder to watch (holds, config); default: the dry-run folder
                    (%LocalAppData%\\Wakeshot\\dry-run). The real data folder is refused.
   --raw <file>     also write, per fed file, the kinds of the lines it fed (never their text)
 
-Claude Code is read where it writes: %CLAUDE_CONFIG_DIR% when set, else %USERPROFILE%\\.claude.
-Ctrl+C stops it.";
+Each agent is read where it writes: Claude Code in %CLAUDE_CONFIG_DIR% when set, else %USERPROFILE%\\.claude;
+Codex in %CODEX_HOME% when set, else %USERPROFILE%\\.codex; Copilot CLI in %COPILOT_HOME% when set, else
+%USERPROFILE%\\.copilot. Ctrl+C stops it.";
+
+/// How a source is built from the user's profile folder: the source, and the folder it reads for the start line.
+type Build = fn(&Path) -> (Box<dyn AgentSource + Send>, PathBuf);
+
+/// The names `--source` takes. A new source is one more row.
+const SOURCES: &[(&str, Build)] = &[
+    ("claude", |home| {
+        // The folder Claude Code itself uses, so a `CLAUDE_CONFIG_DIR` session is seen too.
+        let folder = claude_folder(home, std::env::var_os("CLAUDE_CONFIG_DIR").as_deref());
+        let source = ClaudeSource::in_folder(folder.clone(), Box::new(SystemZone::current()));
+        (Box::new(source), folder)
+    }),
+    ("codex", |home| {
+        let folder = codex_home(home, std::env::var_os("CODEX_HOME").as_deref());
+        (Box::new(CodexSource::new(folder.clone())), folder)
+    }),
+    ("copilot", |home| {
+        // An empty value counts as unset, as Codex treats its own; what Copilot does with one is not verified.
+        let folder = match std::env::var_os("COPILOT_HOME") {
+            Some(dir) if !dir.is_empty() => PathBuf::from(dir),
+            _ => home.join(".copilot"),
+        };
+        let source = CopilotSource::new(folder.clone(), Box::new(SystemZone::current()));
+        (Box::new(source), folder)
+    }),
+];
 
 /// The tray's safety tick (architecture section 4); the thread has no timer of its own.
 const TICK: Duration = Duration::from_secs(30);
@@ -74,12 +106,14 @@ fn main() -> ExitCode {
 }
 
 struct Args {
+    sources: Vec<&'static str>,
     data: Option<PathBuf>,
     raw: Option<PathBuf>,
 }
 
 fn parse_args() -> Result<Option<Args>, String> {
     let mut args = Args {
+        sources: Vec::new(),
         data: None,
         raw: None,
     };
@@ -87,10 +121,25 @@ fn parse_args() -> Result<Option<Args>, String> {
     while let Some(arg) = it.next() {
         match arg.to_str() {
             Some("--help" | "-h") => return Ok(None),
+            Some("--source") => {
+                let names = it.next().ok_or("--source needs a name")?;
+                for name in names.to_string_lossy().split(',').map(str::trim) {
+                    let (known, _) = SOURCES
+                        .iter()
+                        .find(|(known, _)| known.eq_ignore_ascii_case(name))
+                        .ok_or_else(|| format!("unknown source {name:?}; see --help"))?;
+                    if !args.sources.contains(known) {
+                        args.sources.push(known);
+                    }
+                }
+            }
             Some("--data") => args.data = Some(it.next().ok_or("--data needs a folder")?.into()),
             Some("--raw") => args.raw = Some(it.next().ok_or("--raw needs a file")?.into()),
             _ => return Err(format!("unknown argument {arg:?}; see --help")),
         }
+    }
+    if args.sources.is_empty() {
+        args.sources.push("claude");
     }
     Ok(Some(args))
 }
@@ -112,8 +161,6 @@ fn run() -> Result<(), String> {
     let home = std::env::var_os("USERPROFILE")
         .map(PathBuf::from)
         .ok_or("USERPROFILE is not set")?;
-    // The folder Claude Code itself uses, so a `CLAUDE_CONFIG_DIR` session is seen too.
-    let claude = claude_folder(&home, std::env::var_os("CLAUDE_CONFIG_DIR").as_deref());
 
     let out = Arc::new(Out::new());
     let raw = match &args.raw {
@@ -123,22 +170,25 @@ fn run() -> Result<(), String> {
         })),
         None => None,
     };
-    let sources: Vec<Box<dyn AgentSource + Send>> = vec![tap(
-        Box::new(ClaudeSource::in_folder(
-            claude.clone(),
-            Box::new(SystemZone::current()),
-        )),
-        raw.as_ref(),
-    )];
+    let mut sources: Vec<Box<dyn AgentSource + Send>> = Vec::new();
+    let mut folders = Vec::new();
+    for (name, build) in SOURCES
+        .iter()
+        .filter(|(name, _)| args.sources.contains(name))
+    {
+        let (source, folder) = build(&home);
+        sources.push(tap(source, raw.as_ref()));
+        folders.push(format!("{name}={}", folder.display()));
+    }
 
     // SAFETY: the handler is a plain function that lives as long as the process.
     unsafe { SetConsoleCtrlHandler(Some(on_console_event), true) }
         .map_err(|e| format!("SetConsoleCtrlHandler failed: {e}"))?;
 
     out.line(&format!(
-        "start data={} claude={} tick={}s",
+        "start data={} {} tick={}s",
         dir.root().display(),
-        claude.display(),
+        folders.join(" "),
         TICK.as_secs()
     ));
     let liveness: Arc<dyn Liveness> = Arc::new(SystemLiveness);
@@ -447,16 +497,27 @@ impl RawTap {
     }
 }
 
-/// A status file by its name (the pid); a transcript by the first 8 characters of its session id, since its folder
-/// name is built from a path.
+/// A status or lock file by its name; a log by 8 characters of its session id, since folder names can hold a path.
+/// Claude's id is the file name, Codex's ends its rollout name, Copilot's names the folder of its `events.jsonl`.
 fn short_name(path: &Path) -> String {
     let name = path
         .file_name()
         .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-    match name.strip_suffix(".jsonl") {
-        Some(id) => format!("t:{}", id.chars().take(8).collect::<String>()),
-        None => name,
-    }
+    let Some(stem) = name.strip_suffix(".jsonl") else {
+        return name;
+    };
+    let id: String = if stem.starts_with("rollout-") {
+        let tail: Vec<char> = stem.chars().rev().take(8).collect();
+        tail.into_iter().rev().collect()
+    } else if stem == "events" {
+        let folder = path.parent().and_then(Path::file_name);
+        folder.map_or_else(String::new, |f| {
+            f.to_string_lossy().chars().take(8).collect()
+        })
+    } else {
+        stem.chars().take(8).collect()
+    };
+    format!("t:{id}")
 }
 
 /// The fields of a status file that the rules read, never its paths or names.
@@ -489,11 +550,12 @@ fn status_kind(bytes: &[u8]) -> String {
     )
 }
 
-/// A value Claude Code picks from a fixed set (a status, an entrypoint); anything longer may be text.
+/// A value an agent picks from a fixed set (a status, an entrypoint, a Copilot event type such as
+/// `assistant.turn_start`); anything longer may be text.
 fn short_word(s: &str) -> &str {
-    if s.len() <= 24
+    if s.len() <= 32
         && s.bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
     {
         s
     } else {
@@ -518,6 +580,14 @@ fn line_kind(line: &[u8]) -> String {
     let mut kind = ty.clone();
     if let Some(sub) = v.get("subtype").and_then(Value::as_str) {
         kind = format!("{kind}/{}", short_word(sub));
+    }
+    // A Codex rollout line keeps its kind one level down (`event_msg` > `task_started`).
+    if let Some(inner) = v
+        .get("payload")
+        .and_then(|p| p.get("type"))
+        .and_then(Value::as_str)
+    {
+        kind = format!("{kind}:{}", short_word(inner));
     }
     match ty.as_str() {
         "attachment" => {

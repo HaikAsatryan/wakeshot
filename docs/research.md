@@ -5349,8 +5349,10 @@ same day. Design: `agent-hooks.md`.
 - **Results merge per field; `continue` is false if any hook says false** (CLI `index.js`, the merge function), so a
   hook that prints `{}` changes nothing. **Verified** in code.
 - **The CLI hands the payload through a temp file** `%TEMP%\cursor-hooks-<random>\payload.json` read by PowerShell
-  with UTF-8 set; its other form puts the payload in the PowerShell command line (`619.index.js`,
-  `executeCommandScript`). **Verified** in code. The editor's form: not verified.
+  with UTF-8 set, written with `wx` and deleted after the run (`finally`; the deletion read by the security review,
+  `reviews/p4-hooks-design-security.md`); its other form puts the payload, prompt and `user_email` included, in the
+  PowerShell command line (`619.index.js`, `executeCommandScript`). **Verified** in code. The editor's form: not
+  verified; the Cursor build card reads it first, since a command line lands in process audit logs.
 - **Only a single-quoted command path works in both PowerShell forms** (`& <command>` and `$input | <command>`).
   Read in code; not run.
 
@@ -5378,3 +5380,53 @@ Card `p4-contracts-r2`, 2026-11-06. Run elevated (High), as every agent here.
   listing's times, so a stale time could delay a switch or a read until the folder entry updates; `Recent` also keeps a
   hash of the bytes, so a read that finds the same bytes feeds nothing. The live cards (`p4-live-codex`, the VS Code
   live card) see it with real writers.
+
+## Live harness: agents installed, logins, a pseudo console driver
+
+Card `p4-live-harness` Part A, 2026-11-06. Everything ran at Medium (a `.cmd` opened with `explorer.exe`; each log
+has `whoami /groups` "Medium Mandatory Level"). Installs and remove commands: the card's Result.
+
+- **Codex CLI reuses the desktop app's login.** `codex login status` (npm `@openai/codex` 0.167.0): "Logged in using
+  ChatGPT"; `codex exec` then answered. Both use `~/.codex`, which the app made; `auth.json` was never opened.
+  **Verified** (run).
+- **Copilot CLI uses `gh`'s login with no token passed.** GitHub docs list `gh auth token` as the last fallback after
+  `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN` and the keychain; a `copilot -p` run answered and its process
+  tree held `gh.exe`. `gh` is logged in as `HaikAsatryan` with a `gho_` token, a type the docs accept. **Verified**
+  (run, docs).
+- **VS Code's `copilot` on PATH is a launcher** (`copilot-shim\copilot.exe`, "vscode-copilot-launcher"): it runs a
+  `copilot` it finds on PATH, else offers to install the Copilot MSI. With the npm CLI installed, `copilot --version`
+  through it printed 1.0.106. **Verified** (strings, run).
+- **VS Code is signed in to Copilot Free**: its Copilot Chat log says "Logged in as HaikAsatryan" and "copilot token
+  sku: free_limited_copilot" (status lines only, found by a word search). **Verified** (log).
+- **`code chat "<prompt>"` starts an agent mode turn** from the command line: it asks for workspace trust, opens a new
+  chat with mode `agent` by default and calls `acceptInput` with the prompt (`chat.contribution.ts` lines 107-137,
+  `chatActions.ts` 383-398, tag 1.145.1). **Verified** in code; not run (it would use Haik's open VS Code window).
+- **One-shot modes write the same files as the TUI**: `codex exec` a `sessions\YYYY\MM\DD\rollout-*.jsonl`,
+  `copilot -p` a `session-state\<id>\events.jsonl`, `opencode run` rows in the same `opencode.db`. **Verified** by
+  file names and sizes after each run; contents not read.
+- **OpenCode 2.2.5 finds a local Ollama by itself** (`plugin/provider/ollama.ts`, polled every 30 s) and shows its
+  models with no login; a project `opencode.jsonc` with `"model"` and `"permissions"` (`action`, `resource`,
+  `effect`) picks the model and makes every tool ask. Its TUI interrupts a turn on two Esc presses about 0.3 s apart
+  (one did nothing); Esc twice at a permission prompt declines the call. `/exit` ends the TUI; its background service
+  stays until `opencode service stop`. **Verified** (run).
+- **Ollama 0.40.15 runs on the Radeon 890M** through ROCm (gfx1150) and sets a 32768 default context from 37.7 GiB of
+  shared memory; `qwen3.5:2b` thinks for minutes inside OpenCode (6000 hidden tokens, no tool call), so the harness
+  uses `qwen3:4b-instruct` (no thinking): an approval prompt 24 s after Enter, a full turn in 30 s. Ollama holds no
+  power request while idle (`powercfg /requests`). **Verified** (log, run).
+- **The Antigravity IDE 2.6.0 installer is per user**: Inno Setup 6.4, outer manifest `asInvoker`, setup header
+  "Antigravity IDE (User)" with `{userpf}\Antigravity IDE`, read as data with Python's `lzma`; its log said
+  "Administrative install mode: No". After a silent install it starts the IDE, which downloads `~\.gemini\bin\agy.exe`
+  and runs it as `--hub`. **Verified** (header, log, run).
+- **A folder listing showed a stale size for a file another process was appending to**: `Get-ChildItem` gave the
+  driver's open `log.txt` 0 bytes and its creation time, 6 s after the driver had written lines that a read then
+  returned. One sighting, not measured further. Bears on the "Not verified" listing time point of `p4-contracts-r2`
+  above.
+- **Pseudo console facts for drivers**: ConPTY asks its terminal for win32-input-mode (`CSI ?9001h`) and focus events
+  (`CSI ?1004h`) at start; a driver that ignores both gets plain VT keys through. TUIs probed the kitty keyboard
+  protocol (`CSI ?u`), XTVERSION, pixel sizes and OSC colors; with no kitty reply, OpenCode, Codex and Copilot still
+  took plain Enter (`\r`) and Esc (`\x1b`). **Verified** (driver logs).
+- **Copilot CLI's in-use lock is named after the inner `copilot.exe`**: a TUI started through VS Code's shim left
+  `session-state\<id>\inuse.14796.lock` after a crash, and 14796 was the inner `copilot.exe` (shim `copilot.exe` >
+  `cmd.exe` > `node.exe` > `copilot.exe`), not the shim. A crashed Codex TUI left `thread-writer-locks\<id>.lock`
+  with no rollout (no prompt was sent). `agent-watch --source copilot` and `--source codex` showed both as idle and
+  `Gone`. **Verified** (driver tree, file names, harness run).

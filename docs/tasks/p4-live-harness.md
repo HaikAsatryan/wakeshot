@@ -1,7 +1,7 @@
 # Live harness: agents run live tests without Haik
 
-Phase: 4. Status: blocked (Part A done 2026-11-06 14:13; waits for Haik's sign-in sitting, "Steps for Haik", and
-the orchestrator's go for Part B). Needs Haik: yes, once, after Part A: one short sign-in sitting with the
+Phase: 4. Status: done (Part A 14:13, Part B 14:21, 2026-11-06). Haik's sign-in sitting ("Steps for Haik") is still
+open for Cursor and Antigravity. Needs Haik: yes, once, after Part A: one short sign-in sitting with the
 exact steps this card writes (only for logins that cannot be reused).
 Agent: `wakeshot-worker`. Size: about 180K tokens (Part A about 140K, Part B about 40K).
 Runs after: `p4-live-claude` (done). Part B after `p4-contracts-r2` (the orchestrator says go).
@@ -255,11 +255,40 @@ Then tell the orchestrator "sign-in done" and which steps did not go as written.
 - 2026-11-06 14:12: `agent --help` (Cursor CLI: `login`, `status`, `-p`, `--model`, `--list-models`) and `agy --help`
   (`-p`, `--effort`, `--model`) at Medium; nothing left running. Deleted the IDE installer download (200 MB).
 - 2026-11-06 14:13: Part A done; Status blocked on the sign-in sitting and the go for Part B.
+- 2026-11-06 14:14: go for Part B from the orchestrator (`p4-contracts-r2` done; its `ImageSince` arm in the example
+  kept).
+- 2026-11-06 14:15 to 14:18: `agent-watch.rs`: `--source <names>` (comma list or repeated; `claude`, `codex`,
+  `copilot`; default `claude`, so `p4-live-claude`'s use is unchanged), a `SOURCES` table of name and builder (one
+  row per source), Codex home from `CODEX_HOME` via `codex_home`, Copilot home from `COPILOT_HOME` (empty counts as
+  unset; Copilot's own handling not verified) else `%USERPROFILE%\.copilot`; the start line names each folder.
+  `--raw`: Codex lines show `event_msg:<payload type>`, Copilot event types with dots are kept, short names are 8
+  characters of the session id for rollouts (its end) and `events.jsonl` (its folder). `rustfmt --edition 2024
+  --check` on the file: clean. `cargo clippy --locked -p wakeshot-windows --examples -- -D warnings` for x64 and
+  ARM64: clean. `cargo build --locked -p wakeshot-windows --examples` (x64): clean. No failure in another card's file.
+- 2026-11-06 14:19, runs at Medium through the driver, one scratch data folder each, Ctrl+C sent by the driver:
+  `--source claude` posted `ClaudeCode n=2` (live sessions, `pid` liveness), `--source codex` `Codex n=1` (thread
+  `01a1b053`, idle, `any codex.exe alive=Gone`: the lock my killed Codex TUI left at 14:07, with no rollout since no
+  prompt was sent), `--source copilot` `Copilot n=2` (both `alive=Gone`; raw: `inuse.9260.lock` from 11-03 and
+  `inuse.14796.lock`, where 14796 is the inner `copilot.exe` my driver killed, not the shim). Each printed `stopped
+  clean=true`, exit 0; `--source gemini` refused with exit 1. All pids gone. Build folder deleted.
 
 ## Result
 
-Part A done (2026-11-06 14:13). Waiting: Haik's sign-in sitting (above, about 10 minutes) for Cursor and
-Antigravity, and the orchestrator's go for Part B.
+Done: Part A 14:13, Part B 14:21 (2026-11-06). Still open for Haik: the sign-in sitting (above, about 10 minutes)
+for Cursor and Antigravity.
+
+### Part B: `agent-watch --source`
+
+`crates/wakeshot-windows/examples/agent-watch.rs` takes `--source claude,codex,copilot` (comma list or the flag
+again; default `claude`). A later live card adds its source as one row of `SOURCES` (name, builder that reads the
+agent's home from the user's environment). `--raw` now names Codex and Copilot logs by their session id and shows
+Codex's inner event type. Checks: `rustfmt --edition 2024 --check` on the file; `cargo clippy --locked -p
+wakeshot-windows --examples --target <x64 and ARM64> -- -D warnings`; `cargo build --locked -p wakeshot-windows
+--examples --target x86_64-pc-windows-msvc`: all clean. Runs at Medium on scratch data folders, one per source: each
+posted its sessions (Claude 2 live, Codex 1 stale lock `Gone`, Copilot 2 `Gone`) and stopped clean on Ctrl+C; a bad
+name is refused. Built copy: `<scratchpad>\p4-live-harness\bin\agent-watch.exe` (debug); the build folder is deleted.
+Seen for the live cards: Copilot's in-use lock is named after the inner `copilot.exe` pid (14796), not the VS Code
+shim's; a crashed Codex TUI leaves its thread lock, shown idle and `Gone`.
 
 ### Installed for Haik's user (no admin; each run at Medium, versions printed at Medium)
 
@@ -355,17 +384,17 @@ the driver's `done.json` lists every pid to check gone with `Get-Process -Id` af
   as a crash. All trees gone (checked by pid). Pass.
 - Sign-in list complete: every agent is "works now", "after steps N of the sitting" or "not possible for free".
 - Spike: `cargo fmt --check`, `cargo clippy --locked --all-targets --target x86_64-pc-windows-msvc -- -D warnings`,
-  `cargo test --locked` (11 tests): clean. Nothing built inside the workspace; no workspace file touched.
-- Part B: not started.
+  `cargo test --locked` (11 tests): clean. Nothing built inside the workspace in Part A; no workspace file touched.
+- Part B: the example builds and runs for each of the three sources on a scratch data folder (above).
 
 ### Files
 
 - New: `spikes/agent-drive/` (`Cargo.toml`, `Cargo.lock`, `src/main.rs`, `src/conpty.rs`, `src/script.rs`,
-  `src/term.rs`). Changed: this card, `docs/research.md` (new section "Live harness: agents installed, logins, a
-  pseudo console driver").
-- Scratchpad `p4-live-harness\`: `bin\agent-drive.exe`, `run\start-drive.ps1`, `run\start-medium.ps1` and the
-  scripts, `drive\*` logs, `logs\*`, `work\oc-drive` (the OpenCode test folder), `work\signin` (for the sitting),
-  `target\` (kept for Part B, deleted at its end).
+  `src/term.rs`). Changed: `crates/wakeshot-windows/examples/agent-watch.rs` (Part B), this card,
+  `docs/research.md` (new section "Live harness: agents installed, logins, a pseudo console driver").
+- Scratchpad `p4-live-harness\`: `bin\agent-drive.exe`, `bin\agent-watch.exe`, `run\start-drive.ps1`,
+  `run\start-medium.ps1` and the scripts, `drive\*` logs, `logs\*`, `work\oc-drive` (the OpenCode test folder),
+  `work\signin` (for the sitting), `work\watch-data-*`. The build folder `target\` is deleted.
 
 ### Left in Haik's agent homes (test data from today's installs)
 

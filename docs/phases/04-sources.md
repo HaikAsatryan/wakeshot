@@ -136,7 +136,7 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-contracts-r2` | no | the four 2026-11-06 source and research cards (done); runs alone among Rust cards | done (2026-11-06 ~16:20, 24f7405): `FindNewest` (Codex reverted threads) and `Recent` as new variants, `Query`, `ImageSince`; 1541 tests; whole-workspace checks green on x64 and ARM64; no Cargo change |
 | `p4-antigravity-research` | no | none | done (2026-11-06): CLI 1.5.2 (`agy.exe`) and IDE 2.6.0 both need hooks (a Wakeshot plugin folder under `~\.gemini\config\plugins\`); free test yes (Google's claim; Armenia listed); build in v1 (`research/antigravity-signals.md`) |
 | `p4-hooks-design` | no; a security review reads it before any build | `p4-cursor-gemini-research` | done (2026-11-06): `docs/agent-hooks.md`; one command `wakeshot.exe hook <agent> <event>` from a Wakeshot plugin folder per agent, state files read with `Folder` and `Process`; `main.log` dropped; security review running (`docs/reviews/p4-hooks-design-security.md`) |
-| `p4-live-harness` | yes: one short sign-in sitting after Part A | `p4-live-claude`; Part B after `p4-contracts-r2` | Part A running (2026-11-06 15:35) |
+| `p4-live-harness` | yes: one sign-in sitting (about 10 min, Cursor and Antigravity only; steps in the card) | `p4-live-claude`; Part B after `p4-contracts-r2` | Part A done (2026-11-06 ~17:05, bb53377): every agent installed at Medium, Codex, Copilot CLI and VS Code logins reused, OpenCode on Ollama; ConPTY driver `spikes/agent-drive/` works; Part B running |
 
 Bundles (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p4-cli-args` + `p4-cli-run`;
 `p4-cli-commands` + `p4-cli-restore`; `p4-watch-reads` + `p4-watch-data`. Codex and Copilot moved to after v1 (Haik,
@@ -349,3 +349,20 @@ limit; Copilot waiting does not hold. The cards build these.
   (a time cap on a hooked turn): orchestrator decision, no cap, by the product rule that every signal is checked
   against a fact, for Haik's review. Question 4 (if the Cursor editor puts prompts on the command line, does the
   editor hook ship; default no) goes to Haik only if `p4-cursor-source`'s first step finds that.
+- 2026-11-06 ~17:00: hooks security verify done (`docs/reviews/p4-hooks-design-security-verify.md`): majors 1 and 2
+  Fixed, major 3 Partly (the Cursor editor and CLI load one plugin folder); 3 new minors. The design worker applied
+  all four: if the Cursor editor can pass hook input on the command line, Wakeshot adds no Cursor plugin at all
+  (checked in the editor's code and at each hook run); the Medium copy re-checks its values; a 2 s deadline; random
+  temp names. Contract item 2 gains `command_line_contains`. Found outside scope by the design worker, for a later
+  fix card: an elevated `wakeshot run` and an elevated uninstall can still meet a junction in Wakeshot's own data
+  folder (existing code, not the hooks). `p4-contracts-r3` may start; it waits for the running Rust cards to drain.
+- 2026-11-06 ~17:05: `p4-live-harness` Part A done (bb53377). Installed for Haik's user at Medium, no admin, for his
+  review (remove commands in the card's Result): Copilot CLI 1.0.106, OpenCode 2.2.5, Codex CLI 0.167.0 (npm), Ollama
+  0.40.15 with `qwen3:4b-instruct` (adds `Startup\Ollama.lnk`), Cursor 3.27.12 and its CLI 2026.11.05, Antigravity
+  CLI 1.5.2 (puts `%LOCALAPPDATA%\agy\bin` first in the user PATH) and IDE 2.6.0. Logins reused, no token passed:
+  Codex CLI through the desktop app's login, Copilot CLI through `gh` on Copilot Free, VS Code Copilot signed in on
+  Free. Haik's sign-in sitting (about 10 min): Cursor and Antigravity only. Orchestrator decision: harness Part B now
+  (small, its own file), then `p4-live-codex` at once, ahead of `p4-contracts-r3`, since the live lane is the longest
+  chain; `p4-contracts-r3` runs at the next drain. For the live cards: a folder listing showed a stale size and time
+  for a file another process held open, so `FindNewest` and `Recent` may miss writes until a read or a close (time
+  it); the VS Code `copilot` shim stays as a parent, so one Copilot session has two `copilot.exe` images.
