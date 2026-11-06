@@ -121,11 +121,11 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-contracts-r3` | no | `p4-contracts-r2`, the hooks security review and its fixes; runs alone among Rust cards | done (2026-11-06 ~19:30, 98c8795): the six hooks contract items, the OpenCode `-shm` loop fix, Copilot, VS Code and OpenCode in the tray; 1622 tests; whole-workspace checks green on x64 and ARM64; one `windows` feature added (`Wdk_System_Threading`) |
 | `p4-cursor-source` | no: Cursor 3.27.12 passes hook input through a temp file on every plugin path, so the plugin ships | `p4-contracts-r3`, the hooks review verify | done (2026-11-06 ~20:50, f9a41e2): 21 + 8 core, 17 + 4 CLI tests; privacy and exit code rules broken on purpose and caught; `hook <agent> remove` wired |
 | `p4-agent-hooks-install` | no | `p4-contracts-r3`, the hooks review verify | done (2026-11-06 ~20:30, f46828f): 23 tests; link check and fixed file set broken on purpose and caught; the tray call and the CLI remove call not wired yet (to `p4-antigravity-source` and `p4-cursor-source`) |
-| `p4-antigravity-source` | only if its payload is on the command line | `p4-cursor-source`, `p4-agent-hooks-install` | running (2026-11-06 ~20:50), with the Cursor and Antigravity tray wiring |
+| `p4-antigravity-source` | only if its payload is on the command line | `p4-cursor-source`, `p4-agent-hooks-install` | done (2026-11-06 ~21:35, 5d19ee8): stdin payload, so the plugin ships; 13 + 9 + 8 tests; the tray starts Cursor and Antigravity and adds the plugin folders; item 7 done |
 | `p4-live-vscode` | no | `p4-vscode-source`, `p4-live-harness`; live cards in parallel since 18:50 | done, partly (2026-11-06 ~21:05, 857909e): 5 prompts; new chats go to the Copilot harness (the Copilot source holds them since 00e0120); Local chat files save on a 60 s beat (first save 44 s after a send, 34 s after an end), waiting posted 25 ms after the save; approve, stop and crash not tested (they need a click) |
 | `p4-live-opencode` | no | `p4-opencode-source`, the OpenCode review fixes; live cards in parallel since 18:50 | running (2026-11-06 ~20:30) |
-| `p4-live-cursor` | only if the payload check finds the command line | `p4-cursor-source`, `p4-agent-hooks-install`, the hooks code review fixes; live lane after `p4-live-opencode` | card written 2026-11-06 |
-| `p4-live-antigravity` | only if its payload is on the command line | `p4-antigravity-source`, `p4-live-cursor` | card written 2026-11-06 |
+| `p4-live-cursor` | no | `p4-antigravity-source`; fixes the hooks code review first | running (2026-11-06 ~21:35) |
+| `p4-live-antigravity` | no | `p4-antigravity-source`; beside `p4-live-cursor` | running (2026-11-06 ~21:35) |
 | `p4-core-linux-tests` | no | none | done (2026-11-06 ~20:10, 750b023): Codex and OpenCode tests join one level at a time; CI core step runs `--no-fail-fast`; three VS Code tests sent to `p4-live-vscode`; no Linux run here (rustup in WSL refused by the permission check; no C compiler there) |
 | `p4-live-uninstall` | no | every other card of the bigger v1 (only when the work is fully finalized) | later (Haik, 2026-11-06 ~21:20) |
 | `p4-cursor-gemini-research` | no | none | done 2026-11-06 (`research/cursor-gemini-signals.md`): Cursor big, Gemini CLI enterprise only since 2026-06-18; hooks question for Haik |
@@ -472,3 +472,10 @@ limit; Copilot waiting does not hold. The cards build these.
   later). Haik: once everything is tested and fully finalized, remove everything installed for this job (Cursor,
   Antigravity, Codex, Ollama, OpenCode and the rest); card `p4-live-uninstall`, last. Orchestrator reading, for his
   review: only what agents installed goes (the Codex CLI, not his Codex desktop app; VS Code and `gh` stay).
+- 2026-11-06 ~21:35: `p4-antigravity-source` done (5d19ee8): hook input on stdin (`cmd /c`), the chat id also in
+  `ANTIGRAVITY_CONVERSATION_ID`; the IDE's JS runs no hook; the Antigravity App 2.29.0 was not checked (not
+  installed). Worker calls for Haik's review: item 7 also forgets a `removed` mark; a reinstall between two tray
+  starts is missed; `plugin.json` is written last (agy does not skip dot-named folders); paths with a space get no
+  Antigravity hooks (`cmd`), sent to `p4-live-cursor` as an 8.3 short path fix. Started: `p4-live-cursor` (hooks code
+  review fixes first) and `p4-live-antigravity`, beside `p4-live-opencode` (the poll). Haik: the Codex desktop app goes
+  too at the final uninstall (`p4-live-uninstall`); `~\.codex` is listed for him, not deleted.
