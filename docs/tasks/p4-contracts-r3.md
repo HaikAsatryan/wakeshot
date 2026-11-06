@@ -39,6 +39,12 @@ first version; where it differs, the design wins:
 5. A stub `wakeshot-core/src/sources/hooked.rs` (`Owner: p4-cursor-source`); the `Owner:` line of
    `crates/wakeshot-windows/src/agent_hooks.rs` set to `p4-agent-hooks-install`.
 
+6. **OpenCode review major 1** (`docs/reviews/p4-opencode-db-read.md`; added by the orchestrator 2026-11-06 ~18:10,
+   since it is watch thread plumbing from `p4-contracts-r2` and no other card may edit `watch/*` now): a `Query` want
+   re-runs only on change notices for `<db>-wal` or `<db>`, never `-shm`, so a crash-left `-shm` cannot loop reads.
+   A test that fails before the fix (the reviewer's probe scripts are in
+   `<scratchpad>\p4-opencode-review\scripts\`, data only).
+
 Tests for each new piece that has behavior (the parse, the stub command's output and exit code, the parent field,
 the core's answer to `HooksAdded`). `docs/architecture.md`: lines in sections 6 and 12 for what you added (re-read
 right before each edit).

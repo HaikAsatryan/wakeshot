@@ -378,3 +378,10 @@ limit; Copilot waiting does not hold. The cards build these.
   have a new look (AI apps)"): `docs/tasks/p6-agents-video-readme.md` (Part A a plan with stills for his yes, Part B
   after the live tests). It also takes the Round 4 README and `site/` list, the `product.md` README entry and the
   hooks review minor 13. One question to Haik on what "new look (AI apps)" means.
+- 2026-11-06 ~18:10: OpenCode database read review done (`docs/reviews/p4-opencode-db-read.md`): 0 blockers, 1 major,
+  7 minors. M1: after OpenCode dies without closing the database, its `-wal` and `-shm` stay, and each Wakeshot read
+  rewrites `-shm`, whose change notice starts the next read: about three reads a second until OpenCode opens and
+  closes cleanly (the reviewer's probe confirmed it). The fix is watch plumbing (re-run only on `<db>-wal` or `<db>`
+  notices), so it goes to `p4-contracts-r3`, which runs alone; `p4-live-codex` may edit `watch/agents.rs` now. The
+  minors in the OpenCode card's own files go to its worker now (shim refuses deletes, table test gaps, no checkpoint
+  on close). The same reviewer checks the major after `p4-contracts-r3`.
