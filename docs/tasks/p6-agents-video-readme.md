@@ -85,6 +85,29 @@ well; his idea is the brief, not a script. This replaces the storyboard he appro
 10. Render a draft and run every `p6-media` check. The tooltip capture and the speed numbers still wait for the new
     install (Part B).
 
+## Part D: Haik's notes on the Part C draft (2026-11-06 20:45)
+
+Haik's words, as he wrote them:
+
+> First sleep scene is too short, it's ok if we pass 30 second threshold, just make it more professional, and at the
+> point of Tired Sleepy laptops we see behind it the regular frame. + music integration is little weird because it
+> kind of becomes more silent at some points. Also I like this sound and the type of this sound and want to see
+> alternative options as well (not older ones) that are around the same type and can have little bass as well. But
+> entertaining.
+
+11. The opening sleep scene longer and more polished: the agent at work long enough to read, then the laptop going to
+    sleep in a way that feels real (the screen dims, the work stops), then "Tired of sleepy laptops?". The video may
+    pass 30 s.
+12. At "Tired of sleepy laptops?", the frame behind the line: look at the render frame by frame. Haik sees the regular
+    frame behind the line, which reads as a glitch. Make the background behind the question clean and deliberate.
+13. The music level: no dips Haik can hear. The mix ducks the music under each chime (4 dB) and keeps it sparse in
+    the hook; even it out so the music feels continuous, and still keep the loudness checks.
+14. Music options: he likes "Funky Disco Beats" (Fupi, CC0) and its type. Find 3 new tracks of the same type (funky,
+    disco, upbeat, entertaining), with a bit more bass, none of the tracks offered in earlier rounds (`p6-media` Log).
+    Each one free for this use: CC0 or a license that allows a public repo and video uploads with no fee; write the
+    license and source of each in `docs/research/promo-video.md`. Render the new cut once per track (the current one
+    plus the 3 new), each with every check passing, so Haik picks in context.
+
 ## Acceptance checks
 
 - Every check of `p6-media` passes on the new render; the GitHub render of `README.md` checked; every link works.

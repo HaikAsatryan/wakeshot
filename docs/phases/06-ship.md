@@ -666,3 +666,7 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   at 19:25. `npm run check` fails only on the two README paragraphs for Copilot CLI and OpenCode (Part B step 5,
   done once the Cursor, VS Code Stop and Antigravity results are in, in one README pass). CI runs only `check-art`
   for media, so it stays green.
+- 2026-11-06 20:42: Haik's notes on the Part C draft (his words in `p6-agents-video-readme` "Part D"): a longer, more
+  polished opening sleep scene (past 30 s is fine), a clean frame behind "Tired of sleepy laptops?", no music dips,
+  and 3 new tracks of the same funky disco type with a bit more bass to pick from. Part D runs now: the new cut
+  rendered once per track, for his pick in context.
