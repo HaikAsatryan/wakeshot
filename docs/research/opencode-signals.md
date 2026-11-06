@@ -54,7 +54,9 @@ for `@opencode/cli` (orchestrator's numbers in the card; not verified by me). Th
   2.x `core/src/database/schema.gen.ts:16-51`). SQLite stores each table in its own b-tree pages and a query reads
   only the pages of the tables and indexes it touches (SQLite file format; not traced on these files), so a query on
   `session_v2`, `message` or `schedule` never loads those values into the reader's memory. The file as a whole does
-  hold tokens.
+  hold tokens. Except (review `docs/reviews/p4-opencode-db-read.md`, finding 7): after an OpenCode that died left its
+  `-wal` and `-shm`, each read rebuilds the WAL index from every frame of the `-wal`, token pages included, in
+  Wakeshot's memory; nothing of it is kept or logged.
 - **Process image.** Both npm packages' `postinstall.mjs` hard-link (or copy) the native `opencode.exe` from the
   platform package (`opencode-windows-x64`, `@opencode/cli-windows-x64`, and the ARM64 ones) to the package's
   `bin\opencode.exe`, which npm's shim runs. So no `node.exe` sits in between (verified: 1.x
@@ -212,7 +214,9 @@ Windows build turns out to lack the DLL or JSON: then `rusqlite` with `bundled`.
 
 - Read only when `<db>-wal` exists. OpenCode opens the database in WAL mode for the whole process life, and the last
   connection deletes the WAL, so a missing `-wal` means no OpenCode has the file open and nothing can run. This also
-  keeps Wakeshot from creating `-wal` and `-shm` in OpenCode's folder (probe above).
+  keeps Wakeshot from creating `-wal` and `-shm` in OpenCode's folder (probe above). The other way round does not
+  hold: an OpenCode that was killed or crashed leaves both files, so a `-wal` that exists does not mean OpenCode runs
+  (review finding 1; the watch thread's rule for it is `p4-contracts-r3`'s).
 - Open with `SQLITE_OPEN_READONLY` (plus `SQLITE_OPEN_NOMUTEX`, one thread), `busy_timeout` 100 ms, run the fixed
   queries, finalize every statement, close. Never keep the connection or a statement open between reads: an open
   read would hold back checkpoints, and a held connection would stop OpenCode's last close from deleting its WAL.
