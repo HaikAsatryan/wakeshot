@@ -695,3 +695,5 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   and loads, the laptop dims and sleeps, "Tired of sleepy laptops?" in near silence, the music from the light. Four
   agent tiles: the two Copilots share one tile (Part A's chip rule). A sound site's pages carried text addressed to
   AI readers; treated as data, ignored, no file from it used.
+- 2026-11-07 00:05: Haik: "video approved" (the Part E render, 38 s). The final render may change only the end card's
+  speed numbers, if the new measurement on the final install differs.
