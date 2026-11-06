@@ -310,6 +310,14 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   Antigravity sign-in), `p4-vscode-source`, `p4-opencode-source` Part B (2.x only) with its review (1 major, moved to
   `p4-contracts-r3`) and minor fixes, `p4-live-codex` (passed; Codex in the tray). Running: `p4-contracts-r3` (alone),
   `p6-agents-video-readme` Part A (Haik's request: video and README for every AI agent). Not pushed since 8c2637a.
-- Next (orchestrator): the order in the `04-sources.md` work log, 2026-11-06 ~18:50 line (live cards in parallel).
-  Then whole-workspace checks, push, a fresh install over Haik's, an end-to-end check per agent, the hooks install
-  review result, `p6-agents-video-readme` Part B; then ask Haik about the video, upload, Pages, Phase 7, Phase 8.
+- 2026-11-06 ~22:35 (session wakeshot-56, handing over to wakeshot-f5): built and committed since 18:55:
+  `p4-contracts-r3`, `p4-cursor-source`, `p4-agent-hooks-install`, `p4-antigravity-source`, `p4-core-linux-tests`
+  (CI `core-linux` had been red since fb0ebce), the hooks code review (0/1/7, passed) and the OpenCode review verify.
+  Live, run by agents: Codex CLI, Copilot CLI, OpenCode 2.x passed; Copilot in VS Code partly (new chats go to the
+  Copilot harness, held by the Copilot source; Local chat files save on a 60 s beat); Antigravity CLI passed. Waiting
+  on Haik: `p4-live-cursor` (his 5-minute steps) and the Antigravity IDE first-run pass. Each live test found real
+  bugs, now fixed. `p6-agents-video-readme` Part B first pass done. Pushed up to 98c8795 only; everything after waits
+  for the whole-workspace checks in `p6-agents-install-e2e`.
+- Next (orchestrator): `p6-agents-install-e2e` (runs alone; the Cursor editor turn waits for Haik), then
+  `p6-agents-video-readme` Part B last steps, push and CI, Haik's review of README and video, `p4-live-uninstall` last;
+  then ask Haik about the video upload, Pages, Phase 7, Phase 8.
