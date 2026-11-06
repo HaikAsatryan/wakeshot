@@ -96,8 +96,11 @@ function assertFinal() {
 }
 
 // CRF 18, as `promo-video.md` "Formats" says once a draft passes 8 MB at 16: the round 2 draft was 8.5 MB at 16. Not
-// 20: at 20 the app icon's plate broke into blocks while its light came on (Part A).
+// 20: at 20 the app icon's plate broke into blocks while its light came on (Part A). BT.709, converted and tagged: with
+// Remotion 4's default the file used the BT.601 matrix with no tags, and a player that takes untagged HD as BT.709
+// shows the holding green about 12 levels duller (review m7 of round 4).
 const VIDEO_FLAGS = [
+  '--color-space=bt709',
   '--codec=h264',
   '--audio-codec=aac',
   '--audio-bitrate=192k',

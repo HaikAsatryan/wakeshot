@@ -93,7 +93,8 @@ export const Terminal: React.FC<{
   rows?: number;
   width?: number;
   soft?: number;
-}> = ({f, streamFrom, every, stopAt, preset = 3, waitUntil, doneAt, rows: fit = 7, width = 1300, soft = 0}) => {
+  prompt?: string;
+}> = ({f, streamFrom, every, stopAt, preset = 3, waitUntil, doneAt, rows: fit = 7, width = 1300, soft = 0, prompt}) => {
   const t = COPY.terminal;
   const waiting = waitUntil !== undefined && f < waitUntil;
   const now = Math.min(f, stopAt);
@@ -129,10 +130,10 @@ export const Terminal: React.FC<{
         </div>
         <div style={{...line, marginBottom: 10}}>
           <span style={{color: DARK.accent}}>{'> '}</span>
-          {t.prompt}
+          {prompt ?? t.prompt}
           {waiting ? <span style={{display: 'inline-block', width: '0.6em', height: FONT * 1.05, marginLeft: 4, background: DARK.terminalText, opacity: caret ? 0.9 : 0}} /> : null}
         </div>
-        <div style={{height: fit * LINE, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end'}}>
+        <div style={{height: fit * LINE, display: fit > 0 ? 'flex' : 'none', flexDirection: 'column', justifyContent: 'flex-end'}}>
           {rows.map((r, i) => (
             <div key={first + i} style={line}>
               <span style={{color: r[0] === 'pass' ? DARK.accent : DARK.dim, width: '5.5ch', display: 'inline-block'}}>{r[0]}</span>

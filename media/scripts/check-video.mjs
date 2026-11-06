@@ -1,6 +1,6 @@
 // Checks the rendered files against the specs in docs/research/launch.md part 4 with ffprobe (the one Remotion
 // ships, so nothing else is installed): the video is H.264 and AAC, 1920 x 1080, 30 fps, 30 s plus or minus 2, under
-// 10 MB (GitHub's free-plan attachment limit). Each icon loop is read frame by frame (scripts/lib/gif.mjs): a GIF of
+// 10 MB (GitHub's free-plan attachment limit), tagged BT.709. Each icon loop is read frame by frame (scripts/lib/gif.mjs): a GIF of
 // 4 to 6 s that loops forever, under 1 MB, its last frame equal to its first (no jump), a 40 px border of every
 // frame exactly GitHub's page colour for its theme (no visible box on the README), and its idle and holding frames
 // exactly the art port's tray glyph (`tray_mask` at `LOOP.art` px, composed on the page as the review sheets are).
@@ -48,6 +48,8 @@ if (!existsSync(video)) {
   check(v?.width === 1920 && v?.height === 1080, `1920 x 1080 (${v?.width} x ${v?.height})`);
   check(v?.r_frame_rate === '30/1', `30 fps (${v?.r_frame_rate})`);
   check(v?.pix_fmt === 'yuv420p', `yuv420p (${v?.pix_fmt})`);
+  const tags = [v?.color_space, v?.color_primaries, v?.color_transfer];
+  check(tags.every((t) => t === 'bt709'), `tagged BT.709: matrix, primaries, transfer (${tags.join(', ')})`);
   check(a?.codec_name === 'aac', `audio track aac (${a?.codec_name ?? 'none'})`);
   check(Math.abs(seconds - 30) <= 2, `30 s plus or minus 2 (${seconds.toFixed(2)} s)`);
   check(mb < 10, `under 10 MB (${mb.toFixed(2)} MB)`);

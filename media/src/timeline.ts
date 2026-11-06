@@ -50,13 +50,15 @@ export const T = {
   },
   light: {on: beat(4), name: beat(5), faintLines: beat(4) + 6},
   /** Claude Code starts and the icon turns holding; the tooltip under the cursor; the work ends and the icon lets go. */
-  tray: {whip: beat(10), whipLen: 12, start: beat(11), lineEvery: 6, hover: beat(13), drift: beat(14), done: beat(16)},
+  tray: {whip: beat(10), whipLen: 12, start: beat(11), hover: beat(13), drift: beat(14), done: beat(16)},
   /**
-   * The lid shuts and the work goes on behind it: from `work` a chip rises above the shut laptop and shows the agent's
-   * next step every `workEvery` frames; at `done` it shows the work done and, at that same frame, the edge light goes
-   * off: the hold ends (Haik, 2026-11-06 00:56: the work going on, then clearly done, then the sleep).
+   * The lid shuts, Wakeshot locks (the badge comes with the chime, as the app locks at the lid close) and the work goes
+   * on behind it: at `work` a chip rises above the shut laptop with the agent's step under a turning spinner; at `done`
+   * it shows the work done and, at that same frame, the edge light goes off: the hold ends (Haik, 2026-11-06 00:56: the
+   * work going on, then clearly done, then the sleep). One caption and one chip step, so the shot is not the densest
+   * stretch again (review M1 of round 4).
    */
-  lid: {cut: beat(20), settle: 15, close: beat(21), shut: beat(22), work: beat(23), workEvery: beat(1), lock: beat(24), orbit: beat(24), done: beat(27)},
+  lid: {cut: beat(20), settle: 15, close: beat(21), shut: beat(22), lock: beat(22), work: beat(24), orbit: beat(24), done: beat(27)},
   settings: {move: beat(28), card: beat(29), row1: beat(31), row2: beat(32)},
   /**
    * A time cut: the frame dips dark over `dipOut` frames into the cut and comes back over `dipIn`, the words say
@@ -91,7 +93,9 @@ export const PLACES = {
   lid: {x: 6000, y: 0, zoom: 1},
   lidNear: {x: 6000, y: 0, zoom: 1.06},
   lidPush: {x: 6000, y: -20, zoom: 1.03},
-  card: {x: 6500, y: 0, zoom: 1},
+  // A little wider than the lid's place (drawn parts only, so a zoom under 1 is allowed): the laptop, the badge, the
+  // work chip and the card all fit without a cut edge.
+  card: {x: 6500, y: 0, zoom: 0.92},
   menu: {x: 12000, y: 1600, zoom: 1},
   menuSub: {x: 11850, y: 1600, zoom: 1},
   end: {x: 20000, y: 0, zoom: 1},
@@ -169,10 +173,10 @@ export const CAPTIONS: CaptionBlock[] = [
   {
     id: 'lid',
     lines: [
-      {text: COPY.lid[0], at: T.lid.close, style: 'caption'},
-      {text: COPY.lid[1], at: T.lid.lock, style: 'caption'},
+      {text: COPY.lid, at: T.lid.close, style: 'caption'},
     ],
-    until: T.settings.move,
+    // It leaves as the work is done, so no line says the work goes on while the chip says it is done.
+    until: T.lid.done,
     leave: 'fade',
   },
   {
@@ -257,15 +261,13 @@ export const EVENTS: PaceEvent[] = [
   {at: T.tray.whip, kind: 'whip', what: 'the glyph flies into the tray and dims'},
   {at: T.tray.whip + T.tray.whipLen, kind: 'swap', what: 'the glyph lands on the idle icon'},
   {at: T.tray.start, kind: 'light', what: 'Claude Code starts: the icon turns holding at the same frame'},
-  ...range(T.tray.start + T.tray.lineEvery, T.tray.done, T.tray.lineEvery).map((at) => ({at, kind: 'stream' as const, what: 'tool line'})),
   {at: T.tray.hover, kind: 'pop', what: 'the holding tooltip under the cursor'},
   {at: T.tray.drift, kind: 'move', what: 'the camera drifts toward the tray'},
   {at: T.tray.done, kind: 'light', what: 'the work ends: the icon lets go, the idle tooltip'},
   {at: T.lid.close, kind: 'move', what: 'the lid closes'},
   {at: T.lid.shut, kind: 'light', what: 'lid shut, the edge light breathes'},
-  {at: T.lid.work, kind: 'pop', what: 'the work chip rises: the agent goes on behind the lid'},
-  ...range(T.lid.work + T.lid.workEvery, T.lid.done, T.lid.workEvery).map((at) => ({at, kind: 'stream' as const, what: 'the next step in the work chip'})),
   {at: T.lid.lock, kind: 'pop', what: 'lock badge'},
+  {at: T.lid.work, kind: 'pop', what: 'the work chip rises: the agent goes on behind the lid'},
   {at: T.lid.done, kind: 'light', what: 'the work is done: the chip says so and the edge light goes off'},
   {at: T.settings.card, kind: 'pop', what: 'settings card'},
   {at: T.settings.row1, kind: 'count', what: 'first value rolls back'},
@@ -316,16 +318,14 @@ export const SOUNDS: Cue[] = [
   {at: T.tray.whip, sound: 'whip', gain: 0.5},
   {at: T.tray.start, sound: 'enter', gain: 0.45, pan: 0.4},
   {at: T.tray.start, sound: 'lightOn', gain: 0.3, pan: 0.6},
-  ...range(T.tray.start + T.tray.lineEvery, T.tray.done, T.tray.lineEvery).map((at) => ({at, sound: 'tick' as const, gain: 0.07, pan: 0.4})),
   {at: T.tray.hover, sound: 'pop', gain: 0.3, pan: 0.6},
   {at: T.tray.drift, sound: 'whoosh', gain: 0.18, pan: 0.6},
   {at: T.tray.done, sound: 'lightOff', gain: 0.3, pan: 0.6},
   {at: T.lid.cut, sound: 'whoosh', gain: 0.35},
   {at: T.lid.shut, sound: 'thud', gain: 0.5},
   {at: T.lid.shut + 2, sound: 'lidChime', gain: 1},
+  // No lock sound: the badge comes with the lid chime, which sits alone (`promo-video.md`, "Sound").
   {at: T.lid.work, sound: 'pop', gain: 0.22, pan: 0.55},
-  ...range(T.lid.work + T.lid.workEvery, T.lid.done, T.lid.workEvery).map((at) => ({at, sound: 'tick' as const, gain: 0.07, pan: 0.55})),
-  {at: T.lid.lock, sound: 'lock', gain: 0.4},
   {at: T.lid.done, sound: 'lightOff', gain: 0.35},
   {at: T.settings.move, sound: 'whoosh', gain: 0.3, pan: 0.65},
   {at: T.settings.card, sound: 'pop', gain: 0.3, pan: 0.6},

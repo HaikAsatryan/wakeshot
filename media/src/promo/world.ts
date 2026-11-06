@@ -8,8 +8,12 @@ import {CARD, rowBox} from './SettingsCard.tsx';
 
 /** The hook's terminal: its centre, below the big words. */
 export const HOOK_TERMINAL = {x: PLACES.hook.x, y: PLACES.hook.y + 150, w: 1300};
-/** The tray shot's terminal, the cause: its top left and scale, left of the tray capture, the effect. */
-export const TRAY_TERMINAL = {x: PLACES.tray.x - 840, y: PLACES.tray.y - 470, scale: 0.56};
+/**
+ * The tray shot's terminal, the cause: its top left, scale and width (terminal pixels), left of the tray capture, the
+ * effect, level with the tooltip. At 0.88 its 34 px text reads at 30 px, the spec's least (review m1 of round 4); it
+ * shows the prompt and one status line, so it is narrow enough to end left of the capture after the drift (m5).
+ */
+export const TRAY_TERMINAL = {x: PLACES.tray.x - 840, y: PLACES.tray.y - 170, scale: 0.88, width: 660};
 
 /** The hero glyph of the light shot: 320 px, its ink box centred across and its middle at `inkMid`. */
 export const HERO = (() => {

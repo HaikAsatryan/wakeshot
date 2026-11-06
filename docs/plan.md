@@ -290,8 +290,14 @@ tests, Haik's checklist) starts when the tracks it needs are done.
 - 2026-11-05 20:05 (Haik's brand session): social preview uploaded (Haik; API reads it as set). A local 0.1.0 build
   of 2056c60 is installed for his checks and his last visual review (not the field test build: uninstall it before
   the first release).
-- Next (orchestrator): Haik's steps: his 2 to 3 person check at 16 px (also: does idle read as Windows' person
-  glyph?) and a Narrator check of the tray button's name (it kept the old tooltip after a state change), on the
-  installed build; his last visual review of the real app; retake the Task Manager captures after his next sign-out. Then
-  `p6-media` Part B (captures, speed numbers, the final video), the README and Pages finish, the website link on the
-  repo once Pages is live; Phase 7 field test; Phase 8 cleanup.
+- 2026-11-06 ~05:30 (overnight orchestrator, Haik asleep): speed numbers measured on his installed 0.1.0 (4.3 MB
+  private memory idle, 109 ms CPU in 10 idle minutes, a hold starts about 0.1 s after Claude Code starts work,
+  Setup.exe 12.3 MB; `docs/research.md` "Speed numbers"). The final promo video is rendered (7.1 MB, every check
+  passing, review 0/1/10 with the major and nine minors fixed). README: Haik's story ("Why I built it", "What comes
+  next"), the icon loop, pictures, state icons and numbers; the video spot waits for his upload. Community files added
+  (`p6-repo-files`; GitHub's community profile 100%). His install updated to the latest code. Pushed; CI green.
+- Next (orchestrator): Haik's steps: watch the final video and say yes or what to change; upload it and paste its URL
+  into the README spot; turn on private vulnerability reporting; read the night's decisions (`06-ship.md` work log,
+  2026-11-06 lines, and the round 4 Results of `p6-media`, `p6-readme`, `p6-repo-files`); retake the Task Manager
+  captures after his next sign-out. Then the Pages finish (`p6-pages`), the website link on the repo once Pages is
+  live; Phase 7 field test; Phase 8 cleanup.

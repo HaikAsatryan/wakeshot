@@ -28,7 +28,7 @@ sends no usage event (`@remotion/renderer` 4.0.540, `render-media.js`: the event
 | `out/state-<holding\|idle\|off>-<light\|dark>.png` | `npm run states` | The README's state table: the tray glyph per state for the light and the dark taskbar, see-through, 32 x 32 (`tray_mask` drawn at 32 px, the tray at 200%); show at 16 px, the tray's size at 100%, so it stays sharp on a HiDPI screen. No Remotion |
 | `public/sound/soundtrack.wav` | `npm run sounds` | Also run by `draft` and `video`; not kept in git. `-- --music <file.wav>` puts a fitted found track in place of the code bed, `-- --out <file.wav>` writes elsewhere |
 | A found track fitted to the video | `node scripts/music-candidate.mjs <track> --out <file.wav> [--bpm N] [--lift s]` | Finds the tempo and the lift, conforms to 120 BPM with `atempo`, cuts 30 s on the storyboard; prints the numbers to rebuild it with |
-| A contact sheet for review | `npm run sheet -- <composition> <from> <to> <out.png>` | About 4 frames a second, rendered at full size and shrunk to a quarter, tiled |
+| A contact sheet for review | `npm run sheet -- <composition> <from> <to> <out.png>` | About 4 frames a second, rendered at full size and shrunk to a quarter, tiled; add `--final` for frames without the DRAFT mark |
 | Speed numbers | `pwsh scripts/measure-speed.ps1 -Mode <mode>` | See "Speed numbers" below |
 | The live preview | `npm run studio` | Opens Remotion Studio in the browser |
 
@@ -42,7 +42,7 @@ takes about 2 minutes on the test laptop. The motion parts each have a small com
 |---|---|
 | The art port draws exactly what `art.rs` draws, no tolerance: every pixel of the three review sheets (tray glyphs at 16 to 48 px in four rows, dark, light and high contrast), the 14 frames of `assets/wakeshot.ico` and the notice picture | `node scripts/check-art.mjs`; CI runs it on every push (job `art-port`, Node 26, no `npm ci`: it needs only `node:` modules and the `.ts` port) |
 | No em dash, en dash or emoji in the text files; every asset credited; every text colour pair in `src/theme.ts` at 4.5:1 or more and every graphic pair at 3:1; and the pace check | `npm run check` |
-| Pace (`scripts/check-pace.mjs`, from the timeline data): every cut, move, pop, click and caption start on the 120 BPM grid within 1 frame; something new at least every 2 s before the end card; framings 2 to 4 s; captions hold 1.4 s after their last word (big words of 1 to 3 words 0.5 s); 2 to 6 words a caption line; at most two lines on screen; the name by 3 s; the end card the last 4 s; frame 0 not empty | `npm run check-pace` |
+| Pace (`scripts/check-pace.mjs`, from the timeline data): every cut, move, pop, click and caption start on the 120 BPM grid within 1 frame; something new at least every 2 s before the end card; framings 2 to 4 s; captions hold 1.4 s after their last word (big words of 1 to 3 words 0.5 s); at most 5 things to take in within any 2 s (cuts, moves, pops, clicks, lights, counts, rings, swaps, line starts); 2 to 6 words a caption line; at most two lines on screen; the name by 3 s; the end card the last 4 s; frame 0 not empty | `npm run check-pace` |
 | Video: H.264 and AAC, 1920 x 1080, 30 fps, 30 s plus or minus 2, under 10 MB; loops, read frame by frame: GIF, 480 x 240, 4 to 6 s, forever, under 1 MB, last frame equal to the first, a 40 px border of every frame exactly GitHub's page colour, the first frame the port's idle glyph and a held stretch its holding glyph, every pixel; the six state icons, each laid on its taskbar colour, equal to the cell of art.rs's own review sheet for that state at 32 px, every pixel, and see-through around the glyph | `npm run check-video` (add `-- --draft` for the draft) |
 | A clean checkout rebuilds the same bytes | `npm run check-rebuild` (add `-- --final` once the final video exists) |
 | Types | `npm run typecheck` |
@@ -104,7 +104,8 @@ PowerShell window with no Claude Code session working.
    is played three times over, conformed from 130 to 120 BPM, cut so its lift lands on the light at 2 s, softer
    under the hook with a short silence before the light, 5 dB down under the lid chime, and on the end card it plays
    on for a beat and fades over 2.5 s into a soft echo, silent 0.1 s before the end. The music ducks 4 dB under each
-   chime; the mix is set to -15 LUFS with sample peaks under -2 dBFS (true peak about -1.5 dBTP). The 120 BPM
+   chime; the mix is set to -15 LUFS with sample peaks under -2 dBFS in the WAV; after AAC the final measures
+   -15.4 LUFS and -1.2 dBTP true peak (`loudnorm`), its sample peaks up to -1.6 dBFS. The 120 BPM
    sequencer in code (C major, so the C6 and G6 chimes sit in tune) stays as the fallback when `data/music.json`
    names no file. Why: a real track sounds full where the code bed sounded thin, and every build still makes the
    same bytes. Change it when Haik wants another track: try it with `music-candidate.mjs`, then `data/music.json`.
@@ -149,6 +150,9 @@ PowerShell window with no Claude Code session working.
 9. **H.264 at CRF 18.** CRF 16 kept the round 1 drafts clean but the round 2 draft was 8.5 MB, over the spec's
    8 MB line, so the spec's next step, CRF 18. Not 20: at 20 the app icon's plate broke into blocks while its light
    came on (Part A). Change it when the final passes about 9 MB: then less dither, then 720p as the last resort.
+   BT.709, converted and tagged (`--color-space=bt709`, Remotion's own advice and its 5.0 default): with 4.0.540's
+   default the file used the BT.601 matrix with no tags, and a player that takes untagged HD as BT.709 shows the
+   holding green about 12 levels duller (review m7, round 4); `check-video` checks the tags.
 10. **The title and the outro are one stacked lockup** (`docs/brand.md`), the icon over the name, sized by the
     plate's side (`STACKED` in `src/promo/scenes.tsx`): the name's cap height 0.36 of it (the name at half the side,
     117 px under the 256 px icon, 88 px under 192), 0.26 of it from the plate's bottom to the cap line, the name's ink
@@ -167,7 +171,8 @@ PowerShell window with no Claude Code session working.
       the move blur is an SVG Gaussian stretched along the move, off while the camera rests. Change it to Remotion's
       `@remotion/motion-blur` only after a spike shows it rebuilds the same bytes.
     - **Round 3: the real captures are in** (2026-11-05). The menu set's battery figure read 96% in S1 and 97% in
-      S5a to S5d (it was charging): S5a's battery box is drawn over every menu frame, so the figure never jumps.
+      S5a to S5d (it was charging): S5d's battery box (menu closed, as in S1) is drawn over S1 only, so the figure
+      never jumps; S5a's box, used before, carried the open menu's shadow and showed as a darker patch (review m2).
       Each set floats on the stage as a picture (deep shadow, 1 px rim, square corners, nothing clipped). The tooltip,
       menu and submenu rise in with their shadows (each box grown 12 to 16 px). After the menu click the frame had
       no subject: now a ring sits on the icon (no dimming) and a round lens rises above it with the tray glyph at
@@ -175,9 +180,11 @@ PowerShell window with no Claude Code session working.
     - **Stand-in captures are plain sketches of each set** (dark taskbar, menu and tooltip boxes, gray bars where words
       go, the port's real tray glyph), tagged in red, not empty boxes, so the cursor, the pops and the ring can be
       judged before the captures exist. The words never appear: UI words come only from the captures.
-    - **Round 4: a work chip above the shut laptop (11.5 to 17 s)** with the terminal's spinner and the agent's next
-      step, one a beat, then its done line; the lock badge beside it. Round 2 had dropped a "still working" chip for
-      pace; Haik's note of 2026-11-06 asks to see the work go on behind the lid, so the chip is back with real steps.
+    - **Round 4: a work chip above the shut laptop (12 to 17 s)** with the terminal's spinner and one step ("run npm
+      test"), then its done line; the lock badge beside it comes with the lid chime at 11 s. Round 2 had dropped a
+      "still working" chip for pace; Haik's note of 2026-11-06 asks to see the work go on behind the lid, so the chip
+      is back. After the review (M1) the shot has one caption and one chip step, and `check-pace` allows at most 5
+      things within 2 s, so a shot cannot fill up again unnoticed. Change it when Haik wants the steps back.
     - **The end card's icon is 256 px** (the name 117 px), larger than Part A's 192, so the end card fills the frame.
     - **Round 2, Haik's notes (2026-11-05).** The speed numbers fold into the end card as one line ("Light: ... MB of
       memory idle, ... ms of CPU in 10 minutes.") with the build and date in small print; their 3 s go to a 6 s menu
@@ -205,7 +212,9 @@ PowerShell window with no Claude Code session working.
       tested). With the key, 271 frames rendered twice were equal. A
       capture's image is keyed by its file, so a swap of shots mounts a new image: a changed source let a render now
       and then show the shot before (round 3, frame 165). Change it when a render gets slow: the remount costs each
-      frame its images' decode and the stage's dither again.
+      frame its images' decode and the stage's dither again. After the review's fixes one full render still came out
+      different at the whip (frame 150 on, in the faint terminal's area): the faint terminal, hundreds of soft letters
+      at 7% under the move's blur, now goes as the whip starts.
 
 ## Where the video lives
 

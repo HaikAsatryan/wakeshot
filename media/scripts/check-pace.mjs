@@ -2,6 +2,11 @@
 // pixels:
 // - every cut, camera move, pop, click, light, count and caption start lands on the 120 BPM beat grid (within 1 frame);
 // - something new on screen at least every 2 s, the end card excepted;
+// - at most 5 things to take in within any 2 s before the end card: cuts, moves, pops, clicks, lights, counts, rings,
+//   swaps and the start of each line of words (streamed tool lines, single words and a line that flows on from the
+//   one before not counted; a cut counts once with what it opens on). Round 2 spread the
+//   stretches Haik found "a little fast" (6 in 2 s); round 4 filled the lid shot to 8 again and this check, which had
+//   no upper limit, stayed green (review M1);
 // - every framing (one camera place) lasts 2 to 4 s;
 // - a caption holds at least 1.4 s after its last word lands; big words of 1 to 3 words at least 0.5 s;
 // - a caption line has 2 to 6 words (big words and the name 1 to 6; the end card's lines, which pop in whole, are free);
@@ -37,6 +42,27 @@ for (let i = 1; i < moments.length; i++) {
   const gap = Math.min(moments[i], END_CARD) - moments[i - 1];
   longest = Math.max(longest, gap);
   if (gap > 2 * fps) fail(`nothing new for ${(gap / fps).toFixed(2)} s after ${s(moments[i - 1])}`);
+}
+
+// At most 5 things to take in within any 2 s. A camera key counts once with the event that starts on its frame.
+const MOST_IN_2S = 5;
+const take = [
+  ...EVENTS.filter((e) => e.kind !== 'stream' && e.kind !== 'word').map((e) => ({at: e.at, kind: e.kind, what: `${e.kind}: ${e.what}`})),
+  ...CAMERA.filter((k) => k.kind !== 'settle' && !EVENTS.some((e) => e.at === k.at && e.kind !== 'stream')).map((k) => ({
+    at: k.at,
+    kind: k.kind,
+    what: `camera ${k.kind} to ${k.to}`,
+  })),
+  ...CAPTIONS.flatMap((b) => b.lines.filter((l, i) => !l.already && !(l.flow && i > 0)).map((l) => ({at: l.at, kind: 'line', what: `line "${l.text}"`}))),
+].filter((x) => x.at < END_CARD);
+let densest = 0;
+for (let f = 0; f < END_CARD; f++) {
+  const inside = take.filter((x) => x.at >= f && x.at < f + 2 * fps);
+  densest = Math.max(densest, inside.length);
+  if (inside.length > MOST_IN_2S) {
+    fail(`${inside.length} things within 2 s from ${s(f)}, at most ${MOST_IN_2S}: ${inside.map((x) => `${x.what} (${x.at})`).join('; ')}`);
+    break;
+  }
 }
 
 // Framings: 2 to 4 s each.
@@ -80,7 +106,8 @@ console.log(
     ? fails.map((x) => `FAIL ${x}`).join('\n')
     : `ok: ${gridded.length} starts on the beat, ${starts.length} framings of ${(Math.min(...lengths) / fps).toFixed(1)} to ` +
         `${(Math.max(...lengths) / fps).toFixed(1)} s, ${events} new things before the end card (one every ` +
-        `${(END_CARD / fps / events).toFixed(2)} s, the longest gap ${(longest / fps).toFixed(2)} s), ` +
+        `${(END_CARD / fps / events).toFixed(2)} s, the longest gap ${(longest / fps).toFixed(2)} s), at most ${densest} things ` +
+        `to take in within 2 s, ` +
         `${CAPTIONS.flatMap((b) => b.lines).length} lines of words`,
 );
 process.exit(fails.length ? 1 : 0);

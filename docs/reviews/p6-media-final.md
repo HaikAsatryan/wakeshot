@@ -178,3 +178,28 @@ drafts. Nothing was rendered again; no file outside this review was changed.
   light; looked at full size), Claude Code turns the real icon green and back (real S1 to S4 at 2x), and the 00:56
   note (work behind the lid, done, then sleep) are all in. "A little fast" is M1.
 - Poster: equal to the video's frame 120 (mean difference 0.5 levels).
+
+## Fix check (2026-11-06)
+
+Checked the re-rendered `media/out/wakeshot-promo.mp4` (7,137,594 bytes) against the worker's "Fix round (review)"
+in `docs/tasks/p6-media.md`. Scope as asked: M1, plus a look for new blockers or majors in the changed parts. No
+render, no git.
+
+- **M1: fixed.** The lid shot now runs: cut (10.0), the lid closes with one caption "Close the lid: work goes on."
+  (10.5), the lid shuts with the chime and the lock badge (11.0), the work chip rises with one step, "run npm test"
+  (12.0), its done line (13.5). From 10.5 to 13.5 s (frames 315 to 405) the timeline now has 6 events and caption
+  starts, where round 4 had 10; my count gives at most 5 in any 2 s there (was 8). One 6-word caption replaces two, and the chip no longer changes every beat. The
+  caption fades at 13.5 s, as the chip says done. Seen on a sheet of every 6th frame (300 to 444) and in full-size
+  frame 370.
+- **Colour (BT.601 to BT.709):** ffprobe reads `bt709` for matrix, primaries and transfer. Frame 120 decoded with
+  the BT.709 matrix gives the light's middle 182 224 89 against the source `#B6E05A` (182 224 90). The stage is
+  unchanged (17 22 17). No new issue.
+- **Tray shot (5 to 10 s):** the terminal reads at 30 px and ends left of the capture (frame 200). The taskbar
+  covers show no streaks or edge at full size. The S1 to S2 swap (165) and the S3 to S4 swap (240) are clean. No new
+  issue.
+- **Settings framing:** at zoom 0.92 the laptop clears the left edge (frames 430 to 500).
+- **Frame 151:** the small glyph sits at the bottom edge for one frame, inside a 12-frame blurred whip. Not a major.
+  Also seen, and not a major: the name and tagline fade over the incoming terminal and tray in frames 152 to 156.
+
+Result: M1 is closed, and I found no new blocker or major in the changed parts. The minors were not re-checked one by
+one, as asked.

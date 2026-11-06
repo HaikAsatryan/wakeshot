@@ -106,9 +106,10 @@ const HookTerminal: React.FC<{f: number}> = ({f}) => {
   const push = light ? 1 : 1 + 0.03 * Math.min(1, f / 60);
   return (
     <At x={HOOK_TERMINAL.x} y={HOOK_TERMINAL.y}>
-      <div style={{perspective: 1600, opacity: light ? 0.1 : 1}}>
+      {/* Faint and soft behind the name: a texture of work, not words to read through it (review m10, round 4). */}
+      <div style={{perspective: 1600, opacity: light ? 0.07 : 1}}>
         <div style={{transform: `rotateY(8deg) scale(${push})`, transformOrigin: '50% 50%'}}>
-          <Terminal f={virtual} streamFrom={T.hook.firstLine} every={T.hook.lineEvery} stopAt={light ? Infinity : T.hook.sleep} soft={light ? 3 : 0} />
+          <Terminal f={virtual} streamFrom={T.hook.firstLine} every={T.hook.lineEvery} stopAt={light ? Infinity : T.hook.sleep} soft={light ? 7 : 0} />
         </div>
       </div>
     </At>
@@ -187,43 +188,50 @@ const TrayShot: React.FC<{f: number}> = ({f}) => {
           f={f}
           preset={0}
           waitUntil={T.tray.start}
-          streamFrom={T.tray.start + T.tray.lineEvery}
-          every={T.tray.lineEvery}
+          streamFrom={T.tray.done}
+          every={1}
           stopAt={T.tray.done}
           doneAt={T.tray.done}
-          rows={5}
+          rows={0}
+          width={TRAY_TERMINAL.width}
+          prompt={COPY.terminal.trayPrompt}
         />
       </div>
     </>
   );
 };
 
-/** The glyph flying from the light shot into the tray, going out as it flies, so it lands as the idle icon. */
+/**
+ * The glyph flying from the light shot into the tray, going out as it flies, so it lands as the idle icon. It is drawn
+ * from the port at each whole size, never a scaled bitmap (`media/README.md` decision 7), and it fades over its last
+ * frames into the capture's own icon, so two icons never show side by side (review m3 of round 4).
+ */
 const FlyingGlyph: React.FC<{f: number}> = ({f}) => {
   if (!within(f, T.tray.whip, T.tray.whip + T.tray.whipLen)) return null;
   const end = setBox('tray', 'icon');
-  // Both ends are where the camera rests in each shot, so the glyph leaves the hero's spot and lands on the capture's.
+  // It leaves the hero's spot on screen and flies to where the capture's icon is on screen at that frame, so it lands
+  // on the icon while the camera still settles and then rides on it, the same size, until it has faded.
   const from = toScreen(PLACES.hook, SIZE, HERO.left, HERO.top);
-  const to = toScreen(PLACES.tray, SIZE, end.x, end.y);
   const at = (g: number) => {
-    const t = progress(g, T.tray.whip, T.tray.whipLen, SETTLE);
+    const view = viewAt(CAMERA, PLACES as Record<PlaceName, View>, g);
+    const to = {x: Math.round(SIZE.width / 2 - view.x) + end.x, y: Math.round(SIZE.height / 2 - view.y) + end.y};
+    const t = progress(g, T.tray.whip, FLY_LAND, SETTLE);
     return {x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t, s: 1 + (end.w / HERO.size - 1) * t, t};
   };
   const p = at(f);
   const a = at(f - 0.5);
   const b = at(f + 0.5);
+  const size = Math.max(8, Math.round(HERO.size * p.s));
+  const fade = 1 - progress(f, T.tray.whip + FLY_LAND, T.tray.whipLen - FLY_LAND, (t) => t);
   return (
     <DirectionalBlur vx={b.x - a.x} vy={b.y - a.y} id="glyph-blur">
-      <TrayGlyph
-        size={HERO.size}
-        on={1 - p.t}
-        colours={ON_DARK}
-        page={null}
-        style={{position: 'absolute', left: 0, top: 0, transformOrigin: '0 0', transform: `translate(${p.x}px, ${p.y}px) scale(${p.s})`}}
-      />
+      <TrayGlyph size={size} on={1 - p.t} colours={ON_DARK} page={null} style={{position: 'absolute', left: Math.round(p.x), top: Math.round(p.y), opacity: fade}} />
     </DirectionalBlur>
   );
 };
+
+/** The flying glyph lands on the icon this many frames into the whip, then fades over the whip's last frames. */
+const FLY_LAND = 8;
 
 /** The cursor in the tray shot: it comes to rest on the icon, so the tooltip shows as it does under a hand. */
 function trayCursor(): CursorMove[] {
@@ -245,13 +253,12 @@ const lidShut = (f: number) => {
 };
 
 /**
- * The work behind the shut lid: a chip with the agent's next step, one a beat, under a turning spinner; at `done` it
+ * The work behind the shut lid: a chip with the agent's step under a turning spinner; at `done` it
  * says the work is done, with the terminal's own done line. The video's drawing, not a copy of any app's screen.
  */
 const WorkChip: React.FC<{f: number}> = ({f}) => {
-  const steps = COPY.terminal.behindLid;
+  const step = COPY.terminal.behindLid;
   const done = f >= T.lid.done;
-  const step = steps[Math.min(steps.length - 1, Math.max(0, Math.floor((f - T.lid.work) / T.lid.workEvery)))];
   return (
     <Chip style={{width: WORK_CHIP.w, height: WORK_CHIP.h, boxSizing: 'border-box', gap: 18, fontFamily: MONO, fontSize: 32}}>
       <span style={{width: 56, display: 'inline-flex', justifyContent: 'center', fontSize: 40}}>
@@ -350,8 +357,12 @@ const MenuShot: React.FC<{f: number}> = ({f}) => {
       ) : (
         <Capture set="menu" shot={base} zoom={1} />
       )}
-      {/* The battery figure moved from 96% to 97% while the set was taken: one value throughout, so nothing jumps. */}
-      <Capture set="menu" shot="S5a" zoom={1} clip="battery" />
+      {/*
+        The battery figure moved from 96% to 97% while the set was taken: S1 alone shows 96%, so it gets the 97% of
+        S5d, the other shot with the menu closed. Not S5a's: there the open menu's shadow darkens the taskbar, and the
+        patch showed as a darker box with a broken top border.
+      */}
+      {base === 'S1' ? <Capture set="menu" shot="S5d" zoom={1} clip="battery" /> : null}
     </div>
   );
 };
@@ -477,7 +488,7 @@ const BASELINES: Record<string, number[]> = {
   name: [690, 790],
   trayStart: [CAPTION_BASELINE],
   trayDone: [CAPTION_BASELINE],
-  lid: [CAPTION_BASELINE - CAPTION_STEP, CAPTION_BASELINE],
+  lid: [CAPTION_BASELINE],
   settings: [CAPTION_BASELINE],
   sleeps: [CAPTION_BASELINE],
   menu: [CAPTION_BASELINE - CAPTION_STEP, CAPTION_BASELINE],
@@ -548,7 +559,11 @@ export const Promo: React.FC<PromoProps> = ({draft}) => {
       <AbsoluteFill key={f}>
         <Stage focus={liftScreen} lift={stageLift} width={VIDEO.width} height={VIDEO.height} />
         <World view={view} velocity={velocity} size={SIZE}>
-          {f < T.tray.whip + T.tray.whipLen ? <HookTerminal f={f} /> : null}
+          {/*
+            The faint terminal goes as the whip starts: at 7% it cannot be seen under the move, and its hundreds of
+            soft letters under the move's blur made frame 150 come out differently in one of two full renders.
+          */}
+          {f < T.tray.whip ? <HookTerminal f={f} /> : null}
           {within(f, SCENES.light.from, T.tray.whip + T.tray.whipLen) ? <HeroGlyph f={f} /> : null}
           {within(f, T.tray.whip, SCENES.lid.from) ? <TrayShot f={f} /> : null}
           {within(f, SCENES.lid.from, SCENES.menu.from) ? <LidPlace f={f} /> : null}
@@ -593,7 +608,7 @@ export const Promo: React.FC<PromoProps> = ({draft}) => {
               bottom: 44,
               textAlign: 'center',
               fontFamily: SANS,
-              fontSize: 24,
+              fontSize: 28,
               color: speed.measured ? DARK.dim : DARK.onDraft,
               opacity: progress(f, T.end.speed, 4, (t) => t),
             }}

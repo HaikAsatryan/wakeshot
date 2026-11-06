@@ -8,14 +8,15 @@ export const COPY = {
   tagline: 'keeps it *awake* while agents work.',
   /** The tray shot: Claude Code starts and the icon turns holding; the work ends and it lets go. */
   tray: ['Claude Code starts: it turns *green*.', 'Done: it lets *go*.'],
-  lid: ['Close the *lid*.', 'Work goes *on*, locked.'],
+  /** One line for the lid shot (round 4 review, M1); the lock badge shows the lock. */
+  lid: 'Close the lid: work goes *on*.',
   settings: 'Work done. Your settings, *back*.',
   /** After a time cut: no clock, no countdown, no claim that it sleeps at once (Haik, 2026-11-06 00:56). */
   sleeps: 'Later, it sleeps as *usual*.',
   menu: ['Keep awake on *demand*.', 'No second *tool*.'],
   endLine: 'Free and open source. Windows 11, x64 and ARM64.',
   /** The end card's speed line: `{ram}` and `{cpu}` come from `data/speed.json`. */
-  speedLine: 'Light: {ram} MB of memory idle, {cpu} ms of CPU in 10 minutes.',
+  speedLine: 'Idle: {ram} MB of memory, {cpu} ms of CPU in 10 minutes.',
   /** The GitHub address until the winget package is live; then `winget install HaikAsatryan.Wakeshot`. */
   install: 'github.com/HaikAsatryan/wakeshot',
 
@@ -29,15 +30,12 @@ export const COPY = {
     path: 'PS C:\\code\\shop>',
     command: 'claude',
     prompt: 'migrate billing to API v2 and run all tests',
+    /** The tray shot's shorter task: its terminal shows the prompt and one status line, large enough to read. */
+    trayPrompt: 'fix the failing tests',
     working: 'Working',
     done: 'Done. All 128 tests pass.',
-    /** The steps the work chip shows while the lid is shut, one a beat, then `done`. */
-    behindLid: [
-      ['edit', 'src/billing/tax.ts'],
-      ['read', 'src/billing/currency.ts'],
-      ['run', 'npm run lint'],
-      ['run', 'npm test'],
-    ] as string[][],
+    /** The step the work chip shows while the lid is shut, then `done`. */
+    behindLid: ['run', 'npm test'],
     lines: [
       ['read', 'src/billing/client.ts'],
       ['read', 'src/billing/invoice.ts'],

@@ -15,7 +15,8 @@ export const STYLE: Record<TextStyle, {size: number; weight: number; colour: str
   caption: {size: 60, weight: 400, colour: DARK.text, family: SANS, cap: CAP.sans},
   line: {size: 44, weight: 400, colour: DARK.dim, family: SANS, cap: CAP.sans},
   mono: {size: 40, weight: 400, colour: DARK.accent, family: MONO, cap: CAP.mono},
-  small: {size: 34, weight: 400, colour: DARK.text, family: SANS, cap: CAP.sans},
+  // The end card's speed line: 40 px, so the measured numbers still read at the README's 900 px (review m8).
+  small: {size: 40, weight: 400, colour: DARK.text, family: SANS, cap: CAP.sans},
 };
 
 /** Captions: the last line's baseline at 86% of the frame height, a line above it 72 px higher. */

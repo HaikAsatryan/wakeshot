@@ -9,7 +9,10 @@ Real screen captures of Wakeshot's own tray icon, tooltip and menu, made by `p6-
 installed local 0.1.0 build (commit c9da3dd) on the DELL U2723QE at 200%, cut unchanged from its grabs (its
 `captures.json` is the manifest; `data/shots.json` carries the boxes and rows). The captures show parts of the Windows
 taskbar around Wakeshot's icon (the chevron, OneDrive, ENG, network, volume, battery); TrafficMonitor and the clock are
-covered with plain taskbar. Wakeshot's own icon, menu and words: MIT, ours. Microsoft's terms for showing Windows
+covered with plain taskbar. In the dark files that cover was one column stretched across, which left streaks; on
+2026-11-06 (round 4 review) each covered pixel was set to the mean of the real taskbar beside it on the same row plus
+a fixed seeded grain measured on a clean part of the same taskbar (`menu-S1-dark.png`, columns 20 to 110), the same
+grain in every file of a set. The light README stills keep their first cover (their taskbar has a sideways gradient). Wakeshot's own icon, menu and words: MIT, ours. Microsoft's terms for showing Windows
 screenshots: not checked.
 
 | File | What | Source |

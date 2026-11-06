@@ -467,7 +467,7 @@ Output: `<scratchpad>\p6-media-c\draft-3.mp4` (7.17 MB), `draft-3-sheet.png`, `d
 
 ## Round 4: the final (2026-11-06)
 
-Written by the orchestrator (overnight run, Haik asleep). Status: done 2026-11-06 04:29 (waits for Haik's look and the review). Agent: `wakeshot-worker`. Owns what Part C
+Written by the orchestrator (overnight run, Haik asleep). Status: done 2026-11-06 04:29; review fix round done 05:19 (waits for Haik's look and the reviewer's fix check). Agent: `wakeshot-worker`. Owns what Part C
 owns, plus a new `## Speed numbers` section at the end of `docs/research.md` (additions only; re-read right before
 the edit; the README links to `docs/research.md#speed-numbers`, so keep that heading). Real laptop: no screen, no
 power settings, no Claude Code test session. Build folder: `<scratchpad>\p6-media-final\`. Round 3's files are in
@@ -560,6 +560,28 @@ the old scratchpad: `C:\Users\haika\AppData\Local\Temp\claude\f7c2c08a8f04f07b\d
 - 04:28: `npm run check-rebuild -- --final`: ok, a clean copy rebuilds all 15 outputs to the same bytes, the draft
   and the final video included (the open item since round 1 is closed). `npm run check` ok after the last doc edits.
   Result written.
+- 04:45 (fix round): the review `docs/reviews/p6-media-final.md` read (0 blockers, 1 major, 10 minors).
+- 04:53: m2: the dark captures' stretched covers refilled (row mean of the real taskbar beside them plus a seeded
+  grain measured on the same taskbar); originals kept in `<build>\shots-before\` for comparison. Battery patch from
+  S5d over S1 only.
+- 04:56: M1 and m6 (one lid caption, badge with the chime, one chip step, caption leaves at done), the density limit
+  in `check-pace` (negative test: the old lid fails it), m7 (`--color-space=bt709`, tags in `check-video`), m4 (card
+  framing zoom 0.92), m1 and m5 (tray terminal 30 px, narrower), m3 (glyph drawn per size, lands on the moving icon,
+  fades), m8 (speed line 40 px, note 28 px), m10 (README loudness line, faint terminal blur 7 px). Full-size frames
+  of each changed part rendered and looked at.
+- 05:01: draft and final rendered; the final checked (7.17 MB, BT.709 tags, -15.39 LUFS, -1.36 dBTP, the green
+  decoded with BT.709 within 3 levels of the source). Frame 120 still showed the faint terminal's words if one looked
+  for them: its opacity to 7%, and the rebuild check stopped (its temp copy deleted, no process of it left).
+- 05:03: draft, final and `check-rebuild --final` run again in one go.
+- 05:08: `check-rebuild --final`: 14 of 15 the same bytes; the final video differed (the draft did not). A second
+  render of the final, decoded and compared frame by frame: frames 0 to 149 equal, 150 differs first in the faint
+  terminal's area (y 815 to 980), and the encoder carries it to the cut at 300. Frames 140 to 175 rendered twice in a
+  range: equal, so it is rare. The faint terminal (hundreds of soft letters at 7% under the whip's blur) now goes as
+  the whip starts, where it cannot be seen anyway.
+- 05:12: draft, final, `check-rebuild --final` and one more independent full render, in one go.
+- 05:18: `check-rebuild --final` ok, all 15 the same bytes; the independent render the same bytes as `media/out`'s
+  final. Frames 150 to 156 rendered and looked at (the glyph's one-frame dip at 151 noted in the Result). The final
+  sheet rendered again; `check`, `typecheck`, `check-art`, `check-video` ok. Fix-round Result written.
 
 ### Result (round 4)
 
@@ -568,27 +590,31 @@ fresh review (item 6).
 
 #### Outputs
 
-- `C:\Users\haika\code\wakeshot\media\out\wakeshot-promo.mp4`: the final, 7,096,189 bytes (7.10 MB), H.264 CRF 18
-  and AAC, 1920 x 1080, 30 fps, 30.02 s, no DRAFT mark, -15.39 LUFS, true peak -1.23 dBTP. `out/` is not
+- `C:\Users\haika\code\wakeshot\media\out\wakeshot-promo.mp4`: the final after the review's fixes, 7,137,594 bytes
+  (7.14 MB), H.264 CRF 18, BT.709 (converted and tagged), AAC, 1920 x 1080, 30 fps, 30.02 s, no DRAFT mark, -15.39
+  LUFS, true peak -1.36 dBTP. (Before the fixes: 7,096,189 bytes, untagged BT.601, -1.23 dBTP.) `out/` is not
   git-ignored, so it goes into the repo with the commit; GitHub plays it only as an uploaded attachment (not
   uploaded).
-- `C:\Users\haika\code\wakeshot\media\out\wakeshot-promo-poster.png`: frame 120, 2,539,288 bytes.
+- `C:\Users\haika\code\wakeshot\media\out\wakeshot-promo-poster.png`: frame 120, 2,512,195 bytes.
 - Copies and the review sheet in the build folder:
   `C:\Users\haika\AppData\Local\Temp\claude\f7c2c08a8f04f07b\de37e39e-ac9f-4f08-8aa0-3d773dd2f757\scratchpad\p6-media-final\`
-  `wakeshot-promo.mp4`, `wakeshot-promo-poster.png`, `wakeshot-promo-sheet.png` (121 tiles, every 7.5 frames, final
-  props), `final-frames\` (24 full-size frames from the MP4).
+  `wakeshot-promo.mp4`, `wakeshot-promo-poster.png` (both after the fixes), `wakeshot-promo-sheet.png` (121 tiles,
+  every 7.5 frames, final props), `final-frames\` (26 full-size frames from the fixed MP4), `shots-before\` (the
+  captures before the cover refill).
 - The README state table's icons, 32 x 32 PNG, see-through, `tray_mask` drawn at 32 px (the tray at 200%); show them
   at 16 px: `C:\Users\haika\code\wakeshot\media\out\state-holding-light.png`, `...\state-holding-dark.png`,
   `...\state-idle-light.png`, `...\state-idle-dark.png`, `...\state-off-light.png`, `...\state-off-dark.png` (221
   to 341 bytes each). "light" and "dark" are the taskbar the glyph is drawn for (dark ink on light, white ink on dark).
-- `media/out/draft/wakeshot-promo-draft.mp4` (7.33 MB) and its poster, git-ignored, built for `check-rebuild`.
+- `media/out/draft/wakeshot-promo-draft.mp4` (7.43 MB after the fixes) and its poster, git-ignored, built for
+  `check-rebuild`.
 - `media/data/speed.json` (measured, every raw value under `raw`) and `docs/research.md` "Speed numbers" (method, where
   the run differs from launch.md, every value, build 0.1.0, date 2026-11-06).
 
 #### What changed
 
-1. **Speed numbers** in (item 1). The end card reads "Light: 4.3 MB of memory idle, 109 ms of CPU in 10 minutes." and
-   "Measured on Wakeshot 0.1.0, 2026-11-06, x64." No start or end delay on screen.
+1. **Speed numbers** in (item 1). The end card reads "Idle: 4.3 MB of memory, 109 ms of CPU in 10 minutes." (after
+   the review; first "Light: 4.3 MB of memory idle, ...") and "Measured on Wakeshot 0.1.0, 2026-11-06, x64." No start
+   or end delay on screen.
 2. **Haik's 00:56 note** (item 2): 10 to 20 s rebuilt. The lid shuts; a work chip above the shut laptop shows the
    agent's next step every beat (the work goes on behind the lid), with the lock badge beside it; at 13.5 s the chip
    says "Done. All 128 tests pass." and the edge light (the hold) goes off at that frame; the settings card; then a
@@ -606,7 +632,7 @@ fresh review (item 6).
    state icons), `promo-video.md` (rows 4 to 6 and 8, a time cut row, counts, final size), `launch.md` part 4 (sound
    as built).
 
-#### Checks
+#### Checks (before the review; after it, see "Fix round (review)")
 
 | Check | Outcome |
 |---|---|
@@ -647,3 +673,66 @@ fresh review (item 6).
    a render gets too slow.
 5. **State icons at 32 px shown at 16 px**, see-through, so they sit on GitHub's page in both themes; light and dark
    follow the taskbar the glyph is drawn for. Change it to 48 px (shown at 24) if the table looks too small.
+
+#### Fix round (review)
+
+The fresh review `docs/reviews/p6-media-final.md` (0 blockers, 1 major, 10 minors), fixed 2026-11-06 04:45 to
+05:19. Each finding and what was done:
+
+- **M1, the lid shot is the densest stretch again (10.5 to 13.5 s): fixed.** One caption, "Close the lid: work goes
+  on." (315), in place of two; the lock badge comes with the lid chime at 11 s (330; the app locks at the lid close),
+  with no lock sound so the chime sits alone; the work chip rises at 12 s (360) with one step, "run npm test", under
+  the turning spinner, then its done line at 13.5 s. No step every beat, no tick per step. The pace check now has an
+  upper limit: at most 5 things to take in within any 2 s before the end card (cuts, moves, pops, clicks, lights,
+  counts, rings, swaps, line starts; a cut counts once with what it opens on, a line that flows on from the one before
+  not counted). The video's densest window is now 5; the round 4 lid shape, put back in a copy, fails the check (6
+  within 2 s from 10.0 s), so it cannot come back unnoticed.
+- **m6, "Work goes on" while the chip says done: fixed.** The lid caption fades at 13.5 s (405), the frame the chip
+  says done and the edge light starts to go out; the light is out 9 frames into the slide.
+- **m7, BT.601 matrix with no tags: fixed.** `--color-space=bt709` in `build.mjs`: ffprobe reads bt709 matrix,
+  primaries and transfer; `check-video` checks the three tags. Frame 120 decoded with the BT.709 matrix: the hero
+  light's middle 180 221 87 against the source `#B6E05A` (182 224 90); the old file decoded the same way gave 178 210
+  83.
+- **m2, retouched patches on the captures: fixed.** The stretched covers of the 12 dark captures (5 tray-set files,
+  the 2 dark README tooltips, 5 menu-set files) are refilled: each covered pixel is the mean of the real taskbar beside
+  it on the same row plus a fixed seeded grain measured on a clean part of the same taskbar; no stretched column is
+  left (checked by script) and the crops at 3x gain show no streaks or edge. The battery patch now comes from S5d
+  (menu closed, like S1) and only over S1, so the taskbar's top border runs on unbroken (checked at frame 605). The
+  two light README stills keep their first cover (their taskbar has a sideways gradient that a row mean does not
+  match): left, their fill needs its own method, and the README shows them small.
+- **m4, the laptop cut by the left edge in the settings framing: fixed.** The card framing widens to zoom 0.92 (drawn
+  parts only): the laptop, the badge, the chip and the card all in frame (frame 450).
+- **m1, the tray terminal's text is 19 px: fixed.** The tray terminal shows `claude`, a shorter prompt ("fix the
+  failing tests") and one status line at 30 px (scale 0.88, 660 px wide); no tool lines there and no key ticks for
+  lines that are no longer shown.
+- **m5, the tray terminal overlaps the capture's corner: fixed** with m1: the narrower terminal ends 31 px left of the
+  capture before and after the drift, level with the tooltip.
+- **m3, the whip lands as two icons, the glyph a scaled bitmap: fixed.** The flying glyph is drawn from the port at
+  each whole size (no CSS scale), flies to where the capture's icon is on screen at that frame, lands on it at 5.27 s
+  (frame 158) and fades into it by 5.4 s, so no second icon shows beside the real one (frames 150 to 160 looked at).
+  Left for Haik's eye: as it aims at the icon, which is still below the frame when the whip starts, the glyph dips to
+  the frame's bottom edge for one frame (151) before it rises with the tray. A path that aims first at where the icon
+  will rest would keep it in the frame; not done, as it needs another full render and rebuild for one frame of a whip.
+- **m8, the end card's small lines: fixed.** The speed line is shorter and larger: "Idle: 4.3 MB of memory, 109 ms of
+  CPU in 10 minutes." at 40 px (was 34 px with 12 words); the build and date line at 28 px (was 24). The numbers are as
+  measured.
+- **m10, doc and poster points: fixed.** `media/README.md` decision 1 now gives the measured -15.4 LUFS and -1.2 dBTP
+  after AAC (sample peaks up to -1.6 dBFS). The faint terminal behind the name is softer (blur 7 px, was 3) and
+  fainter (7%, was 10%): a texture of work under the name, its words no longer read through it at a glance (frame
+  120 looked at full size).
+- **m9, "while agents work": left as is**, on the orchestrator's word: Haik's brand line, listed for him.
+
+Renders and checks after the fixes (2026-11-06 05:19):
+
+| Check | Outcome |
+|---|---|
+| `npm run check` | ok: 87 files, 31 assets credited, 18 colour pairs; pace: 48 starts on the beat, 10 framings of 2 to 4 s, 103 new things, longest gap 1.80 s, at most 5 things to take in within 2 s, 14 lines of words |
+| `npm run typecheck`, `check-art.mjs` | ok; ok, all 9,458,740 pixels |
+| `npm run check-video` (final) | ok, 32 lines: h264, 1920 x 1080, 30 fps, yuv420p, tagged BT.709 (matrix, primaries, transfer), aac, 30.02 s, 7.14 MB; both loops; the 6 state icons |
+| Loudness (`loudnorm`) | -15.39 LUFS, -1.36 dBTP |
+| The green, frame 120 decoded with BT.709 | 180 221 87 against `#B6E05A` (182 224 90) |
+| `npm run check-rebuild -- --final` | ok: all 15 outputs the same bytes. The run before the last change failed on the final video only (frame 150 on; see the Log); after it, the rebuild and one more independent full render gave the same bytes as the final in `media/out` (three renders equal) |
+| Full-size frames of each changed part | looked at: 120, 150 to 160, 200, 250, 320, 330, 345, 360, 375, 405, 410, 440, 450, 485, 512, 545, 560, 570, 605, 770, 850, 896; and the whole cut on a 121-tile sheet |
+
+Final files after the fixes: `media/out/wakeshot-promo.mp4` 7,137,594 bytes (7.14 MB), `media/out/wakeshot-promo-poster.png`
+2,512,195 bytes; the draft 7.43 MB. Copies, the sheet and 26 full-size frames in the build folder.
