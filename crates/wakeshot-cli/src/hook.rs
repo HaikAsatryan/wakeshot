@@ -61,7 +61,9 @@ const HAND_OFF_MS: u32 = 2_000;
 /// A temp file of `write_atomic` older than this is a crash's leftover, never a write in progress.
 const TEMP_AGE: Duration = Duration::from_secs(60);
 
-/// Every agent the command knows; any other word does nothing, so a hook left by any version never fails.
+/// Every agent the command knows; any other word does nothing, so a hook left by any version never fails. Both are out
+/// of v1 per "No guessing" (`docs/product.md`), Haik 2026-11-06: a deleted Cursor chat sends no `stop`, and
+/// Antigravity's Esc fires no hook. Kept, so the `remove` form works and a folder an earlier build left still runs.
 static AGENTS: &[&Agent] = &[&cursor::AGENT, &antigravity::AGENT];
 
 /// Set once `{}` went out, so the panic hook never prints it twice.

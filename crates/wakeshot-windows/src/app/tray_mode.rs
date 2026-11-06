@@ -35,7 +35,6 @@ use wakeshot_core::sources::AgentSource;
 use wakeshot_core::sources::claude::{ClaudeSource, claude_folder};
 use wakeshot_core::sources::codex::{CodexSource, codex_home};
 use wakeshot_core::sources::copilot::CopilotSource;
-use wakeshot_core::sources::cursor;
 use wakeshot_core::sources::opencode::{OpenCodeSource, opencode_db};
 use wakeshot_core::text::NoticeClick;
 use wakeshot_core::view::{Cue, MenuCommand, Notice, TrayView};
@@ -334,12 +333,7 @@ where
         );
         log.line(Level::Warn, AREA, &text);
     }
-    let watched = watched_sources(
-        boot.dir.root(),
-        std::env::home_dir().as_deref(),
-        AgentEnv::read(),
-        log,
-    );
+    let watched = watched_sources(std::env::home_dir().as_deref(), AgentEnv::read(), log);
     let watch = match WatchThread::start(
         boot.dir.clone(),
         config.clone(),
@@ -470,26 +464,26 @@ fn fatal(log: &dyn Log, what: &str, e: WinError) -> u8 {
 }
 
 /// The watch thread's sources: Claude Code, Codex CLI and Copilot CLI (both back in v1, Haik 2026-11-06) and OpenCode
-/// (in v1, Haik 2026-11-06) from the profile folder `home`, then Cursor, the hooked agent. `home` is what
-/// `std::env::home_dir` reads, in the same order as Node's `os.homedir` (`USERPROFILE` first); `env` holds the agents'
-/// own variables from the tray's environment, so a value set in one shell only is not seen. `serve` and the tests both
-/// call this, so a test sees every source the tray starts.
+/// (in v1, Haik 2026-11-06), all from the profile folder `home`. `home` is what `std::env::home_dir` reads, in the
+/// same order as Node's `os.homedir` (`USERPROFILE` first); `env` holds the agents' own variables from the tray's
+/// environment, so a value set in one shell only is not seen. `serve` and the tests both call this, so a test sees
+/// every source the tray starts.
 ///
-/// Out of v1, each because its end of work is not always seen and Wakeshot does not guess (`docs/product.md`, "No
-/// guessing"); their sources stay for a later version (`docs/tasks/p4-vscode-local-off.md`):
+/// Out of v1, each not in v1 per "No guessing" (`docs/product.md`), Haik 2026-11-06; their sources stay, compiled and
+/// tested, for a later version:
 ///
-/// - VS Code's own Local chats (Haik, 2026-11-06): one whose window closes mid-turn stays working on disk until every
-///   VS Code started before it exits. VS Code's Copilot harness chats are Copilot CLI sessions of its
-///   `copilot-runtime.exe`, so the Copilot source holds for them.
-/// - Antigravity (Haik, 2026-11-06: "Too much problematic"): Esc writes only a line in `agy`'s own log, and the reader
-///   of that line trusts one `agy` version only, while `agy` releases almost daily.
+/// - VS Code's own Local chats: a window closed mid-turn writes nothing, so the chat stays working on disk. VS Code's
+///   Copilot harness chats are Copilot CLI sessions of its `copilot-runtime.exe`, so the Copilot source holds them.
+/// - Antigravity: Esc and Ctrl+C fire no hook; only an undocumented log shows them, and `agy` releases almost daily,
+///   so it would need a version lock.
+/// - Cursor: a chat deleted while it runs sends no `stop`, only the `sessionEnd` that Ctrl+F4 also sends, so its end
+///   cannot be seen.
 fn watched_sources(
-    data_root: &Path,
     home: Option<&Path>,
     env: AgentEnv,
     log: &Arc<dyn Log>,
 ) -> Vec<Box<dyn AgentSource + Send>> {
-    let mut watched = match home {
+    match home {
         Some(home) => sources_in(home, env, log),
         None => {
             log.line(
@@ -499,9 +493,7 @@ fn watched_sources(
             );
             Vec::new()
         }
-    };
-    watched.extend(hooked_sources(data_root, log));
-    watched
+    }
 }
 
 /// The variables that move an agent's folder, as the tray's environment has them.
@@ -575,21 +567,10 @@ fn sources_in(home: &Path, env: AgentEnv, log: &Arc<dyn Log>) -> Vec<Box<dyn Age
     ]
 }
 
-/// The hooked agent, Cursor: its source reads the files Wakeshot's own hook writes in `agents\` of the data folder
-/// (`docs/agent-hooks.md`), so no agent folder or variable decides where. Beside [`sources_in`], so it is watched even
-/// when the profile folder is unknown.
-fn hooked_sources(data_root: &Path, log: &Arc<dyn Log>) -> Vec<Box<dyn AgentSource + Send>> {
-    log.line(
-        Level::Info,
-        AREA,
-        "Cursor is watched in the files its Wakeshot hook writes in the data folder",
-    );
-    vec![Box::new(cursor::source(data_root))]
-}
-
-/// Wakeshot's hook folders in the agents found (`startup::add_agent_hooks`), once per start, after the loop's sink
-/// exists: each folder added posts its notice there. Never joined: the thread ends by itself, and a quit during it
-/// leaves at most a staging folder, which the next start removes.
+/// Wakeshot's hook folders in the agents (`startup::add_agent_hooks`), once per start, after the loop's sink exists:
+/// v1 adds none and removes the folders an earlier build added; a later version's added folder posts its notice there.
+/// Never joined: the thread ends by itself, and a quit during it leaves at most a staging folder, which the next start
+/// removes.
 fn start_agent_hooks(
     boot: &Boot,
     sink: &Arc<dyn EventSink>,
@@ -1845,42 +1826,17 @@ mod tests {
         }
     }
 
-    #[test]
-    fn the_tray_watches_cursor_in_its_hook_folder() {
-        let root = Path::new(r"C:\Users\x\AppData\Local\Wakeshot");
-        let memory = Arc::new(MemoryLog::default());
-        let log: Arc<dyn Log> = memory.clone();
-        let picked = hooked_sources(root, &log);
-        let found: Vec<(SourceId, PathBuf)> = picked
-            .iter()
-            .map(|source| match &source.wanted()[..] {
-                [WantedFile::Folder { dir, .. }] => (source.id(), dir.clone()),
-                _ => panic!("{:?} reads one folder", source.id()),
-            })
-            .collect();
-        assert_eq!(found, [(SourceId::Cursor, root.join(r"agents\cursor"))]);
-        assert_eq!(
-            lines(&memory),
-            [(
-                Level::Info,
-                "Cursor is watched in the files its Wakeshot hook writes in the data folder"
-                    .to_owned()
-            )]
-        );
-    }
-
     // What the tray watches, read by the watch's own `Agents` from real files in a scratch profile, as the watch
     // thread reads them at start and on each tick, with the events fed to the core (`p4-vscode-local-off`).
 
-    /// The v1 agents. VS Code's Local chats and Antigravity are out of v1 (`watched_sources`): this fails if either
-    /// comes back.
+    /// The v1 agents. VS Code's Local chats, Antigravity and Cursor are out of v1 (`watched_sources`): this fails if
+    /// one comes back.
     #[test]
     fn the_tray_starts_the_v1_sources_only() {
         let home = Path::new(r"C:\Users\x");
-        let root = home.join(r"AppData\Local\Wakeshot");
         for profile in [Some(home), None] {
             let log: Arc<dyn Log> = Arc::new(MemoryLog::default());
-            let ids: Vec<SourceId> = watched_sources(&root, profile, AgentEnv::default(), &log)
+            let ids: Vec<SourceId> = watched_sources(profile, AgentEnv::default(), &log)
                 .iter()
                 .map(|s| s.id())
                 .collect();
@@ -1890,12 +1846,62 @@ mod tests {
                     SourceId::Codex,
                     SourceId::Copilot,
                     SourceId::OpenCode,
-                    SourceId::Cursor,
                 ],
-                None => &[SourceId::Cursor],
+                None => &[],
             };
             assert_eq!(ids, want, "{profile:?}");
         }
+    }
+
+    /// A Cursor chat Wakeshot's hook marked working, from an earlier build's hook folder, with its `Cursor.exe`
+    /// running: it holds through Cursor's own source (the control), and holds nothing through the tray, which reads
+    /// no folder under `agents`.
+    #[test]
+    fn a_cursor_chat_holds_nothing_through_the_tray() {
+        let dir = TempDir::new("tray-cursor");
+        let data = dir.path().join("data");
+        let home = dir.path().join("home");
+        let chat = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(r"..\wakeshot-core\tests\fixtures\cursor\live\state-working.json");
+        dir.write(
+            r"data\agents\cursor\7ae3e396-0000-4000-8000-000000000001.json",
+            &std::fs::read(&chat).unwrap(),
+        );
+        // The pid and start the live chat file names.
+        let editor = running(4120, 134_384_524_042_912_323, "Cursor.exe");
+        let held = ProcessRef {
+            pid: editor.pid,
+            start: editor.start,
+        };
+        let live = FakeLiveness::default();
+        live.processes.lock().unwrap().push(editor);
+        live.alive.lock().unwrap().push((held, Alive::Yes));
+
+        let control: Vec<Box<dyn AgentSource + Send>> =
+            vec![Box::new(wakeshot_core::sources::cursor::source(&data))];
+        let mut agents = Agents::with_owners(
+            control,
+            Arc::new(MemoryLog::default()),
+            Box::new(HeldBy(Vec::new())),
+        );
+        let mut sim = started_core();
+        assert_eq!(
+            watch_round(&mut agents, &live, &mut sim),
+            [(SourceId::Cursor, Activity::Working, Alive::Yes)]
+        );
+        assert!(sim.requests().system, "{}", sim.trace());
+
+        let log: Arc<dyn Log> = Arc::new(MemoryLog::default());
+        let tray = watched_sources(Some(&home), AgentEnv::default(), &log);
+        let mut agents = Agents::with_owners(tray, log, Box::new(HeldBy(Vec::new())));
+        let mut sim = started_core();
+        assert_eq!(watch_round(&mut agents, &live, &mut sim), []);
+        assert!(!sim.requests().any(), "{}", sim.trace());
+        let folders = agents.folders();
+        assert!(
+            folders.iter().all(|f| !f.dir.starts_with(&data)),
+            "no folder of the data folder is watched: {folders:?}"
+        );
     }
 
     /// The Local chat VS Code left working when its window closed mid-turn (`p4-live-vscode-stop`): nothing on disk
@@ -2000,12 +2006,7 @@ mod tests {
         assert!(sim.requests().system, "{}", sim.trace());
 
         let log: Arc<dyn Log> = Arc::new(MemoryLog::default());
-        let tray = watched_sources(
-            &dir.path().join("data"),
-            Some(&home),
-            AgentEnv::default(),
-            &log,
-        );
+        let tray = watched_sources(Some(&home), AgentEnv::default(), &log);
         let mut agents = Agents::with_owners(tray, log, Box::new(HeldBy(Vec::new())));
         let mut sim = started_core();
         assert_eq!(watch_round(&mut agents, &live, &mut sim), []);
@@ -2042,12 +2043,7 @@ mod tests {
         live.alive.lock().unwrap().push((held, Alive::Yes));
 
         let log: Arc<dyn Log> = Arc::new(MemoryLog::default());
-        let tray = watched_sources(
-            &dir.path().join("data"),
-            Some(&home),
-            AgentEnv::default(),
-            &log,
-        );
+        let tray = watched_sources(Some(&home), AgentEnv::default(), &log);
         let mut agents = Agents::with_owners(tray, log, Box::new(HeldBy(vec![held])));
         let mut sim = started_core();
         assert_eq!(
@@ -2097,7 +2093,9 @@ mod tests {
             assert!(events.events().is_empty(), "dry run {dry_run}");
             let said: Vec<String> = lines(&memory).into_iter().map(|(_, text)| text).collect();
             let want: &[&str] = match dry_run {
-                false => &["this tray is not Velopack's install, so it adds no agent hooks"],
+                false => {
+                    &["this tray is not Velopack's install, so it touches no agent's hook folder"]
+                }
                 true => &[],
             };
             assert_eq!(said, want, "dry run {dry_run}");

@@ -1925,14 +1925,15 @@ mod tests {
         let rig = Rig::new(
             "hooks::tests::real_uninstall_removes_agent_hooks_at_medium_and_hands_them_off_above",
         );
-        // What a start of the installed tray at Medium added.
+        // What a start of an earlier build of the installed tray added at Medium.
         let cursor = rig.agents.profile.join(".cursor");
         fs::create_dir_all(&cursor).unwrap();
         fs::create_dir_all(rig.folder()).unwrap();
         let hook_exe = rig.folder().join(agent_hooks::HOOK_EXE);
         fs::write(&hook_exe, b"MZ").unwrap();
         let record = rig.dir.root().join(agent_hooks::RECORD);
-        let added = agent_hooks::at_start(&rig.agents, &record, &hook_exe, Ok(false), &*rig.log);
+        let added =
+            agent_hooks::add_as_an_earlier_build(&rig.agents, &record, &hook_exe, &*rig.log);
         assert_eq!(added, ["Cursor"]);
         let plugin = cursor.join(r"plugins\local\wakeshot");
 

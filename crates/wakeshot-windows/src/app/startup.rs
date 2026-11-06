@@ -395,12 +395,14 @@ fn locked_from(state: Option<bool>, log: &dyn Log) -> bool {
     })
 }
 
-/// Adds or keeps Wakeshot's hook folders in the agents found (`agent_hooks::at_start`), once per start, and posts
-/// `Event::HooksAdded` for each folder it added (`docs/agent-hooks.md`, "Adding"). Call it once the loop window and
-/// its sink exist. The work runs on a thread of its own, so the loop never waits on another app's folders; a tray
-/// that quits during it leaves at most a staging folder, which the next start removes. A dry run, a tray not run from
-/// Velopack's `current` folder (a dev build, a Store build) and a tray above Medium touch no agent's folder. `None`:
-/// nothing to do, or the thread did not start (logged).
+/// Wakeshot's hook folders in the agents, once per start (`agent_hooks::at_start`): v1 adds none, since Cursor and
+/// Antigravity are out of v1 ("No guessing", `docs/product.md`, Haik 2026-11-06), and removes the folders an earlier
+/// build added. A later version that adds one again gets `Event::HooksAdded` posted for each folder added
+/// (`docs/agent-hooks.md`, "Adding"). Call it once the loop window and its sink exist. The work runs on a thread of
+/// its own, so the loop never waits on another app's folders; a tray that quits during it leaves at most a staging
+/// folder, which the next start removes. A dry run, a tray not run from Velopack's `current` folder (a dev build, a
+/// Store build) and a tray above Medium touch no agent's folder. `None`: nothing to do, or the thread did not start
+/// (logged).
 pub fn add_agent_hooks(
     boot: &Boot,
     sink: Arc<dyn EventSink>,
@@ -460,7 +462,7 @@ fn agent_hooks_for(
         log.line(
             Level::Info,
             AREA,
-            "this tray is not Velopack's install, so it adds no agent hooks",
+            "this tray is not Velopack's install, so it touches no agent's hook folder",
         );
         return;
     };
@@ -1187,8 +1189,10 @@ mod tests {
         assert!(!line.contains(&"x".repeat(PANIC_TEXT_MAX)), "{line}");
     }
 
+    /// v1 adds no hook folder, so the "hooks added" notice never posts: the installed tray's start removes the Cursor
+    /// folder an earlier build added and posts nothing. This fails if a start adds a folder or posts the notice again.
     #[test]
-    fn each_agent_folder_added_posts_hooks_added_once() {
+    fn the_installed_start_removes_an_old_hook_folder_and_posts_no_notice() {
         let dir = TempDir::new("agent-hooks");
         let folders = agent_hooks::Folders {
             profile: dir.0.join("profile"),
@@ -1198,46 +1202,34 @@ mod tests {
             .local_app_data
             .join(r"HaikAsatryan.Wakeshot\current");
         fs::create_dir_all(&current).unwrap();
-        fs::write(current.join(agent_hooks::HOOK_EXE), b"MZ").unwrap();
+        let hook_exe = current.join(agent_hooks::HOOK_EXE);
+        fs::write(&hook_exe, b"MZ").unwrap();
         fs::create_dir_all(folders.profile.join(".cursor")).unwrap();
         let record = dir.0.join(r"Wakeshot\agent-hooks.json");
         let tray = current.join("wakeshot-tray.exe");
         let sink = FakeEventSink::default();
         let log = MemoryLog::default();
-        agent_hooks_for(&tray, &folders, &record, Ok(false), &sink, &log);
-        assert_eq!(sink.events(), [Event::HooksAdded { agent: "Cursor" }]);
-        // The folder is there now: a second start says nothing.
-        agent_hooks_for(&tray, &folders, &record, Ok(false), &sink, &log);
-        assert_eq!(sink.events().len(), 1);
+        let plugin = folders.profile.join(r".cursor\plugins\local\wakeshot");
+        let earlier = || agent_hooks::add_as_an_earlier_build(&folders, &record, &hook_exe, &log);
 
         // A dev build's tray and a tray above Medium touch nothing and post nothing.
-        let plugins = folders.profile.join(r".cursor\plugins");
-        fs::remove_dir_all(&plugins).unwrap();
-        fs::remove_file(&record).unwrap();
+        assert_eq!(earlier(), ["Cursor"]);
         let dev = dir.0.join(r"target\debug\wakeshot-tray.exe");
         agent_hooks_for(&dev, &folders, &record, Ok(false), &sink, &log);
         agent_hooks_for(&tray, &folders, &record, Ok(true), &sink, &log);
-        assert_eq!(sink.events().len(), 1);
-        assert!(!plugins.exists());
-        assert!(!record.exists());
+        assert!(plugin.join(agent_hooks::MARKER).is_file());
         let said = |part: &str| lines(&log).iter().any(|(_, _, text)| text.contains(part));
         assert!(said(
-            "this tray is not Velopack's install, so it adds no agent hooks"
+            "this tray is not Velopack's install, so it touches no agent's hook folder"
         ));
 
-        // A post the loop does not take: the folder stays added, and the log says the notice is lost.
-        let failing = FakeEventSink {
-            fail_with: Some(WinError {
-                call: "PostMessageW",
-                code: 1816,
-            }),
-            ..FakeEventSink::default()
-        };
-        agent_hooks_for(&tray, &folders, &record, Ok(false), &failing, &log);
-        assert!(said(
-            "the notice that Cursor got hooks is lost: PostMessageW failed with 1816"
-        ));
-        assert!(plugins.join(r"local\wakeshot").is_dir());
+        // The installed tray at Medium: the folder goes, and no notice, now or at the next start.
+        agent_hooks_for(&tray, &folders, &record, Ok(false), &sink, &log);
+        assert!(!plugin.exists());
+        assert!(said(r"Cursor: .cursor\plugins\local\wakeshot removed"));
+        agent_hooks_for(&tray, &folders, &record, Ok(false), &sink, &log);
+        assert!(!plugin.exists());
+        assert_eq!(sink.events(), []);
     }
 
     #[test]

@@ -1,3 +1,7 @@
+//! Not started by the v1 tray, and its hook folder is not added: a chat deleted while it runs sends no `stop`, only the
+//! `sessionEnd` that Ctrl+F4 also sends, so its end cannot be seen. Not in v1 per "No guessing" (`docs/product.md`),
+//! Haik 2026-11-06 (`docs/tasks/p4-cursor-off.md`). Kept, with its tests, for a later version.
+//!
 //! Cursor sessions, editor and CLI, from the files Wakeshot's own Cursor hook writes in `agents\cursor\` (architecture
 //! sections 7 and 12; `docs/agent-hooks.md`, "Cursor"). The table is all the hook and the source know of Cursor; the
 //! shared rules are in `sources::hooked`. The editor's wakelock lines in `main.log` are not read (the design's

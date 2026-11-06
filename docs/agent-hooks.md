@@ -15,13 +15,20 @@ Cursor editor `3.29.9` (commit `306d153d51d7`, Linux `.deb`; its app JS is share
 
 ## What Wakeshot adds (user view)
 
-| Agent | Folder Wakeshot adds | Runs on | Removed |
-|---|---|---|---|
-| Cursor (editor and CLI) | `%USERPROFILE%\.cursor\plugins\local\wakeshot\` | prompt sent, agent stopped, chat ended | at uninstall; or delete the folder yourself |
+v1 adds no hook to any agent. Cursor and Antigravity, the two agents Wakeshot hooked, are out of v1, each because a
+way to stop its work leaves no sign Wakeshot can see (`product.md`, "Other agents"; Cursor: Haik, 2026-11-06 23:21,
+"ok le'ts drop cursor as well."). Test builds before v1 added the folders below. Each v1 start removes them by the
+uninstall's rules ("Source turned off" below): an unchanged folder is deleted, one you changed is moved to
+`wakeshot-removed` in the agent's own folder. No notice. The design stays for a later version that hooks an agent
+again.
 
-- Antigravity is not in v1 (Haik, 2026-11-06, `product.md`, "Other agents"): Wakeshot adds no folder to it and does
-  not watch it. A folder an earlier build added (`%USERPROFILE%\.gemini\config\plugins\wakeshot\`) stays until
-  `wakeshot hook antigravity remove` or the uninstall removes it. The design for it stays below ("Antigravity").
+| Agent | Folder an earlier build added | Removed |
+|---|---|---|
+| Cursor (editor and CLI) | `%USERPROFILE%\.cursor\plugins\local\wakeshot\` | at Wakeshot's next start; at uninstall; by `wakeshot hook cursor remove` |
+| Antigravity | `%USERPROFILE%\.gemini\config\plugins\wakeshot\` | the same, with `antigravity` |
+
+When a version adds a hook (none in v1):
+
 - What runs: one command for every agent, `wakeshot.exe hook <agent> <event>`, from Wakeshot's install folder. It
   writes one small file per chat in `%LocalAppData%\Wakeshot\agents\<agent>\` while the agent works, and deletes it
   when the agent stops.
@@ -35,6 +42,12 @@ Cursor editor `3.29.9` (commit `306d153d51d7`, Linux `.deb`; its app JS is share
 - Each agent loads the folder at its next start (Cursor also at Developer: Reload Window).
 
 ## Cursor
+
+**Out of v1** (Haik, 2026-11-06 23:21: "ok le'ts drop cursor as well."; card `p4-cursor-off`): a chat deleted while it
+runs sends no `stop`, only the `sessionEnd` with `final_status` `generating` that Ctrl+F4 also sends, whose turn goes
+on and ends with its own `stop`; no field tells the two apart, so the hold would last until the window closes
+(`p6-agents-install-e2e`, live, Cursor 3.27.12). The tray neither watches it nor adds its folder; a start removes the
+folder an earlier build added ("Source turned off"). The design and code below stay, tested, for a later version.
 
 ### Facts
 
@@ -271,8 +284,8 @@ when `%USERPROFILE%\.cursor\` exists: both Cursor apps create it (the CLI's conf
 first sees a Cursor process" if users install Cursor and expect it to work before the next sign-in.
 
 Wakeshot's record is `%LocalAppData%\Wakeshot\agent-hooks.json`: `{ "version": 1, "cursor": "added" | "removed",
-"antigravity": ... }`. What the tray does for Cursor (Antigravity the same, with its own folders, but out of v1 no
-start handles it):
+"antigravity": ... }`. What the tray does for Cursor (Antigravity the same, with its own folders). Out of v1 no start
+runs this table (`ADDED_AT_START` is empty since `p4-cursor-off`); each start runs "Source turned off" instead:
 
 | `.cursor` | Plugin folder | Record | Action |
 |---|---|---|---|
@@ -307,7 +320,9 @@ start handles it):
   data folder and so starts as on a new PC, like the Run value's startup switch (`p6-uninstall-startup-approval`).
   Product question 3 asks whether a menu item should bring them back.
 
-The notice, once, when Wakeshot adds the folder (`Notice::HooksAdded { agent: "Cursor" }`, quiet, no click):
+The notice, once, when Wakeshot adds the folder (`Notice::HooksAdded { agent: "Cursor" }`, quiet, no click). No v1
+start shows it, since v1 adds no folder; the event, the notice and its words stay, unchanged, for a later version
+(`p4-cursor-off`: the least change, no contract change):
 
 > **Wakeshot now works with Cursor**
 > It added a small hook to Cursor's plugins, so the PC stays awake while Cursor's agent works. It works from
@@ -334,8 +349,15 @@ The notice, once, when Wakeshot adds the folder (`Notice::HooksAdded { agent: "C
     and a failed rename; change it when a user reports hooks left after an uninstall).
   - The `.wakeshot-new-*` staging rule above runs here too. The record goes with the data folder step.
 - **Updated hook**: nothing. The command path does not change, and the next tray start rewrites older content.
-- **Source turned off** (a later version that drops the Cursor source, or a switch if Haik wants one): the tray runs
-  the same removal at start and records `removed`. Automatic off does not remove anything: it is a pause.
+- **Source turned off** (built in v1 for Cursor and Antigravity, `p4-cursor-off`; also for a switch if Haik wants
+  one): each start runs the uninstall's removal above, in-process at Medium, for every agent of `AGENTS` that is not
+  in `ADDED_AT_START` (`agent_hooks::retire`), before any add. Once the folder is gone (deleted, or moved to
+  `wakeshot-removed`), the record drops that agent's `added` mark. It does not write `removed`: that mark means the
+  user said no, and here Wakeshot removed the folder, so a later version that adds the agent again starts as on a new
+  PC, with its notice (change it when a version must remember the turn-off). A `removed` mark stays, and a record
+  that does not read stays as it is. A folder that cannot be removed or renamed stays, one line per start, and the
+  record keeps its mark, so the next start tries again. Above Medium, a dev build and a dry run do nothing, as for
+  the add. Automatic off does not remove anything: it is a pause.
 - **The `wakeshot hook` command form is frozen**: every later version accepts `hook <agent> <event>`, and an agent or
   event it does not know prints `{}` and exits 0, so hooks left by any version never fail. `remove` and `--checked`
   are Wakeshot's own forms (above); anyone of the same user can run them, which gives no more than deleting the
@@ -348,7 +370,8 @@ The notice, once, when Wakeshot adds the folder (`Notice::HooksAdded { agent: "C
   `Event::HooksAdded` per folder added; called by `tray_mode::start_agent_hooks` in `serve`), `on_uninstall`
   (from `RealHookEnv::remove_agent_hooks`), `remove_command` (for the CLI's `hook <agent> remove`, in `hook.rs`).
   Antigravity adds one entry to `AGENTS`: its folders, fixed files, a `present` check (`agy.exe`) and a `contents`
-  function that refuses a path outside its allow list. A start handles only `ADDED_AT_START` (Cursor in v1).
+  function that refuses a path outside its allow list. A start adds only `ADDED_AT_START` (empty in v1) and removes
+  the folders of every other agent (`retire`).
 - "Installed": the tray exe's folder is `%LocalAppData%\HaikAsatryan.Wakeshot\current` (ASCII case ignored); the hook
   files name `wakeshot.exe` in it, and nothing is added when that file is missing.
 - A fixed file counts as Wakeshot's when it hashes to the marker's value or holds what this version writes, so a stop
@@ -367,7 +390,7 @@ The notice, once, when Wakeshot adds the folder (`Notice::HooksAdded { agent: "C
   copy's own lines go to the `cli` log.
 - A record that does not read as version 1 (another version, a value but `added` or `removed`, not JSON) adds nothing
   and is never rewritten: delete it to start over.
-- Not built: "Source turned off" (no version drops a source yet).
+- "Source turned off": built by `p4-cursor-off` (2026-11-06), above.
 
 ## Failure cases
 
@@ -445,9 +468,9 @@ The notice, once, when Wakeshot adds the folder (`Notice::HooksAdded { agent: "C
 
 **Out of v1** (Haik, 2026-11-06 about 21:50: "Yes remove antigravity. Too much problematic."; card
 `p4-vscode-local-off`): Esc shows only in `agy`'s own log, checked for one `agy` version, and `agy` releases almost
-daily. The tray neither watches it (`tray_mode::hooked_sources` gives Cursor only) nor adds its folder at a start
-(`agent_hooks::ADDED_AT_START`); `AGENTS` keeps it, so `wakeshot hook antigravity remove` and the uninstall still
-remove a folder an earlier build added. The design and code below stay, tested, for a later version.
+daily. The tray neither watches it nor adds its folder at a start (`agent_hooks::ADDED_AT_START`); `AGENTS` keeps
+it, so a start (since `p4-cursor-off`), `wakeshot hook antigravity remove` and the uninstall remove a folder an
+earlier build added. The design and code below stay, tested, for a later version.
 
 It needs hooks: `research/antigravity-signals.md` (card `p4-antigravity-research`, still in progress when read on
 2026-11-06; CLI 1.5.2 and IDE 2.6.0, docs, not run). The same pattern applies, with these differences:
@@ -564,14 +587,21 @@ log for its cancel line, with a guard. Built:
 
 ## README lines
 
-For `p4-readme-agents`:
+For `p4-readme-agents`. v1 adds no hooks (`p4-cursor-off`, Haik 2026-11-06 23:21): no README line names Cursor or
+Antigravity as supported, and no line describes a hook folder, the hook's prompt handling or the "hooks added"
+notice. The lines below are all the README says about them:
+
+- If the README lists what is not supported: "Cursor: not supported. When you delete a chat while it works, Cursor
+  gives no sign that the work stopped." and "Antigravity: not supported. It leaves no reliable sign when you stop it
+  with Esc."
+- No user-facing line about the folders test builds added: no such build was released, so only a PC that ran one
+  has such a folder, and v1 removes it at its first start.
+
+Kept for a later version that hooks an agent again:
 
 - Agents: "For Cursor, Wakeshot adds a small hook folder of its own (`.cursor\plugins\local\wakeshot` in your user
   folder) and tells you once. Uninstalling Wakeshot removes it; delete the folder to remove it yourself, and Wakeshot
   leaves it removed."
-- No Antigravity in v1 (`p4-vscode-local-off`, Haik 2026-11-06): no README line names Antigravity as supported, and
-  no line describes its hook or its log. If the README lists what is not supported: "Antigravity: not supported. It
-  leaves no reliable sign when you stop it with Esc."
 - Prompts, in the main text, not a fold: "While a hook runs, the agent hands it your prompt, and in some modes writes
   it to a temp file or a command line first. Wakeshot's hook keeps none of it, and Wakeshot adds no hook to an agent
   that puts prompts on a command line."

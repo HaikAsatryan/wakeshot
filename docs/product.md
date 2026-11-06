@@ -46,16 +46,20 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
     2026-11-04, for Haik's review).
 - **Other agents** (v1 grows, Haik 2026-11-06; on 2026-11-03 v1 was Claude Code only): Codex CLI, Copilot CLI,
   Copilot in VS Code (its Copilot harness chats, which are Copilot CLI sessions and hold through the Copilot source;
-  `research/copilot-vscode-signals.md`), OpenCode 2.x, and Cursor (editor and CLI). Not in v1, each because its end
-  of work is not always seen ("No guessing" below):
+  `research/copilot-vscode-signals.md`), and OpenCode 2.x. Not in v1, each because its end of work is not always
+  seen ("No guessing" below):
   - VS Code's own Local chats (Haik, 2026-11-06 21:28, on the default to leave them out: "your default answer is
     good"): a Local chat whose window closes mid-turn stays "working" on disk until VS Code exits, and nothing on disk
     shows the end (`p4-live-vscode-stop`). Revisit when VS Code writes the end at a close.
   - Antigravity (Haik, 2026-11-06 about 21:50: "Yes remove antigravity. Too much problematic."): Esc fires no hook,
     and the cancel line in `agy`'s own log was checked for one `agy` version (1.5.2), while `agy` releases almost
     daily, so it would hold nothing most of the time (`p4-antigravity-exact-end`). The tray neither watches it nor
-    adds its hook folder; `wakeshot hook antigravity remove` and the uninstall still remove a folder an earlier build
-    added.
+    adds its hook folder; a start, `wakeshot hook antigravity remove` and the uninstall remove a folder an earlier
+    build added.
+  - Cursor, editor and CLI (Haik, 2026-11-06 23:21: "ok le'ts drop cursor as well."): a chat deleted while it runs
+    sends no `stop`, only the `sessionEnd` that Ctrl+F4 also sends (whose turn goes on), so the hold would last until
+    the window closes (`p6-agents-install-e2e`). The tray neither watches it nor adds its hook folder; a start removes
+    the folder an earlier build added, as the uninstall does (`p4-cursor-off`).
 
   OpenCode: 2.x first, 1.x only
   if cheap ("we are focusing the future"); Haik, 2026-11-06 19:25: v1 supports 2.x only, and says "OpenCode 2.x". No
@@ -92,10 +96,12 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
 - Later, not v1: rules for any app ("while ffmpeg runs"). Claude Code inside WSL: its session files carry Linux pids,
   which Windows cannot check, so stale files would hold forever. Revisit with a helper inside WSL.
 - No plugins and no scripting. A new built-in source is new code.
-- Hooks (Haik, 2026-11-06): for an agent with no reliable file signal (Cursor, the only one in v1), Wakeshot may add
-  its own hook files in a folder it owns that the agent loads (a plugin or extension folder), never by editing the
-  user's own settings, and never for Claude Code. It adds them by itself when it finds the agent, says so once in a
-  notice, lists them in the README, and removes them at uninstall.
+- Hooks (Haik, 2026-11-06): for an agent with no reliable file signal, Wakeshot may add its own hook files in a
+  folder it owns that the agent loads (a plugin or extension folder), never by editing the user's own settings, and
+  never for Claude Code. It adds them by itself when it finds the agent, says so once in a notice, lists them in the
+  README, and removes them at uninstall. v1 adds no hooks: its two hooked agents, Cursor and Antigravity, are out of
+  v1 ("Other agents" above; Cursor out, Haik 2026-11-06 23:21: "ok le'ts drop cursor as well."). A v1 start removes
+  the hook folder an earlier build added, by the uninstall's rules, and shows no notice.
 
 ### Power behavior
 

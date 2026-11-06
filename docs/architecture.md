@@ -598,7 +598,7 @@ Every decision in `product.md`, by section. Phase numbers are from `plan.md`.
 | 6 | Idle with a timer due within 1 hour holds; none for the hidden loop fallback | section 7 | 4 |
 | 7 | `waiting` holds only with Remote Control, at most 1 hour | section 7 | 4 |
 | 8 | `shell` and open background tasks of non-terminal sessions hold while the process lives | section 7 | 4 |
-| 9 | Codex CLI, Copilot CLI, Copilot in VS Code (its Copilot harness chats; VS Code's own Local chats out of v1, Haik 2026-11-06 21:28), OpenCode and Cursor in v1 (Haik, 2026-11-06; on 2026-11-03 they had moved to after v1); Antigravity out of v1 (Haik, 2026-11-06 about 21:50); others later; logic may be ported from the MIT rivals with credit | section 7; a credit line in the README for each port | 4, 6 |
+| 9 | Codex CLI, Copilot CLI, Copilot in VS Code (its Copilot harness chats; VS Code's own Local chats out of v1, Haik 2026-11-06 21:28), OpenCode in v1 (Haik, 2026-11-06; on 2026-11-03 they had moved to after v1); Antigravity out of v1 (Haik, 2026-11-06 about 21:50); Cursor out of v1 (Haik, 2026-11-06 23:21); others later; logic may be ported from the MIT rivals with credit | section 7; a credit line in the README for each port | 4, 6 |
 | 10 | `wakeshot run -- <command>` with a documented hold file | sections 4 and 6 | 4 |
 | 11 | Keep awake on demand | `holds\keep-awake.json` (section 6), episode flow | 2, 4, 5 |
 | 12 | Every signal checked against a fact; only the waiting hour and the battery floor limit time | `Liveness` on every hold and session (sections 5, 6, 7); the Codex rule is not yet tied to its session (section 7) | 2, 4 |
@@ -1097,7 +1097,7 @@ cut right after the move leaves: not tested.
 | `journal.json` | IO thread and every restore, under `Local\Wakeshot.Journal` | owned keys (below) |
 | `logs\wakeshot.log` | every process | text log (section 8) |
 | `agents\<agent>\<chat>.json`, `problem.json`, `blocked.json` | `wakeshot hook <agent> <event>` at Medium, under `Local\Wakeshot.AgentHooks` | one agent chat that works, or a hook input problem (`docs/agent-hooks.md`, "The files it writes"); the tray only reads them |
-| `agent-hooks.json` | installed tray at start, at Medium (`agent_hooks::at_start`) | `{ "version": 1, "cursor": "added" }`: `added` once Wakeshot added an agent's hook folder, `removed` once it found that folder gone, so it never adds it again; marks of agents a version does not know are kept. A file that does not read as version 1 adds nothing and stays as it is. Goes with the data folder at uninstall |
+| `agent-hooks.json` | installed tray at start, at Medium (`agent_hooks::at_start`) | `{ "version": 1, "cursor": "added" }`: `added` once Wakeshot added an agent's hook folder, `removed` once it found that folder gone, so it never adds it again; a v1 start, which adds no folder, drops an `added` mark once that folder is gone (`agent_hooks::retire`); marks of agents a version does not know are kept. A file that does not read as version 1 adds nothing and stays as it is. Goes with the data folder at uninstall |
 
 Hold format:
 
@@ -1337,8 +1337,8 @@ VS Code".
   start) when such a request has no usable time or went back from done to Pending (a retry keeps its first time).
   Rule 6 (`AnyProcess` on `state.vscdb`) is not used.
 
-Cursor, editor and CLI (in v1, Haik 2026-11-06; built by `p4-cursor-source`, started by the tray since
-`p4-antigravity-source`, `tray_mode::hooked_sources`): no file of Cursor's own is read. Wakeshot's hook
+Cursor, editor and CLI (built by `p4-cursor-source`; started by the tray from `p4-antigravity-source` until
+`p4-cursor-off` took it out of v1, Haik 2026-11-06 23:21; kept for a later version): no file of Cursor's own is read. Wakeshot's hook
 (section 12, `agent-hooks.md`) writes `agents\cursor\<chat>.json` while a turn runs, and the source reads that folder
 (`WantedFile::Folder`): one `Working` session per file, `Liveness::Process` on the Cursor process the hook's walk
 found, label "Cursor" or "Cursor CLI" from the source's own strings; `problem.json` and `blocked.json` give the
@@ -1566,8 +1566,15 @@ from `.gemini\config\plugins\wakeshot\` with `PreInvocation` and `Stop`):
   `hooks.json` and the marker, no subfolder) runs `<exe> hook antigravity PreInvocation` and `... Stop` with the exe
   as a bare path, since `agy` runs each hook as `cmd /c <command>` and only a path with no space, quote or `cmd`
   sign survives that; any other path gets no Antigravity hooks. Out of v1 since `p4-vscode-local-off`: a start adds
-  only the agents of `agent_hooks::ADDED_AT_START` (Cursor), while remove and uninstall still know Antigravity. The
-  tray starts the hooked source (`tray_mode::hooked_sources`, Cursor only since then) and calls `startup::add_agent_hooks` once per start (`tray_mode::start_agent_hooks`).
+  only the agents of `agent_hooks::ADDED_AT_START` (then Cursor), while remove and uninstall still know Antigravity. The
+  tray calls `startup::add_agent_hooks` once per start (`tray_mode::start_agent_hooks`).
   An agent whose own folder (`.cursor`, `.gemini\config`) is gone at a start is dropped from the record, so a
   reinstall of that agent gets the hooks again; only Wakeshot's folder gone, the agent's still there, stays "removed"
   (orchestrator decision, for Haik's review).
+- Out of v1 since `p4-cursor-off` (Haik, 2026-11-06 23:21: "ok le'ts drop cursor as well."): a Cursor chat deleted
+  while it runs sends no `stop`, only the `sessionEnd` that Ctrl+F4 also sends, so its end cannot be seen. So
+  `ADDED_AT_START` is empty and the tray starts no hooked source. A start removes the folder an earlier build added,
+  Cursor's and Antigravity's, with the uninstall's own rules (`agent_hooks::retire`: unchanged, deleted; changed, moved
+  to `wakeshot-removed`), and drops the `added` mark once the folder is gone, so a later version that adds it again
+  starts as on a new PC. No v1 start posts `Event::HooksAdded`; the event, the notice and their words stay for a later
+  version. v1 adds no hook folder to any agent.

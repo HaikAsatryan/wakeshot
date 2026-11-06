@@ -4,7 +4,8 @@
 //! `app::startup::add_agent_hooks`; the CLI's `wakeshot hook <agent> remove` calls [`remove_command`].
 //!
 //! Owner: `p4-agent-hooks-install`. `p4-antigravity-source` adds its agent to [`AGENTS`]; `p4-antigravity-exact-end`
-//! limits it to the Antigravity CLI; `p4-vscode-local-off` takes it out of the start ([`ADDED_AT_START`]).
+//! limits it to the Antigravity CLI; `p4-vscode-local-off` takes it out of the start ([`ADDED_AT_START`]);
+//! `p4-cursor-off` takes Cursor out too, so a v1 start adds nothing and removes what an earlier build added.
 //!
 //! Every read, write and delete goes by an [`Agent`]'s fixed names, and each part of each path, from the agent's own
 //! folder down to the file, must be a plain folder or file: a reparse point of any kind (a junction, a link, a cloud
@@ -104,19 +105,22 @@ pub struct Agent {
 /// uninstall clean each one.
 pub static AGENTS: &[Agent] = &[CURSOR, ANTIGRAVITY];
 
-/// The agents a start adds a hook folder to and keeps it current, in order. Antigravity is out of v1 (Haik,
-/// 2026-11-06: "Yes remove antigravity. Too much problematic."; `docs/tasks/p4-vscode-local-off.md`): its Esc shows
-/// only in `agy`'s own log, read for one tested `agy` version, and `agy` releases almost daily. So a start leaves its
-/// folder alone: none is added, and one an earlier build added stays until `wakeshot hook antigravity remove` or the
-/// uninstall. Its add stays, tested, for a later version.
-static ADDED_AT_START: &[&Agent] = &[&CURSOR];
+/// The agents a start adds a hook folder to and keeps current, in order. None in v1, so a start removes the folder an
+/// earlier build added ([`retire`]); the add stays, tested, for a later version. Why each is out:
+///
+/// - Cursor: a chat deleted while it runs sends no `stop`, only the `sessionEnd` that Ctrl+F4 also sends, so its end
+///   cannot be seen. Not in v1 per "No guessing" (`docs/product.md`), Haik 2026-11-06.
+/// - Antigravity: Esc and Ctrl+C fire no hook; only an undocumented log shows them, and `agy` releases almost daily,
+///   so it would need a version lock. Not in v1 per "No guessing" (`docs/product.md`), Haik 2026-11-06.
+static ADDED_AT_START: &[&Agent] = &[];
 
 /// The agent with this command word, if this version knows it.
 pub fn find(key: &str) -> Option<&'static Agent> {
     AGENTS.iter().find(|agent| agent.key == key)
 }
 
-/// `docs/agent-hooks.md`, "The folder".
+/// `docs/agent-hooks.md`, "The folder". Out of v1 ([`ADDED_AT_START`]): a start, remove and uninstall still take a
+/// folder an earlier build added.
 const CURSOR: Agent = Agent {
     key: "cursor",
     label: "Cursor",
@@ -195,8 +199,8 @@ fn json_string(text: &str) -> String {
 
 /// `docs/agent-hooks.md`, "Antigravity": one plugin folder, which the CLI and the IDE's hub (the same `agy.exe`) both
 /// load. `hooks.json` sits in the plugin folder itself: `agy` reads no `hooks\hooks.json` in a plugin. Only the CLI was
-/// held (`p4-antigravity-exact-end`), so it is named so, and only its `agy.exe` makes Antigravity present. Out of v1:
-/// no start adds it ([`ADDED_AT_START`]); remove and uninstall still know it.
+/// held (`p4-antigravity-exact-end`), so it is named so, and only its `agy.exe` makes Antigravity present. Out of v1
+/// ([`ADDED_AT_START`]): a start, remove and uninstall still take a folder an earlier build added.
 const ANTIGRAVITY: Agent = Agent {
     key: "antigravity",
     label: "Antigravity CLI",
@@ -343,12 +347,14 @@ pub fn installed_hook_exe(tray_exe: &Path, local_app_data: &Path) -> Option<Path
     (same && folder.is_absolute()).then(|| folder.join(HOOK_EXE))
 }
 
-/// The tray's start (`app::startup::add_agent_hooks`): for each agent of [`ADDED_AT_START`] that is on this PC, the
-/// table of `docs/agent-hooks.md`, "Adding": add the folder once, keep it current, never touch it again once the user
-/// removed or changed it. `record` is `agent-hooks.json` in the data folder; `hook_exe` the installed `wakeshot.exe`
-/// ([`installed_hook_exe`]); `above_medium` this process's level (`process::current_above_medium`). Above Medium, or
-/// with the level unknown, nothing is touched. Returns the labels of the agents whose folder it added, for
-/// `Event::HooksAdded`. Never fails: each problem is a log line.
+/// The tray's start (`app::startup::add_agent_hooks`). First every agent of [`AGENTS`] a start does not add loses the
+/// folder an earlier build added ([`retire`], "Source turned off" in `docs/agent-hooks.md`): all of them in v1. Then,
+/// for each agent of [`ADDED_AT_START`] that is on this PC, the table of `docs/agent-hooks.md`, "Adding": add the
+/// folder once, keep it current, never touch it again once the user removed or changed it. `record` is
+/// `agent-hooks.json` in the data folder; `hook_exe` the installed `wakeshot.exe` ([`installed_hook_exe`]);
+/// `above_medium` this process's level (`process::current_above_medium`). Above Medium, or with the level unknown,
+/// nothing is touched. Returns the labels of the agents whose folder it added, for `Event::HooksAdded`: none in v1.
+/// Never fails: each problem is a log line.
 pub fn at_start(
     folders: &Folders,
     record: &Path,
@@ -356,19 +362,73 @@ pub fn at_start(
     above_medium: Result<bool, WinError>,
     log: &dyn Log,
 ) -> Vec<&'static str> {
-    start_for(ADDED_AT_START, folders, record, hook_exe, above_medium, log)
+    if !medium(above_medium, "touches no agent's folder", log) {
+        return Vec::new();
+    }
+    let off: Vec<&'static Agent> = AGENTS
+        .iter()
+        .filter(|agent| !ADDED_AT_START.iter().any(|on| on.key == agent.key))
+        .collect();
+    retire(&off, folders, record, hook_exe, log);
+    start_for(ADDED_AT_START, folders, record, hook_exe, log)
 }
 
-/// [`at_start`] for `agents`, so the tests also run the add of an agent the start leaves out.
+/// The removal a start runs for `agents`, the ones it does not add: the uninstall's own [`remove`], so a folder an
+/// earlier build added stops running hooks. Unchanged, it is deleted; changed by the user, it is moved to
+/// `wakeshot-removed` in the agent's own folder. Once it is gone the record forgets an `added` mark, so a later version
+/// that adds the agent again starts as on a new PC, with its notice. A `removed` mark, the user's no, stays, and a
+/// record that does not read stays as it is.
+fn retire(
+    agents: &[&'static Agent],
+    folders: &Folders,
+    record: &Path,
+    hook_exe: &Path,
+    log: &dyn Log,
+) {
+    for &agent in agents {
+        remove(folders, agent, Some(hook_exe), log);
+    }
+    let Ok(mut marks) = read_record(record) else {
+        return;
+    };
+    let before = marks.clone();
+    for &agent in agents {
+        if marks.0.get(agent.key) == Some(&Mark::Added) && folder_gone(folders, agent) {
+            marks.0.remove(agent.key);
+        }
+    }
+    if marks != before
+        && let Err(e) = store::write_atomic(record, &record_bytes(&marks))
+    {
+        let text = format!("{RECORD} not written: {}", failed(e));
+        line(log, Level::Warn, &text);
+    }
+}
+
+/// Whether `agent` has no plugin folder now. A path part that is a link, or does not read, counts as not gone: the
+/// record keeps its mark, and the next start looks again.
+fn folder_gone(folders: &Folders, agent: &Agent) -> bool {
+    match walk(folders, agent) {
+        Ok(Chain::Absent) => true,
+        Ok(Chain::Plain { made }) if made < agent.parents.len() => true,
+        Ok(Chain::Plain { .. }) => matches!(
+            kind(&parent_dir(folders, agent).join(FOLDER)),
+            Ok(Kind::Missing)
+        ),
+        Ok(Chain::Blocked { .. }) | Err(_) => false,
+    }
+}
+
+/// The add of [`at_start`] for `agents`, at Medium (the caller checked), so the tests also run the add of an agent
+/// the start leaves out. No agents: nothing is read or said.
 fn start_for(
     agents: &[&'static Agent],
     folders: &Folders,
     record: &Path,
     hook_exe: &Path,
-    above_medium: Result<bool, WinError>,
     log: &dyn Log,
 ) -> Vec<&'static str> {
-    if !medium(above_medium, "touches no agent's folder", log) {
+    if agents.is_empty() {
         return Vec::new();
     }
     if !matches!(kind(hook_exe), Ok(Kind::File)) {
@@ -407,6 +467,18 @@ fn start_for(
         line(log, Level::Warn, &text);
     }
     added
+}
+
+/// What the start of an earlier build did at Medium: add Cursor's folder. For the tests of what a start and the
+/// uninstall do with it now.
+#[cfg(test)]
+pub(crate) fn add_as_an_earlier_build(
+    folders: &Folders,
+    record: &Path,
+    hook_exe: &Path,
+    log: &dyn Log,
+) -> Vec<&'static str> {
+    start_for(&[&CURSOR], folders, record, hook_exe, log)
 }
 
 /// One agent's row of the table. `Ok(true)`: the folder was added.
@@ -1562,7 +1634,14 @@ mod tests {
             }
         }
 
+        /// The add a start ran before v1 (Cursor's folder), kept for a later version; most tests below run it, and
+        /// those of v1's own start ([`World::v1_start`]) use it to plant what an earlier build added.
         fn start(&self) -> Vec<&'static str> {
+            add_as_an_earlier_build(&self.folders, &self.record, &self.exe, &self.log)
+        }
+
+        /// The start the tray runs now.
+        fn v1_start(&self) -> Vec<&'static str> {
             at_start(&self.folders, &self.record, &self.exe, Ok(false), &self.log)
         }
 
@@ -1900,6 +1979,7 @@ mod tests {
             }
             let before = tree(&w.temp.0);
             assert!(w.start().is_empty(), "{marker:?}");
+            assert!(w.v1_start().is_empty(), "{marker:?}");
             w.uninstall();
             assert_eq!(tree(&w.temp.0), before, "{marker:?}");
             assert!(w.has("was not written by Wakeshot"), "{marker:?}");
@@ -1911,6 +1991,7 @@ mod tests {
         fs::write(w.plugin(), b"x").unwrap();
         let before = tree(&w.temp.0);
         assert!(w.start().is_empty());
+        assert!(w.v1_start().is_empty());
         w.uninstall();
         assert_eq!(tree(&w.temp.0), before);
     }
@@ -1999,6 +2080,7 @@ mod tests {
             }
             let before = tree(&out);
             let added = w.start();
+            assert!(w.v1_start().is_empty(), "{part}");
             w.uninstall();
             assert_eq!(
                 tree(&out),
@@ -2028,6 +2110,7 @@ mod tests {
         fs::write(w.plugin().join(MARKER), crafted).unwrap();
         let before = tree(&w.temp.0);
         assert!(w.start().is_empty());
+        assert!(w.v1_start().is_empty());
         w.uninstall();
         assert_eq!(tree(&w.temp.0), before);
 
@@ -2283,7 +2366,10 @@ mod tests {
 
     #[test]
     fn above_medium_or_unknown_nothing_is_touched_and_the_uninstall_hands_off() {
+        // A folder from an earlier start at Medium: neither an elevated start nor an elevated uninstall deletes it in
+        // this process.
         let w = World::new("elevated");
+        assert_eq!(w.start(), ["Cursor"]);
         let before = tree(&w.temp.0);
         let unknown = WinError {
             call: "OpenProcessToken",
@@ -2297,10 +2383,6 @@ mod tests {
             w.has("runs above Medium integrity (started from an admin terminal), so it touches no")
         );
         assert!(w.has("integrity level does not read (OpenProcessToken failed with 5)"));
-
-        // A folder from an earlier start at Medium: an elevated uninstall never deletes in this process.
-        assert_eq!(w.start(), ["Cursor"]);
-        let before = tree(&w.temp.0);
         let mut asked = Vec::new();
         let answers = [
             CopyRun::Ended { outside_tree: true },
@@ -2340,8 +2422,9 @@ mod tests {
     }
 
     #[test]
-    fn the_real_token_decides_whether_a_start_writes() {
+    fn the_real_token_decides_whether_a_start_deletes() {
         let w = World::new("token");
+        assert_eq!(w.start(), ["Cursor"]);
         let above = process::current_above_medium().unwrap();
         println!("test runner above Medium: {above}");
         let added = at_start(
@@ -2351,8 +2434,8 @@ mod tests {
             process::current_above_medium(),
             &w.log,
         );
-        assert_eq!(added.is_empty(), above);
-        assert_eq!(w.plugin().exists(), !above);
+        assert!(added.is_empty());
+        assert_eq!(w.plugin().exists(), above);
     }
 
     const REPORT_ARG: &str = "wakeshot-test-report=";
@@ -2367,21 +2450,24 @@ mod tests {
             return;
         };
         let w = World::new("medium-role");
+        let planted = w.start();
         let above = process::current_above_medium();
         let added = at_start(&w.folders, &w.record, &w.exe, above, &w.log);
+        // The log lines after the first line, for a failure's message.
         let text = format!(
-            "above Medium {above:?}; added {added:?}; marker {}",
-            w.plugin().join(MARKER).is_file()
+            "above Medium {above:?}; planted {planted:?}; added {added:?}; marker {}\n{:?}",
+            w.plugin().join(MARKER).is_file(),
+            w.lines()
         );
         fs::write(report, text).unwrap();
     }
 
     /// The Medium rule both ways, with real tokens: a start under Explorer's token (Medium, as the installed tray
-    /// runs) writes the folder; this runner, elevated on the test laptop, writes nothing. Run with `cargo test --locked
-    /// -p wakeshot-windows -- --ignored agent_hooks::`. Needs Explorer as the shell.
+    /// runs) removes the folder an earlier build added; this runner, elevated on the test laptop, deletes nothing. Run
+    /// with `cargo test --locked -p wakeshot-windows -- --ignored agent_hooks::`. Needs Explorer as the shell.
     #[test]
     #[ignore = "needs Explorer as the shell (track note 3)"]
-    fn a_medium_start_writes_and_an_elevated_one_does_not() {
+    fn a_medium_start_removes_and_an_elevated_one_does_not() {
         let temp = Temp::new("medium");
         let report = temp.0.join("report.txt");
         let mut args: Vec<OsString> = [
@@ -2403,17 +2489,20 @@ mod tests {
         let text = fs::read_to_string(&report).expect("the nested run wrote its report");
         println!("nested run: {text}");
         assert_eq!(
-            text,
-            r#"above Medium Ok(false); added ["Cursor"]; marker true"#
+            text.lines().next(),
+            Some(r#"above Medium Ok(false); planted ["Cursor"]; added []; marker false"#),
+            "{text}"
         );
 
         let above = process::current_above_medium().unwrap();
         println!("this runner above Medium: {above}");
         if above {
             let w = World::new("elevated-real");
+            assert_eq!(w.start(), ["Cursor"]);
+            let before = tree(&w.temp.0);
             let added = at_start(&w.folders, &w.record, &w.exe, Ok(above), &w.log);
             assert!(added.is_empty());
-            assert!(!w.folders.profile.join(r".cursor\plugins").exists());
+            assert_eq!(tree(&w.temp.0), before);
         }
     }
 
@@ -2508,7 +2597,7 @@ mod tests {
         log: &dyn Log,
     ) -> Vec<&'static str> {
         let all: Vec<&'static Agent> = AGENTS.iter().collect();
-        start_for(&all, folders, record, hook_exe, Ok(false), log)
+        start_for(&all, folders, record, hook_exe, log)
     }
 
     impl World {
@@ -2558,45 +2647,118 @@ mod tests {
         r"wakeshot\wakeshot-hooks.json",
     ];
 
-    /// Antigravity is out of v1 (`ADDED_AT_START`): a start adds no folder to it and leaves one an earlier build added
-    /// as it is, while the uninstall still removes that one. This fails if a start adds its folder again.
+    /// Cursor and Antigravity are out of v1 (`ADDED_AT_START`): with both agents on the PC, a start adds no folder,
+    /// writes no record, says nothing and gives no label for a notice. This fails if a start adds a folder again.
     #[test]
-    fn a_start_adds_no_antigravity_folder_and_the_uninstall_still_removes_an_old_one() {
-        assert_eq!(
-            ADDED_AT_START.iter().map(|a| a.key).collect::<Vec<_>>(),
-            ["cursor"]
-        );
-        let w = World::gemini("agy-out-of-v1");
+    fn a_v1_start_adds_no_hook_folder() {
+        assert!(ADDED_AT_START.is_empty());
+        let w = World::gemini("v1-adds-nothing");
         fs::create_dir_all(w.cursor()).unwrap();
-        let gemini = w.folders.profile.join(".gemini");
-        let before = tree(&gemini);
+        let before = tree(&w.temp.0);
+        for _ in 0..2 {
+            assert!(w.v1_start().is_empty());
+        }
+        assert_eq!(tree(&w.temp.0), before);
+        assert_eq!(w.lines(), Vec::<String>::new());
+    }
+
+    /// The folders an earlier build added, unchanged: a v1 start deletes them by the fixed names, keeps the folders
+    /// above them, and the record forgets them; the user's no for another agent stays. A second start, and an uninstall
+    /// after, find nothing and say nothing.
+    #[test]
+    fn a_v1_start_removes_the_unchanged_folders_an_earlier_build_added() {
+        let w = World::gemini("v1-removes");
+        fs::create_dir_all(w.cursor()).unwrap();
+        assert_eq!(w.start_all(), ["Cursor", "Antigravity CLI"]);
+        let mut record: Value = serde_json::from_str(&w.record_text().unwrap()).unwrap();
+        record["zed"] = "removed".into();
+        fs::write(&w.record, record.to_string()).unwrap();
+        let mut want = tree(&w.temp.0);
+        want.retain(|path, _| {
+            !path.starts_with(r"profile\.cursor\plugins\local\wakeshot")
+                && !path.starts_with(r"profile\.gemini\config\plugins\wakeshot")
+                && !path.ends_with("agent-hooks.json")
+        });
+
+        assert!(w.v1_start().is_empty(), "no notice");
+        assert_eq!(
+            w.record_text().as_deref(),
+            Some("{\"version\":1,\"zed\":\"removed\"}\n")
+        );
+        let mut now = tree(&w.temp.0);
+        now.retain(|path, _| !path.ends_with("agent-hooks.json"));
+        assert_eq!(now, want);
+        assert!(w.local().is_dir() && w.gemini_plugins().is_dir());
+        assert!(w.has(r"Cursor: .cursor\plugins\local\wakeshot removed"));
+        assert!(w.has(r"Antigravity CLI: .gemini\config\plugins\wakeshot removed"));
+
+        let before = tree(&w.temp.0);
+        let lines = w.lines().len();
+        assert!(w.v1_start().is_empty());
+        w.uninstall();
+        assert_eq!(tree(&w.temp.0), before);
+        assert_eq!(w.lines().len(), lines);
+    }
+
+    /// A folder an earlier build added that the user changed since: a v1 start moves it to `wakeshot-removed` in the
+    /// agent's own folder, as the uninstall does, so the agent stops loading it and the user's edits stay.
+    #[test]
+    fn a_v1_start_moves_a_changed_folder_out_of_the_agents_plugins() {
+        let w = World::gemini("v1-moves");
+        fs::create_dir_all(w.cursor()).unwrap();
+        assert_eq!(w.start_all(), ["Cursor", "Antigravity CLI"]);
+        fs::write(w.plugin().join(r"hooks\hooks.json"), b"{\"mine\":1}").unwrap();
+        fs::write(w.gemini_plugin().join("notes.md"), b"x").unwrap();
+
+        assert!(w.v1_start().is_empty());
+        assert!(!w.plugin().exists() && !w.gemini_plugin().exists());
+        assert_eq!(names(&w.local()), Vec::<String>::new());
+        assert_eq!(names(&w.gemini_plugins()), Vec::<String>::new());
+        let cursor_removed = w.cursor().join(REMOVED);
+        assert_eq!(
+            names(&cursor_removed),
+            ["hooks", r"hooks\hooks.json", MARKER]
+        );
+        assert_eq!(
+            fs::read(cursor_removed.join(r"hooks\hooks.json")).unwrap(),
+            b"{\"mine\":1}"
+        );
+        let gemini_removed = w.folders.profile.join(r".gemini\config").join(REMOVED);
+        assert_eq!(names(&gemini_removed), ["notes.md"]);
+        assert!(w.has(r".cursor\plugins\local\wakeshot moved to .cursor\wakeshot-removed, so"));
+        assert!(
+            w.has(r".gemini\config\plugins\wakeshot moved to .gemini\config\wakeshot-removed, so")
+        );
+        assert_eq!(w.record_text().as_deref(), Some("{\"version\":1}\n"));
+    }
+
+    /// A folder the start cannot empty or rename (a file held open with no delete sharing) stays, one line says so, and
+    /// the record keeps its mark, so the next start tries again.
+    #[test]
+    fn a_v1_start_that_cannot_remove_a_folder_tries_again_at_the_next() {
+        let w = World::new("v1-held");
         assert_eq!(w.start(), ["Cursor"]);
-        assert_eq!(tree(&gemini), before, "nothing under .gemini changed");
+        let held = w.plugin().join(r"hooks\hooks.json");
+        let file = OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ.0)
+            .open(&held)
+            .unwrap();
+        assert!(w.v1_start().is_empty());
+        assert!(w.has("could not be removed (a delete failed: DeleteFileW failed with 32)"));
         assert_eq!(
             w.record_text().as_deref(),
             Some("{\"version\":1,\"cursor\":\"added\"}\n")
         );
-        assert!(
-            !w.lines().iter().any(|l| l.contains("Antigravity")),
-            "{:?}",
-            w.lines()
-        );
-
-        // A folder an earlier build added: a start keeps away from it, the uninstall takes it.
-        let w = World::gemini("agy-old-folder");
-        assert_eq!(w.start_all(), ["Antigravity CLI"]);
-        let lines = w.lines().len();
-        let old = tree(&w.gemini_plugins());
-        assert!(w.start().is_empty());
-        assert_eq!(tree(&w.gemini_plugins()), old, "not touched");
-        assert_eq!(w.lines().len(), lines, "not even looked at");
+        drop(file);
+        assert!(w.v1_start().is_empty());
+        assert!(!w.plugin().exists());
+        assert_eq!(w.record_text().as_deref(), Some("{\"version\":1}\n"));
         assert_eq!(
-            find("antigravity").map(|a| a.label),
-            Some("Antigravity CLI"),
-            "`wakeshot hook antigravity remove` still knows it"
+            find("cursor").map(|a| a.label),
+            Some("Cursor"),
+            "`wakeshot hook cursor remove` still knows it"
         );
-        w.uninstall();
-        assert!(!w.gemini_plugin().exists());
     }
 
     #[test]
@@ -2928,6 +3090,7 @@ mod tests {
             junction(&link, &target);
             let before = tree(&out);
             assert!(w.start_all().is_empty(), "{part}");
+            assert!(w.v1_start().is_empty(), "{part}");
             w.uninstall();
             assert_eq!(
                 tree(&out),

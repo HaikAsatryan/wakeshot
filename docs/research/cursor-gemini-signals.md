@@ -2,6 +2,11 @@
 
 Research for Wakeshot, 2026-11-06 (card `p4-cursor-gemini-research`). Builds on `other-agent-signals.md`.
 
+**Cursor is out of v1** (Haik, 2026-11-06 23:21: "ok le'ts drop cursor as well."; card `p4-cursor-off`): the hooks
+worked live, but a chat deleted while it runs sends no `stop`, only the `sessionEnd` that Ctrl+F4 also sends, so its
+end cannot be seen ("No guessing", `docs/product.md`; live, Cursor 3.27.12, `docs/tasks/p6-agents-install-e2e.md`).
+The tray neither watches Cursor nor adds its folder, and removes the folder an earlier build added.
+
 Marks: **verified** = seen in source, a shipped bundle or official docs (path or URL given). **claim** = a number
 the company states about itself. **not verified** = read elsewhere, inferred, or not checked. Nothing was installed
 or run. Downloads were unpacked as data only, in the card's scratch folder, and deleted at the end.

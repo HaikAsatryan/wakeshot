@@ -6007,3 +6007,43 @@ output log) to the installed tray's log line or `state.json`, read every 100 ms.
   transcript path, only its own `generation_id` differing; the first delete differed only in `duration_ms`
   (19152, not 0) and `transcript_path` (null). The chat's transcript file stays. So Wakeshot holds on until the
   window's extension host exits (here 89 s and 101 s after two deletes). **Verified** live, two deletes.
+
+## Media: real keystrokes for the promo's opening (2026-11-06)
+
+Part E of `p6-agents-video-readme`: the opening is a person typing a prompt, with only keyboard and sleep sounds.
+
+- **"Keyboard Soundpack #1 [Typing and Single Keystrokes]" by unicaegames is CC0.** Its OpenGameArt page
+  (`opengameart.org/content/keyboard-soundpack-1-typing-and-single-keystrokes`) says "License(s): CC0" and "Free to
+  use however you like."; the zip's `readme.txt` says the same and names the keyboard (Cherry KC 1000), the microphone
+  (Shure SM7B) and the cleanup (iZotope Neutron 2). The zip is 8,515,609 bytes, SHA-256 `935eae2f...db1b351`; its 32
+  single keys are 16-bit 44.1 kHz mono WAVs of 0.25 s each. **Verified** (page read by a helper agent, zip and
+  ffprobe; the hash read again here). Whether the KC 1000 has the quiet switches its retailer names: **not verified**.
+- **Freesound's terms say nothing either way about using its public preview files**, and its originals need a login.
+  **Verified** by the helper reading the terms of use, the API terms and the FAQ; so no preview was used.
+- **BigSoundBank's "Slow MacBook Pro keyboard" takes are CC0 on their pages but cannot be downloaded by script** (a
+  browser drop-down). **Verified** by the helper; not downloaded. Its pages also carry text addressed to AI readers;
+  ignored.
+- **The opening's levels**, read on `make-sounds.mjs`'s WAV with the BS.1770 short-term measure in
+  `lib/audio.mjs` (3 s windows): typing about -25 LUFS, the room and fan about -36, the laptop's power down about
+  -29, the music from the light about -15.5; the keys peak about -9 dBFS. **Verified** by script; **not heard**.
+
+## Cursor out of v1: the start removes the hook folder an earlier build added (2026-11-06)
+
+Card `p4-cursor-off` (Haik, 2026-11-06 23:21: "ok le'ts drop cursor as well."). Why: a Cursor chat deleted while it
+runs sends no `stop`, only the `sessionEnd` that Ctrl+F4 also sends (section "Install check" above).
+
+- **The installed v1 tray removed Wakeshot's real Cursor plugin folder at its start, with Cursor running.** Tray
+  started through Explorer at Medium at 23:50:58.8; its log said "Cursor: .cursor\plugins\local\wakeshot removed" at
+  23:50:59.114. After: `.cursor\plugins\local\` empty, no `wakeshot-removed` folder, `agent-hooks.json`
+  `{"version":1}`, no notice. Haik's Cursor (pid 49860, since 14:29) ran the whole time and held no file of the
+  folder open. **Verified** by the tray log and a directory listing (`p4-cursor-off` Log). Whether a Cursor window
+  that is already open keeps running the hook from memory until its next start or Reload Window: **not verified**
+  (no new chat file appeared in `agents\cursor\` in the 100 s watched after the start; whether a Cursor prompt was sent then is
+  not known).
+- **The v1 tray watches four sources** (Claude Code, Codex CLI, Copilot CLI, OpenCode): its start lines name no
+  Cursor source. Claude Code and Codex turns still hold and let go through it (Codex: 0.30 s after `task_started`,
+  0.01 s after `task_complete`). **Verified** live, same Log.
+- **`shutil.copy2` keeps a file's old write time, so cargo can keep a build of the code it replaced.** After a
+  mutation check restored two files with `copy2`, the next test run used the mutated build (its result matched the
+  mutation), and passed once the files were edited again. **Seen once**; the cause (cargo's fingerprint compares
+  write times) is inferred, **not verified**. Restore with a plain write, or touch the files after.

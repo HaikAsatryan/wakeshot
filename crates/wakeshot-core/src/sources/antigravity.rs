@@ -1,3 +1,7 @@
+//! Not started by the v1 tray, and its hook folder is not added: Esc and Ctrl+C fire no hook; only an undocumented log
+//! shows them, and `agy` releases almost daily, so it would need a version lock. Not in v1 per "No guessing"
+//! (`docs/product.md`), Haik 2026-11-06 (`docs/tasks/p4-vscode-local-off.md`). Kept, with its tests, for later.
+//!
 //! Antigravity CLI sessions, from the files Wakeshot's own Antigravity hook writes in `agents\antigravity\`, and from
 //! `agy`'s own log for the one end no hook reports, Esc and Ctrl+C (architecture section 7; `docs/agent-hooks.md`,
 //! "Antigravity"; signals in `docs/research/antigravity-signals.md`). The table is what the hook and the source know
