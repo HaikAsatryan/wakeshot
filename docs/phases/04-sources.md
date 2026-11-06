@@ -120,10 +120,10 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-vscode-source` | no | `p4-contracts-r2` | done (2026-11-06 ~17:45, 5869c5c): 31 tests; `ImageSince` on `Code.exe` with the newest send time; label "Copilot in VS Code"; Insiders read, portable not (worker calls, for Haik's review); not live yet |
 | `p4-contracts-r3` | no | `p4-contracts-r2`, the hooks security review and its fixes; runs alone among Rust cards | done (2026-11-06 ~19:30, 98c8795): the six hooks contract items, the OpenCode `-shm` loop fix, Copilot, VS Code and OpenCode in the tray; 1622 tests; whole-workspace checks green on x64 and ARM64; one `windows` feature added (`Wdk_System_Threading`) |
 | `p4-cursor-source` | only if the editor puts the payload on the command line (design Question 4) | `p4-contracts-r3`, the hooks review verify | running (2026-11-06 ~19:35) |
-| `p4-agent-hooks-install` | no | `p4-contracts-r3`, the hooks review verify | running (2026-11-06 ~19:35) |
+| `p4-agent-hooks-install` | no | `p4-contracts-r3`, the hooks review verify | done (2026-11-06 ~20:30, f46828f): 23 tests; link check and fixed file set broken on purpose and caught; the tray call and the CLI remove call not wired yet (to `p4-antigravity-source` and `p4-cursor-source`) |
 | `p4-antigravity-source` | only if its payload is on the command line | `p4-cursor-source`, `p4-agent-hooks-install` | card written 2026-11-06 |
 | `p4-live-vscode` | no | `p4-vscode-source`, `p4-live-harness`; live cards in parallel since 18:50 | running (2026-11-06 ~19:35) |
-| `p4-live-opencode` | no | `p4-opencode-source`, the OpenCode review fixes; live lane after `p4-live-vscode` | card written 2026-11-06 |
+| `p4-live-opencode` | no | `p4-opencode-source`, the OpenCode review fixes; live cards in parallel since 18:50 | running (2026-11-06 ~20:30) |
 | `p4-live-cursor` | only if the payload check finds the command line | `p4-cursor-source`, `p4-agent-hooks-install`, the hooks code review fixes; live lane after `p4-live-opencode` | card written 2026-11-06 |
 | `p4-live-antigravity` | only if its payload is on the command line | `p4-antigravity-source`, `p4-live-cursor` | card written 2026-11-06 |
 | `p4-core-linux-tests` | no | none | done (2026-11-06 ~20:10, 750b023): Codex and OpenCode tests join one level at a time; CI core step runs `--no-fail-fast`; three VS Code tests sent to `p4-live-vscode`; no Linux run here (rustup in WSL refused by the permission check; no C compiler there) |
@@ -428,3 +428,10 @@ limit; Copilot waiting does not hold. The cards build these.
   it does not hold. Routed to `p4-live-copilot` (research rule 8: accept `copilot-runtime.exe` and `Code.exe` owners).
   Also `alive=Gone` from Medium for a running `copilot.exe`: elevation of the test process or a real Medium-to-High
   gap; `p4-live-copilot` says which. The VS Code worker was asked to check who started the elevated VS Code.
+- 2026-11-06 ~20:30: `p4-agent-hooks-install` done (f46828f). Not wired yet: the tray's `startup::add_agent_hooks`
+  call (added to `p4-antigravity-source`) and the CLI's `hook <agent> remove` call (sent to `p4-cursor-source`).
+  Worker's question for Haik (a Cursor uninstall and reinstall reads as "the user removed the hooks", so they never
+  come back): orchestrator decision, for Haik's review, easy to undo: a whole agent folder gone is the agent going
+  away, so its record is forgotten and the hooks come back when it is found again; only Wakeshot's own folder gone
+  stays "removed by the user" (`p4-antigravity-source` item 7). `p4-live-opencode` started (slot freed). The VS Code
+  live card asked Haik to close its elevated test window after one approval click (relayed in chat).

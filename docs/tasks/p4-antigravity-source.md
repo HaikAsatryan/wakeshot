@@ -38,6 +38,14 @@ folder in the install table, as `docs/agent-hooks.md` "Antigravity" designs them
    start the Cursor and Antigravity sources in `crates/wakeshot-windows/src/app/tray_mode.rs` (as `p4-contracts-r3`
    did for Copilot, VS Code and OpenCode, each with a unit test), and add `cursor` and `antigravity` rows to
    `SOURCES` in `crates/wakeshot-windows/examples/agent-watch.rs`. This wins over "Out of scope" below.
+6. The one `startup::add_agent_hooks` call in `tray_mode::serve` (`p4-agent-hooks-install` Result, "Not wired yet"),
+   so the tray adds the plugin folders, with a test.
+7. Orchestrator decision, 2026-11-06 ~20:30, for Haik's review (easy to undo): a whole agent folder gone (for example
+   `%USERPROFILE%\.cursor` deleted with Cursor, then made again by a reinstall) is the agent going away, not the user
+   removing Wakeshot's hooks, so the record forgets that agent and the hooks are added again when it is found.
+   Only Wakeshot's own folder gone, with the agent folder still there, stays "the user removed them" (never added
+   back). In `agent_hooks.rs`, with tests for both cases. Today's code treats both as "removed by the user", so a
+   Cursor reinstall would lose Wakeshot's hooks for good.
 
 ## Acceptance checks
 
