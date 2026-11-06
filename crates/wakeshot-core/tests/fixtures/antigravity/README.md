@@ -10,3 +10,8 @@ from the field names in `agy` 1.5.2's own descriptors (`exa.hooks_pb.HookArgsCom
   background stop has `fullyIdle` false, which `agy` writes (protojson `EmitUnpopulated`).
 - `ide-pre-invocation.json`, `ide-stop-canceled.json`: one IDE chat, pretty printed, its id in upper case where the
   hook must lowercase it, and Esc's reason.
+
+Real captures are in `live/` (`p4-live-antigravity`). They differ from the made-up files above in ways the hook
+ignores: a real `Stop` has no `finalModelOutput`, its `terminationReason` was `NO_TOOL_CALL`, the paths use `/`, and
+the form is compact with sorted keys. Esc in the CLI runs no `Stop` at all, so `ide-stop-canceled.json` stays a
+made-up case. The made-up files stay for what the real ones do not show (pretty printing, an upper-case id).

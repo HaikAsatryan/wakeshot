@@ -193,7 +193,7 @@ fn assert_clean(text: &str, case: &str) {
 
 /// The privacy rule on the core's side: what the parse returns (and so every file text and log text made from it)
 /// holds no input value but the checked chat id: not the prompt (`lastUserInput`), the model's answer, the paths or the
-/// model name.
+/// model name. On the made-up fixtures and on the live ones.
 #[test]
 fn the_marker_in_any_field_never_reaches_a_file_or_a_log_text() {
     let process = ProcessRef {
@@ -201,8 +201,14 @@ fn the_marker_in_any_field_never_reaches_a_file_or_a_log_text() {
         start: FileTime(134_000_000_000_000_001),
     };
     let mut written = 0;
-    for (name, event) in FIXTURES {
-        let base: Value = serde_json::from_slice(&fixture(name)).unwrap();
+    let made_up = FIXTURES
+        .iter()
+        .map(|&(name, event)| (name, event, fixture(name)));
+    let real = LIVE
+        .iter()
+        .map(|&(name, event, ..)| (name, event, live(name)));
+    for (name, event, bytes) in made_up.chain(real) {
+        let base: Value = serde_json::from_slice(&bytes).unwrap();
         let rule = AGENT.event(event).unwrap();
         for (field, input) in marked(&base) {
             let case = format!("{name}, {field} = {}", input[&field]);
@@ -565,6 +571,139 @@ fn a_hook_input_is_never_a_state_file() {
         hooked::resolve(AGENT.event("Stop").unwrap(), &input),
         Ok(Op::Delete)
     );
+}
+
+/// One step of the live turn: the fixture, its event, what it does to the chat's file, and the sessions the source then
+/// gives, as `activity` and `open_tasks`.
+type LiveStep = (&'static str, &'static str, Op, &'static [(Activity, u32)]);
+
+/// The live turn in `fixtures/antigravity/live/`, in order (`p4-live-antigravity`, 2026-11-06).
+const LIVE: [LiveStep; 5] = [
+    (
+        "turn-1-pre-invocation.json",
+        "PreInvocation",
+        Op::Write(State::Working),
+        &[(Activity::Working, 0)],
+    ),
+    (
+        "turn-2-pre-invocation.json",
+        "PreInvocation",
+        Op::Write(State::Working),
+        &[(Activity::Working, 0)],
+    ),
+    (
+        "turn-3-stop-background.json",
+        "Stop",
+        Op::Write(State::Background),
+        &[(Activity::Idle, 1)],
+    ),
+    (
+        "turn-4-pre-invocation-woken.json",
+        "PreInvocation",
+        Op::Write(State::Working),
+        &[(Activity::Working, 0)],
+    ),
+    ("turn-5-stop-idle.json", "Stop", Op::Delete, &[]),
+];
+
+const LIVE_CHAT: &str = "7f3c9a21-5b6e-4d08-9c2a-e41b0d6f8a53";
+
+fn live_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("antigravity")
+        .join("live")
+}
+
+fn live(name: &str) -> Vec<u8> {
+    let path = live_dir().join(name);
+    std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+}
+
+#[test]
+fn every_live_fixture_is_listed_once() {
+    let mut on_disk: Vec<String> = std::fs::read_dir(live_dir())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .filter(|name| name.ends_with(".json"))
+        .collect();
+    on_disk.sort();
+    let mut listed: Vec<String> = LIVE.iter().map(|(name, ..)| (*name).to_owned()).collect();
+    listed.sort();
+    assert_eq!(on_disk, listed);
+}
+
+/// A real turn, replayed as the hook and the source handle it: the second model call writes nothing, the loop's end
+/// with a command still running holds as one open task, the command's end wakes the agent into a new loop, and that
+/// loop's end deletes the file. What the parse keeps holds none of the input's other values.
+#[test]
+fn the_live_turn_replays_into_the_sessions_the_live_test_saw() {
+    let process = ProcessRef {
+        pid: 40_292,
+        start: FileTime(134_384_452_138_799_879),
+    };
+    let mut source = antigravity::source(&data_root());
+    let mut on_disk: Option<Vec<u8>> = None;
+    let mut writes = 0;
+    for (name, event, want, sessions) in LIVE {
+        let parsed = parse(event, &live(name));
+        for word in [
+            "app test",
+            "C:/Users/dev",
+            "gemini",
+            "NO_TOOL_CALL",
+            "brain",
+        ] {
+            assert!(!format!("{parsed:?}").contains(word), "{name}: {word}");
+        }
+        assert_eq!(parsed.version, None, "{name}");
+        let input = parsed.input.unwrap_or_else(|p| panic!("{name}: {p}"));
+        assert_eq!((input.chat.as_str(), input.turn.as_str()), (LIVE_CHAT, ""));
+        let op = hooked::resolve(AGENT.event(event).unwrap(), &input).unwrap();
+        assert_eq!(op, want, "{name}");
+        match op {
+            // The hook skips a write whose bytes the file already holds.
+            Op::Write(state) => {
+                let text = hooked::state_text(process, &input.turn, CLI_LABEL, state);
+                if on_disk.as_deref() != Some(text.as_slice()) {
+                    writes += 1;
+                    on_disk = Some(text.clone());
+                    let fed = source.feed(&chat_id(LIVE_CHAT), Feed::Whole(text));
+                    assert_eq!(fed, Fed::Taken, "{name}");
+                }
+            }
+            Op::Delete => {
+                on_disk = None;
+                source.feed(&chat_id(LIVE_CHAT), Feed::Gone);
+            }
+            other => panic!("{name}: {other:?}"),
+        }
+        let seen: Vec<_> = source
+            .sessions()
+            .iter()
+            .map(|s| {
+                assert_eq!(
+                    (s.key.id.as_str(), s.label, s.format.clone()),
+                    (LIVE_CHAT, CLI_LABEL, FormatHealth::Ok)
+                );
+                assert_eq!(
+                    s.liveness,
+                    Liveness::Process {
+                        pid: process.pid,
+                        start: process.start
+                    }
+                );
+                (s.activity, s.open_tasks)
+            })
+            .collect();
+        assert_eq!(seen, sessions, "{name}");
+    }
+    assert_eq!(
+        writes, 3,
+        "the second model call of the loop writes nothing"
+    );
+    assert_eq!(on_disk, None);
 }
 
 #[test]

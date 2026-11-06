@@ -5835,3 +5835,26 @@ Card `docs/tasks/p4-live-opencode.md`, 2026-11-06; detail in `docs/research/open
   research file.
 - **A schedule made through `opencode api POST /api/experimental/schedule` fires on time while the service runs**;
   the model did not get the schedule tools with `experimental.schedules` on (why: not verified).
+
+## Antigravity live test
+
+Card `p4-live-antigravity`, 2026-11-06. Antigravity CLI 1.5.2 (IDE 2.6.0 installed), Free plan, Gemini 3.8 Flash low;
+Wakeshot's plugin from the product's add code, a debug hook exe on a scratch data folder, readers at Medium
+(`agent-watch`, a dry-run tray). How checked: a pseudo console driver, a kernel process trace (names, pids, times),
+a scratch capture plugin for the inputs. Details: `research/antigravity-signals.md`, "Phase 4 live test (2026-11-06)".
+
+- **A dropped plugin folder loads in the CLI, enabled, with no install step**, also into a running TUI at its next
+  model call. **Dot-named folders load too**: `.wakeshot-new-<pid>` is listed as a plugin, and `.wakeshot-removed`
+  ran its hooks in a real turn. Verified live.
+- **The hook runs under `cmd.exe` under `agy.exe`, input on stdin**, `ANTIGRAVITY_CONVERSATION_ID` set, working folder
+  the plugin's; plugins' hooks run one after the other. Each Wakeshot hook run: `cmd` median 42 ms (36 to 111), the
+  debug exe inside it median 31 ms (21 runs). The release exe: not measured. Verified live.
+- **Esc runs no `Stop`**, nor does `/exit` or a crash: the chat's file stays `working` until the next prompt's `Stop`
+  or the end of that `agy.exe` (an exit or a crash ends the hold at once through the process). Verified live (CLI).
+- **`fullyIdle` is not reliable for "a background command still runs"**: `false` twice, `true` twice while a
+  background command ran; each time the command ended, the agent woke itself and that turn held. Verified live;
+  why it differs: not verified.
+- **Through the app**: the dry-run tray held 0.1 s after Enter and ended at the `Stop`, also for the first file in a
+  hook folder made while it ran. Verified live.
+- **IDE**: its hub is `.gemini\bin\agy.exe --hub`, a child of the extension host, only in a trusted window; an IDE
+  chat did not run (first-run screen, Haik's to finish). Not tested live.

@@ -352,3 +352,56 @@ task). The `modelName` value is a guess.
 8. Does `powercfg /requests` list `Antigravity IDE.exe` under EXECUTION while the IDE agent runs, and nothing for the
    CLI?
 9. Is Free sign-in possible from Armenia without a card or phone?
+
+## Phase 4 live test (2026-11-06)
+
+Card `p4-live-antigravity`. Antigravity CLI 1.5.2 and IDE 2.6.0 for Haik's user, Free plan ("Antigravity Starter
+Quota"), Gemini 3.8 Flash at low effort; 11 one-line test prompts, 10 of them reached a model. Wakeshot's plugin
+folder came from the product's add code (`agent_hooks::at_start`, run on a scratch profile so the real `.cursor` was
+not touched, then its three files copied into the real `plugins\` under the staging name and renamed), naming a debug
+`wakeshot.exe` that wrote to a scratch data folder. Readers at Medium: `agent-watch --source antigravity` and a
+dry-run tray. Times are from a kernel process trace (`logman`, Microsoft-Windows-Kernel-Process: names, pids, times
+only), the driver's log and the readers' lines, on one clock. A scratch capture plugin beside Wakeshot's kept the real
+inputs in the scratch folder (redacted copies in `crates/wakeshot-core/tests/fixtures/antigravity/live/`).
+
+Answers to "Open questions only a live test answers":
+
+1. **A dropped folder loads, enabled, with no `agy plugin install`** (CLI): `agy plugin list --json` lists it at once,
+   `enabled: true`; `/hooks` shows PreInvocation and Stop with 1 hook each; `agy plugin validate --strict` passes (one
+   note: no logo). A running TUI also picks up a plugin folder added after its start, from its next model call.
+   **Dot-named folders are not skipped**: a staging folder `.wakeshot-new-<pid>` is listed as an enabled plugin under
+   its folder name, and a folder renamed `.wakeshot-removed` ran both its hooks in a real turn. Verified live.
+2. **Shell and parent**: `agy.exe` starts `cmd.exe`, which starts the hook (`wakeshot.exe` -> `cmd.exe` -> `agy.exe`);
+   the input is on stdin (a pipe), `ANTIGRAVITY_CONVERSATION_ID` is set and equals the input's id, the working folder
+   is the plugin's folder. The runtime transport check found no payload key in `cmd`'s command line in any run (no
+   `blocked.json`, no log line). Hooks of two plugins run one after the other, never at once. Cost of Wakeshot's hook
+   per event, from 21 runs: `cmd` 36 to 111 ms (median 42), the debug exe inside it 25 to 88 ms (median 31); a
+   `PreInvocation` whose file already says working writes nothing. The release exe was not measured. Verified live.
+3. **Esc runs no `Stop`**: Esc during a running command shows "Interrupted · What should Antigravity CLI do instead?",
+   ends the command, and runs no hook. The chat's file stays `working`, so the hold lasts until the next prompt's
+   `Stop` or the end of that `agy.exe`. `/exit` runs no hook either; it ends the process and its background commands,
+   and the watch thread sees the end at once (`alive=Gone` 5 ms before the driver did). A crash (the TUI killed by
+   pid mid-command) leaves the file `working` with a dead pid, which holds nothing. Verified live (CLI).
+4. **`fullyIdle` is not "no background command runs"**: `Stop` came with `fullyIdle: false` twice (a command `agy`
+   moved to the background after waiting about 10 s; a background command after an Esc'd turn) and `fullyIdle: true`
+   twice for a command the agent started in the background while it still ran (the footer showed "1 task(s)"). So the
+   dry-run tray held during the second case only until the `Stop`. Each time the command ended while `agy` ran, the
+   agent woke itself: a new `PreInvocation` (`invocationNum` 0), then `Stop`, and that held. The binary has
+   `HasIdleBlockingBackgroundTasks` and a `WaitMsBeforeAsync` run-command argument, so likely only some background
+   tasks block "idle" (strings only; **not verified**). A `/schedule` timer: **not tested live**.
+5. **`{}` lets a stop through**: every turn ended normally with Wakeshot's `{}` answer. Verified live.
+6. **IDE**: the hub is `%USERPROFILE%\.gemini\bin\agy.exe --hub ...`, started by the IDE's extension host for an
+   empty (trusted) window; a folder in Restricted Mode loads no Antigravity extension and starts no hub (process
+   facts, verified). The IDE's settings text says each window starts its own hub. An IDE chat could not run: the IDE
+   showed its first-run "Get Started" screen, which only Haik may finish. So a hook under the hub, the IDE's Esc and
+   crash, and a Remote Control chat are **not tested live**.
+7. Transcript timing: not looked at (the transcript holds prompt text; Wakeshot does not read it).
+8. `powercfg /requests`: not run.
+
+Other facts seen: the real `Stop` input has `artifactDirectoryPath`, `conversationId`, `error`, `executionNum`,
+`fullyIdle`, `lastUserInput`, `modelName`, `terminationReason` (seen: `NO_TOOL_CALL`), `transcriptPath`,
+`workspacePaths`, and no `finalModelOutput`; `PreInvocation` has `initialNumSteps` and `invocationNum` instead of the
+four `Stop` fields. Keys come sorted, compact, paths with `/`, no line end. `agy` runs a shell command through
+`powershell.exe`. Through the app: the dry-run tray logged "Holding starts: Antigravity CLI" 0.1 s after Enter and
+"Holding ends" at the `Stop`, also for the first file in an `agents\antigravity\` folder the hook made while the tray
+ran.
