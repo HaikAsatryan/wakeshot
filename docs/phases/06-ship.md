@@ -179,6 +179,7 @@ those one at a time across all tracks.
 | `p6-repo-files` | yes: reads the files; turns on private vulnerability reporting | none | done (2026-11-06): `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 3.0), two issue forms and `config.yml`, a PR template; 3 questions with defaults in the card |
 | `p6-agents-video-readme` | yes: his yes to the plan, then his look at the render and README | `p6-media`, `p6-readme`; Part B after the bigger v1 live tests | Part C draft done 19:55 (Haik's new scenario: the pain of a sleeping laptop first, then Wakeshot, then the agents by name, no logos; 30.0 s, 7.49 MB, -15.3 LUFS, -1.6 dBTP; every check but the README paragraphs of Part B); the agent list has 4 passed, VS Code `partly`, Cursor and Antigravity pending; Part A done (2026-11-06 ~19:00); Haik: "Agree to everything" (~19:15); Part B: all but the agent list, the tested-live marks and the tooltip capture, which wait for the live results |
 | `p6-agents-install-e2e` | no | every `p4-live-*` card of the bigger v1 and its fixes; runs alone | done (23:14): checks green on x64 and ARM64 (1779 tests); Haik's install replaced (WM_CLOSE, code 0; his values back; Setup 12,495,450 bytes); holds start/end: Claude Code 0.05/0.03 s, Codex 0.04/0.01, Copilot CLI 0.14/0.02, OpenCode 2.0/1.6, VS Code harness 0.14/0.06, Cursor 0.9 to 2.2 / 0.86 to 0.93 s (Stop, Ctrl+F4, window close exact); a Cursor chat deleted while it runs is not exact (only `sessionEnd`, the same as Ctrl+F4; held until the window closed, 101 s and 89 s): Haik's call |
+| `p6-logs-diagnostics` | no | `p4-idle-cpu`; alone if a contract changes | ready (02:43): the log rolls only at start today; a per-session hold line and a diagnostics bundle are missing |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
 dependency 110K, pack and release 110K, install e2e 130K, winget 60K, README 70K, Pages 60K. About 880K in all.
@@ -714,3 +715,7 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   and any typed prompt the Claude Desktop test needs.
 - 2026-11-07 02:40: Haik: "I am oq with the sqashing as well. I have nothing to add." His yes for the Phase 8 history
   squash and its force push, given ahead: do it once the repo polish is done and every check and CI is green.
+- 2026-11-07 02:43: Haik asked whether logs clean themselves and whether users can send logs we can trust. Checked:
+  the log rolls only at tray start (over 1 MB, three files), so a long-running tray grows it; bug reports are lines
+  copied by hand; no log line per Claude Code session. New card `p6-logs-diagnostics` (best practice, no questions to
+  Haik). He also wants no questions overnight and a short structured report of the whole night in the morning.
