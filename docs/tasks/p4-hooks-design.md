@@ -84,9 +84,13 @@ Only product calls; each with your default. None blocks the build.
    (a CLI command would need a menu item too, by the CLI and menu rule).
 4. **If the Cursor editor hands hook input on the PowerShell command line** (not verified yet; the Cursor build
    card reads it first): then from the day Wakeshot adds its plugin, every Cursor prompt and your email land in
-   process command lines, which company PCs often log centrally (Sysmon, Defender, event 4688). Should the editor
-   hook ship anyway? Default: no. The Cursor editor is then not covered, the README says why, and the card re-checks
-   each Cursor version (its CLI already uses a temp file). Only asked if the check finds the command line.
+   process command lines, which company PCs often log centrally (Sysmon, Defender, event 4688). The editor and the
+   CLI load one plugin folder, so the choice is all or nothing for Cursor. Should Wakeshot add its Cursor plugin
+   anyway? Default: no Cursor plugin at all, for either app; the README says why. Little is lost: the CLI's
+   interactive loop does not fire plugin-only prompt and stop hooks anyway (question 1). The form is a runtime option
+   in Cursor's code, so the build checks it twice: by reading every place the editor sets it (for each Cursor
+   version Wakeshot claims), and in every hook run by reading the parent PowerShell's command line, which removes the
+   plugin after at most one prompt if a later Cursor switches. Only asked if the static check finds the command line.
 5. **A missed end event in a long-lived shared process** (Antigravity's IDE hub or Remote Control daemon, maybe
    Cursor's agent daemon) holds until that process ends, which can be the whole session on AC. The only fallback is
    a time cap, which your rule ("checked against a fact, not capped by time") forbids. Default: no cap; the live
@@ -105,7 +109,9 @@ Orchestrator decision, 2026-11-06 ~16:00, for Haik's review (he was away): all t
   it. Not edited.
 - The review's own outside-scope note: `wakeshot run` in an elevated shell writes its hold file through
   `write_atomic`'s `CREATE_ALWAYS` temp in the Medium-writable `holds\`. Contract change 6 in `docs/agent-hooks.md`
-  (`CREATE_NEW`) closes it for every caller.
+  closes only the hard-link overwrite. A junction plus an object manager link still redirects the create for an
+  elevated `wakeshot run`, and for the uninstall's own journal and data folder work under an elevated `winget
+  uninstall` (not checked). Those need the same Medium rule as the hooks; not part of this card.
 
 ## Log
 
@@ -142,6 +148,12 @@ Orchestrator decision, 2026-11-06 ~16:00, for Haik's review (he was away): all t
   Removing, Failure cases, Privacy gate, Antigravity rows, README lines, contract changes 1, 2 and 6, live test 0
   and 6 to 9, risk rows 19 to 23), `architecture.md` section 12 and the `research.md` section. Questions 4 and 5
   added. Result updated with a "Review fixes" part.
+- 2026-11-06: verify in (`docs/reviews/p4-hooks-design-security-verify.md`): majors 1 and 2 fixed, major 3 partly
+  (one folder for both Cursor apps), 3 new minors. Fixing: no Cursor plugin at all if the editor uses the command
+  line, a static and a runtime check of the transport, the copy's value checks and deadline, contract 6's claim.
+- 2026-11-06: verify fixes written: `agent-hooks.md` (Gate, "How the build checks it", steps 3 and 4, source,
+  contract 2 and 6, live test 0, risk rows 7 and 19), `architecture.md` section 12, Question 4, Found outside scope,
+  a "Verify fixes" table in the Result. Contract 2 gains `command_line_contains`; contract 6 drops its delete step.
 
 ## Result
 
@@ -167,13 +179,14 @@ stdin, never a command line.
 1. `Command::Hook { agent, event, values }` in `wakeshot-cli/src/command.rs`, its `main.rs` line, the parse in
    `args.rs` (hidden, with `--checked <value>...`), a stub `hook.rs`.
 2. In `wakeshot-windows/src/process.rs`: `ProcessEntry.parent: u32`, `image_path(pid)`, `current_above_medium()`,
-   `harden_dll_search()`.
+   `harden_dll_search()`, `command_line_contains(pid, needle)` (added after the verify, for the runtime transport
+   check).
 3. `Event::HooksAdded { agent }`, `Notice::HooksAdded { agent }`, the core's `Notify` answer, the `text.rs` words.
 4. `HookEnv::remove_agent_hooks` in `wakeshot-windows/src/hooks.rs`.
 5. A stub `wakeshot-core/src/sources/hooked.rs` for the shared code; the `Owner:` of `agent_hooks.rs` set to the
    install card below.
-6. `store::write_atomic`: the temp file opens with `CREATE_NEW` (an old temp of that name deleted first); every
-   caller.
+6. `store::write_atomic`: a random temp name opened with `CREATE_NEW`, a new name on `ERROR_FILE_EXISTS`, no delete
+   step; every caller. It closes the hard-link overwrite only.
 
 **Build cards** (both after the contracts, in parallel; then `p4-antigravity-source` adds its table and folder to
 both, then the live cards):
@@ -216,7 +229,16 @@ Control crashes; non-ASCII folders; an elevated agent with a junction).
 | 11 | Long-lived shared processes hold a missed end for the session | Fixed in the doc: the walk takes the nearest match; live test rows for Esc and crashes in the hub and Remote Control; a time cap is Question 5 (default no cap) |
 | 12 | The file's label reaches the tray | Fixed: fixed label strings in the source; a forged `problem.json` accepted and noted in the risk table |
 | 13 | Hardening and doc gaps | Fixed: `SetDefaultDllDirectories` first (contract 2); the walk placed in `sources::hooked`, Windows calls in `process` (doc and section 12 agree). Not fixed: `product.md`'s "nothing that touches other apps" (Haik's decisions file, noted under Found outside scope) and `research/cursor-gemini-signals.md` (a done card's file, already noted) |
-| - | Outside scope: `wakeshot run` elevated with `CREATE_ALWAYS` | Covered by contract change 6, for every caller |
+| - | Outside scope: `wakeshot run` elevated with `CREATE_ALWAYS` | Partly: contract 6 closes the hard-link overwrite for every caller; the junction redirect stays for an elevated `wakeshot run` and an elevated uninstall (verify minor 3) |
+
+Verify fixes (`docs/reviews/p4-hooks-design-security-verify.md`, 2026-11-06):
+
+| # | Finding | Fix |
+|---|---|---|
+| Major 3 | One plugin folder for both Cursor apps, so "no editor hook" cannot hold | Fixed: the Gate and Question 4 say no Cursor plugin at all if the editor uses the command line; the build checks the runtime option statically (every place the editor sets it) and at run time (the parent PowerShell's command line, then the plugin is removed and `blocked.json` shows the notice; at most one prompt leaks); contract 2 gains `command_line_contains` |
+| New minor 1 | The Medium copy trusts its `--checked` values | Fixed: the copy re-runs every step 2 check on its arguments; one failure writes nothing |
+| New minor 2 | A slow copy can write "working" after `stop` | Fixed: a `deadline` value (the elevated hook's start plus 2 s); the copy drops a "working" write past it |
+| New minor 3 | Contract 6 claimed to close `wakeshot run`'s gap | Fixed: the claim is now "hard-link overwrite only"; the delete step is gone (random temp names instead), so it adds no delete primitive; an elevated `wakeshot run` and an elevated uninstall keep the junction gap until they get the Medium rule |
 
 Review fix checks: grep for em dashes in the three docs and the card: none. New non-ASCII characters only `ё` and
 `ւ` in `docs/agent-hooks.md`, on purpose (the test folder names). No git run.

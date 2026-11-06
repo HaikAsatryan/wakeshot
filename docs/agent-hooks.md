@@ -143,16 +143,23 @@ knows only a small table: the input field names, the events and the process imag
    install layout from `research/other-agent-signals.md`). The nearest is the process that ran the hook (an
    extension host, an agent daemon or the CLI), never a farther window or daemon above it. The path comes from
    `process::image_path` (`QueryFullProcessImageNameW`, `PROCESS_QUERY_LIMITED_INFORMATION`). No match: write
-   nothing, one log line.
+   nothing, one log line. Then the runtime transport check on the hook's parent (see "Privacy", "How the build
+   checks it").
 4. File work runs only at Medium integrity or lower. The hook reads its own token's integrity level:
    - Medium or lower: it does step 5 itself.
    - Above Medium (an agent started from an admin terminal; every agent shell on the test laptop is High): it writes
      nothing. It starts a copy of itself at Medium through `process::spawn_outside_tree` (Explorer's token), with the
      checked values as arguments: `hook <agent> <event> --checked <conversation> <generation> <pid> <procStart>
-     <label> <state>`, all from fixed character sets. It waits for that copy at most 2 s. The copy checks its own
-     token again; if it is not Medium (no Explorer, so `spawn_outside_tree` fell back to a normal child), it writes
-     nothing, one log line. Reason: the folders below inherit the profile's rights, so any Medium process of the same
-     user can swap them for a junction or plant hard links in them; an elevated write or delete there would hand it a
+     <label> <state> <deadline>`, all from fixed character sets. `deadline` is the elevated hook's start plus 2 s, a
+     FILETIME of the wall clock. It waits for that copy at most 2 s. The copy checks its own token again; if it is not
+     Medium (no Explorer, so `spawn_outside_tree` fell back to a normal child), it writes nothing, one log line. The
+     copy runs the step 2 checks again on every value (UUID shape and lowercase, the generation's characters, digits
+     for pid, start and deadline, the label and state from their fixed lists, the agent and event from the known
+     table), since any process of the user can run it with any arguments; one failed check: nothing written, one log
+     line. A copy that runs past its deadline drops a "working" write, so a slow copy can never land after the turn's
+     `stop` (the wait handle has no right to end the copy); deletes still apply. Reason for the hand-off: the
+     folders below inherit the profile's rights, so any Medium process of the same user can swap them for a junction
+     or plant hard links in them; an elevated write or delete there would hand it a
      write and delete primitive it does not have without Wakeshot (review major 1). At Medium a swap gains nothing.
      Cost: one more process start for elevated agents.
 5. Under the mutex `Local\Wakeshot.AgentHooks` (wait at most 1 s, then go on without it): apply the event to
@@ -202,7 +209,8 @@ start is Cursor's cost.
   The label is one of the source's own fixed strings (`Cursor`, `Cursor CLI`; `Antigravity`, `Antigravity CLI`),
   picked by the file's value; any other value gives the agent's plain name. File text never reaches the tooltip. `sources::antigravity` reads `agents\antigravity\` the same way. `problem.json` gives one
   `Activity::Idle` session with `FormatHealth::Unreadable("Cursor hook input")`, so the "update Wakeshot" notice
-  shows once per start while that process lives.
+  shows once per start while that process lives. `blocked.json` (the runtime transport check, "Privacy") is read the
+  same way.
 - No new `WantedFile` or `Liveness` variant is needed.
 
 ### Cursor's `main.log`: dropped
@@ -325,11 +333,27 @@ The notice, once, when Wakeshot adds the folder (`Notice::HooksAdded { agent: "C
   command-line auditing, common on company PCs) records full command lines and ships them to a central log. So the
   command-line form would put every prompt and the user's email into such logs, from the day Wakeshot adds its
   plugin, against the rule that prompts are never stored or logged (`product.md`).
-- **Gate:** Wakeshot adds a hook only to an agent form known to use the temp-file (or stdin) form. Which form the
-  Cursor editor uses is **not verified**: the first step of the Cursor build card reads the editor's spawn code
-  (`extensionHostProcess.js`, the agent host daemon) and names it. If it is the command line, the editor hook does
-  not ship until Haik decides (product question 4; default: it does not ship). Antigravity: how `agy` passes the
-  input is unknown; the same check is the first step of its build card.
+- **Gate:** Wakeshot adds a hook only for an agent whose every app that loads the folder passes the input through a
+  temp file or stdin. The Cursor editor and the Cursor CLI load one folder, so **if the editor uses the command line,
+  Wakeshot adds no Cursor plugin at all**, for either app, until Haik decides (product question 4; default: none).
+  That costs little: the CLI's interactive loop does not fire plugin-only prompt and stop hooks anyway (question 1).
+  Antigravity: how `agy` passes the input is unknown; the same check is the first step of its build card.
+- **How the build checks it.** The form is a runtime option, not fixed by version: in the CLI,
+  `commandHookPayloadTransport` is a parameter its callers pass (`3026.index.js`, `4110.index.js`, `697.index.js` from
+  a function, `2855.index.js` from a variable; verify review). So two checks:
+  1. Static, first step of the Cursor build card, and again for each Cursor version Wakeshot claims: in the editor's
+     code (`extensionHostProcess.js`, the agent host daemon) find every place the option is set, and say whether it is
+     a constant, a user setting or an experiment flag. Anything but "temp file in every path": no Cursor plugin.
+  2. Runtime, in every hook run, for versions the user updates to: before any write, the hook reads its parent
+     PowerShell's command line (`NtQueryInformationProcess`, `ProcessCommandLineInformation`, which needs only
+     `PROCESS_QUERY_LIMITED_INFORMATION`: **not verified**) and looks for the payload's own key (`"conversation_id"`;
+     Antigravity `"conversationId"`). It keeps nothing of that text and logs none of it. Found: the hook writes no
+     state, removes the agent's plugin by the fixed names (at Medium, step 4), and writes
+     `agents\<agent>\blocked.json` (`{ "version": 1, "pid": ..., "procStart": ..., "problem": "command-line" }`),
+     which the source reads like `problem.json`, so the "update Wakeshot" notice shows and the log line says why. At
+     its next start the tray finds the plugin gone and records `removed` (the "user removed it" row), so it never
+     adds it again. This limits the leak to the one prompt whose hook found it. If the command line cannot be read,
+     the hook goes on: the static check stays the main gate.
 - In the here-string form, Cursor doubles `'`, and `JSON.stringify` never writes a raw line break, so the payload is
   one line and cannot close the here-string. Whether PowerShell also ends a line at U+2028 or U+2029 (which
   `JSON.stringify` leaves raw): **not verified**. Moot while the gate holds.
@@ -382,18 +406,24 @@ Beyond `p4-contracts-r2` (which made `SourceId::Cursor` and `Antigravity`, the s
    already reads it from `Reserved2`); `image_path(pid) -> Result<PathBuf, WinError>`
    (`QueryFullProcessImageNameW`); and `current_above_medium() -> Result<bool, WinError>` (this process's
    `TokenIntegrityLevel` above Medium; the same read exists privately in `process.rs` tests and `store.rs`); and
-   `harden_dll_search()` (`SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32)`), since the bins call Windows
-   only through `wakeshot-windows`. `spawn_outside_tree` and `ProcessHandle::wait` exist.
+   `harden_dll_search()` (`SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32)`); and
+   `command_line_contains(pid, needle: &str) -> Result<bool, WinError>` for the runtime transport check, which reads
+   the command line, searches it and drops it, so no caller ever holds or logs it. The bins call Windows only through
+   `wakeshot-windows`. `spawn_outside_tree` and `ProcessHandle::wait` exist.
 3. `wakeshot-core`: `Event::HooksAdded { agent: &'static str }`, `Notice::HooksAdded { agent: &'static str }`, the
    core's answer (`Notify`, once per event), the words in `text.rs`.
 4. `wakeshot-windows::hooks`: `HookEnv::remove_agent_hooks`, called in `on_uninstall` after `remove_notices`.
 5. A stub `wakeshot-core/src/sources/hooked.rs` for what Cursor and Antigravity share (the state file format, the id
    rule, the event rules, the parent walk over a process list), so neither source module owns the other's code; and
    the `Owner:` line of `agent_hooks.rs` set to the install card if the build is split (card Result).
-6. `wakeshot-windows::store`: `write_atomic`'s temp file opens with `CREATE_NEW`, not `CREATE_ALWAYS`; a temp file
-   left by a stopped process is deleted first (`DeleteFileW` removes only that name, also when it is a hard link),
-   and an `ERROR_FILE_EXISTS` after that fails the write. This changes every caller; it also closes the same gap for
-   `wakeshot run` in an elevated shell (review, "Found outside scope").
+6. `wakeshot-windows::store`: `write_atomic`'s temp name gets a random part and opens with `CREATE_NEW`, not
+   `CREATE_ALWAYS`; on `ERROR_FILE_EXISTS` it tries a new name (at most 3 times). No delete step, so the change adds
+   no delete of a name an attacker picks. A temp file left by a crash then stays (it ends in `.tmp`, which no reader
+   opens); the hook's prune removes its own. This changes every caller. What it closes: only the hard-link overwrite.
+   A junction plus an object manager link still redirects the temp file's create, so an elevated `wakeshot run`, and
+   the uninstall's own journal and data folder work under an elevated `winget uninstall` (not checked), keep that gap
+   until they get the same Medium rule as the hooks (verify review). The hooks do not depend on it: they run at
+   Medium.
 
 No new `WantedFile`, `Liveness`, data file enum, mutex in `store::Names`, `Cargo` change or `windows` feature:
 `Win32_System_Threading`, `Win32_System_LibraryLoader` (for `SetDefaultDllDirectories`) and `Win32_UI_Shell` are on
@@ -403,8 +433,9 @@ in `crates/wakeshot-windows/Cargo.toml` (checked 2026-11-06).
 
 0. Before any hook ships (the first step of the Cursor build card, by reading code, no install needed): which
    payload form the Cursor editor uses on Windows (temp file or command line), from its spawn code in
-   `extensionHostProcess.js` and the agent host daemon. Command line: the editor hook waits for Haik (product
-   question 4). The same for `agy` in the Antigravity build card.
+   `extensionHostProcess.js` and the agent host daemon, at every place the option is set (constant, setting or
+   experiment flag). Command line anywhere: no Cursor plugin at all until Haik decides (product question 4). The same
+   for `agy` in the Antigravity build card. Live: the runtime check reads a real hook's parent command line.
 1. The editor loads the local plugin with no prompt; `beforeSubmitPrompt`, `stop` (completed, Esc, error) and
    `sessionEnd` each run the exe; the process found is a `Cursor.exe` that lives as long as the window; the
    `conversation_id` has the UUID shape.
@@ -432,7 +463,7 @@ in `crates/wakeshot-windows/Cargo.toml` (checked 2026-11-06).
 | 4 | The hook blocks or changes the user's prompt | Always exit 0, always `{}`, also after a panic (a panic hook prints `{}` and exits 0); no path exits 2; never `continue`, `permission`, `followup_message` or `failClosed`; tests check each event's output and exit code |
 | 5 | The hook slows every prompt | Four-field parse, one process list, one small file; target under 50 ms; `timeout` 5 s; never waits on the tray; hooks only turn start and end, never tool events |
 | 6 | Prompt text, paths or the user's email leak into Wakeshot's files or log | Parse only four fields; skipped fields never stored; fixed log text; parse errors logged by class and position only, never `serde_json`'s text; a marker-word test over files and log, also as each field's value |
-| 7 | Prompts and the email in a process command line, so in audit logs | Gate: a hook only for an agent form known to use a temp file or stdin; the Cursor editor's form is the first step of its build card; command line means no editor hook until Haik decides; the README says it in the main text |
+| 7 | Prompts and the email in a process command line, so in audit logs | Gate: a hook only for an agent whose every app that loads the folder uses a temp file or stdin; the Cursor editor's form is the first step of its build card (static check of every place the option is set); command line means no Cursor plugin at all, for either app, until Haik decides; a runtime check of the parent's command line removes the plugin after at most one prompt if a later version switches; the README says it in the main text |
 | 8 | A bad `conversation_id` used as a file name (traversal, device names, case twins) | UUID shape only, lowercased; anything else is unreadable input |
 | 9 | A forged state file keeps the PC awake | Any process of the same user can already do that through a hold file (a documented format). A forged file holds only while the pid and start it names run (the watch thread checks both); the battery floor still steps back. Its label maps to the source's fixed strings, so no file text reaches the tooltip. A forged `problem.json` can show a false "update Wakeshot" notice once per start: accepted |
 | 10 | A reused pid holds forever | `procStart` must match (`Liveness::Process`); the walk refuses a parent that started after its child |
@@ -444,7 +475,7 @@ in `crates/wakeshot-windows/Cargo.toml` (checked 2026-11-06).
 | 16 | Enterprise rules | Cursor's admin switch for local plugins decides; Wakeshot never works around it |
 | 17 | Antigravity's unknown shell | Bare absolute path only when every character is in an allow list; otherwise no hooks until a live check; never an exe copied into the agent's folder |
 | 18 | Antigravity's `PreInvocation` runs on every model call | The exe skips the write when the file already says working for this process; the live test measures the cost per call |
-| 19 | An elevated hook, tray or uninstall writes or deletes in a folder a Medium process can swap or hard-link | File work only at Medium: an elevated hook passes its checked values to a Medium copy (`spawn_outside_tree`), an elevated uninstall runs `hook <agent> remove` the same way, an elevated tray skips; a copy that is not Medium writes nothing; temp files with `CREATE_NEW`; the prune deletes only version 1 files of gone processes and its own temp names; a junction test under an elevated token |
+| 19 | An elevated hook, tray or uninstall writes or deletes in a folder a Medium process can swap or hard-link | File work only at Medium: an elevated hook passes its checked values to a Medium copy (`spawn_outside_tree`), an elevated uninstall runs `hook <agent> remove` the same way, an elevated tray skips; a copy that is not Medium writes nothing; the copy re-checks every value and drops a "working" write past its deadline; temp files with `CREATE_NEW`; the prune deletes only version 1 files of gone processes and its own temp names; a junction test under an elevated token |
 | 20 | A marker anyone can write steers the rewrite or the uninstall | The file set is fixed in code; the marker has fixed keys and hashes only, no paths; any extra key, file or folder means "changed by someone"; empty folders removed only up to `wakeshot\` |
 | 21 | Gemini CLI's `.gemini` taken for Antigravity | Presence needs `agy.exe` in its install folder and an existing `.gemini\config\`; Wakeshot never creates `config\`; `ANTIGRAVITY_GEMINI_DIR` set means no hooks |
 | 22 | DLL planting from the repo folder a `stop` hook runs in | `SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32)` first thing; no exploitable DLL known, not tested |
