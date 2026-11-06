@@ -1,6 +1,6 @@
 # Live test: Copilot CLI (with Haik)
 
-Phase: 4. Status: later (after v1, Haik 2026-11-03; `docs/phases/02-06-lighter.md`). Needs Haik: yes, about 20 minutes at the laptop: install or sign in to Copilot CLI with his
+Phase: 4. Status: ready once `p4-codex-source` and `p4-copilot-source` are done (back in v1, Haik 2026-11-06; see "Round 2" at the end). Needs Haik: yes, about 20 minutes at the laptop: install or sign in to Copilot CLI with his
 own account, then type the numbered steps the worker gives. Agent: `wakeshot-worker`. Size: about 100K tokens.
 Runs after: `p4-live-codex` (both may fix `lockowner.rs` and `watch/agents.rs`). Parallel with: code cards of any
 track that own none of the files below. Never at the same time as another live card or any card that needs Haik's
@@ -75,3 +75,20 @@ Problems seen but not fixed.
 ## Result
 
 What was done, files changed, checks and outcomes, open items.
+
+## Round 2: back in v1 (2026-11-06)
+
+Written by the orchestrator. Haik, 2026-11-06: Codex CLI and Copilot CLI ship in v1 after all. Changes to this card:
+
+- Order: this card now runs first (Haik is sure of his Copilot access, not yet of Codex), after both source cards; `p4-live-codex` runs after it.
+- This card also wires the source into the app: add it to the sources the tray starts in
+  `crates/wakeshot-windows/src/app/tray_mode.rs`, so the installed app holds for it, and test that through the app.
+- Haik's answers to sign-off items 1 and 2 (`docs/phases/02-06-signoff.md`) apply.
+- Access: GitHub's plans page: "All plans include Copilot CLI and the Copilot app" (read 2026-11-06), so Haik's Copilot Free works. The test is Copilot CLI in a terminal, not Copilot chat in VS Code.
+- From `p4-copilot-source` (2026-11-06, Copilot 1.0.106): a new `copilot-runtime.exe` hosts sessions for SDK apps, so
+  the `AnyProcess` image fallback (`copilot.exe`) would miss those; check which process holds the in-use lock on a
+  real install and fix the fallback if needed. Also check that a schedule fire's `source` (`schedule-...`) carries
+  the schedule id, and the `events.jsonl` rotation (`session.journal_link`).
+- From `p4-copilot-vscode-research` (2026-11-06): VS Code's "Copilot" harness and Background sessions write the same
+  `session-state\<id>\events.jsonl` but run as `copilot-runtime.exe` or `Code.exe`; an `inuse.<pid>.hold` file was
+  seen next to `inuse.<pid>.lock`. Check both on the real install.

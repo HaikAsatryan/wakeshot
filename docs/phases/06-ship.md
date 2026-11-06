@@ -574,3 +574,51 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   `check`, typecheck, `check-art`, `check-video`, `check-rebuild --final` pass; loudness -15.3 LUFS, -1.1 dBTP
   (rechecked by the orchestrator with `loudnorm`; 0.1 dB under the limit). The orchestrator looked at frames 505, 513,
   520 and 525. The worker ran `git --version` once against the rule; it changed nothing.
+- 2026-11-06 12:05: Haik: "video is ok" on the final (f88a034). Next: where to upload it (README needs a
+  `user-attachments` URL; he will also post it on LinkedIn).
+- 2026-11-06 12:20: Haik postpones the video upload and the launch steps: he wants a bigger v1, so the video may
+  change. Open product talk: Codex and Copilot in v1, a per-source list in the menu, and app rules (his example: a
+  torrent app, hold while it downloads). No card yet; decisions wait for his answers.
+- 2026-11-06 12:40: Haik drops the per-source menu, app rules and the download research for now and puts Codex CLI
+  and Copilot CLI back in v1 (`docs/product.md`, `02-06-lighter.md`, the four Phase 4 cards' "Round 2"). Started
+  `p4-codex-source` and `p4-copilot-source` (two workers, parallel, separate files). Live order swapped: Copilot
+  first (Copilot Free includes the CLI, GitHub's plans page read 2026-11-06), Codex when Haik has access (OpenAI
+  lists the CLI for Plus and up or an API key; Free unclear). Each live card also adds its source to the tray.
+- 2026-11-06 12:55: Haik wants Copilot agent mode in VS Code in v1 too, and will get a Codex subscription. New card
+  `p4-copilot-vscode-research` (research only, one worker, parallel with the two source cards). He asked which other
+  agents compare in use: npm downloads last week (2026-10-29 to 11-04; installs and updates, not users): Codex
+  26.5M, Claude Code 13.3M, OpenCode 4.3M, Copilot CLI 1.9M, Gemini CLI 0.48M; VS Code Marketplace installs (total):
+  Copilot Chat 79.2M, Claude Code 29.6M, Codex (`openai.chatgpt`) 16.5M, Cline 5.8M, Gemini Code Assist 5.6M.
+- 2026-11-06 13:10: Haik: OpenCode in v1; Gemini's number looks low and Cursor may belong; "check how we can
+  decrease reliance on me". Found: OpenCode users are mostly on 1.x (`opencode-ai` 4.3M a week against 2.x
+  `@opencode/cli` 0.6M), and only 2.x was researched; Gemini CLI's npm downloads fell every month since May (3.2M to
+  1.5M) and its README says it has no free tier any more. Started `p4-opencode-source` Part A (research 1.x and 2.x,
+  how to read SQLite lightly) and `p4-cursor-gemini-research` (real usage, Cursor editor signal, hooks as a signal).
+  Five workers run now; three of them research only.
+- 2026-11-06 13:20: `p4-copilot-source` done (Copilot CLI 1.0.106 read: log rotation, integer schedule ids, a new
+  `copilot-runtime.exe` host; 42 tests, clippy both targets clean). Worker default for Haik's review: Copilot's
+  `ask_user` question counts as waiting, so it does not hold (his "same as Claude waiting" answer). The runtime host
+  note went to `p4-live-copilot`.
+- 2026-11-06 13:35: `p4-copilot-vscode-research` done: partly reliable, medium confidence (VS Code 1.145.1 source,
+  not seen live). Each chat's `chatSessions\<id>.jsonl` logs `modelState` (0 working, 4 waiting, 1 to 3 done), but
+  VS Code writes it only about once a minute and rewrites it after 1024 lines, and it has no pid (liveness through
+  Restart Manager on `state.vscdb`, untested). A source card needs a contracts change (whole-file reads) run alone.
+- 2026-11-06 13:50: `p4-cursor-gemini-research` done. Gemini CLI serves only enterprise and paid-API users since
+  2026-06-18; free and Pro users moved to Google's Antigravity CLI (a native binary, not on npm), which explains the
+  falling npm numbers. Cursor: 18% of developers use it at work, the same as Claude Code (JetBrains survey, Jan
+  2026); SpaceX's Q3 2026 10-Q shows $608M Cursor revenue in 48 days. Signals: Cursor editor, its own wakelock lines
+  in `main.log` (undocumented) or hooks; Cursor CLI and Gemini CLI, hooks only. Gemini, Cursor, Copilot CLI,
+  OpenCode and Kiro can load hooks from a folder Wakeshot owns, with no edit of the user's settings. Question for
+  Haik: hooks for agents with no file signal.
+- 2026-11-06 14:05: `p4-codex-source` done (Codex 0.167.0 read; `lockowner.rs` through Restart Manager, the
+  `AnyProcess` check in `watch/agents.rs`; 16 + 4 + 6 tests). Open: after a TUI backtrack Codex writes a reverted
+  thread file (`..._<rollout id>.jsonl`) that `FindTail` cannot match, so that session would read idle while it
+  works: a contract change. It goes into one contracts card with VS Code's whole-file reads and whatever OpenCode's
+  design needs, run alone. Stale "after v1" lines fixed in `architecture.md`, `04-sources.md`, `plan.md`.
+  Whole-workspace checks on x64 and ARM64 running before the commit.
+- 2026-11-06 14:15: `p4-opencode-source` Part A done (1.19.5 and 2.2.5 read). 1.x: working while the newest message
+  row is an assistant message with no `time.completed`; 2.x: `time_busy > coalesce(time_idle, 0)` (the 2026-11-03
+  rule with `time_suspended` is wrong). SQLite through Windows' own `winsqlite3.dll` at run time (no size added;
+  fallback `rusqlite` bundled, under 900 KiB). Blocked on Haik: `opencode.db` also holds OpenCode's login tokens;
+  the design opens it read only and queries only the session and schedule tables. Needs `SourceId::OpenCode`,
+  `WantedFile::Query` and `Liveness::ImageSince` in the contracts card.

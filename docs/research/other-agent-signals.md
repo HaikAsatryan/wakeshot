@@ -283,6 +283,9 @@ researched here (closed source, unverified).
 
 ## OpenCode
 
+Newer research, 1.x and 2.x at their 2026-11-06 releases: `research/opencode-signals.md` (in 2.2.5
+`time_suspended` is set while a turn runs, so the rule below no longer holds).
+
 Source: `anomalyco/opencode` (the old `sst/opencode` redirects here) main at commit `2e8a861` (2026-11-02), CLI
 package `@opencode/cli` 2.2.5. Paths are under `packages/`. License MIT (`LICENSE`), verified. Note: this is the new
 2.x architecture. Users on 1.x have a different store (there is a `core/src/database/v1-migration.bun.ts`); 1.x

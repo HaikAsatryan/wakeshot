@@ -44,8 +44,9 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
     until its own timeout (at most 1 hour). A task stopped from the app's UI ends when Claude Code queues its stop
     notice, which it writes to the transcript at once (2.1.317 code; not checked live; decided by the worker,
     2026-11-04, for Haik's review).
-- **Other agents** after v1 (Haik, 2026-11-03: v1 ships Claude Code only, to keep v1 small; the cards are ready and
-  marked `later`): Codex CLI and Copilot CLI first (`research/other-agent-signals.md`). OpenCode next (reliable
+- **Other agents**: Codex CLI and Copilot CLI ship in v1 (Haik, 2026-11-06; on 2026-11-03 they had moved to after
+  v1 to keep v1 small), and Copilot agent mode in VS Code too if its research finds a reliable signal (Haik,
+  2026-11-06; `p4-copilot-vscode-research`), and OpenCode (Haik, 2026-11-06; `p4-opencode-source`) (`research/other-agent-signals.md`). OpenCode next (reliable
   signal, free to test). No reliable signal yet: Gemini CLI, Cursor CLI, Aider, Amp, Kiro. Logic may be ported from
   the MIT rivals with credit. Haik has personal Codex and Copilot access for one live test each. Agents not tested
   live are marked so in the docs.

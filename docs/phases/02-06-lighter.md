@@ -59,6 +59,8 @@ Two separate reviews in all of Phases 2 to 6, each one `wakeshot-reviewer` with 
 
 ## Codex and Copilot after v1
 
+- 2026-11-06: reversed by Haik: Codex CLI and Copilot CLI are back in v1. The four cards are no longer `later`
+  (each card's "Round 2"); the live cards also add their source to the tray. The notes below are the history.
 - `p4-codex-source`, `p4-copilot-source`, `p4-live-codex`, `p4-live-copilot`: Status `later (after v1)`. The
   orchestrator never starts a `later` card.
 - The Restart Manager lock-holder code (`lockowner.rs`) and the `AnyProcess` liveness serve only Codex and Copilot

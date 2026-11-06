@@ -1,6 +1,6 @@
 # Live test: Codex CLI (with Haik)
 
-Phase: 4. Status: later (after v1, Haik 2026-11-03; `docs/phases/02-06-lighter.md`). Needs Haik: yes, about 20 minutes at the laptop: install or sign in to Codex with his own
+Phase: 4. Status: waits for Haik's Codex access (back in v1, Haik 2026-11-06; see "Round 2" at the end). Needs Haik: yes, about 20 minutes at the laptop: install or sign in to Codex with his own
 account, then type the numbered steps the worker gives. Agent: `wakeshot-worker`. Size: about 100K tokens.
 Runs after: `p4-live-claude` (the harness). Parallel with: code cards of any track that own none of the files below.
 Never at the same time as another live card or any card that needs Haik's hands or the screen.
@@ -78,3 +78,13 @@ Problems seen but not fixed.
 ## Result
 
 What was done, files changed, checks and outcomes, open items.
+
+## Round 2: back in v1 (2026-11-06)
+
+Written by the orchestrator. Haik, 2026-11-06: Codex CLI and Copilot CLI ship in v1 after all. Changes to this card:
+
+- Order: after `p4-live-copilot` (swapped 2026-11-06).
+- This card also wires the source into the app: add it to the sources the tray starts in
+  `crates/wakeshot-windows/src/app/tray_mode.rs`, so the installed app holds for it, and test that through the app.
+- Haik's answers to sign-off items 1 and 2 (`docs/phases/02-06-signoff.md`) apply.
+- Access: Haik is not sure he can use Codex. OpenAI's pricing page (read 2026-11-06) lists the CLI for Plus, Pro, Business, Enterprise and Edu, and for an API key at API rates; Free and Go are not clear. Starts when Haik says he has access.

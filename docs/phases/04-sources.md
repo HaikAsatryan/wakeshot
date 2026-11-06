@@ -37,7 +37,7 @@ Values this plan sets, each with why. Haik signed them off with the plan (2026-1
 6. **Transcript lines of a known kind with a missing field** are skipped and reported as `UnknownValue` with the line
    kind; the status file signal for that session stays. Unknown line kinds are ignored silently (transcripts have
    many).
-Notes 7, 8 and 9 apply after v1: Codex and Copilot moved there (Haik, 2026-11-03).
+Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2026-11-03 they had moved to after v1).
 
 7. **Codex and Copilot: the lock file ties a session to its process.** The watch thread asks Restart Manager which
    process holds the lock file open and checks that pid and start time. Only if the live test shows Restart Manager
@@ -109,12 +109,15 @@ Notes 7, 8 and 9 apply after v1: Codex and Copilot moved there (Haik, 2026-11-03
 | `p4-cron` | no | contracts card | done (21:53): 34 tests; matches Claude's own scheduler in 400,000 cases |
 | `p4-claude-status` | no | contracts card | done (21:37): 34 tests |
 | `p4-claude-live-shapes` | no; runs Claude Code test sessions (Haiku); agent-session lane | contracts card | done (18:47): 27 fixtures; resume and rule 3, 5 changes in the signals doc |
-| `p4-codex-source` | no | contracts card | later (after v1, Haik 2026-11-03) |
+| `p4-codex-source` | no | contracts card | done 2026-11-06 (Codex 0.167.0 read, not tested live; reverted threads need a contract change) |
 | `p4-watch-folders` | no | contracts card | done (00:26): 20 tests, no handle leak in 1,000 cycles |
 | `p4-watch-reads` | no | contracts card | done (21:12): 18 tests; `names` returns `io::Result` |
 | `p4-cli-args` | no | contracts card | done (committed 01:14): every command routed; the child text comes from the raw command line |
 | `p4-claude-transcript` | no | `p4-claude-status`, `p4-cron`, `p4-claude-live-shapes` | done (22:35): 46 tests; no contract change |
-| `p4-copilot-source` | no | `p4-cron` | later (after v1, Haik 2026-11-03) |
+| `p4-copilot-source` | no | `p4-cron` | done 2026-11-06 (schema of 1.0.106, not tested live; 42 tests) |
+| `p4-copilot-vscode-research` | no | none | done 2026-11-06: a partly reliable signal, medium confidence (`research/copilot-vscode-signals.md`); a source card follows, after a contracts change run alone |
+| `p4-opencode-source` | no | Part B after the contracts card | blocked: Part A done 2026-11-06 (`research/opencode-signals.md`); Haik's answer on opening `opencode.db`, which also holds login tokens |
+| `p4-cursor-gemini-research` | no | none | done 2026-11-06 (`research/cursor-gemini-signals.md`): Cursor big, Gemini CLI enterprise only since 2026-06-18; hooks question for Haik |
 | `p4-watch-data` | no | `p4-hold-files`, `p4-watch-reads` | done (21:12): 19 tests |
 | `p4-watch-agents` | no | `p4-watch-reads` | done (22:43): 19 tests; API changes for `p4-watch-thread` in its Result |
 | `p4-watch-thread` | no | `p4-watch-folders`, `p4-watch-data`, `p4-watch-agents`, `p3-process` | done (committed 00:54): 14 thread tests, 2 m3 tests; each of 4 behaviours caught by its tests when broken |
@@ -122,8 +125,8 @@ Notes 7, 8 and 9 apply after v1: Codex and Copilot moved there (Haik, 2026-11-03
 | `p4-cli-commands` | no; screen once (opens one file in the default app; global lane, review M6) | `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 30 tests; screen step ran once |
 | `p4-cli-restore` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09; nothing to add) | `p3-journal`, `p3-power-plan`, `p2-ownership-restore`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 10 tests |
 | `p4-live-claude` | optional: 3 minutes for the VS Code check; agent-session lane | `p4-watch-thread`, `p4-claude-transcript`, `p4-cli-run`, `p3-process`, the Claude parsing review (`docs/phases/02-06-lighter.md`) | done (committed 01:59): every live case passed (Claude Code 2.1.317); m6 fixed; the VS Code check waits for Haik |
-| `p4-live-codex` | yes: about 20 minutes (install or sign in, then type the steps) | `p4-live-claude` | later (after v1, Haik 2026-11-03) |
-| `p4-live-copilot` | yes: about 20 minutes (install or sign in, then type the steps) | `p4-live-codex` | later (after v1, Haik 2026-11-03) |
+| `p4-live-codex` | yes: about 20 minutes (install or sign in, then type the steps) | `p4-live-copilot` (swapped 2026-11-06) | waits for Haik's Codex access |
+| `p4-live-copilot` | yes: about 20 minutes (install or sign in, then type the steps) | `p4-codex-source`, `p4-copilot-source` (swapped 2026-11-06) | next after the two source cards |
 | `p4-watch-tick-flake` | no | `p4-watch-thread` | done (15:00: ticks wait for their check; data files written atomically; 20 serial and 24 of 24 load runs pass) |
 
 Bundles (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p4-cli-args` + `p4-cli-run`;
@@ -137,7 +140,7 @@ Result of `docs/tasks/p4-plan-sources.md`). `p3-*` cards are the power track's (
 
 Cards that use the real laptop (review M6, m19):
 
-- Agent-session lane: `p4-claude-live-shapes`, `p4-live-claude`, and after v1 `p4-live-codex` and `p4-live-copilot`, start agent
+- Agent-session lane: `p4-claude-live-shapes`, `p4-live-claude`, `p4-live-copilot` and `p4-live-codex`, start agent
   test sessions (no power settings, screen or sound). They run one at a time with each other, and may run beside the
   global lane (power, screen, sound, installs), so they never block screen or power cards for hours. `p4-live-codex`
   and `p4-live-copilot` also need Haik's hands and may install an agent CLI (an install: never beside another install
@@ -161,7 +164,7 @@ contracts card writes the dispatch, then they stay as they are).
 | `p4-claude-status` | `crates/wakeshot-core/src/sources/claude/mod.rs`, `.../claude/status.rs`; `crates/wakeshot-core/tests/claude_status.rs`; `crates/wakeshot-core/tests/fixtures/claude/status/` |
 | `p4-claude-live-shapes` | `crates/wakeshot-core/tests/fixtures/claude/live/`; a new section in `docs/research/claude-code-signals.md` |
 | `p4-claude-transcript` | `.../claude/transcript.rs`; `.../claude/mod.rs` and `crates/wakeshot-core/tests/claude_status.rs` (both after `p4-claude-status`: the `new(home, zone)` change breaks that test file, review m4); `crates/wakeshot-core/tests/claude_transcript.rs`; `crates/wakeshot-core/tests/fixtures/claude/transcript/` |
-| `p4-codex-source` (later) | `crates/wakeshot-core/src/sources/codex.rs`; `crates/wakeshot-core/tests/codex_source.rs`; `crates/wakeshot-core/tests/fixtures/codex/`; `crates/wakeshot-windows/src/lockowner.rs`, and the `AnyProcess` part of `watch/agents.rs` (after `p4-watch-agents`) |
+| `p4-codex-source` | `crates/wakeshot-core/src/sources/codex.rs`; `crates/wakeshot-core/tests/codex_source.rs`; `crates/wakeshot-core/tests/fixtures/codex/`; `crates/wakeshot-windows/src/lockowner.rs`, and the `AnyProcess` part of `watch/agents.rs` (after `p4-watch-agents`) |
 | `p4-copilot-source` | `crates/wakeshot-core/src/sources/copilot.rs`; `crates/wakeshot-core/tests/copilot_source.rs`; `crates/wakeshot-core/tests/fixtures/copilot/` |
 | `p4-watch-folders` | `crates/wakeshot-windows/src/watch/dir.rs` |
 | `p4-watch-reads` | `crates/wakeshot-windows/src/watch/read.rs` |
@@ -189,8 +192,8 @@ Every card may append to `docs/research.md` (additions only, re-read right befor
    `p3-journal`, `p3-power-plan` and the core's `p2-ownership-restore`; review M1; the tray track's `p5-haik-check`
    waits for its `shell.rs`).
 4. Then: the Claude parsing review (`docs/phases/02-06-lighter.md`), then `p4-live-claude`.
-5. After v1: `p4-codex-source`, `p4-copilot-source`, then `p4-live-codex`, `p4-live-copilot`, one at a time and with
-   Haik.
+5. Back in v1 (Haik, 2026-11-06): `p4-codex-source`, `p4-copilot-source` (done), then `p4-live-copilot`, `p4-live-codex`,
+   one at a time.
 
 Integration (planned after the tracks, not here): start the watch thread in the tray with the Claude source and the
 real `process::Liveness`; post its events to the loop window after `Started`; delete hold files on `DeleteHold`; the
