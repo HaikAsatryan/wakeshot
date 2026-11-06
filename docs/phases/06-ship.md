@@ -687,3 +687,6 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
 - 2026-11-06 23:22: the v1 agent list is final (Haik dropped Cursor at 23:21): Claude Code, Codex CLI, Copilot CLI, Copilot
   in VS Code (Copilot harness chats), OpenCode 2.x. Sent to the video worker for `agents.ts`. `p4-cursor-off` updates
   Haik's install once more; the tooltip capture and speed numbers wait for that install.
+- 2026-11-06 23:49: Haik on the Part D renders: "ok our music was the best. I already checked it. + I like the video."
+  The music stays "Funky Disco Beats" (Fupi, CC0); the three candidates go. Part E (his 23:02 opening: typing sounds
+  only, the agent loading, the sleep, the music from the Wakeshot reveal) renders on that track only.
