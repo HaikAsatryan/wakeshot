@@ -68,7 +68,9 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   track plan questions".
 - No guessing (Haik, 2026-11-06 18:45, on Antigravity's Esc, which fires no hook): "We cannot guess or randomly
   sleep. It's better not support something or do so." If Wakeshot cannot see when an agent's work ends, it does not
-  support that agent or that case, rather than end the hold on a timer or keep it on a guess.
+  support that agent or that case, rather than end the hold on a timer or keep it on a guess. Claude's cancelled
+  wakeup stays as it is (Haik, 2026-11-06 19:50): Esc writes nothing, so the hold lasts until the due time Claude
+  wrote, at most 1 hour.
 - Later, not v1: rules for any app ("while ffmpeg runs"). Claude Code inside WSL: its session files carry Linux pids,
   which Windows cannot check, so stale files would hold forever. Revisit with a helper inside WSL.
 - No plugins and no scripting. A new built-in source is new code.

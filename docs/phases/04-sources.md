@@ -526,3 +526,6 @@ limit; Copilot waiting does not hold. The cards build these.
   the due time, at most 1 hour) asked of Haik. Running: `p4-live-cursor` (finishing after Haik's 19:00 steps: the
   cancel was the Stop button on a count to 10K; `cursor-live2` did not open), `p4-antigravity-exact-end` Part A,
   `p4-live-vscode-stop`, and the video Part C render.
+- 2026-11-06 19:50: Haik did `p4-live-cursor` round 2 ("done", nothing shown); the worker finishes the card. Haik
+  kept Claude's cancelled wakeup as it is (default; `docs/product.md`, "No guessing"). `p4-antigravity-exact-end`
+  Question 1 (read `agy`'s log for the cancel line) asked of him.
