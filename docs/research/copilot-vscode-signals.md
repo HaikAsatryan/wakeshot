@@ -367,3 +367,62 @@ chat: the live card does both. What differs from the rules above, and what was c
   one's value is history.
 - **Not verified:** serde_json stops at 128 levels of JSON nesting, so a chat whose saved tool data nests deeper would
   be unreadable; whether real chats nest that deep was not checked.
+
+## Phase 4 live test (2026-11-06)
+
+Card `p4-live-vscode`. VS Code 1.145.1 (commit `6bab64e2d12b`), built-in Copilot extension 0.73.0, Copilot Free
+(model `copilot/auto`), the test laptop, 15:58 to 16:20 local time (UTC+4). Readers at Medium: `agent-watch --source
+vscode,copilot` (through the pseudo console driver) and the dry-run tray, both built from the tree of that day. A
+structure-only monitor (kinds, paths, send times, `modelState`; no text) timed the writes. Five one-line prompts.
+
+**How it ran.** Haik's own VS Code was running, elevated (title "[Administrator]", started 11:05 from a shell that has
+since ended). A Medium `code` cannot join an elevated instance: VS Code shows "Another instance of Code is already
+running as administrator" (`src/vs/code/electron-main/main.ts:396-400`). So the test windows were opened in his
+instance from an elevated shell (`code -n <test folder>`), and the chats ran at High; real users mostly run VS Code at
+Medium (not tested). Prompts went in with `code chat -m <mode> "<prompt>"` from the test folder: VS Code sends it to
+the window of the current folder (`windowsMainService.ts:520-538`), runs a trust check, starts a new chat, then sends
+(`electron-browser/chat.contribution.ts`, `prompt()`). The test folder sat inside the repo folder he had open, so it
+was trusted. The screen was locked from 15:57:50 to 16:08:20, so no window lost focus during prompts 1 to 4.
+
+| Step | What happened |
+|---|---|
+| Prompts 1, 2 (agent mode, `sleep 60`) | Both went to the **Copilot harness**: `~\.copilot\session-state\<id>\` made 0.8 s after the send, with `inuse.2728.lock` (5 bytes), `inuse.2728.hold` (0 bytes), `.workspace-fork.lock`, `workspace.yaml`, `events.jsonl`; 2728 is `copilot-runtime.exe`, the agent host's child, started with VS Code at 11:05. The turns ran 61 s and answered. The Copilot CLI source posted them working 1.4 s after the folder appeared, but with `any copilot.exe alive=Gone`, so they would not hold (rule 8 is not built; sent to `p4-live-copilot`) |
+| Harness switch | A workspace setting `chat.defaultToCopilotHarness: false` written while the window was open did not change the next chat: New Chat keeps the current chat's harness (`clearChatSessionPreservingType`; `constants.ts`, `currentSession`). In a window opened after the setting, the next chat was Local. So here the computed default is the Copilot harness (likely the `experiment: startup` rollout; not verified which) |
+| Prompt 3 (agent mode, `sleep 60`), Local | File first written 44 s after the send, one Initial line, `modelState` 4 (NeedsInput). The terminal call says "Auto approved by rule `sleep (default)`", but no shell started and the chat waited for a click (what it showed is not saved in the file and was not seen; the renderer log shows a `toolRiskAssessment` at the call; one candidate is the one-time auto approve warning, `TerminalAutoApproveWarningAccepted` in application storage, not verified). `agent-watch` posted `waiting(remote=false)`, `since Code.exe alive=Yes`, 25 ms after the write |
+| Prompt 4 (ask mode, one word), Local | Sent 16:07:53.0, done 16:07:55.9, first written 16:08:29.8, already done: Pending never reached the disk. `idle` posted 13 ms before the monitor saw the file |
+| Prompt 5 (`code chat -n`, empty window) | Copilot harness again (`session-state\<id>`, 6 s turn); no `emptyWindowChatSessions` folder exists on this PC |
+| Dry-run tray (Medium, only VS Code can hold) | "VS Code chat is watched in the folder APPDATA names"; the waiting and the idle chat gave no hold, as the rules say (waiting holds only when remote). CPU 0.95 s in 352 s (debug build, all five sources, four on empty folders) |
+
+**Answers to "Open questions only a live test answers":**
+
+1. Delay: each window saves on its own 60 s beat (16:03:29.7, then 16:08:29.8, nothing in between since nothing
+   changed), plus a save on blur. First write 44 s after a send, and 34 s after a turn ended, with the screen locked.
+   A turn that ends before the next beat never shows Pending on disk, so Wakeshot never holds for it (harmless: it
+   was over). In front, behind, minimized as separate cases: not tested (Haik used the laptop meanwhile).
+2. NeedsInput is written at the first beat after the wait starts (seen live). Back to 0 after the approval: not
+   tested live (needs a click; no computer use).
+3. Restart Manager on `state.vscdb`: not needed, the source does not use rule 6; not tested.
+4. Window closed or reloaded mid-request: not tested live. A close while a Local chat runs or waits asks "A session is
+   in progress. Are you sure you want to close the window?" (`chatLifecycle.ts`; `isSessionInProgressStatus` takes
+   InProgress and NeedsInput), so it needs a click.
+5. Crash: not run (only Haik's VS Code could be ended; a new `--user-data-dir` has no sign-in).
+6. Copilot harness: the lock and hold are `inuse.<pid>.lock` and `inuse.<pid>.hold` with the pid of
+   `copilot-runtime.exe`, one runtime for all sessions of the VS Code instance; which file is held open and whether
+   `permission.requested` is written: not tested.
+7. and 8. Background sessions, Claude and Codex in the chat panel: not tested.
+9. The Copilot harness works on Copilot Free (prompts 1, 2, 5 answered).
+
+**Also seen:**
+
+- The Medium readers see the files and the processes of an elevated VS Code: `ImageSince` gave `alive=Yes`.
+- A read at the moment VS Code made a file got 0 bytes; the source asked for its one retry, and the read 14 ms later
+  parsed (rule 3 works).
+- Watch cost: in 39 minutes the VS Code source posted three times, each on a real chat change, although VS Code
+  writes other files under `workspaceStorage` all the time (contracts round 3, "Found outside scope" 3).
+- Every saved line read with no format problem. The real Initial line has ten top-level keys, among them `version`
+  3, `requests`, `inputState`, `customTitle`, `responderUsername`, `hasPendingEdits`; a request carries `modelId`,
+  `modeInfo`, `copilotCredits` (0.26 for prompt 3) and `timeSpentWaiting`. No change to the parser was needed.
+- Compaction (1024 lines): not reached; these chats had one line each.
+- Each `code chat` brings its window to the front, and a file opened from Explorer goes to the last active VS Code
+  window: one of Haik's files opened in the test window. A live test beside a person must expect that.
+- Redacted copies: `crates/wakeshot-core/tests/fixtures/vscode/live/`.

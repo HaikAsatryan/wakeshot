@@ -1,6 +1,7 @@
 //! `VsCodeSource` fed the way the watch thread feeds a `Recent` want: each chat session log whole, again on each
-//! change, `Gone` when deleted. Every fixture in `fixtures/vscode/` is built from the schema. The source does no I/O, so
-//! the user folder is a made-up path and no real VS Code folder is ever read.
+//! change, `Gone` when deleted. The fixtures in `fixtures/vscode/` are built from the schema, those in its `live/`
+//! are redacted real files. The source does no I/O, so the user folder is a made-up path and no real VS Code folder
+//! is ever read.
 
 use std::ffi::OsStr;
 use std::fs;
@@ -18,8 +19,6 @@ use wakeshot_core::sources::{
 
 const PROFILE: &str = r"X:\Users\me";
 const ROAMING: &str = r"X:\Users\me\AppData\Roaming";
-const USER: &str = r"X:\Users\me\AppData\Roaming\Code\User";
-const INSIDERS_USER: &str = r"X:\Users\me\AppData\Roaming\Code - Insiders\User";
 const WORKSPACE: &str = "55992610aaaabbbbccccddddeeeeffff";
 const ID: &str = "0b1c2d3e-0000-4000-8000-000000000001";
 const OTHER: &str = "0b1c2d3e-0000-4000-8000-000000000002";
@@ -47,9 +46,19 @@ const FIXTURES: [&str; 11] = [
     "partial-last-line.jsonl",
 ];
 
+/// `<ROAMING>\Code\User`, one level per `join` as `installs` builds it: `\` is a separator on Windows only, so one
+/// literal with backslashes would be another path than the source's on Linux.
+fn user() -> PathBuf {
+    Path::new(ROAMING).join("Code").join("User")
+}
+
+fn insiders_user() -> PathBuf {
+    Path::new(ROAMING).join("Code - Insiders").join("User")
+}
+
 fn source() -> VsCodeSource {
     VsCodeSource::new(vec![Install {
-        user_dir: PathBuf::from(USER),
+        user_dir: user(),
         product: STABLE,
     }])
 }
@@ -62,27 +71,25 @@ fn both_builds() -> VsCodeSource {
     ))
 }
 
-fn in_workspace(user: &str, id: &str) -> FileId {
+fn in_workspace(user: &Path, id: &str) -> FileId {
     FileId(
-        Path::new(user)
-            .join("workspaceStorage")
+        user.join("workspaceStorage")
             .join(WORKSPACE)
             .join(CHAT_SESSIONS)
             .join(format!("{id}.jsonl")),
     )
 }
 
-fn in_empty_window(user: &str, id: &str) -> FileId {
+fn in_empty_window(user: &Path, id: &str) -> FileId {
     FileId(
-        Path::new(user)
-            .join("globalStorage")
+        user.join("globalStorage")
             .join("emptyWindowChatSessions")
             .join(format!("{id}.jsonl")),
     )
 }
 
 fn chat(id: &str) -> FileId {
-    in_workspace(USER, id)
+    in_workspace(&user(), id)
 }
 
 fn read_fixture(name: &str) -> Vec<u8> {
@@ -200,8 +207,7 @@ fn shape(wants: &[WantedFile]) -> Vec<(PathBuf, u8, Option<&'static str>)> {
 fn it_wants_both_chat_folders_of_each_build_whole_and_recent() {
     let mut s = both_builds();
     let got = shape(&s.wanted());
-    let user = Path::new(USER);
-    let insiders = Path::new(INSIDERS_USER);
+    let (user, insiders) = (user(), insiders_user());
     assert_eq!(
         got,
         [
@@ -273,25 +279,27 @@ fn installs_find_the_data_folder_the_way_vs_code_does() {
         };
     let stable: &[&str] = &["Code.exe"];
     let insiders: &[&str] = &["Code - Insiders.exe"];
+    let under = |base: &str, folder: &str| Path::new(base).join(folder).join("User");
     assert_eq!(
         users(Some(r"X:\Roaming"), None),
         [
-            (PathBuf::from(r"X:\Roaming\Code\User"), stable),
-            (PathBuf::from(r"X:\Roaming\Code - Insiders\User"), insiders),
+            (under(r"X:\Roaming", "Code"), stable),
+            (under(r"X:\Roaming", "Code - Insiders"), insiders),
         ]
     );
     // `VSCODE_APPDATA` wins over `APPDATA`, for both builds.
     assert_eq!(
         users(Some(r"X:\Roaming"), Some(r"D:\vsdata")),
         [
-            (PathBuf::from(r"D:\vsdata\Code\User"), stable),
-            (PathBuf::from(r"D:\vsdata\Code - Insiders\User"), insiders),
+            (under(r"D:\vsdata", "Code"), stable),
+            (under(r"D:\vsdata", "Code - Insiders"), insiders),
         ]
     );
     // An empty value is unset; with no `APPDATA` VS Code uses the profile's `AppData\Roaming`.
+    let roaming = Path::new(PROFILE).join("AppData").join("Roaming");
     let fallback = [
-        (PathBuf::from(USER), stable),
-        (PathBuf::from(INSIDERS_USER), insiders),
+        (roaming.join("Code").join("User"), stable),
+        (roaming.join("Code - Insiders").join("User"), insiders),
     ];
     assert_eq!(users(None, None), fallback);
     assert_eq!(users(Some(""), Some("")), fallback);
@@ -303,7 +311,7 @@ fn installs_find_the_data_folder_the_way_vs_code_does() {
 fn files_outside_the_chat_folders_are_never_taken() {
     let mut s = source();
     let working = read_fixture("working.jsonl");
-    let user = Path::new(USER);
+    let user = user();
     let ws = user.join("workspaceStorage").join(WORKSPACE);
     let name = format!("{ID}.jsonl");
     for path in [
@@ -328,7 +336,7 @@ fn files_outside_the_chat_folders_are_never_taken() {
             .join(WORKSPACE)
             .join(CHAT_SESSIONS)
             .join(&name),
-        PathBuf::from(INSIDERS_USER)
+        insiders_user()
             .join("workspaceStorage")
             .join(WORKSPACE)
             .join(CHAT_SESSIONS)
@@ -746,7 +754,7 @@ fn a_send_time_that_is_not_ms_since_2020_counts_any_start() {
 fn an_insiders_chat_lives_by_the_insiders_image() {
     let mut s = both_builds();
     s.feed(
-        &in_workspace(INSIDERS_USER, ID),
+        &in_workspace(&insiders_user(), ID),
         Feed::Whole(read_fixture("working.jsonl")),
     );
     assert_eq!(
@@ -757,7 +765,7 @@ fn an_insiders_chat_lives_by_the_insiders_image() {
         }
     );
     s.feed(
-        &in_empty_window(USER, OTHER),
+        &in_empty_window(&user(), OTHER),
         Feed::Whole(read_fixture("working.jsonl")),
     );
     let images: Vec<Liveness> = s.sessions().into_iter().map(|f| f.liveness).collect();
@@ -796,7 +804,7 @@ fn a_deleted_file_ends_its_session() {
 #[test]
 fn an_empty_window_chat_is_read_from_its_own_folder() {
     let mut s = source();
-    let file = in_empty_window(USER, ID);
+    let file = in_empty_window(&user(), ID);
     assert_eq!(
         s.feed(&file, Feed::Whole(read_fixture("empty-window.jsonl"))),
         Fed::Taken
@@ -813,7 +821,7 @@ fn an_empty_window_chat_is_read_from_its_own_folder() {
 fn one_chat_in_two_folders_is_one_session_and_the_file_that_says_most_stands() {
     let mut s = source();
     s.feed(
-        &in_empty_window(USER, ID),
+        &in_empty_window(&user(), ID),
         Feed::Whole(read_fixture("idle.jsonl")),
     );
     s.feed(&chat(ID), Feed::Whole(read_fixture("working.jsonl")));
@@ -832,7 +840,7 @@ fn one_chat_in_two_folders_is_one_session_and_the_file_that_says_most_stands() {
         [facts(Activity::Idle, Some(T_R1), FormatHealth::Ok)]
     );
     s.feed(
-        &in_empty_window(USER, ID),
+        &in_empty_window(&user(), ID),
         Feed::Whole(read_fixture("unknown-state.jsonl")),
     );
     assert_eq!(
@@ -958,6 +966,84 @@ fn writes_follow_vs_codes_own_rules() {
         fed_bytes(crlf.as_bytes()),
         facts(WAITING, Some(T_R1), FormatHealth::Ok)
     );
+}
+
+// Live chat logs (`p4-live-vscode`), redacted copies of real VS Code 1.145.1 files (`fixtures/vscode/live/README.md`).
+
+fn live_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("vscode")
+        .join("live")
+}
+
+/// A live chat log, the lines (counted from 1) after which the activity changes with the activity from there on, and
+/// the send time its liveness names at the end.
+type LiveCase = (&'static str, Vec<(usize, Activity)>, Option<i64>);
+
+fn live_expected() -> Vec<LiveCase> {
+    vec![
+        // Sent 16:02:46.076 local (UTC+4); VS Code's first save, 44 s later, already says NeedsInput.
+        (
+            "terminal-call-waiting.jsonl",
+            vec![(1, WAITING)],
+            Some(1_793_966_566_076),
+        ),
+        // Sent 16:07:53.027, done 16:07:55.941; the first save came after the end, so it never says Pending.
+        (
+            "ask-turn-done.jsonl",
+            vec![(1, Activity::Idle)],
+            Some(1_793_966_873_027),
+        ),
+    ]
+}
+
+#[test]
+fn every_live_fixture_is_listed_once() {
+    let mut on_disk: Vec<String> = fs::read_dir(live_dir())
+        .unwrap()
+        .map(|e| e.unwrap().file_name().into_string().unwrap())
+        .filter(|name| name.ends_with(".jsonl"))
+        .collect();
+    on_disk.sort();
+    let mut listed: Vec<String> = live_expected().iter().map(|e| e.0.to_owned()).collect();
+    listed.sort();
+    assert_eq!(on_disk, listed);
+}
+
+/// Each part that ends at a line end is a file VS Code could have written at one save: each reads with no format
+/// problem, the activity moves only where the table says, and the liveness names the chat's send time.
+#[test]
+fn live_chat_logs_read_at_every_save_with_no_format_problem() {
+    for (name, changes, since) in live_expected() {
+        let path = live_dir().join(name);
+        let bytes = fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let mut now = None;
+        let mut end = 0;
+        for (i, line) in bytes.split_inclusive(|&b| b == b'\n').enumerate() {
+            end += line.len();
+            if let Some((_, next)) = changes.iter().find(|(at, _)| *at == i + 1) {
+                now = Some(*next);
+            }
+            let got = fed_bytes(&bytes[..end]);
+            assert_eq!(
+                (Some(got.activity), got.format),
+                (now, FormatHealth::Ok),
+                "{name} line {}",
+                i + 1
+            );
+        }
+        assert!(bytes.ends_with(b"\n"), "{name}: VS Code ends every entry");
+        assert_eq!(
+            fed_bytes(&bytes).liveness,
+            Liveness::ImageSince {
+                images: &["Code.exe"],
+                since_wall_ms: since,
+            },
+            "{name}"
+        );
+    }
 }
 
 // Privacy.
