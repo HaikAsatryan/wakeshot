@@ -20,8 +20,9 @@ fully finalize the work. It's part of cleanup."
    Copilot CLI, OpenCode 2.x and Codex CLI (npm globals), Ollama with its model and its `Startup\Ollama.lnk`, Cursor
    and its CLI, Antigravity CLI (and its user PATH entry) and IDE, the driver's and harness's scratch folders, test
    folders such as `target\vscode-live`, any WSL change.
-2. Keep what Haik installed himself: the Codex desktop app and its login (`~\.codex`), VS Code and its Copilot
-   sign-in, `gh`. Keep the shared data folders they use (`~\.codex`, `~\.copilot`, `%APPDATA%\Code`). Wakeshot's own
+2. Also remove the Codex desktop app (Haik, 2026-11-06 ~21:25: "codex is not needed as well"); its `~\.codex` folder
+   was there before this job (his login, threads), so list it for Haik instead of deleting it. Keep VS Code and its
+   Copilot sign-in, and `gh`, and the shared folders they use (`~\.copilot`, `%APPDATA%\Code`). Wakeshot's own
    plugin folders are removed by Wakeshot's own remove path, never by hand.
 3. For each removed app's own data folder (for example `~\.cursor`, `~\.gemini`, OpenCode's data and state folders,
    `~\.ollama`): remove it only if this job created it (check the creation time against the install time in the
