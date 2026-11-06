@@ -136,7 +136,7 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-cli-restore` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09; nothing to add) | `p3-journal`, `p3-power-plan`, `p2-ownership-restore`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 10 tests |
 | `p4-live-claude` | optional: 3 minutes for the VS Code check; agent-session lane | `p4-watch-thread`, `p4-claude-transcript`, `p4-cli-run`, `p3-process`, the Claude parsing review (`docs/phases/02-06-lighter.md`) | done (committed 01:59): every live case passed (Claude Code 2.1.317); m6 fixed; the VS Code check waits for Haik |
 | `p4-live-codex` | no: Codex logged in by Haik (2026-11-06); agents run it with `p4-live-harness` | `p4-contracts-r2`, `p4-live-harness`; one live card at a time | done (2026-11-06 ~18:25, a1ca2ce): Codex 0.167.0, 7 one-line prompts; holds 0.3 s after a turn starts, ends in 17 ms; reverted thread followed; crash ends the hold in 115 ms; Codex in the tray |
-| `p4-live-copilot` | no (Round 3) | `p4-contracts-r2`, `p4-live-harness`; live cards in parallel since 18:50 | running (2026-11-06 ~19:35) |
+| `p4-live-copilot` | no (Round 3) | `p4-contracts-r2`, `p4-live-harness`; live cards in parallel since 18:50 | done (2026-11-06 ~21:00, 00e0120): Copilot 1.0.106, 7 prompts; posts 0.13 to 0.25 s after each line; liveness fixed (the `.hold` holder named in the file); crash ends the hold in 61 ms; schedules live |
 | `p4-watch-tick-flake` | no | `p4-watch-thread` | done (15:00: ticks wait for their check; data files written atomically; 20 serial and 24 of 24 load runs pass) |
 | `p4-contracts-r2` | no | the four 2026-11-06 source and research cards (done); runs alone among Rust cards | done (2026-11-06 ~16:20, 24f7405): `FindNewest` (Codex reverted threads) and `Recent` as new variants, `Query`, `ImageSince`; 1541 tests; whole-workspace checks green on x64 and ARM64; no Cargo change |
 | `p4-antigravity-research` | no | none | done (2026-11-06): CLI 1.5.2 (`agy.exe`) and IDE 2.6.0 both need hooks (a Wakeshot plugin folder under `~\.gemini\config\plugins\`); free test yes (Google's claim; Armenia listed); build in v1 (`research/antigravity-signals.md`) |
@@ -449,3 +449,8 @@ limit; Copilot waiting does not hold. The cards build these.
   `conversation_id` without quotes (Node escapes quotes); an elevated hook writes no log line; a bad or newer state
   file gives no notice. Started: `p4-antigravity-source` and the hooks code review (`wakeshot-reviewer`,
   `docs/reviews/p4-hooks-code.md`), in parallel, as decided at 18:50.
+- 2026-11-06 ~21:00: `p4-live-copilot` done (00e0120). The Gone bug was not elevation: nobody holds the `.lock`; the
+  inner `copilot.exe` (or VS Code's `copilot-runtime.exe`) holds `inuse.<pid>.hold`, so `copilot.rs` names the `.hold`
+  and `watch/agents.rs` counts the holder whose pid is in the file name, whatever its image (only that pid when
+  Restart Manager fails). VS Code's Copilot harness chats now hold as "Copilot". Worker calls for Haik's review: the
+  pid-in-name rule; those chats show as "Copilot". `watch/*` handed to the `p4-live-opencode` worker for the poll.
