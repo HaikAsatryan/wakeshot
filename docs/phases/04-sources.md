@@ -409,3 +409,7 @@ limit; Copilot waiting does not hold. The cards build these.
   a `ProcessRef`. Pushed 98c8795 (25 commits, secret scan clean). Started: `p4-cursor-source`,
   `p4-agent-hooks-install`, `p4-live-copilot`, `p4-live-vscode`, and the OpenCode major verify. Haik may use the
   laptop for normal work; he was told to keep away from the AI apps, sleep and the lid until the live tests end.
+- 2026-11-06 ~19:45: OpenCode review verify (`docs/reviews/p4-opencode-db-read-verify.md`): the major is Fixed; the
+  minor fixes opened nothing new. Left, bounded: leftover files after a crash still get three reads per 30 s tick;
+  `p4-live-opencode` runs that case. The OpenCode database read review has passed. `p4-live-opencode` starts when a
+  build slot frees (four building now).
