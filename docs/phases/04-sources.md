@@ -487,3 +487,9 @@ limit; Copilot waiting does not hold. The cards build these.
   on their own (PIDs in the card Log). `p4-live-antigravity` also asks Haik for the IDE's first-run screen. Both
   relayed in chat; Haik is away 1 to 2 hours. The M1 verify runs with the design reviewer (`add32795`), which knows
   the design; report `docs/reviews/p4-hooks-code-verify.md`.
+- 2026-11-06 ~22:05: hooks code verify (`docs/reviews/p4-hooks-code-verify.md`): M1 Fixed; no new blocker or major.
+  Notes, no action: the list-failure path has no test; the check is skipped if the hook is missing from its own
+  process list; a future `-EncodedCommand` form would pass the plain-text search. The hooks code review has passed.
+  From `p4-live-antigravity` (live, agy 1.5.2): agy loads dot-named plugin folders, so the uninstall's rename to
+  `.wakeshot-removed` and the staging folder do not stop or hide hooks; sent to `p4-live-cursor` (owner of
+  `agent_hooks.rs`): stage and park outside the plugin root, delete Wakeshot's `hooks.json` first.
