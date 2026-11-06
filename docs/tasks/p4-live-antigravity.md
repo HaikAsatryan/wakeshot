@@ -39,6 +39,16 @@ tray.
 7. Clean-up: the plugin folder removed through the product's remove path (the fresh install adds it again), every
    process you started ended by PID.
 
+## Orchestrator changes (2026-11-06 ~18:50, for speed; Haik asked for more parallel work)
+
+- Runs after `p4-antigravity-source`, in parallel with `p4-live-cursor` and the hooks code review. Fixes in shared
+  hooks files (`sources/hooked.rs`, `hook.rs`, `agent_hooks.rs`) belong to `p4-live-cursor` this round: report yours
+  to the orchestrator; fix only `sources/antigravity.rs`, its tests and fixtures.
+- Before the first write: copy `%USERPROFILE%\.gemini\config\plugins\` whole (if it exists) to
+  `<scratchpad>\p4-live-antigravity\backup\`; nothing else under `.gemini` (token files live there). At the end
+  compare.
+- If the hooks code review reports a blocker while you run, the orchestrator tells you; stop writing real folders.
+
 ## Rules
 
 The "Rules for every live card of the bigger v1" in `docs/tasks/p4-live-vscode.md` apply. Also: never edit Haik's

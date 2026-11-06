@@ -394,3 +394,13 @@ limit; Copilot waiting does not hold. The cards build these.
   contract change; each notice walks all date folders; a background terminal left running after Esc does not hold;
   `CODEX_HOME` from the tray's own environment only. Track note 7 updated. Next: `p4-contracts-r3` runs alone once
   the OpenCode minor fixes end; then `p4-cursor-source`, `p4-agent-hooks-install` and `p4-live-copilot` in parallel.
+- 2026-11-06 ~18:50: Haik asked why the agents are not integrated in parallel. Orchestrator decisions, for speed and
+  easy to undo: live cards run in parallel from now on (at most four building cards in all). `p4-contracts-r3`
+  (running alone) also wires Copilot, VS Code and OpenCode into `tray_mode.rs` and adds `agent-watch` rows for VS Code
+  and OpenCode; `p4-antigravity-source` wires Cursor and Antigravity; no live card edits those two files. The
+  `--dry-run` app step takes turns through `<scratchpad>\dry-run.lock`. The hooks code review runs beside the Cursor
+  and Antigravity live cards instead of before them; those cards first copy the folder they write into
+  (`.cursor\plugins\`, `.gemini\config\plugins\`) to the scratchpad. Order after `p4-contracts-r3`: `p4-cursor-source`,
+  `p4-agent-hooks-install`, `p4-live-copilot`, `p4-live-vscode` (four), then `p4-live-opencode` when a slot frees and
+  the OpenCode major is verified; then `p4-antigravity-source` beside the hooks code review; then `p4-live-cursor`
+  and `p4-live-antigravity` together. Estimate told to Haik: about 22:00 to 22:30 (a guess).

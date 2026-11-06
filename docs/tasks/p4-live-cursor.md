@@ -41,6 +41,17 @@ to 6), redacted fixtures, fixes with tests, and the source wired into the tray.
 7. Clean-up: the plugin folder removed through the product's remove path at the end (the fresh install adds it again),
    every process you started ended by PID.
 
+## Orchestrator changes (2026-11-06 ~18:50, for speed; Haik asked for more parallel work)
+
+- Runs after `p4-antigravity-source` (it adds the Cursor tray and harness lines), not after the hooks code review:
+  the review runs at the same time. Runs in parallel with `p4-live-antigravity`; both may fix `sources/hooked.rs`,
+  `hook.rs` or `agent_hooks.rs`, so this card owns those fixes and `p4-live-antigravity` reports its own to the
+  orchestrator.
+- Before the first write: copy `%USERPROFILE%\.cursor\plugins\` whole to `<scratchpad>\p4-live-cursor\backup\`, so a
+  bug cannot lose anything; at the end compare the folder with the backup (only Wakeshot's folder may differ, and it
+  is removed). Never restore over the user's files without telling the orchestrator.
+- If the hooks code review reports a blocker while you run, the orchestrator tells you; stop writing real folders.
+
 ## Rules
 
 The "Rules for every live card of the bigger v1" in `docs/tasks/p4-live-vscode.md` apply. Also: never edit

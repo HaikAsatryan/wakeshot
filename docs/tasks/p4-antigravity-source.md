@@ -34,6 +34,10 @@ folder in the install table, as `docs/agent-hooks.md` "Antigravity" designs them
    point `p4-agent-hooks-install` left), and the `hook` command's agent name if `hook.rs` needs one line for it.
 4. Tests in the shape of Cursor's: event rules, the privacy marker test, the fixed file set, the liveness pairing
    with `agy.exe`.
+5. Wiring for both hooked sources (orchestrator, 2026-11-06 ~18:50, so the two live cards can run in parallel):
+   start the Cursor and Antigravity sources in `crates/wakeshot-windows/src/app/tray_mode.rs` (as `p4-contracts-r3`
+   did for Copilot, VS Code and OpenCode, each with a unit test), and add `cursor` and `antigravity` rows to
+   `SOURCES` in `crates/wakeshot-windows/examples/agent-watch.rs`. This wins over "Out of scope" below.
 
 ## Acceptance checks
 

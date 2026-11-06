@@ -42,6 +42,15 @@ fixes with tests, and the source wired into the tray.
 
 ## Rules for every live card of the bigger v1 (2026-11-06)
 
+- **Live cards run in parallel** (Haik asked for more parallel work, 2026-11-06 ~18:50). So no live card edits
+  `crates/wakeshot-windows/src/app/tray_mode.rs` or `examples/agent-watch.rs`: `p4-contracts-r3` adds the Copilot,
+  VS Code and OpenCode lines, `p4-antigravity-source` the Cursor and Antigravity lines. This wins over any card's
+  "Wire the source" item: test through the app with the line already there, and report a wiring bug to the
+  orchestrator. The `--dry-run` app step takes turns: create `<scratchpad>\dry-run.lock` with your card name
+  (`New-Item -ItemType File` fails if it exists; then wait 30 s and try again), run the dry-run tray, and delete the
+  file once that tray has quit. Fixes in shared watch files (`watch/*`, `lockowner.rs`) only by the card that owns
+  them this round (`p4-live-copilot`); others report them.
+
 - Minimum tokens (Haik): each prompt says it is an app test and asks for one word or `0`, no reasoning; the lowest
   reasoning setting and the smallest model the plan allows. Count prompts in the Log; free plans have monthly limits.
 - Start agents and the driver at Medium through `explorer.exe`. Kill only processes you started, by PID.
