@@ -527,7 +527,7 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   contrast menu fix): tray quit by `WM_CLOSE` (settings restored, code 0), `Setup.exe --silent` at Medium through
   Explorer (exit 0, exe hash equals the build, `config.json` kept), tray started through Explorer. Final review of
   the video running (`docs/reviews/p6-media-final.md`); the MP4 and poster are committed after its fixes.
-- 2026-11-06 05:35: video review 0 blockers, 1 major (the lid shot again the densest stretch), 10 minors. The worker
+- 2026-11-06 05:24: video review 0 blockers, 1 major (the lid shot again the densest stretch), 10 minors. The worker
   fixed the major and nine minors (one lid caption, the lock badge with the chime, one chip step; `check-pace` now
   fails above 5 things in any 2 s; BT.709 with colour tags; clean patches on the dark captures; tray terminal at
   30 px; the laptop whole in the settings shot). m9 ("keeps it awake while agents work" says more than v1's Claude
