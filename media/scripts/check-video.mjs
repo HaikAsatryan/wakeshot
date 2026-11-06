@@ -1,6 +1,6 @@
 // Checks the rendered files against the specs in docs/research/launch.md part 4 with ffprobe (the one Remotion
-// ships, so nothing else is installed): the video is H.264 and AAC, 1920 x 1080, 30 fps, 30 s plus or minus 2, under
-// 10 MB (GitHub's free-plan attachment limit), tagged BT.709. Each icon loop is read frame by frame (scripts/lib/gif.mjs): a GIF of
+// ships, so nothing else is installed): the video is H.264 and AAC, 1920 x 1080, 30 fps, as long as the timeline
+// (38 s since Part E of `p6-agents-video-readme`: Haik let the pain pass 30 s, then asked for his typing opening) and 45 s at most, under 10 MB (GitHub's free-plan attachment limit), tagged BT.709. Each icon loop is read frame by frame (scripts/lib/gif.mjs): a GIF of
 // 4 to 6 s that loops forever, under 1 MB, its last frame equal to its first (no jump), a 40 px border of every
 // frame exactly GitHub's page colour for its theme (no visible box on the README), and its idle and holding frames
 // exactly the art port's tray glyph (`tray_mask` at `LOOP.art` px, composed on the page as the review sheets are).
@@ -15,7 +15,7 @@ import {fileURLToPath} from 'node:url';
 import {ON_DARK, ON_LIGHT, TASKBAR_DARK, TASKBAR_LIGHT, blank, paint} from '../src/art/heldLight.ts';
 import {rgbOf, trayFade, trayPlace} from '../src/art/motion.ts';
 import {GITHUB} from '../src/theme.ts';
-import {LOOP, STATE_ICON} from '../src/timeline.ts';
+import {LOOP, STATE_ICON, VIDEO} from '../src/timeline.ts';
 import {readGif} from './lib/gif.mjs';
 import {readPng} from './lib/png.mjs';
 
@@ -51,7 +51,8 @@ if (!existsSync(video)) {
   const tags = [v?.color_space, v?.color_primaries, v?.color_transfer];
   check(tags.every((t) => t === 'bt709'), `tagged BT.709: matrix, primaries, transfer (${tags.join(', ')})`);
   check(a?.codec_name === 'aac', `audio track aac (${a?.codec_name ?? 'none'})`);
-  check(Math.abs(seconds - 30) <= 2, `30 s plus or minus 2 (${seconds.toFixed(2)} s)`);
+  const length = VIDEO.frames / VIDEO.fps;
+  check(Math.abs(seconds - length) <= 0.1 && seconds <= 45, `the timeline's ${length} s, 45 s at most (${seconds.toFixed(2)} s)`);
   check(mb < 10, `under 10 MB (${mb.toFixed(2)} MB)`);
 }
 

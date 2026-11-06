@@ -3,11 +3,16 @@
 // focus ring, the cursor and the stage's lift can find the same spots.
 import {held} from '../art/heldLight.ts';
 import {PLACES} from '../timeline.ts';
+import {OPEN_TERMINAL} from './AgentTerminal.tsx';
 import {SETS, boxOf, type Box, type SetName} from './Capture.tsx';
 import {CARD, rowBox} from './SettingsCard.tsx';
 
-/** The pain's laptop: the top left of its box, below the big words. */
-export const PAIN_LAPTOP_AT = {x: PLACES.hook.x - 416, y: PLACES.hook.y + 63};
+/** The pain's flat terminal window: its top left, centred on its place. */
+export const OPEN_TERMINAL_AT = {x: PLACES.terminal.x - OPEN_TERMINAL.w / 2, y: PLACES.terminal.y - Math.round(OPEN_TERMINAL.h / 2)};
+/** The pain's laptop: the top left of its box; its middle sits at about (hook.x, 189), where the camera looks. */
+export const PAIN_LAPTOP_AT = {x: PLACES.hook.x - 416, y: 63};
+/** The pain's "Sleeping" chip: its left middle, beside the lid's top corner, in the world so it sinks with the laptop. */
+export const SLEEP_CHIP_AT = {x: PLACES.hook.x + 546, y: -163};
 /**
  * The tray shot's terminal, the cause: its top left, scale and width (terminal pixels), left of the tray capture, the
  * effect, level with the tooltip. At 0.88 its 34 px text reads at 30 px, the spec's least (review m1 of round 4); it

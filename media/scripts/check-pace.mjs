@@ -11,11 +11,13 @@
 // - a caption holds at least 1.4 s after its last word lands; big words of 1 to 3 words at least 0.5 s;
 // - a caption line has 2 to 6 words (big words and the name 1 to 6; the end card's lines, which pop in whole, are free);
 // - at most two lines of words on screen at once before the end card (it holds still for 3 s and may show three);
-//   the name on screen by 5 s (Part C, 2026-11-06: the pain and Haik's question come first, 4 s); the end card is the
-//   last 4 s;
-// - frame 0 shows words already in, so the first frame is a full picture.
+//   the name on screen by 13 s (Part C, 2026-11-06: the pain and Haik's question come first, 4 s; Part D: Haik found
+//   that too short, so the pain took 8 s; Part E: his opening, a prompt typed, the agent waiting, the laptop asleep,
+//   takes 12 s and the name lands at 12.5 s); the end card is the last 4 s;
+// - frame 0 is a full picture: words already in, or the camera on the opening terminal from frame 0 with its command
+//   line and input box already on it (Part E has no words over the pain).
 import {BEAT} from '../src/beat.ts';
-import {CAMERA, CAPTIONS, END_CARD, EVENTS, ON_GRID, SCENES, VIDEO, lineIn, wordStarts, wordsOf} from '../src/timeline.ts';
+import {CAMERA, CAPTIONS, END_CARD, EVENTS, KEYS, ON_GRID, SCENES, VIDEO, lineIn, wordStarts, wordsOf} from '../src/timeline.ts';
 
 const fps = VIDEO.fps;
 const fails = [];
@@ -97,9 +99,13 @@ for (let f = 0; f < END_CARD; f++) {
   }
 }
 const name = CAPTIONS.flatMap((b) => b.lines).find((l) => l.style === 'name');
-if (!name || name.at > 5 * fps) fail(`the name is not on screen by 5 s (${name ? s(name.at) : 'never'})`);
+if (!name || name.at > 13 * fps) fail(`the name is not on screen by 13 s (${name ? s(name.at) : 'never'})`);
 if (VIDEO.frames - SCENES.end.from !== 4 * fps) fail(`the end card lasts ${((VIDEO.frames - SCENES.end.from) / fps).toFixed(2)} s, not 4 s`);
-if (!CAPTIONS.some((b) => b.lines.some((l) => l.already && l.at === 0))) fail('frame 0 shows no words already in');
+const wordsAtZero = CAPTIONS.some((b) => b.lines.some((l) => l.already && l.at === 0));
+// The terminal draws its command line and input box from its first frame; the first key may not land on frame 0, so
+// the picture is whole before anything moves.
+const terminalAtZero = CAMERA[0].at === 0 && CAMERA[0].kind === 'cut' && CAMERA[0].to === 'typeClose' && KEYS.length > 0 && KEYS[0].at > 0;
+if (!wordsAtZero && !terminalAtZero) fail('frame 0 shows no words already in and does not open on the terminal');
 
 const events = moments.filter((m) => m < END_CARD).length;
 console.log(

@@ -20,8 +20,11 @@ import {encodePng, readPng} from './lib/png.mjs';
 const media = join(dirname(fileURLToPath(import.meta.url)), '..');
 const cli = join(media, 'node_modules', '@remotion', 'cli', 'remotion-cli.js');
 const concurrency = process.env.MEDIA_CONCURRENCY ?? '4';
-/** The poster: the light on and the name with its line in, the frame the README player shows before play. */
-const POSTER_FRAME = 180;
+/**
+ * The poster: the light on and the name with its line in, the frame the README player shows before play (2 s after
+ * the light, which comes on at 12 s since Part E).
+ */
+const POSTER_FRAME = 420;
 
 function run(args) {
   const r = spawnSync(process.execPath, args, {cwd: media, stdio: 'inherit'});

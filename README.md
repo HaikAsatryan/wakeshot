@@ -62,7 +62,7 @@ PC sleeps as usual, and your settings are your own again. Today these can hold:
 
 | What | The PC stays awake while |
 |---|---|
-| **AI agents**: <!-- agents -->Claude Code, Codex CLI, Copilot CLI and OpenCode<!-- /agents --> | an agent works on your task, or runs work it started in the background. Wakeshot reads the small files each agent keeps and never changes an agent's settings |
+| **AI agents**: <!-- agents -->Claude Code, Codex CLI, Copilot CLI, Copilot in VS Code and OpenCode<!-- /agents --> | an agent works on your task, or runs work it started in the background. Wakeshot reads the small files each agent keeps and never changes an agent's settings |
 | **Any command**: `wakeshot run -- <command>` | that command runs: a build, a test suite, a backup, a download |
 | **Any script**: a [hold file](docs/hold-files.md) | the process named in the file runs |
 | **You**: Keep awake in the menu | the time you picked runs: 30 minutes, 1, 2 or 4 hours, or until you turn it off |

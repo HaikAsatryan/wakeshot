@@ -18,15 +18,14 @@ export type Agent = {
   card: string;
 };
 
+// The v1 list is final (Haik, 2026-11-06 23:21, via the orchestrator): Cursor and Antigravity left v1, so they are
+// not listed at all.
 export const AGENTS: Agent[] = [
-  // May leave v1 under the no-guessing rule: its exact end of work (Esc, background commands) is not proven yet.
-  {name: 'Antigravity', live: 'pending', card: 'p4-antigravity-exact-end'},
   {name: 'Claude Code', live: 'passed', card: 'p4-live-claude'},
   {name: 'Codex CLI', live: 'passed', card: 'p4-live-codex'},
   {name: 'Copilot CLI', chip: 'Copilot', live: 'passed', card: 'p4-live-copilot'},
-  // Waiting and idle chats were read right live, but no Local working chat reached the disk, so no hold was seen.
-  {name: 'Copilot in VS Code', chip: 'Copilot', live: 'partly', card: 'p4-live-vscode'},
-  {name: 'Cursor', live: 'pending', card: 'p4-live-cursor'},
+  // Passed for the Copilot harness chats, every case exact (Haik, 2026-11-06 23:21); VS Code's Local chats left v1.
+  {name: 'Copilot in VS Code', chip: 'Copilot', live: 'passed', card: 'p4-live-vscode'},
   // Tested live with 2.x (2.2.5); a 1.x database was not tested live.
   {name: 'OpenCode', live: 'passed', card: 'p4-live-opencode'},
 ];
@@ -35,7 +34,7 @@ export const AGENTS: Agent[] = [
 export const SUPPORTED: Agent[] = AGENTS.filter((a) => a.live === 'passed');
 
 /**
- * One tile of the video's agents shot: the name only, in our type. No owner's logo: of the six owners only GitHub's
+ * One tile of the video's agents shot: the name only, in our type. No owner's logo: of the owners only GitHub's
  * rules allow one for "works with", and even that page also asks for prior written permission
  * (`docs/research/promo-video.md`, "Agent logos").
  */

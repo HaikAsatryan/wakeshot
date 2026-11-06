@@ -6,7 +6,10 @@ import {chips} from './agents.ts';
 import {BEAT, beat} from './beat.ts';
 import {COPY} from './copy.ts';
 
-export const VIDEO = {width: 1920, height: 1080, fps: 30, frames: 900};
+// 38 s since Part E of `p6-agents-video-readme` (Haik, 2026-11-06 23:02: a person types a prompt, the agent mostly
+// waits and loads, the laptop sleeps, no music until Wakeshot comes in): the pain grew from 8 s to 12 s and everything
+// after it moved 8 beats again. Part D had made it 34 s (the pain may pass the 30 s line).
+export const VIDEO = {width: 1920, height: 1080, fps: 30, frames: 1140};
 /**
  * The README loop. `art` is the tray glyph's size in it: `tray_mask` drawn at 128 px, not scaled from a smaller one;
  * the README shows the loop at half size, so the glyph reads at 64 px and stays sharp on a HiDPI screen.
@@ -27,45 +30,78 @@ export const LIGHT_OFF_FRAMES = 24;
  * The eight shots of the storyboard (`docs/research/promo-video.md`), in frames. Part C of
  * `p6-agents-video-readme` (Haik, 2026-11-06): the pain first (the laptop sleeps mid-work, "Tired of sleepy
  * laptops?"), the name, then the agents it works with; the tray proof, the lid, the settings and the sleep follow as
- * signed off. The menu shot left so the pain and the agents get their time in the same 30 s.
+ * signed off. The menu shot left so the pain and the agents get their time. Part E: the pain takes 12 s (6 bars, so
+ * the light, where the music now starts, lands on a bar line and the track's bars line up with the rest).
  */
 export const SCENES = {
-  hook: {from: beat(0), len: beat(8)},
-  light: {from: beat(8), len: beat(6)},
-  agents: {from: beat(14), len: beat(8)},
-  tray: {from: beat(22), len: beat(10)},
-  lid: {from: beat(32), len: beat(8)},
-  settings: {from: beat(40), len: beat(6)},
-  sleeps: {from: beat(46), len: beat(6)},
-  end: {from: beat(52), len: beat(8)},
+  hook: {from: beat(0), len: beat(24)},
+  light: {from: beat(24), len: beat(6)},
+  agents: {from: beat(30), len: beat(8)},
+  tray: {from: beat(38), len: beat(10)},
+  lid: {from: beat(48), len: beat(8)},
+  settings: {from: beat(56), len: beat(6)},
+  sleeps: {from: beat(62), len: beat(6)},
+  end: {from: beat(68), len: beat(8)},
 } as const;
+
+/**
+ * The person at the keyboard: the prompt (`COPY.terminal.prompt`) typed one key at a time by a fluent typist, about
+ * 11 keys a second, a little slower after a space and before the capitals. Each number is the frames from one key to
+ * the next; the first key lands at `KEY_FROM`. Hand-set, not random, so it reads the same in the code as on screen.
+ */
+const KEY_FROM = 12;
+const KEY_GAPS = [3, 2, 3, 2, 3, 2, 3, 4, 2, 3, 2, 3, 2, 3, 2, 4, 2, 3, 5, 3, 2, 3, 4, 3];
+if (KEY_GAPS.length !== COPY.terminal.prompt.length - 1) {
+  throw new Error(`KEY_GAPS has ${KEY_GAPS.length} gaps for a ${COPY.terminal.prompt.length} character prompt: set one gap per key after the first`);
+}
+/** Each key of the prompt and the frame it lands on: the letter shows and the key sounds at that frame. */
+export const KEYS: {at: number; ch: string}[] = [...COPY.terminal.prompt].map((ch, i) => ({
+  ch,
+  at: KEY_FROM + KEY_GAPS.slice(0, i).reduce((a, b) => a + b, 0),
+}));
+/** Shift goes down a little before the first capital and is held through the rest of the word ("API"). */
+export const SHIFT_AT = (() => {
+  const first = KEYS.find((k) => k.ch !== k.ch.toLowerCase());
+  return first ? first.at - 2 : null;
+})();
 
 /** Every moment the scenes and the sound share, in absolute frames. */
 export const T = {
   /**
-   * The pain: an agent works on the laptop, then the laptop goes to sleep under it (`sleep`: the screen dims, the
-   * work freezes, the power light breathes), then the stage darkens under the question.
+   * The pain, as a person lives it (Part E, Haik: "terminal is open and someone is typing ... agents in terminal are
+   * not typing so fast, usually they loading a lot"): close on a terminal, a person types a prompt to an agent
+   * (`KEYS`) and sends it (`enter`); the agent then mostly waits and loads, a spinner and a thinking line with its
+   * clock, a tool line now and then (`lines`). Its clock runs in real time until `lapse`, then as a time lapse, so
+   * minutes go by while nobody touches the laptop. A cut to the whole laptop with the same screen (`cut`); the idle
+   * timer dims the screen while the agent still works (`dim`); then the screen goes off, the work stops and the power
+   * light starts to breathe (`sleep`). The scene sinks into the dark (`sink`), so the question stands alone on the
+   * clean stage the light then comes on in (Part D: Haik read a ghost of the laptop behind it as a glitch).
    */
   hook: {
-    /** The first tool line on the laptop's screen; one more every `lineEvery` frames until the laptop sleeps. */
-    firstLine: 3,
-    lineEvery: 6,
-    sleep: beat(2),
-    /** The screen dims over this many frames. */
-    dimLen: 12,
-    question: beat(4),
-    /** The stage darkens under the question over this many frames. */
-    darkLen: 12,
+    enter: beat(6),
+    lapse: beat(6) + 36,
+    /** The tool lines, now and then and never evenly: real agents spend most of their time waiting. */
+    lines: [132, 171, 219, 243],
+    cut: beat(13),
+    dim: beat(15),
+    /** The screen dims over this many frames, then goes off over `offLen` at `sleep`. */
+    dimLen: 10,
+    sleep: beat(17),
+    offLen: 6,
+    sink: beat(19),
+    /** The scene fades into the clean stage over this many frames, done before the question starts. */
+    sinkLen: 12,
+    question: beat(20),
   },
-  light: {on: beat(8), name: beat(9)},
+  light: {on: beat(24), name: beat(25)},
   /**
    * The agents: the light rises and shrinks to the top as the camera moves; the agent tiles come in one after another
    * (`tileStep` frames apart, read as one group like the words of a line); the line; the light pulses: it holds for
    * every one of them.
    */
-  agents: {move: beat(14), tiles: beat(15), tileStep: 5, line: beat(17), pulse: beat(19)},
+  agents: {move: beat(30), tiles: beat(31), tileStep: 5, line: beat(33), pulse: beat(35)},
   /** The agent starts and the icon turns holding; the tooltip under the cursor; the work ends and the icon lets go. */
-  tray: {whip: beat(22), whipLen: 12, start: beat(23), hover: beat(25), drift: beat(26), done: beat(28)},
+  tray: {whip: beat(38), whipLen: 12, start: beat(39), hover: beat(41), drift: beat(42), done: beat(44)},
   /**
    * The lid shuts, Wakeshot locks (the badge comes with the chime, as the app locks at the lid close) and the work goes
    * on behind it: at `work` a chip rises above the shut laptop with the agent's step under a turning spinner; at `done`
@@ -73,8 +109,8 @@ export const T = {
    * work going on, then clearly done, then the sleep). One caption and one chip step, so the shot is not the densest
    * stretch again (review M1 of round 4).
    */
-  lid: {cut: beat(32), settle: 15, close: beat(33), shut: beat(34), lock: beat(34), work: beat(36), orbit: beat(36), done: beat(39)},
-  settings: {move: beat(40), card: beat(41), row1: beat(43), row2: beat(44)},
+  lid: {cut: beat(48), settle: 15, close: beat(49), shut: beat(50), lock: beat(50), work: beat(52), orbit: beat(52), done: beat(55)},
+  settings: {move: beat(56), card: beat(57), row1: beat(59), row2: beat(60)},
   /**
    * A time cut: the frame goes to black into the cut, "Later" lands on the black, and the picture comes back under the
    * rest of the line; then the laptop goes to sleep. `dip` holds the frames where the black starts, is full, starts to
@@ -84,8 +120,8 @@ export const T = {
    * (Haik, 2026-11-06). No clock and no countdown on screen: Wakeshot sleeps a closed laptop once nothing has happened
    * for 5 minutes (`docs/product.md`), and the video claims no time it does not keep.
    */
-  sleeps: {cut: beat(46), dip: [beat(46) - 10, beat(46) - 1, beat(46) + 5, beat(47)], line: beat(46), sleep: beat(48), moon: beat(49)},
-  end: {cut: beat(52), line: beat(53), speed: beat(54), install: beat(55)},
+  sleeps: {cut: beat(62), dip: [beat(62) - 10, beat(62) - 1, beat(62) + 5, beat(63)], line: beat(62), sleep: beat(64), moon: beat(65)},
+  end: {cut: beat(68), line: beat(69), speed: beat(70), install: beat(71)},
 } as const;
 
 /** Camera moves between near places run this long; a whip is quicker (`promo-video.md`, "Motion"). */
@@ -96,9 +132,21 @@ export const MOVE_LEN = 15;
  * camera slides between them; far places are reached by a hard cut.
  */
 export const PLACES = {
-  // The pain's laptop: a laptop of its own, far from the lid shot's, so each keeps its own state.
-  hook: {x: -6000, y: 0, zoom: 0.86},
-  hookPush: {x: -6000, y: 10, zoom: 0.89},
+  // The pain's terminal: a flat window 1500 x 906 centred here (`OPEN_TERMINAL` in world.ts), seen close, straight on,
+  // so the typed prompt reads at about 52 px. First the input box and the line above it while the person types, the
+  // window's left edge and title bar in view so it reads as a window; then, from the Enter, most of the window: the
+  // prompt, the tool lines, the thinking line and its clock.
+  terminal: {x: -9000, y: 0, zoom: 1},
+  typeClose: {x: -9171, y: -280, zoom: 1.45},
+  typeClosePush: {x: -9171, y: -280, zoom: 1.5},
+  workClose: {x: -9150, y: -190, zoom: 1.25},
+  workClosePush: {x: -9150, y: -186, zoom: 1.29},
+  // The pain's laptop: a laptop of its own, far from the lid shot's, so each keeps its own state. The same screen as
+  // the terminal above at the cut; then the camera eases back as it all sinks into the dark.
+  // The laptop centred in the frame, as large as it fits with room for the chip: no words above it since Part E.
+  hook: {x: -6000, y: 189, zoom: 1},
+  hookPush: {x: -6000, y: 185, zoom: 1.03},
+  hookAway: {x: -6000, y: 215, zoom: 0.88},
   light: {x: 0, y: 0, zoom: 1},
   // Below the light: the camera moves down, so the light rises to the top of the frame over the agent tiles.
   agents: {x: 0, y: 210, zoom: 1},
@@ -121,9 +169,15 @@ export type PlaceName = keyof typeof PLACES;
  */
 export type CameraKey = {at: number; to: PlaceName; kind: 'cut' | 'move' | 'whip' | 'settle'; len: number};
 export const CAMERA: CameraKey[] = [
-  {at: SCENES.hook.from, to: 'hook', kind: 'cut', len: 0},
-  // The slow push of a hold on drawn parts (`promo-video.md`, "Motion"), through the pain.
-  {at: SCENES.hook.from, to: 'hookPush', kind: 'settle', len: SCENES.hook.len},
+  {at: SCENES.hook.from, to: 'typeClose', kind: 'cut', len: 0},
+  // The slow push of a hold on drawn parts (`promo-video.md`, "Motion"), while the person types.
+  {at: SCENES.hook.from, to: 'typeClosePush', kind: 'settle', len: T.hook.enter},
+  {at: T.hook.enter, to: 'workClose', kind: 'move', len: MOVE_LEN},
+  {at: T.hook.enter + MOVE_LEN, to: 'workClosePush', kind: 'settle', len: T.hook.cut - T.hook.enter - MOVE_LEN},
+  // A cut, not a pull back: the close shots are a flat window, the laptop is seen at three-quarters.
+  {at: T.hook.cut, to: 'hook', kind: 'cut', len: 0},
+  {at: T.hook.cut, to: 'hookPush', kind: 'settle', len: T.hook.sink - T.hook.cut},
+  {at: T.hook.sink, to: 'hookAway', kind: 'move', len: MOVE_LEN},
   {at: SCENES.light.from, to: 'light', kind: 'cut', len: 0},
   {at: T.agents.move, to: 'agents', kind: 'move', len: MOVE_LEN},
   {at: T.agents.tiles, to: 'agentsPush', kind: 'settle', len: T.tray.whip - T.agents.tiles},
@@ -163,15 +217,8 @@ export type TextStyle = 'big' | 'name' | 'caption' | 'line' | 'mono' | 'small';
 export type CaptionLine = {text: string; at: number; style: TextStyle; flow?: boolean; whole?: boolean; already?: boolean};
 export type CaptionBlock = {id: string; lines: CaptionLine[]; until: number; leave: 'fade' | 'cut' | 'stay'};
 export const CAPTIONS: CaptionBlock[] = [
-  {
-    id: 'hook',
-    lines: [
-      {text: COPY.hook[0], at: 0, style: 'big', already: true},
-      {text: COPY.hook[1], at: T.hook.sleep, style: 'big'},
-    ],
-    until: T.hook.question,
-    leave: 'cut',
-  },
+  // No words over the pain until the question (Part E): the typed prompt, the thinking line and the "Sleeping" chip
+  // tell it, and big words over the terminal would cover the prompt being typed.
   {id: 'question', lines: [{text: COPY.question, at: T.hook.question, style: 'big'}], until: SCENES.light.from, leave: 'cut'},
   {
     id: 'name',
@@ -260,8 +307,12 @@ const range = (from: number, to: number, step: number) => {
 
 /** Every new thing on screen except the words, which `check-pace.mjs` adds from `CAPTIONS`. */
 export const EVENTS: PaceEvent[] = [
-  ...range(T.hook.firstLine, T.hook.sleep, T.hook.lineEvery).map((at) => ({at, kind: 'stream' as const, what: 'tool line'})),
-  {at: T.hook.sleep, kind: 'pop', what: 'the laptop sleeps: the screen dims, the work freezes, the sleeping chip'},
+  // Each word of the prompt as its first key lands: words, so off the grid and not counted as things to take in.
+  ...KEYS.filter((k, i) => k.ch !== ' ' && (i === 0 || KEYS[i - 1].ch === ' ')).map((k) => ({at: k.at, kind: 'word' as const, what: 'a word of the prompt typed'})),
+  {at: T.hook.enter, kind: 'pop', what: 'Enter: the prompt is sent, the spinner and the thinking line come in'},
+  ...T.hook.lines.map((at) => ({at, kind: 'stream' as const, what: 'a tool line, now and then'})),
+  {at: T.hook.dim, kind: 'light', what: 'the idle timer dims the screen; the agent still works'},
+  {at: T.hook.sleep, kind: 'pop', what: 'the laptop sleeps: the screen goes off, the work stops, the sleeping chip'},
   {at: T.light.on, kind: 'light', what: 'the light comes on'},
   {at: T.agents.tiles, kind: 'pop', what: 'the agent tiles, one after another'},
   {at: T.agents.pulse, kind: 'ring', what: 'the light pulses: it holds for every agent'},
@@ -292,6 +343,14 @@ export const END_CARD = SCENES.end.from;
 
 /** Each sound, at its frame. `make-sounds.mjs` makes them; whooshes peak at the move's fastest frame. */
 export type SoundName =
+  | 'key'
+  | 'keySpace'
+  | 'keyShift'
+  | 'keyReturn'
+  | 'room'
+  | 'fan'
+  | 'powerDown'
+  | 'riser'
   | 'enter'
   | 'tick'
   | 'pop'
@@ -307,13 +366,37 @@ export type SoundName =
   | 'sleepChime'
   | 'settle'
   | 'glow';
-export type Cue = {at: number; sound: SoundName; gain?: number; pan?: number};
+/** `variant` picks one of a sound's takes (each key of the prompt sounds a little different). */
+export type Cue = {at: number; sound: SoundName; gain?: number; pan?: number; variant?: number};
+
+/**
+ * Where a key sits across the keyboard, 0 at the left end to 1 at the right, so each key comes from its own side of
+ * the stereo picture as it does for the person typing.
+ */
+function keyAcross(ch: string): number {
+  const rows = ['1234567890', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+  const c = ch.toLowerCase();
+  for (const [r, row] of rows.entries()) {
+    const i = row.indexOf(c);
+    if (i >= 0) return (i + 0.5 + 0.3 * r) / 11;
+  }
+  return 0.5;
+}
 
 export const SOUNDS: Cue[] = [
-  {at: 0, sound: 'enter', gain: 0.5},
-  ...range(T.hook.firstLine, T.hook.sleep, T.hook.lineEvery).map((at) => ({at, sound: 'tick' as const, gain: 0.08, pan: 0.42})),
-  {at: T.hook.sleep, sound: 'pop', gain: 0.35, pan: 0.7},
-  {at: T.hook.sleep, sound: 'lightOff', gain: 0.3},
+  // Before the light, no music and no effects (Part E, Haik: "we only hear that typing sounds and sleeping process"):
+  // the room, the laptop's fan, the keys, the laptop going to sleep, then a riser into the light.
+  {at: 0, sound: 'room'},
+  {at: 0, sound: 'fan'},
+  ...KEYS.map((k, i) =>
+    k.ch === ' ' ? {at: k.at, sound: 'keySpace' as const, gain: 0.9, variant: i} : {at: k.at, sound: 'key' as const, gain: 0.8, pan: 0.38 + 0.24 * keyAcross(k.ch), variant: i},
+  ),
+  ...(SHIFT_AT === null ? [] : [{at: SHIFT_AT, sound: 'keyShift' as const, gain: 0.5, pan: 0.4}]),
+  {at: T.hook.enter, sound: 'keyReturn', gain: 1, pan: 0.62},
+  // The screen goes off and the fan winds down (`fan` knows the frame): the laptop's own sound of going to sleep.
+  {at: T.hook.sleep, sound: 'powerDown', gain: 0.2},
+  // Over the beat before the light; it peaks on the light, where the music comes in.
+  {at: T.light.on, sound: 'riser', gain: 0.35},
   {at: T.light.on, sound: 'hit', gain: 0.15},
   {at: T.light.on, sound: 'lightOn', gain: 0.35},
   {at: T.agents.move, sound: 'whoosh', gain: 0.25},
@@ -332,8 +415,8 @@ export const SOUNDS: Cue[] = [
   {at: T.tray.drift, sound: 'whoosh', gain: 0.18, pan: 0.6},
   {at: T.tray.done, sound: 'lightOff', gain: 0.3, pan: 0.6},
   {at: T.lid.cut, sound: 'whoosh', gain: 0.35},
-  {at: T.lid.shut, sound: 'thud', gain: 0.5},
-  {at: T.lid.shut + 2, sound: 'lidChime', gain: 1},
+  {at: T.lid.shut, sound: 'thud', gain: 0.35},
+  {at: T.lid.shut + 2, sound: 'lidChime', gain: 0.85},
   // No lock sound: the badge comes with the lid chime, which sits alone (`promo-video.md`, "Sound").
   {at: T.lid.work, sound: 'pop', gain: 0.22, pan: 0.55},
   {at: T.lid.done, sound: 'lightOff', gain: 0.35},
@@ -348,17 +431,19 @@ export const SOUNDS: Cue[] = [
   {at: T.end.cut, sound: 'glow', gain: 0.3},
 ];
 
-/** What the music does when (`promo-video.md`, "Sound"); `make-sounds.mjs` builds the code bed from it. */
+/** What the music does when (`promo-video.md`, "Sound"). */
 export const MUSIC = {
-  /** Sparse until the PC sleeps; then it falls in pitch to a low hum; silent just before the light. */
-  sparseTo: T.hook.sleep,
-  silentFrom: T.light.on - 4,
+  /**
+   * The music starts here, the found track's lift on the light, on a bar line (Part E, Haik: "we start music when
+   * starting to introducing our app"). Before it there is no music at all; from it the track plays at one level to
+   * the end card (Part D, Haik: the music went "more silent at some points").
+   */
   full: T.light.on,
-  /** Thinned around the lid chime, so it sits alone. */
-  thin: [T.lid.cut, T.settings.move] as const,
-  /** The code bed lifts once the lid chime has passed, up to the end card. */
-  lift: T.settings.move,
   resolve: T.end.cut,
+  /** The code bed only: thinned around the lid chime. */
+  thin: [T.lid.cut, T.settings.move] as const,
+  /** The code bed only: it lifts once the lid chime has passed, up to the end card. */
+  lift: T.settings.move,
 };
 
 /** Frames per beat, for the scenes that pulse with it. */

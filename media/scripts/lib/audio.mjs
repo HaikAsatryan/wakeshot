@@ -114,6 +114,49 @@ export function loudness(L, R) {
   return lufs(mean(abs.filter((m) => lufs(m) > gate)));
 }
 
+/**
+ * Short-term loudness (BS.1770-4 K-weighting, ungated) of `win` seconds centred on each `hop`: how loud the sound is
+ * from moment to moment, the reading that shows a dip a listener hears. Returns `{t, lufs}` per window.
+ */
+export function shortTerm(L, R, win = 3, hop = 0.5) {
+  const k = (x) => biquad(biquad(x, ...SHELF), ...HIGHPASS);
+  const [l, r] = [k(L), k(R)];
+  const half = Math.round((win / 2) * RATE);
+  const out = [];
+  for (let c = half; c + half <= l.length; c += Math.round(hop * RATE)) {
+    let sum = 0;
+    for (let i = c - half; i < c + half; i++) sum += l[i] * l[i] + r[i] * r[i];
+    out.push({t: c / RATE, lufs: -0.691 + 10 * Math.log10(1e-12 + sum / (2 * half))});
+  }
+  return out;
+}
+
+/**
+ * A state-variable filter (Simper's trapezoidal form, which stays stable while its cutoff moves) over a whole signal,
+ * its cutoff `hzAt(i)` per sample and its resonance `q`. Returns the low-pass and the unity-peak band-pass outputs.
+ */
+export function svf(x, hzAt, q) {
+  const k = 1 / q;
+  const low = new Float64Array(x.length);
+  const band = new Float64Array(x.length);
+  let ic1 = 0;
+  let ic2 = 0;
+  for (let i = 0; i < x.length; i++) {
+    const g = Math.tan((Math.PI * Math.min(hzAt(i), 0.45 * RATE)) / RATE);
+    const a1 = 1 / (1 + g * (g + k));
+    const a2 = g * a1;
+    const a3 = g * a2;
+    const v3 = x[i] - ic2;
+    const v1 = a1 * ic1 + a2 * v3;
+    const v2 = ic2 + a2 * ic1 + a3 * v3;
+    ic1 = 2 * v1 - ic1;
+    ic2 = 2 * v2 - ic2;
+    low[i] = v2;
+    band[i] = k * v1;
+  }
+  return {low, band};
+}
+
 export const peakOf = (L, R) => {
   let p = 0;
   for (let i = 0; i < L.length; i++) p = Math.max(p, Math.abs(L[i]), Math.abs(R[i]));

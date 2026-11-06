@@ -690,3 +690,8 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
 - 2026-11-06 23:49: Haik on the Part D renders: "ok our music was the best. I already checked it. + I like the video."
   The music stays "Funky Disco Beats" (Fupi, CC0); the three candidates go. Part E (his 23:02 opening: typing sounds
   only, the agent loading, the sleep, the music from the Wakeshot reveal) renders on that track only.
+- 2026-11-06 23:54: `p6-agents-video-readme` Part E done and sent to Haik: 38.0 s, 8.50 MB, -15.3 LUFS, -1.5 dBTP, every
+  check but the README paragraphs (Part B). Opening: a person types a prompt (CC0 keystrokes only), the agent waits
+  and loads, the laptop dims and sleeps, "Tired of sleepy laptops?" in near silence, the music from the light. Four
+  agent tiles: the two Copilots share one tile (Part A's chip rule). A sound site's pages carried text addressed to
+  AI readers; treated as data, ignored, no file from it used.

@@ -23,12 +23,12 @@ kind (counted frame by frame and from their sound), then set for Wakeshot.
 | Rule | Target |
 | --- | --- |
 | Beat grid | 120 BPM: one beat every 0.5 s (15 frames), one bar every 2 s (60 frames). Every cut, camera move, pop and caption start lands on a beat, within 1 frame |
-| Framing (one camera place) | 2 to 4 s, about 3 s on average; 9 framings in 30 s since Part C (the menu shot and its pan left) |
+| Framing (one camera place) | 2 to 4 s, about 3 s on average; 9 framings in 30 s since Part C (the menu shot and its pan left); 11 in 34 s since Part D; 12 in 38 s since Part E (the pain has four: typing close, working close, the laptop, sinking) |
 | Something new on screen | on average every 0.5 to 1 s (a move, a pop, a click, a word, a number); never more than 2 s without one, except on the end card |
 | Most to take in | at most 5 things within any 2 s before the end card: cuts, moves, pops, clicks, lights, counts, rings, swaps and line starts (tool lines and single words not counted; a cut counts once with what it opens on). Added in round 4 after the review found the lid shot back at 6 to 8 in 2 s, the measure Haik's "a little fast" note was closed by |
 | Longest still hold | 3.5 s, and even then a slow push runs (below) |
-| First 2 s | a full picture from frame 0, the problem shown, sound from frame 0. Frame 0 is never black: the README player may show it before play |
-| Name on screen | by 5 s (was 3 s; Part C of `p6-agents-video-readme`, 2026-11-06: the pain and Haik's question "Tired of sleepy laptops?" come first and take 4 s; the name lands at 4.5 s) |
+| First 2 s | a full picture from frame 0, sound from frame 0. Frame 0 is never black: the README player may show it before play. Since Part E frame 0 is the terminal with its command line and the empty input box, the caret blinking; the first key lands at 0.4 s. The problem comes at 7.5 to 8.5 s, after the prompt and the waiting (Haik: the first scene was too short, then: a person types, the agent loads) |
+| Name on screen | by 9 s (was 3 s, then 5 s in Part C of `p6-agents-video-readme`, 2026-11-06, when the pain and Haik's question "Tired of sleepy laptops?" came first in 4 s; Part D gave the pain 8 s at Haik's word; Part E, his typing opening, 12 s, so the name lands at 12.5 s and the rule is by 13 s). Change it when a viewer test shows people leave before the name |
 | End card | the last 4 s |
 
 ### Text
@@ -50,7 +50,9 @@ kind (counted frame by frame and from their sound), then set for Wakeshot.
 - About 10 lines in 30 s is the most that fits: each needs about 0.7 s to come in and 1.4 s to be read.
 - UI words come only from the real captures. The video never types or redraws a menu or tooltip word.
 - Terminal text: JetBrains Mono 30 to 40 px; typing at 1 character per frame (30 per second) for prompts, 2 per frame
-  for commands the viewer does not need to read.
+  for commands the viewer does not need to read. Since Part E the pain's prompt is typed by a person: about 11 keys a
+  second, 2 to 5 frames apart (`KEYS` in `timeline.ts`), the terminal's 36 px type seen at zoom 1.45 to 1.5 (about
+  52 px); the agent then shows mostly a spinner and a thinking line, a tool line only now and then.
 
 ### Motion
 
@@ -83,24 +85,45 @@ capture scaled by anything but a whole number (decision 4 in `media/README.md`).
 
 ### Sound
 
-- One music track at 120 BPM (or conformed to it): sparse in the hook, full when the light comes on, thinned to let
-  the lid chime sit alone, lifted at the menu, resolved on the end card (the last chord rings 1.5 s). The plan asked
-  for calm electronic; Haik's final pick (2026-11-06) is a funky disco loop.
-- Every camera move has a whoosh: 0.3 to 0.6 s of filtered noise, loudest at the move's fastest frame. Every click has
-  a click. Typing has soft key ticks (at most 12 a second, not one per character). Counters tick at most 8 a second.
+- No music before the light (Part E, Haik, 2026-11-06 23:02: "First music is not required ... we only here that typing
+  sounds and sleeping process and we start music when starting to introducing our app"). The opening is a quiet room:
+  the keys as the prompt is typed, a faint room tone and the laptop's fan, then the laptop going to sleep (a soft
+  tick, a low glide falling two octaves, the fan winding down), the question in near silence, and a 0.5 s riser of
+  air into the light.
+- From the light, one music track at 120 BPM (or conformed to it): it comes in on its lift, a downbeat, with the low
+  hit, and plays at one level to the end card (Part D, Haik: "music integration is little weird because it kind of
+  becomes more silent at some points"). It fades into a soft echo on the end card. The plan asked for calm
+  electronic; Haik's pick (2026-11-06) is a funky disco loop, with three options of the same type in Part D.
+- Level, measured on the music alone (`make-sounds.mjs`, 3 s short-term loudness every 0.5 s, only windows wholly
+  after the light): within 2 LU of its median to the end card; the build stops past that. A slow leveler
+  (`lib/fit-music.mjs`, at most 6 dB, the gain moving along a raised cosine every 0.25 s) evens a track out first.
+- The opening's levels (set by script, not heard): typing about -25 LUFS short-term, 9 to 10 LU under the music; the
+  room and fan about -36; the power down about -29; the keys peak about -9 dBFS.
+- From the light on, every camera move has a whoosh: 0.3 to 0.6 s of filtered noise, loudest at the move's fastest
+  frame (the opening's cut and moves are silent: only keys and the sleep there). Every click has a click. Typing is one
+  real keystroke per key (CC0 takes, "Music and effects"), about 11 a second. Counters tick at most 8 a second.
 - Wakeshot's own chimes where the app plays them: the lid chime at the lid close, the going-to-sleep chime when the
   laptop sleeps.
-- Mix: integrated -14 to -16 LUFS, true peak -1 dBTP or lower (ffmpeg `loudnorm`, which Remotion's ffmpeg has). The
-  music ducks 4 dB under each chime. No voice.
+- Mix: integrated -14 to -16 LUFS, true peak -1 dBTP or lower (ffmpeg `loudnorm`, which Remotion's ffmpeg has). Under
+  each chime the music gives way only in the chime's band: a 6 dB bell cut at 1.5 kHz (Q 0.8, so 1 to 3 kHz: C6, G6
+  and their overtones), eased in over 0.1 s and out over 0.3 s, the way a mix makes room for a voice. Until Part D
+  the whole music ducked 4 dB under each chime and 5 dB more under the lid chime, one of the dips Haik heard. No
+  voice.
 - The video must make sense with no sound (the README plays it muted); sound is the bonus.
 
-## Storyboard: the 30 s main cut
+## Storyboard: the 38 s main cut
 
 Part C of `docs/tasks/p6-agents-video-readme.md` (Haik, 2026-11-06 18:45: "show how one of agents working and laptop
 sleeps and tell tired of sleepy laptops and start our logo", the agents "dynamically", designed by us). It replaces
 the storyboard Haik signed off in round 6 (git history has it): the hook is now the pain on a laptop and the question,
 a new agents shot follows the name, the tray, lid, settings and sleep shots carry over 180 frames later, and the menu
-shot left. The brand, the music, the beat grid and the checks are kept.
+shot left. The brand, the music, the beat grid and the checks are kept. Part D (Haik, 2026-11-06 20:45: "First sleep
+scene is too short, it's ok if we pass 30 second threshold, just make it more professional") made the pain 8 s, so
+every shot after it started 4 s (8 beats) later and the cut was 34 s. Part E (Haik, 2026-11-06 23:02: "Imagine
+terminal is open and someone is typing something and we only here that typing sounds and sleeping process and we
+start music when starting to introducing our app. Usually agents in terminal are not typing so fast, usually they
+loading a lot.") made the pain a person's story in 12 s: every shot after it starts 4 s later again, the cut is 38 s,
+and the music starts on the light.
 
 Frames at 30 fps; a beat is 15 frames. "Drawn" means made in code; "capture" means a real screen picture from the
 capture session (shot ids in the next section). The camera works over one large dark world: the pain's laptop, the
@@ -109,23 +132,24 @@ near moves are slides and far ones are cuts.
 
 | # | Seconds (frames) | On screen | Motion | Text | Sound |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 0.0 to 4.0 (0 to 119) | **The pain.** The drawn laptop of the lid shot, open, three-quarter view, the terminal on its screen with an agent at work (`claude`, the billing prompt, tool lines). "Agent working." already on screen at frame 0, so the first frame is a full picture | Camera at zoom 0.86, a slow push to 0.89 over the shot (drawn parts only). Tool lines from frame 3, one every 6 frames. Frame 30: the laptop sleeps under the agent: the screen dims to 25% over 12 frames, the work freezes mid-task (the spinner stops, still readable), the power light breathes slowly (2 s), and a "Sleeping" chip with a moon pops beside the lid. Frame 60: the stage darkens to 14% over 12 frames under the question | Big words: "Agent **working**." (from frame 0) and "Laptop sleeping." (frame 30, in by 42); both go at 60. Then "Tired of sleepy laptops?" (frame 60, in by 78, holds 1.4 s; no green word: green means awake) | Enter key at 0; soft key ticks with the tool lines; a pop and a soft fall at 30; the music soft under the hook, silent from frame 116 |
-| 2 | 4.0 to 7.0 (120 to 209) | **The light.** A hard cut to the black stage: the tray glyph idle at 320 px, alone | Frames 120 to 133: the light comes on, the bloom spreads; frame 135: "Wakeshot" rises under it and the line under the name follows word by word | "Wakeshot" (SemiBold 140 px), then "keeps it **awake** while agents work." (in by 162) | Low hit and the full beat at 120 (the music's lift lands here); a soft rising tone on the light |
-| 3 | 7.0 to 11.0 (210 to 329) | **The agents.** The lit glyph at the top; under it one tile per agent whose live test passed (`media/src/agents.ts`, A to Z): the name in Instrument Sans SemiBold 46 px, an example task under it in the terminal's face (`copy.ts`, by name), a turning spinner. One row up to three tiles, two rows from four; at most six, since the two Copilots share one tile once both pass. Names only, no owner's logo ("Agent logos" below). An agent that drops out takes its tile with it; the grid centres itself | Frame 210: the camera moves down 210 px (15 frames) while the glyph rises with it and shrinks from 320 to 160 px, drawn from the port at each whole size; the name and its line fade. Frame 225: the tiles come in one after another, 5 frames apart, each rising 28 px with the pop's spring (one group, like the words of a line); a slow push to zoom 1.03 until the whip. Frame 285: a ring of the holding green spreads from the light: it holds for every one of them | "Stays **awake** for these agents." (frame 255, in by 276, holds 1.8 s). Not "works with": OpenAI asks non-partners not to write "worked with", and the line says what Wakeshot does | Whoosh at 210; one soft tick per tile (6 a second at most); a soft rise at 285 |
-| 4 | 11.0 to 16.0 (330 to 479) | **The agent turns it green, then lets go** (round 2, Haik's note, kept). The drawn terminal (`claude`, "fix the failing tests", one status line, 30 px) left of the real tray rectangle, the 200% tray set (S1 to S4) at 2x | Whip, 12 frames: the glyph flies from the top of the agents shot to the capture's idle icon (S1), going out as it flies, lands on it at frame 338 and fades into it by 342. Frame 345: Enter, the agent starts, and at that frame the icon turns holding (S2), a ring of green spreading from it. The cursor comes to rest on the icon; frame 375 the holding tooltip (S3) rises, ringed. Frame 390 the camera drifts 90 px. Frame 420 the terminal shows done and at that frame the icon is idle again with the idle tooltip (S4) | "Your agent starts: it turns **green**." (frame 345, in by 369), then "Done: it lets **go**." (frame 420, in by 438) | Enter and a soft rise at 345; pop; a soft whoosh; a soft fall at 420 |
-| 5 | 16.0 to 20.0 (480 to 599) | **Lid, and the work goes on behind it** (round 4, kept). Cut to the drawn laptop, three-quarter view; then shut, a thin holding-green light on the lid's front edge, breathing. Above it, in one row: a lock badge and a work chip | Camera settles back 15 frames; frames 495 to 510 the lid closes; frame 510 the lock badge pops with the lid chime; frame 540 the work chip rises: "run npm test" under the turning spinner; frame 585 the chip says "Done. All 128 tests pass." and at that frame the edge light goes off: the hold ends; slow orbit of 6 degrees from 540 | "Close the lid: work goes **on**." (frame 495, in by 519), gone with a fade at 585 | Whoosh; soft thump and Wakeshot's lid chime at 510, the music dips under it; a pop at 540; a soft fall at 585 |
-| 6 | 20.0 to 23.0 (600 to 689) | **Done, settings back** (kept). Frame 615: the "Power settings" card pops right of the laptop, two rows from the capture log (S9); the work chip stays in view with its done line | Camera slides right from 600 (15 frames), zoom 0.92 (drawn parts only); each value rolls back to the user's own at 645 and 660; the ring moves row to row | "Work done. Your settings, **back**." (frame 615, in by 636) | Whoosh; pop; two ticks |
-| 7 | 23.0 to 26.0 (690 to 779) | **Later, it sleeps** (round 6, kept). A time cut back to the shut laptop, its edge dark, the lock badge alone above it; the same laptop that slept under the agent in shot 1, now asleep once the work is done | Black from 681, full 689 to 695 (the cut at 690 inside it), back by 705; slow push of 3%; frame 720 the power light fades and the badge goes; frame 735 a moon rises | "Later, it sleeps as **usual**." (frame 690, on the black, "Later," in by 699) | Soft whoosh at the cut; Wakeshot's going-to-sleep chime at 720 |
-| 8 | 26.0 to 30.0 (780 to 899) | **End card** (kept). The stacked lockup, the app icon's light coming on at 780 to 793; the lines under it; the small print at the bottom now ends "Agent names are trademarks of their owners; Wakeshot is not affiliated with them." (Google asks for a trademark line where its names show) | The lines pop in whole; still for the last 3 s | Frame 795: "Free and open source. Windows 11, x64 and ARM64." Frame 810: the speed line from `data/speed.json` with the measured line and the trademark line at 28 px. Frame 825: the install line in mono | One soft swell of air as the light comes on; the music fades over 2.5 s into a soft echo and is silent 0.1 s before the end |
+| 1 | 0.0 to 12.0 (0 to 359) | **The pain** (Part E: a person's story). First a drawn terminal window seen close and straight on (1500 x 906, our colours, not a copy of any app): `PS C:\code\shop> claude` already run, the agent's input box empty with its caret blinking, so frame 0 is a full picture. Then the same screen on the drawn laptop of the lid shot, three-quarter view, in the middle of the frame | Frames 0 to 89: close on the input box (zoom 1.45 to 1.5, a slow push), the prompt's 36 px type at about 52 px; from frame 12 a person types "migrate billing to API v2", one key every 2 to 5 frames (about 11 a second, a little slower after a space and before "API"), the caret solid while keys come. Frame 90: Enter; the box's frame goes, the prompt stays as sent, a turning spinner and "Thinking" with a slow shimmer and the agent's clock come in, and the camera moves out to most of the window (zoom 1.25 to 1.29). The clock runs in real time to frame 126, then speeds up over 1.5 s to a time lapse (150 clock seconds a second): about 4 minutes at the cut, 9 when the laptop sleeps. Tool lines now and then (frames 132, 171, 219, 243), never evenly. Frame 195: a cut to the laptop with the same screen (zoom 1 to 1.03). Frame 225: the idle timer dims the screen to 40% over 10 frames; the agent still works. Frame 255: the screen goes off over 6 frames, the work stops, the power light starts to breathe (2 s), a "Sleeping" chip with a moon pops beside the lid. Frame 285: the camera eases back (zoom 0.88) while the laptop, its chip and the stage's lift fade out over 12 frames, so from frame 297 the stage is plain and empty. Frame 300: the question, alone | No words over the terminal or the laptop: the typed prompt, the thinking line and the chip tell it (big words would cover the prompt as it is typed). "Tired of sleepy laptops?" (frame 300, in by 318, holds 1.4 s; no green word: green means awake) | No music. From frame 0 a faint room tone and the laptop's fan. One real keystroke per typed key, each from its own side of the keyboard; shift just before "API"; a firmer Enter at 90. The waiting is silent but for the room and fan. At 255 the laptop's own sound of going to sleep: a soft tick, a low glide falling two octaves, a breath of air, and the fan winding down over 1.6 s. The question in near silence; over the beat before the light a riser of air (345 to 360) |
+| 2 | 12.0 to 15.0 (360 to 449) | **The light.** A hard cut to the black stage: the tray glyph idle at 320 px, alone | Frames 360 to 373: the light comes on, the bloom spreads; frame 375: "Wakeshot" rises under it and the line under the name follows word by word | "Wakeshot" (SemiBold 140 px), then "keeps it **awake** while agents work." (in by 402) | The music starts here on its lift, a downbeat, with a low hit and the end of the riser; a soft rising tone on the light |
+| 3 | 15.0 to 19.0 (450 to 569) | **The agents.** The lit glyph at the top; under it one tile per agent whose live test passed (`media/src/agents.ts`, A to Z): the name in Instrument Sans SemiBold 46 px, an example task under it in the terminal's face (`copy.ts`, by name), a turning spinner. One row up to three tiles, two rows from four; at most six, since the two Copilots share one tile once both pass. Names only, no owner's logo ("Agent logos" below). An agent that drops out takes its tile with it; the grid centres itself | Frame 450: the camera moves down 210 px (15 frames) while the glyph rises with it and shrinks from 320 to 160 px, drawn from the port at each whole size; the name and its line fade. Frame 465: the tiles come in one after another, 5 frames apart, each rising 28 px with the pop's spring (one group, like the words of a line); a slow push to zoom 1.03 until the whip. Frame 525: a ring of the holding green spreads from the light: it holds for every one of them | "Stays **awake** for these agents." (frame 495, in by 516, holds 1.8 s). Not "works with": OpenAI asks non-partners not to write "worked with", and the line says what Wakeshot does | Whoosh at 450; one soft tick per tile (6 a second at most); a soft rise at 525 |
+| 4 | 19.0 to 24.0 (570 to 719) | **The agent turns it green, then lets go** (round 2, Haik's note, kept). The drawn terminal (`claude`, "fix the failing tests", one status line, 30 px) left of the real tray rectangle, the 200% tray set (S1 to S4) at 2x | Whip, 12 frames: the glyph flies from the top of the agents shot to the capture's idle icon (S1), going out as it flies, lands on it at frame 578 and fades into it by 582. Frame 585: Enter, the agent starts, and at that frame the icon turns holding (S2), a ring of green spreading from it. The cursor comes to rest on the icon; frame 615 the holding tooltip (S3) rises, ringed. Frame 630 the camera drifts 90 px. Frame 660 the terminal shows done and at that frame the icon is idle again with the idle tooltip (S4) | "Your agent starts: it turns **green**." (frame 585, in by 609), then "Done: it lets **go**." (frame 660, in by 678) | Enter and a soft rise at 585; pop; a soft whoosh; a soft fall at 660 |
+| 5 | 24.0 to 28.0 (720 to 839) | **Lid, and the work goes on behind it** (round 4, kept). Cut to the drawn laptop, three-quarter view; then shut, a thin holding-green light on the lid's front edge, breathing. Above it, in one row: a lock badge and a work chip | Camera settles back 15 frames; frames 735 to 750 the lid closes; frame 750 the lock badge pops with the lid chime; frame 780 the work chip rises: "run npm test" under the turning spinner; frame 825 the chip says "Done. All 128 tests pass." and at that frame the edge light goes off: the hold ends; slow orbit of 6 degrees from 780 | "Close the lid: work goes **on**." (frame 735, in by 759), gone with a fade at 825 | Whoosh; soft thump and Wakeshot's lid chime at 750, the music keeps its level and gives way only in the chime's band ("Sound"); a pop at 780; a soft fall at 825 |
+| 6 | 28.0 to 31.0 (840 to 929) | **Done, settings back** (kept). Frame 855: the "Power settings" card pops right of the laptop, two rows from the capture log (S9); the work chip stays in view with its done line | Camera slides right from 840 (15 frames), zoom 0.92 (drawn parts only); each value rolls back to the user's own at 885 and 900; the ring moves row to row | "Work done. Your settings, **back**." (frame 855, in by 876) | Whoosh; pop; two ticks |
+| 7 | 31.0 to 34.0 (930 to 1019) | **Later, it sleeps** (round 6, kept). A time cut back to the shut laptop, its edge dark, the lock badge alone above it; the same laptop that slept under the agent in shot 1, now asleep once the work is done | Black from 921, full 929 to 935 (the cut at 930 inside it), back by 945; slow push of 3%; frame 960 the power light fades and the badge goes; frame 975 a moon rises | "Later, it sleeps as **usual**." (frame 930, on the black, "Later," in by 939) | Soft whoosh at the cut; Wakeshot's going-to-sleep chime at 960 |
+| 8 | 34.0 to 38.0 (1020 to 1139) | **End card** (kept). The stacked lockup, the app icon's light coming on at 1020 to 1033; the lines under it; the small print at the bottom now ends "Agent names are trademarks of their owners; Wakeshot is not affiliated with them." (Google asks for a trademark line where its names show) | The lines pop in whole; still for the last 3 s | Frame 1035: "Free and open source. Windows 11, x64 and ARM64." Frame 1050: the speed line from `data/speed.json` with the measured line and the trademark line at 28 px. Frame 1065: the install line in mono | One soft swell of air as the light comes on; the music fades over 2.5 s into a soft echo and is silent 0.1 s before the end |
 
-Counts (Part C, 2026-11-06, with the four agents that passed live: Claude Code, Codex CLI, Copilot CLI, OpenCode):
-8 shots, 9 framings in 30 s (2 to 4 s each), 14 lines of words (3 big words lines, the name, 7 captions, the end
-card's 3); `check-pace.mjs` counts 44 starts on the beat, 83 new things before the end card, the longest gap 1.9 s,
-at most 5 things to take in within any 2 s; the name at 4.5 s. The poster is frame 180 (the light on, the name and
-its line in).
+Counts (Part E, 2026-11-06, with the final v1 list: Claude Code, Codex CLI, Copilot CLI, Copilot in VS Code and
+OpenCode, so four tiles: Claude Code, Codex CLI, Copilot, OpenCode, the two Copilots sharing one): 8 shots, 12
+framings in 38 s (2 to 4 s each), 12 lines of words (the question, the name and its line, 6 captions, the end card's
+3); `check-pace.mjs` counts 47 starts on the beat, 90 new things before the end card, the longest gap 1.9 s, at most
+5 things to take in within any 2 s; the name at 12.5 s. The poster is frame 420 (the light on, the name and its line
+in).
 
-Out of this cut: the menu shot ("Keep awake on demand", 6 s). Its time pays for the longer pain (4 s, was 2 s) and the
-agents shot (4 s). Keep awake stays in the README and the site. Change it when Haik wants Keep awake in the video: in
+Out of this cut: the menu shot ("Keep awake on demand", 6 s). Its time paid for the longer pain (4 s, was 2 s; 8 s since
+Part D, 12 s since Part E) and the agents shot (4 s). Keep awake stays in the README and the site. Change it when Haik wants Keep awake in the video: in
 a longer cut, or in place of the settings shot (the menu's clicks need 4 to 5 s, so the cut grows by 1 to 2 s). A
 longer cut (about 45 s) can add, in this order: Keep awake from the menu, builds (`wakeshot run -- npm run build` and
 its tooltip), the morning notice after a closed-lid night, the battery floor.
@@ -259,7 +283,7 @@ pleases him, the 120 BPM sequencer in code is the fallback. Every file, its link
 
 Built 2026-11-05 (Part C): the code bed is a 120 BPM sequencer in `make-sounds.mjs`, shaped as the "Sound" rules say.
 A found track is fitted by `scripts/music-candidate.mjs`: its tempo found by autocorrelation (not checked by ear),
-conformed with `atempo`, cut so the moment it lifts out of its intro lands on the light (2 s then, 4 s since Part C);
+conformed with `atempo`, cut so the moment it lifts out of its intro lands on the light (2 s then, 4 s since Part C, 8 s since Part D);
 the bars before the lift play softly under the hook with a short silence before the light (a found track cannot fall
 in pitch like the code bed), a 5 dB dip under the lid chime, a fade over the end card. The music stem is set to -20 LUFS before the mix, so
 every candidate sits at the code bed's level; the mix is -15 LUFS with sample peaks under -2.5 dBFS (-2 until the
@@ -280,6 +304,67 @@ in `data/music.json` (110.25 BPM, conformed with `atempo` 1.0884; its lift at 45
 left the repo. The fit and the shape are unchanged: the same storyboard cut, the dip under the lid chime and the end
 card's fade and echo. Tempo and key were found by script (A minor, so the C6 and G6 chimes are in key), not by ear.
 The options, their pages and their readings are in `docs/tasks/p6-media.md`, round 5.
+
+Part D of `p6-agents-video-readme` (Haik, 2026-11-06 20:45): "music integration is little weird because it kind of
+becomes more silent at some points. Also I like this sound and the type of this sound and want to see alternative
+options as well (not older ones) that are around the same type and can have little bass as well. But entertaining."
+The fit's shape changed ("Sound" above): one level from the first frame, a slow leveler, the muffle while the laptop
+sleeps, the chimes' band cut in place of the ducks. The old shape is gone from the fit (the code bed keeps its own).
+
+Three new options, found by a helper agent on the Free Music Archive and OpenGameArt (ten tracks downloaded, nine
+CC0 and one CC BY 4.0), picked by numbers, not by ear: same type (disco or funk tags), 105 to 130 BPM, a steady
+level, a key with C and G in it (the chimes are C6 and G6), and more bass than the current track where small speakers
+play it (100 to 250 Hz). Each licence read on the track's own page, 2026-11-06 (the helper, then again by curl).
+
+| # | Track | Page and licence | BPM, key (by script) | Energy in 40-100 / 100-250 / 250-2k / 2k-8k Hz | Lift (orig. s) | After AAC: LUFS, dBTP, LRA | Music 3 s loudness: outside the muffle, in it |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | "Funky Disco Beats to Boogie/Woogie to", Fupi (the current pick) | https://opengameart.org/content/funky-disco-beats-to-boogiewoogie-to, "CC0" | 110.25, A minor | 78 / 11 / 5 / 3% | 45.75 | -15.25, -1.45, 5.4 | -0.5 to +0.4 LU, -2.2 LU |
+| 1 | "Can't Stop My Feet !", Loyalty Freak Music (album "ROLLER DISCO DANCE DANCE") | https://freemusicarchive.org/music/Loyalty_Freak_Music/ROLLER_DISCO_DANCE_DANCE/Loyalty_Freak_Music_-_ROLLER_DISCO_DANCE_DANCE_-_04_Cant_Stop_My_Feet_/, "licensed under a CC0 1.0 Universal License"; the page says "Instrumental: No" | 130, A minor | 52 / 26 / 11 / 7% | 59.07 (bar 32; a 2-bar break at 44 to 48 s kept out of the cut) | -15.26, -1.82, 4.4 | -0.3 to +0.4 LU, -1.1 LU |
+| 2 | "Lost In The Rythm", HoliznaCC0 (album "Lost") | https://freemusicarchive.org/music/holiznacc0/lost/lost-in-the-rythm/, "licensed under a CC0 1.0 Universal License"; "Instrumental: Yes" | 105, A minor | 56 / 20 / 5 / 0% | 27.43 (bar 12) | -15.27, -1.58, 5.0 | -0.2 to +0.2 LU, -0.1 LU |
+| 3 | "Funked Up", Joth | https://opengameart.org/content/funked-up, "License(s): CC0"; its notice asks for credit to Joth (CC0 does not require it; `CREDITS.md` would give it) | 116, A minor | 24 / 45 / 30 / 1% | 16.55 (bar 8; a 66 s loop, so no loop seam in the cut) | -15.23, -2.27, 5.0 | -0.5 to +0.4 LU, -0.3 LU |
+
+Files: options 1 and 2 are MP3s from the Free Music Archive's stream link (the download button needs a login), 185.6
+and 160.0 s, SHA-256 `5cedc66e...` and `53a5c022...`; option 3 the page's MP3, 66.3 s, SHA-256 `57cd8125...`. None is
+in the repo; the build folder of `p6-agents-video-readme` holds them. To use one: copy it unchanged into
+`media/public/music/`, set `data/music.json` (`file`, `bpm`, `lift` as above, title, author, page), write its
+`CREDITS.md` line, then `npm run video` and the checks. Each was rendered once that way, every check passing (card
+Result, Part D). Not picked: "Make Funk" (HoliznaCC0, 98.75 BPM, too far from 120), "Rhythm Garden" (tempo unsure),
+"Raspberry Jam" (C sharp major), "High Funktioning ..." (D sharp minor, and its title), "Roller Fever" and "Grab A
+Partner" (Loyalty Freak Music, less bass), "Funky Chunk" (Kevin MacLeod, CC BY 4.0: a credit in every post; also very
+widely used).
+
+Part E (Haik, 2026-11-06 23:02: no music until Wakeshot comes in; the opening is typing and the laptop going to
+sleep). The fit now starts each track on its lift at the light, with a 10 ms fade in, and nothing before; the muffle
+is gone, since nothing plays while the laptop sleeps. The leveler and the evenness rule count only the windows wholly
+after the light (a window that reached back into the silence read low and would have pushed the first bars up). The
+same four tracks, lifts and tempos as Part D, so the music from the light on is the same cut of each. Haik's pick,
+2026-11-06 about 23:50, after listening: the current track, "Funky Disco Beats" ("ok our music was the best"). Options
+1 to 3 in the table above were offered and not picked, since Haik picked the current track; none of them is in the
+repo. The new cut was rendered with it and with options 1 and 2 (every check passing); the run with option 3 was
+stopped at Haik's pick.
+
+The keys are real keystrokes. A helper agent searched OpenGameArt, Wikimedia Commons, Kenney, BigSoundBank, Freesound
+and others (2026-11-06; its notes are in the card's build folder) and downloaded three, each licence read on its own
+page:
+
+| Recording | Page and licence | Why picked or not |
+| --- | --- | --- |
+| "Keyboard Soundpack #1 [Typing and Single Keystrokes]", unicaegames | https://opengameart.org/content/keyboard-soundpack-1-typing-and-single-keystrokes, "License(s): CC0" and "Free to use however you like." | picked: 32 single keys of 0.25 s each (WAV, 44.1 kHz), so one take per typed key; a Cherry KC 1000, a low-profile office keyboard, close and dry (the floor between strokes about -70 dBFS, by script). 18 takes are in `media/public/keys/`, unchanged |
+| A laptop typing take, johndekale, OpenGameArt | CC0 | not picked: one 5 s OGG (lossy), its floor about 20 dB higher |
+| A laptop on a wooden desk, Wikimedia Commons | public domain | not picked: rumble and birdsong (the page says so), from a 128k MP3 |
+
+Not downloaded: BigSoundBank's two "Slow MacBook Pro keyboard" takes (CC0 on the page, but the site blocks scripted
+downloads; a person can fetch them by hand) and Freesound's CC0 MacBook takes (a login is needed for the originals;
+its terms say nothing either way about the public previews, so none was used). Rejected by licence: SoundBible
+(personal use or CC BY 3.0), a Keychron take (CC BY 4.0, and mechanical), an Internet Archive item labelled CC0 whose
+own text says its files come from Mixkit, Pixabay and SoundBible.
+
+Which take plays which key was picked by numbers, not by ear (`make-sounds.mjs`, `KEY_TAKES`): letters from 15
+mid-level takes that have their key-up after them; the space bar the one deep take (a fifth of its energy under
+300 Hz); Enter a firm take with more low end; shift a soft take with no key-up. Each take is cut 3 ms before its
+stroke, its top softened a little (half of it through a 6.5 kHz low-pass, heard from the seat, not the close
+microphone), its peak set, then each key varies by up to 1.5 dB. The room, the fan, the power down and the riser are
+made in code.
 
 ## Agent logos
 
@@ -315,13 +400,14 @@ name's place in its tile (not beside it), smaller than the Wakeshot name, and th
 Outside the logo question (not a legal reading, not verified how Google applies it): the Antigravity terms say "You
 must not abuse, harm, interfere with, or disrupt the Service. This includes, but is not limited to, using the Service
 in connection with products not provided by us." Their example is reaching the service with its sign-in, which
-Wakeshot does not do. Listed for Haik before a public "Antigravity" claim.
+Wakeshot does not do. Listed for Haik before a public "Antigravity" claim. Moot since 2026-11-06 23:21: Antigravity
+and Cursor left v1, so neither is named in the video or the docs.
 
 ## Formats
 
 | Where | What plays | File |
 | --- | --- | --- |
-| README | only an uploaded attachment plays inline: the bare `github.com/user-attachments/assets/...` URL on its own line shows a player, muted, with controls, no autoplay, no loop. Limits: "10MB for videos" on a free plan; `.mp4`, `.mov`, `.webm`; "we recommend using H.264" (GitHub docs, read 2026-11-05) | MP4, H.264 and AAC, 1920 x 1080, 30 fps, 30 s, under 10 MB |
+| README | only an uploaded attachment plays inline: the bare `github.com/user-attachments/assets/...` URL on its own line shows a player, muted, with controls, no autoplay, no loop. Limits: "10MB for videos" on a free plan; `.mp4`, `.mov`, `.webm`; "we recommend using H.264" (GitHub docs, read 2026-11-05) | MP4, H.264 and AAC, 1920 x 1080, 30 fps, 38 s since Part E (34 s in Part D, 30 s before), under 10 MB |
 | Pages | `<video autoplay muted loop playsinline poster>` with the same MP4 in `site/` | the same file and its poster PNG |
 | X, LinkedIn, YouTube | the 16:9 master plays on all three. Reported limits (third-party guides, not checked on the sites): X up to 140 s for a standard account, any shape from 1:3 to 3:1; LinkedIn 16:9, 1:1 or 9:16 | the master |
 | Optional 1:1 cut | 1080 x 1080, for LinkedIn and X feeds on phones, where a square shows larger; captions at 72 px | a second composition over the same world and timeline; the camera frames each place for the square |
@@ -334,7 +420,12 @@ then less dither. Measured on the first full draft (2026-11-05, stand-in capture
 music and the reshaped time cut) is 7.02 MB at CRF 18, BT.709 (converted and tagged; Remotion 4's default was BT.601
 with no tags), -15.3 LUFS, true peak -1.1 dBTP. The round 4 final was 7.14 MB, -15.4 LUFS, -1.4 dBTP. The Part C
 draft (2026-11-06, four agent tiles) is 7.49 MB and 30.02 s, -15.3 LUFS, -1.62 dBTP; the same cut rendered as a
-final, 7.37 MB (a check only; the round 6 final stays in `media/out/` until Haik's look). Measure the true peak on
+final, 7.37 MB (a check only; the round 6 final stays in `media/out/` until Haik's look). The Part D cut (2026-11-06, 34 s) is 8.45 MB (8,447,495 bytes)
+with each of the four tracks: the same picture, AAC at 192 kbit/s. Over the 8 MB line above, under GitHub's 10 MB and
+`media/README.md` decision 9's 9 MB trigger. The Part E cut (2026-11-06, 38 s, the typing opening, the music from the
+light) with "Funky Disco Beats" is 8.50 MB (8,497,349 bytes), 38.02 s, -15.32 LUFS, -1.47 dBTP, LRA 16.2 LU (the quiet
+opening widens it; the music alone sits within 0.5 LU of its median), and is the final in `media/out/` since Haik's
+yes to it. Its draft, with the DRAFT mark, is 9.10 MB. Measure the true peak on
 the rendered MP4 (Remotion's ffmpeg, `loudnorm=print_format=json`, `input_tp`): the same WAV encoded by that ffmpeg
 directly (`-c:a aac -b:a 192k`) read -0.55 dBTP where Remotion's render of it read -1.01 (2026-11-06), so a quick
 encode is no stand-in for the render.

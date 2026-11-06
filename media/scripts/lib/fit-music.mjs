@@ -1,16 +1,18 @@
 // Fits a found music track to the video: finds its tempo and the moment it lifts out of its intro, conforms it to
-// 120 BPM with ffmpeg's `atempo` (Remotion's own ffmpeg), and cuts the video's length on the storyboard: the lift lands
-// on the light coming on, the bars before it play softly under the hook with a short silence before the light, the
-// music dips 5 dB under the lid chime, and it fades on the end card into a soft echo that dies before the video ends. Used by `make-sounds.mjs` for the picked track
-// (`data/music.json`) and by `music-candidate.mjs` to try a new one.
+// 120 BPM with ffmpeg's `atempo` (Remotion's own ffmpeg), and cuts the video's length on the storyboard: the music
+// starts on the light coming on, on the track's lift (Part E of `p6-agents-video-readme`, Haik: "we start music when
+// starting to introducing our app"), and plays at one level from there to the end card (Part D: Haik heard the old
+// shape, soft under the hook and dipped under the lid chime, as the music going "more silent at some points"); on the
+// end card it fades into a soft echo that dies before the video ends. Used by `make-sounds.mjs` for the picked track (`data/music.json`) and by `music-candidate.mjs` to
+// try a new one.
 import {spawnSync} from 'node:child_process';
 import {mkdtempSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {RATE, fade, readWav} from './audio.mjs';
+import {RATE, fade, readWav, shortTerm} from './audio.mjs';
 import {BEAT, FPS} from '../../src/beat.ts';
-import {MUSIC, SOUNDS, VIDEO} from '../../src/timeline.ts';
+import {MUSIC, VIDEO} from '../../src/timeline.ts';
 
 const media = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ffmpeg = join(media, 'node_modules', '@remotion', 'compositor-win32-x64-msvc', 'ffmpeg.exe');
@@ -20,7 +22,7 @@ export const TARGET_BPM = (60 * FPS) / BEAT;
  * Decodes with ffmpeg to 48 kHz stereo, after an optional filter chain. Through a WAV file: Remotion's ffmpeg has no
  * raw float output.
  */
-function decode(file, filter, loops = 0) {
+export function decode(file, filter, loops = 0) {
   const dir = mkdtempSync(join(tmpdir(), 'wakeshot-music-'));
   try {
     const wav = join(dir, 'decoded.wav');
@@ -84,24 +86,49 @@ function levels(L, R, win) {
   return out;
 }
 
-/** The gain of the music at second `t` of the video: the storyboard's shape for a found track. */
+/** The gain of the music at second `t` of the video: silent before the light, one level from it, the end card's fade. */
 export function shapeAt(t) {
-  const silent = MUSIC.silentFrom / FPS;
   const full = MUSIC.full / FPS;
-  const lidChime = (SOUNDS.find((c) => c.sound === 'lidChime')?.at ?? 0) / FPS;
   const end = MUSIC.resolve / FPS;
   const total = VIDEO.frames / VIDEO.fps;
-  let g = 1;
-  if (t < silent) g = 0.5 * fade(t / 0.3) * fade((silent - t) / 0.08);
-  else if (t < full) g = 0;
-  // The lid chime sits alone: 5 dB down from half a second before it to two seconds after.
-  const dip = fade((t - (lidChime - 0.6)) / 0.4) * fade((lidChime + 2.4 - t) / 0.6);
-  g *= 1 - (1 - 10 ** (-5 / 20)) * dip;
+  // A 10 ms fade in on the light: the track comes in on its lift, a downbeat, so it lands as a drop, without a click.
+  let g = fade((t - full) / 0.01);
   // The end card: the track plays on for a beat, then fades over 2.5 s; the echo (`ending`) carries it into silence.
   const fadeFrom = end + 0.5;
   if (t >= fadeFrom) g *= Math.cos(Math.min(1, (t - fadeFrom) / 2.5) * (Math.PI / 2));
   if (t >= total) g = 0;
   return g;
+}
+
+/**
+ * Evens the track out, the way a broadcast leveler does: where its 3 s loudness sits above or below its own median
+ * (from the light to the end card) it is turned down or up, by at most `most` dB, with a gain that moves slowly. A
+ * track can have softer or louder bars in those 26 s, and either reads as a dip somewhere. Only windows wholly inside
+ * the music count: one that reaches back into the silence before the light would read low and push the track's first
+ * bars up. The first bars keep the first window's gain, the end card the gain it reached.
+ */
+const LEVEL = {most: 6, hop: 0.25};
+
+function level(L, R) {
+  const full = MUSIC.full / FPS;
+  const end = MUSIC.resolve / FPS;
+  const windows = shortTerm(L, R, 3, LEVEL.hop).filter((w) => w.t - 1.5 >= full && w.t <= end);
+  const sorted = windows.map((w) => w.lufs).sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  const gainDb = windows.map((w) => Math.max(-LEVEL.most, Math.min(LEVEL.most, median - w.lufs)));
+  const at = (t) => {
+    // Between window centres the gain moves along a raised cosine; before the first and after the last it holds.
+    const x = (t - windows[0].t) / LEVEL.hop;
+    if (x <= 0) return gainDb[0];
+    if (x >= gainDb.length - 1) return gainDb[gainDb.length - 1];
+    const k = Math.floor(x);
+    return gainDb[k] + (gainDb[k + 1] - gainDb[k]) * fade(x - k);
+  };
+  for (let i = 0; i < L.length; i++) {
+    const g = 10 ** (at(i / RATE) / 20);
+    L[i] *= g;
+    R[i] *= g;
+  }
 }
 
 /**
@@ -168,8 +195,8 @@ export function fitTrack(input, {bpm: givenBpm = null, lift: givenLift = null} =
     }
   }
   lift = phase + Math.round((lift - phase) / beatS) * beatS;
+  // Where the video's first frame would sit in the track; before the light it is silent, so this may be negative.
   const start = lift - MUSIC.full / FPS;
-  if (start < 0) throw new Error(`the lift at ${lift.toFixed(2)} s comes too early to put ${(MUSIC.full / FPS).toFixed(1)} s before it`);
 
   const n = Math.round((VIDEO.frames / VIDEO.fps) * RATE);
   const outL = new Float64Array(n);
@@ -180,6 +207,7 @@ export function fitTrack(input, {bpm: givenBpm = null, lift: givenLift = null} =
     outL[i] = (L[first + i] ?? 0) * g;
     outR[i] = (R[first + i] ?? 0) * g;
   }
+  level(outL, outR);
   ending(outL, outR);
   return {
     L: outL,

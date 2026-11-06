@@ -60,9 +60,10 @@ const Keys: React.FC<{w: number; h: number}> = ({w, h}) => {
  * A laptop in three-quarter view, drawn with CSS 3D (perspective 1800 px): the base with its keys, touchpad, edges and
  * a power light on the front; the lid on its hinge with the terminal on its screen, a shell and a front edge that
  * carries the holding-green light when shut. `shut` 0 is open, 1 shut; `yaw` turns the laptop (the slow orbit);
- * `edge` and `led` are the lights' strength; `screen` is the display's brightness and `stopAt` the frame the work on
- * it freezes (the pain shot: the laptop sleeps under the agent). Our own drawing in neutral graphite; it stands for
- * any laptop.
+ * `edge` and `led` are the lights' strength; `screen` is the display's brightness (0 is off), `every` the frames between
+ * tool lines, `preset` the lines already there, and `stopAt` the frame the work on it freezes. `content` puts another
+ * screen in place of that terminal, drawn at `contentWidth` and scaled to the display (the pain's agent terminal).
+ * Our own drawing in neutral graphite; it stands for any laptop.
  */
 export const LaptopTilt: React.FC<{
   f: number;
@@ -71,13 +72,17 @@ export const LaptopTilt: React.FC<{
   edge: number;
   led: number;
   streamFrom: number;
+  every?: number;
+  preset?: number;
   stopAt?: number;
   screen?: number;
-}> = ({f, shut, yaw, edge, led, streamFrom, stopAt = Infinity, screen = 1}) => {
+  content?: React.ReactNode;
+  contentWidth?: number;
+}> = ({f, shut, yaw, edge, led, streamFrom, every = 6, preset = 3, stopAt = Infinity, screen = 1, content, contentWidth = 1300}) => {
   const {w, d, base, lid, bezel} = LAPTOP;
   const angle = OPEN + (SHUT - OPEN) * shut;
   const display = {w: w - 2 * bezel, h: d - 2 * bezel - 12};
-  const scale = display.w / 1300;
+  const scale = display.w / (content ? contentWidth : 1300);
   return (
     <div style={{position: 'relative', width: w, height: d}}>
       {/* The floor's soft shadow, drawn flat: wider than the laptop, darkest under its middle. */}
@@ -177,7 +182,7 @@ export const LaptopTilt: React.FC<{
             >
               <div style={{position: 'absolute', left: bezel, top: bezel, width: display.w, height: display.h, overflow: 'hidden', borderRadius: 3, background: DARK.terminal}}>
                 <div style={{transform: `scale(${scale})`, transformOrigin: '0 0'}}>
-                  <Terminal f={f} streamFrom={streamFrom} every={6} stopAt={stopAt} rows={9} />
+                  {content ?? <Terminal f={f} streamFrom={streamFrom} every={every} preset={preset} stopAt={stopAt} rows={9} />}
                 </div>
                 {screen < 1 ? <div style={{position: 'absolute', inset: 0, background: '#000', opacity: 1 - screen}} /> : null}
                 {/* Glass: a soft sheen from the top left. */}

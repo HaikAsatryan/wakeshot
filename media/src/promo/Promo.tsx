@@ -17,6 +17,7 @@ import {Stage} from '../motion/Stage.tsx';
 import {CAPTION_BASELINE, CAPTION_STEP, STYLE, Words} from '../motion/Words.tsx';
 import {DARK, MOSS} from '../theme.ts';
 import {CAMERA, CAPTIONS, FOCUS, LIGHT_OFF_FRAMES, LIGHT_ON_FRAMES, PLACES, SCENES, T, VIDEO, type PlaceName} from '../timeline.ts';
+import {AgentTerminal, OPEN_TERMINAL} from './AgentTerminal.tsx';
 import {Capture, SETS, StandInTag} from './Capture.tsx';
 import {DraftContext} from './draft.ts';
 import {LaptopTilt} from './LaptopTilt.tsx';
@@ -30,7 +31,9 @@ import {
   LAPTOP_AT,
   LAPTOP_SCALE,
   LID_ROW,
+  OPEN_TERMINAL_AT,
   PAIN_LAPTOP_AT,
+  SLEEP_CHIP_AT,
   SET_AT,
   TILE,
   TRAY_TERMINAL,
@@ -53,7 +56,8 @@ const centre = (b: Rect) => ({x: b.x + b.w / 2, y: b.y + b.h / 2});
 
 /** Where the stage's soft lift sits in each shot, in world pixels: behind what the viewer should look at. */
 function liftAt(f: number): {x: number; y: number} {
-  if (f < SCENES.light.from) return {x: PLACES.hook.x, y: PLACES.hook.y + 120};
+  if (f < T.hook.cut) return {x: PLACES.terminal.x - 200, y: PLACES.terminal.y - 120};
+  if (f < SCENES.light.from) return {x: PLACES.hook.x, y: PLACES.hook.y + 60};
   if (f < SCENES.agents.from) return HERO.light;
   if (f < SCENES.tray.from) return {x: PLACES.agents.x, y: PLACES.agents.y};
   if (f < SCENES.lid.from) return {x: PLACES.tray.x + 120, y: PLACES.tray.y};
@@ -122,17 +126,55 @@ const Badge: React.FC<{children: React.ReactNode}> = ({children}) => (
 // ---- Shot 1: the pain ---------------------------------------------------------------------------------------------
 
 /**
- * The laptop at work, then asleep under the agent: the screen dims, the work on it freezes mid-task, and the power
- * light breathes slowly, the way a sleeping laptop shows it. The same drawing as the lid shot, so the video ends on
- * this laptop sleeping again, this time once the work is done.
+ * The pain. First a terminal window seen close: a person types a prompt to an agent and sends it, and the agent
+ * thinks, mostly waiting, its clock running on. Then the same screen on the laptop, the way a laptop goes to sleep:
+ * the idle timer dims the screen while the agent still works, then the screen goes off, the work on it stops, and the
+ * power light breathes slowly. Then it all sinks into the dark, the chip with it, so the question that follows stands
+ * on a clean stage. The same laptop drawing as the lid shot, so the video ends on this laptop sleeping again, this
+ * time once the work is done.
  */
 const PainPlace: React.FC<{f: number}> = ({f}) => {
-  const asleep = progress(f, T.hook.sleep, T.hook.dimLen, LAMP_OFF);
-  const breathe = 0.2 + 0.8 * (0.5 + 0.5 * Math.cos((2 * Math.PI * Math.max(0, f - T.hook.sleep - T.hook.dimLen)) / 60));
-  const led = f < T.hook.sleep + T.hook.dimLen ? 1 : breathe;
+  const h = T.hook;
+  if (f < h.cut) {
+    return (
+      <div style={{position: 'absolute', left: OPEN_TERMINAL_AT.x, top: OPEN_TERMINAL_AT.y}}>
+        <AgentTerminal f={f} />
+      </div>
+    );
+  }
+  const dim = progress(f, h.dim, h.dimLen, LAMP_OFF);
+  const off = progress(f, h.sleep, h.offLen, LAMP_OFF);
+  const awake = h.sleep + h.offLen;
+  const breathe = 0.15 + 0.85 * (0.5 + 0.5 * Math.cos((2 * Math.PI * Math.max(0, f - awake)) / 60));
+  const led = f < awake ? 1 : breathe;
+  const sink = progress(f, h.sink, h.sinkLen, LAMP_OFF);
+  if (sink >= 1) return null;
   return (
-    <div style={{position: 'absolute', left: PAIN_LAPTOP_AT.x, top: PAIN_LAPTOP_AT.y}}>
-      <LaptopTilt f={f} shut={0} yaw={-30} edge={0} led={led} streamFrom={T.hook.firstLine} stopAt={T.hook.sleep} screen={1 - 0.75 * asleep} />
+    <div style={{position: 'absolute', left: 0, top: 0, opacity: 1 - sink}}>
+      <div style={{position: 'absolute', left: PAIN_LAPTOP_AT.x, top: PAIN_LAPTOP_AT.y}}>
+        <LaptopTilt
+          f={f}
+          shut={0}
+          yaw={-30}
+          edge={0}
+          led={led}
+          streamFrom={0}
+          screen={(1 - 0.6 * dim) * (1 - off)}
+          content={<AgentTerminal f={f} />}
+          contentWidth={OPEN_TERMINAL.w}
+        />
+      </div>
+      {f >= h.sleep ? (
+        // Beside the lid's top corner, where the eye already is.
+        <div style={{position: 'absolute', left: SLEEP_CHIP_AT.x, top: SLEEP_CHIP_AT.y}}>
+          <Pop at={h.sleep} origin="0% 50%">
+            <Chip>
+              <Moon size={32} colour={DARK.dim} />
+              {COPY.sleepingChip}
+            </Chip>
+          </Pop>
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -513,7 +555,6 @@ const BLOCK = Object.fromEntries(CAPTIONS.map((b) => [b.id, b]));
 
 /** Each caption block's baselines on screen. */
 const BASELINES: Record<string, number[]> = {
-  hook: [170, 318],
   question: [575],
   name: [690, 790],
   agents: [CAPTION_BASELINE],
@@ -546,7 +587,7 @@ const DraftBanner: React.FC<{f: number}> = ({f}) => (
   </div>
 );
 
-/** The 30 second video. The soundtrack is one file that `scripts/make-sounds.mjs` mixes on the same timeline. */
+/** The 38 second video. The soundtrack is one file that `scripts/make-sounds.mjs` mixes on the same timeline. */
 export const Promo: React.FC<PromoProps> = ({draft, preview}) => {
   const f = useCurrentFrame();
   const list = preview ? previewTiles(preview) : tiles();
@@ -568,13 +609,12 @@ export const Promo: React.FC<PromoProps> = ({draft, preview}) => {
     return {x: p.x, y: p.y, w: box.w * view.zoom, h: box.h * view.zoom};
   };
   const focus = focusAt(FOCUS, f, resolve);
-  // The stage darkens under the question, so it stands alone over the sleeping laptop.
-  const dark = within(f, T.hook.question, SCENES.light.from) ? 0.86 * progress(f, T.hook.question, T.hook.darkLen, (t) => t) : 0;
   // The time cut before the sleep. Before the cut the black covers everything, the settings line too, so the shot
   // leaves as one; from the cut it sits under the words, so "Later" reads on the black as the picture comes back.
   const dip = interpolate(f, T.sleeps.dip, [0, 1, 1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.sin)});
   const black = dip > 0 ? <AbsoluteFill style={{background: '#000', opacity: dip}} /> : null;
-  const stageLift = f < SCENES.light.from ? 1 - dark : f < SCENES.agents.from ? progress(f, T.light.on, 18, SETTLE) : 1;
+  // The stage's lift sinks with the pain's laptop, so the question and the unlit glyph after it share one plain stage.
+  const stageLift = f < SCENES.light.from ? 1 - progress(f, T.hook.sink, T.hook.sinkLen, LAMP_OFF) : f < SCENES.agents.from ? progress(f, T.light.on, 18, SETTLE) : 1;
   const inTray = within(f, T.tray.whip + T.tray.whipLen, SCENES.lid.from);
   const cursor = inTray ? cursorAt(trayCursor(), f) : null;
   const speed = f >= SCENES.end.from ? speedFill(draft) : null;
@@ -600,18 +640,6 @@ export const Promo: React.FC<PromoProps> = ({draft, preview}) => {
         {within(f, T.agents.move, T.tray.whip) ? <HubGlyph f={f} /> : null}
         <FlyingGlyph f={f} />
         <Focus rect={focus.rect} amount={focus.amount} dim={focus.dim} width={VIDEO.width} height={VIDEO.height} />
-        {within(f, T.hook.sleep, SCENES.light.from) ? (
-          // Beside the lid's top corner, where the eye already is.
-          <div style={{position: 'absolute', left: 1430, top: 400}}>
-            <Pop at={T.hook.sleep} origin="0% 50%">
-              <Chip>
-                <Moon size={32} colour={DARK.dim} />
-                {COPY.sleepingChip}
-              </Chip>
-            </Pop>
-          </div>
-        ) : null}
-        {dark > 0 ? <AbsoluteFill style={{background: '#000', opacity: dark}} /> : null}
         {cursor ? <Cursor tip={toScreen(view, SIZE, cursor.x, cursor.y)} f={f} clicks={[]} opacity={1} /> : null}
         {f >= T.sleeps.cut ? black : null}
         {CAPTIONS.map((b) => {

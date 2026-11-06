@@ -38,7 +38,7 @@ export const Check: React.FC<{size: number; colour: string}> = ({size, colour}) 
 );
 
 /** The window's title bar: a tab with a prompt sign and the title, and thin minimise, maximise and close marks. */
-const TitleBar: React.FC<{title: string}> = ({title}) => (
+export const TitleBar: React.FC<{title: string}> = ({title}) => (
   <div
     style={{
       height: BAR,

@@ -1,6 +1,6 @@
 # Wakeshot media
 
-The icon loop for the README top, the 30 second promo video and its poster, built in code with
+The icon loop for the README top, the 38 second promo video and its poster, built in code with
 [Remotion](https://www.remotion.dev/) so they can be made again when the icon or the menu changes. Outside the Cargo
 workspace; no Rust here. Card: `docs/tasks/p6-media.md`. Specs: `docs/research/launch.md` part 4. Style rules,
 storyboard and captures: `docs/research/promo-video.md`.
@@ -24,10 +24,10 @@ sends no usage event (`@remotion/renderer` 4.0.540, `render-media.js`: the event
 | `out/icon-loop-light.gif`, `out/icon-loop-dark.gif` | `npm run loop` | 480 x 240, 5 s, loops forever, on GitHub's page colours; the tray glyph drawn at 128 px. Remotion renders 125 PNG frames (25 fps); `scripts/lib/gif.mjs` writes the GIF with each frame's exact colours. Show at 240 px wide for sharp HiDPI |
 | `out/wakeshot-promo.mp4`, `out/wakeshot-promo-poster.png` | `npm run video` | Refuses while any picture is missing or a stand-in, or a speed number is missing |
 | `out/draft/wakeshot-promo-draft.mp4` and its poster | `npm run draft` | A missing capture shows as a plain sketch of its set with a stand-in tag, missing speed numbers as tagged stand-ins (88.8, 888, 8.8); DRAFT, the second and the frame on every frame; not kept in git |
-| `out/wakeshot-promo-poster.png` alone | `npm run poster` | Frame 180 of the video (the light on, the name and its line in), for the Pages `<video poster>` |
+| `out/wakeshot-promo-poster.png` alone | `npm run poster` | Frame 420 of the video (the light on, the name and its line in), for the Pages `<video poster>` |
 | `out/state-<holding\|idle\|off>-<light\|dark>.png` | `npm run states` | The README's state table: the tray glyph per state for the light and the dark taskbar, see-through, 32 x 32 (`tray_mask` drawn at 32 px, the tray at 200%); show at 16 px, the tray's size at 100%, so it stays sharp on a HiDPI screen. No Remotion |
-| `public/sound/soundtrack.wav` | `npm run sounds` | Also run by `draft` and `video`; not kept in git. `-- --music <file.wav>` puts a fitted found track in place of the code bed, `-- --out <file.wav>` writes elsewhere |
-| A found track fitted to the video | `node scripts/music-candidate.mjs <track> --out <file.wav> [--bpm N] [--lift s]` | Finds the tempo and the lift, conforms to 120 BPM with `atempo`, cuts 30 s on the storyboard; prints the numbers to rebuild it with. The lift it finds is the biggest 2 s rise in the first minute: when that rise comes just before a breakdown (a quiet stretch would then fall under the lid and settings shots), set `--lift` by hand to where the track's steady part starts (round 5, "Beach") |
+| `public/sound/soundtrack.wav` | `npm run sounds` | Also run by `draft` and `video`; not kept in git. `-- --music <file.wav>` puts a fitted found track in place of the code bed, `-- --out <file.wav>` writes elsewhere. It stops when a found track's 3 s loudness leaves its median by more than 2 LU between the light, where the music starts, and the end card; `SOUND_ALLOW_DIP=1` writes the file anyway, to listen |
+| A found track fitted to the video | `node scripts/music-candidate.mjs <track> --out <file.wav> [--bpm N] [--lift s]` | Finds the tempo and the lift, conforms to 120 BPM with `atempo`, cuts the video's length (38 s) on the storyboard, the music starting on the light; prints the numbers to rebuild it with. The lift it finds is the biggest 2 s rise in the first minute: when that rise comes just before a breakdown (a quiet stretch would then fall under the lid and settings shots), set `--lift` by hand to where the track's steady part starts (round 5, "Beach"). Nothing before the lift plays since Part E (the opening has no music); when the found rise is the end of the intro, set `--lift` to a bar where the track is already full, so it comes in on a full downbeat (Part D) |
 | A contact sheet for review | `npm run sheet -- <composition> <from> <to> <out.png>` | About 4 frames a second, rendered at full size and shrunk to a quarter, tiled; add `--final` for frames without the DRAFT mark |
 | Speed numbers | `pwsh scripts/measure-speed.ps1 -Mode <mode>` | See "Speed numbers" below |
 | The live preview | `npm run studio` | Opens Remotion Studio in the browser |
@@ -42,8 +42,8 @@ takes about 2 minutes on the test laptop. The motion parts each have a small com
 |---|---|
 | The art port draws exactly what `art.rs` draws, no tolerance: every pixel of the three review sheets (tray glyphs at 16 to 48 px in four rows, dark, light and high contrast), the 14 frames of `assets/wakeshot.ico` and the notice picture | `node scripts/check-art.mjs`; CI runs it on every push (job `art-port`, Node 26, no `npm ci`: it needs only `node:` modules and the `.ts` port) |
 | No em dash, en dash or emoji in the text files; every asset credited; every text colour pair in `src/theme.ts` at 4.5:1 or more and every graphic pair at 3:1; the pace check; and the agent lists in `README.md` and `site/index.html` equal to `src/agents.ts`, with a rules paragraph in the README for each agent that passed and none for one that did not | `npm run check` |
-| Pace (`scripts/check-pace.mjs`, from the timeline data): every cut, move, pop, click and caption start on the 120 BPM grid within 1 frame; something new at least every 2 s before the end card; framings 2 to 4 s; captions hold 1.4 s after their last word (big words of 1 to 3 words 0.5 s); at most 5 things to take in within any 2 s (cuts, moves, pops, clicks, lights, counts, rings, swaps, line starts); 2 to 6 words a caption line; at most two lines on screen; the name by 3 s; the end card the last 4 s; frame 0 not empty | `npm run check-pace` |
-| Video: H.264 and AAC, 1920 x 1080, 30 fps, 30 s plus or minus 2, under 10 MB; loops, read frame by frame: GIF, 480 x 240, 4 to 6 s, forever, under 1 MB, last frame equal to the first, a 40 px border of every frame exactly GitHub's page colour, the first frame the port's idle glyph and a held stretch its holding glyph, every pixel; the six state icons, each laid on its taskbar colour, equal to the cell of art.rs's own review sheet for that state at 32 px, every pixel, and see-through around the glyph | `npm run check-video` (add `-- --draft` for the draft) |
+| Pace (`scripts/check-pace.mjs`, from the timeline data): every cut, move, pop, click and caption start on the 120 BPM grid within 1 frame; something new at least every 2 s before the end card; framings 2 to 4 s; captions hold 1.4 s after their last word (big words of 1 to 3 words 0.5 s); at most 5 things to take in within any 2 s (cuts, moves, pops, clicks, lights, counts, rings, swaps, line starts); 2 to 6 words a caption line; at most two lines on screen; the name by 9 s; the end card the last 4 s; frame 0 not empty | `npm run check-pace` |
+| Video: H.264 and AAC, 1920 x 1080, 30 fps, as long as the timeline (38 s) within 0.1 s and 45 s at most, under 10 MB; loops, read frame by frame: GIF, 480 x 240, 4 to 6 s, forever, under 1 MB, last frame equal to the first, a 40 px border of every frame exactly GitHub's page colour, the first frame the port's idle glyph and a held stretch its holding glyph, every pixel; the six state icons, each laid on its taskbar colour, equal to the cell of art.rs's own review sheet for that state at 32 px, every pixel, and see-through around the glyph | `npm run check-video` (add `-- --draft` for the draft) |
 | A clean checkout rebuilds the same bytes | `npm run check-rebuild` (add `-- --final` once the final video exists) |
 | Types | `npm run typecheck` |
 
@@ -62,6 +62,8 @@ takes about 2 minutes on the test laptop. The motion parts each have a small com
   README rules paragraph to add or delete. `live` is `passed`, `partly` (the card is done but no working hold was seen
   live) or `pending`; only `passed` shows anywhere. The video's agent tiles (shot 3) follow on the next render and
   lay themselves out for any count from 1 to 6.
+- **The typed prompt** of the opening: `COPY.terminal.prompt` in `src/copy.ts` and `KEY_GAPS` in `src/timeline.ts`
+  together (one gap in frames per key after the first; the timeline stops with a message when they disagree).
 - **The words on screen**: `src/copy.ts`. **The timing**: `src/timeline.ts` (on the grid of `src/beat.ts`); the
   sounds and `check-pace` follow it.
 - **The speed numbers**: `data/speed.json`, from the measure script's output.
@@ -72,10 +74,10 @@ takes about 2 minutes on the test laptop. The motion parts each have a small com
 | Input | From |
 |---|---|
 | Icon art | `src/art/heldLight.ts`, a port of the held light in `art.rs` (tray glyph, app icon, the sheets' composition), equal to every file `art.rs` writes (`check-art.mjs`, 0 of 9,458,740 pixels differ, 2026-11-05). The states in between (the light coming on) are the media's own: `src/art/motion.ts` |
-| Screen pictures | `public/shots/`, real captures of `p6-media-captures` (2026-11-05, the DELL at 200%), listed in `data/shots.json`: two sets, each one screen rectangle at one scale with its boxes and rows from the capture's manifest: `tray` (S1 to S4 in one rectangle) for the video, and `menu` (S1, S5a to S5d), out of the 30 s cut since `p6-agents-video-readme` Part C and kept for a longer cut (still in `shots.json`, `CREDITS.md`, `Capture.tsx` and `world.ts`, so a final render checks its files), and the README stills (menu, holding and idle tooltip, light and dark; the build tooltip) |
+| Screen pictures | `public/shots/`, real captures of `p6-media-captures` (2026-11-05, the DELL at 200%), listed in `data/shots.json`: two sets, each one screen rectangle at one scale with its boxes and rows from the capture's manifest: `tray` (S1 to S4 in one rectangle) for the video, and `menu` (S1, S5a to S5d), out of the main cut since `p6-agents-video-readme` Part C and kept for a longer cut (still in `shots.json`, `CREDITS.md`, `Capture.tsx` and `world.ts`, so a final render checks its files), and the README stills (menu, holding and idle tooltip, light and dark; the build tooltip) |
 | Settings values in the video | `data/settings.json`, from the capture session's log (S9): lid close Do nothing while holding, Sleep before and after; battery sleep Never while holding, 5 hours before and after. The plugged-in timer is not written by Wakeshot, so it is not shown |
 | Speed numbers | `data/speed.json`: measured 2026-11-06 on Wakeshot 0.1.0, x64 (`docs/research.md`, "Speed numbers", has the method and every raw value). The end card shows the tray's private memory idle (4.3 MB) and its CPU time in 10 idle minutes (109 ms) |
-| Sound | `scripts/make-sounds.mjs`: the music Haik picked (`public/music/`, named with its fit in `data/music.json`, fitted on every build by `scripts/lib/fit-music.mjs`), the effects made in code, the chimes from `chime.rs`. The code bed (a 120 BPM sequencer) when `data/music.json` names no file |
+| Sound | `scripts/make-sounds.mjs`: the music Haik picked (`public/music/`, named with its fit in `data/music.json`, fitted on every build by `scripts/lib/fit-music.mjs`), the keys of the opening (`public/keys/`, 18 single keystrokes, CC0, unchanged), the other effects made in code, the chimes from `chime.rs`. The code bed (a 120 BPM sequencer) when `data/music.json` names no file |
 | Fonts | Instrument Sans in `public/fonts/` with its `OFL.txt` (from the designer's repo); JetBrains Mono from npm; loaded in `src/fonts.ts` |
 | Colours | `src/theme.ts`: Moss (`docs/research/brand-directions-2.md`), GitHub's page colours for the loop |
 
@@ -103,19 +105,26 @@ PowerShell window with no Claude Code session working.
 
 ## Decisions (principal designer, for Haik's review)
 
-1. **Effects made in code; the music is Haik's pick.** Every effect (whooshes, clicks, pops, ticks, the low hit, the
-   end card's swell of air) is sine waves and seeded noise, and the chimes come from `chime.rs`. The music is "Funky
+1. **Effects made in code, the keys real; the music is Haik's pick.** Every effect (whooshes, clicks, pops, ticks,
+   the low hit, the room and the laptop's fan, its power going down, the riser into the light, the end card's swell of
+   air) is sine waves and seeded noise, and the chimes come from `chime.rs`. The keys of the opening are real
+   keystrokes (CC0, `CREDITS.md`), one per typed key: typing made in code sounds like clicks, and no one heard these
+   before the pick, so a real recording was the safer choice. The music is "Funky
    Disco Beats to Boogie/Woogie to" by Fupi (CC0), Haik's pick of 2026-11-06 from four new options (it replaced "A
    Chill Fever (Loopable)" by Pro Sensory, his pick of 2026-11-05): conformed from 110.25 to 120 BPM, cut so its
-   lift (45.75 s into the track) lands on the light at 4 s, softer under the hook with a short silence before the
-   light, 5 dB down under the lid chime, and on the end card it plays on for a beat and fades over 2.5 s into a soft
-   echo, silent 0.1 s before the end. The fit plays any track three times over, so it never runs out; this one is
-   133 s long and the cut ends at about 76 s of it. A minor, so both chimes (C6, G6) are in its key (by script, not
-   heard). The music ducks 4 dB under each chime; the mix is set to -15 LUFS with sample peaks under -2.5 dBFS in the
-   WAV; after AAC the Part C draft measures -15.3 LUFS and -1.6 dBTP true peak (`loudnorm`, 2026-11-06). The 120 BPM
+   lift (45.75 s into the track) lands on the light at 12 s. Since Part E of `p6-agents-video-readme` (Haik: "we
+   start music when starting to introducing our app") the music starts there, on the lift, and nothing plays before
+   it but the keys, the room and the laptop going to sleep. Since Part D (Haik: the music went "more silent at some
+   points") it plays at one level from there: a slow leveler evens the track to its own median, and nothing is soft
+   or ducked any more; under each chime only the chime's band gives way (a 6 dB bell at 1.5 kHz) instead of the whole
+   music (4 dB, and 5 dB more under the lid chime, before). `make-sounds.mjs` stops when the music's 3 s loudness
+   leaves its median by more than 2 LU after the light. On the end card it plays on for a beat and fades over 2.5 s into a soft echo, silent 0.1 s before the
+   end. The fit plays any track three times over, so it never runs out. A minor, so both chimes (C6, G6) are in its
+   key (by script, not heard). The mix is set to -15 LUFS with sample peaks under -2.5 dBFS in the WAV. The 120 BPM
    sequencer in code (C major, so the C6 and G6 chimes sit in tune) stays as the fallback when `data/music.json`
-   names no file. Why: a real track sounds full where the code bed sounded thin, and every build still makes the
-   same bytes. Change it when Haik wants another track: try it with `music-candidate.mjs`, then `data/music.json`.
+   names no file; it is silent before the light too, and the evenness rule does not apply to it. Why: a real track sounds
+   full where the code bed sounded thin, and every build still makes the same bytes. Change it when Haik wants
+   another track: try it with `music-candidate.mjs`, then `data/music.json`.
 2. **Instrument Sans for every word of the video, self-hosted; JetBrains Mono only in the drawn terminal and the
    install command.** Instrument Sans SemiBold is the brand's wordmark face (`docs/research/brand-identity.md`
    section 7); the other lines use the same family so the name and the words read as one. The WOFF2 files and the
@@ -172,8 +181,8 @@ PowerShell window with no Claude Code session working.
     the title and the outro were two lockups. Change it when a scene needs the name larger than the icon allows.
 
 11. **The dynamic cut (Part C) follows `docs/research/promo-video.md`**, with these choices of the worker. Since
-    `p6-agents-video-readme` Part C (2026-11-06) the cut has 9 framings and no menu shot; the menu notes below stay
-    for a longer cut.
+    `p6-agents-video-readme` Part C (2026-11-06) the cut has no menu shot (9 framings; 11 in 34 s since Part D, whose
+    pain had three; 12 in 38 s since Part E, whose pain has four); the menu notes below stay for a longer cut.
     - **Ten framings, not nine.** The settings slide starts a beat after the work ends (14 s), so the lid framing is
       4 s; the menu shot (6 s) is two framings with a short pan to the submenu at 23 s. Every framing is 2 to 4 s.
       Change it when Haik wants fewer camera moves.

@@ -1,6 +1,9 @@
 # Video and README for every AI agent, not Claude Code first
 
-Phase: 6. Status: Part C (Haik's new video scenario, 2026-11-06 18:45): steps 7 to 10 done ("Part C, round 1" and
+Phase: 6. Status: Part E (Haik's notes on the Part D renders, 2026-11-06 23:02): done (steps 15 to 17; Haik picked
+the current track and likes the video, ~23:50; its final is in `media/out/`; "Part E" in Result). Part B's README
+paragraphs, speed numbers and tooltip capture still wait. Part D (Haik's notes on the Part C draft, 2026-11-06 20:45): done (steps 11 to 14); waits for Haik's
+music pick from four renders ("Part D" in Result). Part C (Haik's new video scenario, 2026-11-06 18:45): steps 7 to 10 done ("Part C, round 1" and
 "round 2" in Result: storyboard, stills, logo rules, the list from the live cards, a draft and every check; `check`
 fails only on the two README paragraphs Part B writes); waits for Haik's look at the cut; Part B: blocked: Part A done and approved (Haik, 2026-11-06 ~19:15); Part B steps that need no live
 result done 2026-11-06 (draft rendered, checks pass); the rest waits for the live results, the new install and
@@ -108,6 +111,26 @@ Haik's words, as he wrote them:
     license and source of each in `docs/research/promo-video.md`. Render the new cut once per track (the current one
     plus the 3 new), each with every check passing, so Haik picks in context.
 
+## Part E: Haik's notes on the Part D renders (2026-11-06 23:02)
+
+Haik's words, as he wrote them:
+
+> Video change request again: First music is not required and the visual can be different. Imagine terminal is open
+> and someone is typing something and we only here that typing sounds and sleeping process and we start music when
+> starting to introducing our app. Usually agents in terminal are not typing so fast, usually they loading a lot. Try
+> in this way.
+
+He has not picked a track yet.
+
+15. The opening, redesigned: a terminal is open, someone types a prompt to an agent (keyboard sounds only, no music),
+    then the agent works the way real agents do: mostly waiting and loading (a spinner, a thinking line, a tool line
+    now and then), not fast typing. Then the laptop goes to sleep (its own sound, the screen dims and goes dark), then
+    "Tired of sleepy laptops?". The opening visual may change from Part D's.
+16. The music starts when Wakeshot is introduced (the light comes on), not before. Keyboard and sleep sounds must be
+    original or free for this use (CC0 or a license that allows a public repo and video uploads with no fee); record
+    each source and license.
+17. Render the new cut once per track (the 4 of Part D), each passing every check, for Haik's pick in context.
+
 ## Acceptance checks
 
 - Every check of `p6-media` passes on the new render; the GitHub render of `README.md` checked; every link works.
@@ -165,6 +188,20 @@ Haik's words, as he wrote them:
    `media/CREDITS.md` (five rows, and the grain note names `menu-S1-dark.png`), `media/src/promo/Capture.tsx` (the
    `menu` set's sketch), `media/src/promo/world.ts` (`SET_AT.menu`), `media/README.md`, `promo-video.md` (captures
    table); `build.mjs` refuses a final while any listed file is missing.
+7. Part D: the code bed (the fallback music in `make-sounds.mjs`, used only when `data/music.json` names no file)
+   still has the old sparse hook and a silence before the light; the evenness rule skips it. Not changed: no build
+   uses it.
+8. Part D: the committed `media/out/wakeshot-promo.mp4` is the round 6 final (30.02 s), so `check-video` in final mode
+   now fails its new length rule (34 s) until the picked track's final is rendered into `media/out/`. Part E: done;
+   the 38 s final with Haik's pick is in `media/out/` and `check-video` passes.
+9. Part E: the helper read BigSoundBank's pages, which carry text addressed to AI readers (asking to be quoted
+   exactly). Treated as data and ignored; no BigSoundBank file was used.
+10. Part E: the orchestrator's note said the final list gives "5 tiles". By the chip rule Haik approved in Part A, two
+    passed Copilots share one "Copilot" tile, so the video shows 4 (Claude Code, Codex CLI, Copilot, OpenCode); the
+    README and site lists name all 5. Five tiles: delete the two `chip` fields in `agents.ts` (the tile layout takes 5
+    as 3 and 2; "Copilot in VS Code" steps down to 40 px). Not changed.
+11. Part E: `agent-lists --check` (in `npm run check`) now names three missing README paragraphs: **Copilot CLI.**,
+    **Copilot in VS Code.**, **OpenCode.** (Part B step 5; README text is not owned this round).
 
 ## Log
 
@@ -255,6 +292,102 @@ Haik's words, as he wrote them:
   ok: 15 outputs the same bytes. The new final copied to the build folder's `final-check\`; the round 6 final and
   poster put back in `media/out/` (sha256 c35177c7... and 5abbdc2b... again); `out-backup\` deleted. `site/check_page.py`
   0 errors; `gh api markdown` render of `README.md`: the new list, 5 tables, no marker text. Result written.
+- 2026-11-06: Part D started (worker): steps 11 to 14, Haik's notes on the Part C draft. Owned: `media/`,
+  `docs/research/promo-video.md`, this card, the build folder. Not `README.md`, `site/`, `docs/product.md`, Rust. No
+  git, no screen captures. Kept: names only, the trademark line, `agents.ts` as it is (4 passed).
+- 2026-11-06: the Part C hook rendered frame by frame (0 to 120). Found: the agent works for only 1 s (tool lines
+  from frame 3 to 30); the "asleep" screen still shows the terminal at 25%; at frame 60 the hook words cut and
+  "Tired" comes in over the laptop at full light, then a black veil fades to 86% over 12 frames, so the laptop and
+  the "Sleeping" chip stay as a ghost at 14% behind the question to the light. That ghost is the "regular frame"
+  Haik saw. A helper agent searches for new CC0 funky disco tracks into the build folder's `music-raw\` (step 14).
+- 2026-11-06: built (steps 11 to 13): the pain is 8 s (16 beats, so the music's lift stays on a bar line), the video
+  34 s, everything after the pain 8 beats later. Close on the screen 0 to 3 s (terminal text about 30 px), pull back,
+  the screen dims at 3.5 s while the agent still works, goes off at 4.5 s (work stops, power light breathes, chip),
+  the scene sinks into the plain stage at 5.5 s, the question alone from 6 s, the light at 8 s. The 86% veil is gone.
+  Music: one level from frame 0 (a slow leveler evens a track to its own median), no silence before the light, no
+  5 dB lid dip; under each chime only the chime's band is cut (6 dB bell at 1.5 kHz) instead of 4 dB of the whole
+  music; when the laptop sleeps the track goes on behind a low-pass (500 Hz) and opens over the beat before the light.
+  `make-sounds.mjs` now stops when the music's 3 s loudness leaves its median by more than 2 LU (6 in the muffle).
+  Funky Disco Beats: -0.5 to +0.5 LU outside the muffle, -2.2 LU in it (was: the hook at -6 dB, silence, -9 dB under
+  the lid chime). Limiter 2.7 dB after the thud 0.5 to 0.35 and the lid chime 1 to 0.85 (the music no longer ducks
+  there). Pace check ok with the name rule moved from 5 s to 9 s; `check-video` takes the timeline's length (45 s at
+  most); poster frame 180 to 300.
+- 2026-11-06: draft with the current track: 34.01 s, 8.48 MB; -15.25 LUFS, -1.47 dBTP, LRA 5.3 LU (the round 6 final:
+  LRA 6.6). The leveler then leaves the muffle stretch as the track plays it (a track's own break before its lift
+  belongs under the question). The helper's 10 tracks (9 CC0, 1 CC BY 4.0) measured by script, not heard: tempo
+  (whole, low and high bands), key, band shares by FFT. Finding: Funky Disco Beats puts 78% of its energy in 40 to
+  100 Hz and only 11% in 100 to 250 Hz, the bass small speakers play; every new track has more there. Picked (all
+  CC0, licence lines read again by curl on each page): "Can't Stop My Feet !" (Loyalty Freak Music, 130 BPM, A minor,
+  26% in 100 to 250 Hz), "Lost In The Rythm" (HoliznaCC0, 105 BPM, A minor, 20%, the most bass over mids),
+  "Funked Up" (joth, 116 BPM, A minor, 45%). Lifts set by hand on bar lines in steady parts (59.07, 27.43, 16.55 s).
+  Fitted and mixed: each within 0.5 LU of its median outside the muffle.
+- 2026-11-06: renders, one track at a time (`candidate.sh` in the build folder): each sets the track in
+  `public/music/`, `data/music.json` and a temporary `CREDITS.md` line, runs check, typecheck, check-art, draft,
+  video, check-video (both), loudness, check-rebuild --final, copies the final out, then puts the three files back.
+  The round 6 final and poster are backed up in the build folder's `out-backup\` (sha256 c35177c7... and
+  5abbdc2b...), `music.json` and `CREDITS.md` in `repo-backup\`. If this run is cut off: copy those back.
+- 2026-11-06 21:12: "Can't Stop My Feet !": every check ok except `check-rebuild --final`: the final video differed
+  (the draft, the soundtrack and the poster were the same bytes). The pain rendered twice (frames 0 to 245, decoded
+  pixels): all equal, so the cause is not the new hook. `candidate.sh` now keeps the rebuild copy on a mismatch and
+  names the first video packets that differ. 21:24: "Lost In The Rythm": every check ok, `check-rebuild --final` ok.
+  "Can't Stop My Feet !" runs again at the end.
+- 2026-11-06 21:33: "Funked Up": every check ok. 21:41: "Can't Stop My Feet !" again: every check ok, and its final is
+  the same bytes as the first run's, so the first mismatch was the clean copy's render, once. 21:49: "Funky Disco
+  Beats": every check ok. Contact sheet of 0 to 8.5 s rendered (35 frames, final look) and looked at: close shot,
+  pull back, dim, off, sink, the question alone on the plain stage, the light. The round 6 final and poster put back
+  in `media/out/` (sha256 c35177c7... and 5abbdc2b... again); `public/music/`, `music.json` and `CREDITS.md` are as
+  before the runs (compared byte for byte); `out/draft/` holds the new cut with the current track. Test frames, fitted
+  WAVs and the backups deleted from the build folder.
+- 2026-11-06: Part E round 1 started (worker): steps 15 and 16, the design, the code, the sounds, stills of the new
+  opening and a contact sheet, the checks that need no full render. No full render this round (an install check times
+  live agents on this laptop). Owned: `media/`, `docs/research/promo-video.md`, this card, the build folder. Kept:
+  names only, the trademark line, `agents.ts` as it is. No git, no screen captures.
+- 2026-11-06: read the Part D code, `promo-video.md` and the Part D opening sheet. Design picked: the opening is 12 s
+  (24 beats, was 8 s), the light at 12 s, everything after it 8 beats later, the video 38 s. 0 to 3 s close on a flat
+  terminal window: the input box, a person types "migrate billing to API v2" at about 11 keys a second; Enter at 3 s;
+  3 to 6.5 s the agent works the way agents do: a spinner, "Thinking" with a shimmer, a clock that starts in real time
+  and then runs as a time lapse into minutes, a tool line now and then; 6.5 s a cut to the laptop with the same screen;
+  7.5 s the idle timer dims it; 8.5 s it sleeps (screen off, power light breathes, "Sleeping" chip); 9.5 s it sinks;
+  10 s "Tired of sleepy laptops?" in silence; 12 s the light, the music starts there. Sound before the light: keys,
+  a faint room tone and fan, the power-down and the fan winding down, a riser into the light. A helper agent looks for
+  CC0 typing recordings into the build folder's `sound-raw\` (code-made keys are the fallback).
+- 2026-11-06 23:15: the orchestrator: the install check is done, so round 2 (the four renders) follows at once.
+- 2026-11-06: built: `timeline.ts` (38 s, `KEYS` and `SHIFT_AT`, the new pain moments and places, no words before the
+  question, new sounds, `MUSIC` without the muffle), `promo/AgentTerminal.tsx` (new: the input box, typing, the
+  thinking line with a shimmer and the time-lapse clock, tool lines), `LaptopTilt.tsx` (`content`), `Promo.tsx`,
+  `world.ts`, `copy.ts`, `lib/fit-music.mjs` (silent before the light, the leveler counts only the music's own
+  windows, the muffle out), `make-sounds.mjs` (keys, room, fan, power down, riser; the evenness rule from the light;
+  the code bed silent before the light), `check-pace.mjs` (name by 13 s; frame 0 may open on the terminal),
+  `build.mjs` (poster frame 420). Typecheck, `check.mjs` and `check-pace` ok.
+- 2026-11-06: the helper's report: three CC0 or public domain typing recordings downloaded; picked "Keyboard Soundpack
+  #1" by unicaegames (OpenGameArt, CC0, a Cherry KC 1000 low-profile keyboard, 32 single keys). 18 takes copied
+  unchanged into `media/public/keys/` (not `public/sound/`, which git ignores), credited in `CREDITS.md`. Levels by
+  script, not heard: typing at about -25 LUFS (3 s), 9 to 10 LU under the music; room and fan -36; the power down
+  about -29; keys peak about -9 dBFS.
+- 2026-11-06: stills (final look) and a 51-frame contact sheet of 0 to 12.5 s rendered and looked at; the laptop
+  moved to the frame's middle (no words above it now), the clock put in brackets.
+- 2026-11-06 23:21 (orchestrator): the v1 list is final. `agents.ts`: Copilot in VS Code `passed`, Cursor and
+  Antigravity lines deleted (their task lines in `copy.ts` too); `npm run agent-lists` wrote "Claude Code, Codex CLI,
+  Copilot CLI, Copilot in VS Code and OpenCode" into `README.md` line 65 and `site/index.html` line 57 only. The
+  video shows 4 tiles, not 5: both Copilots passed, so they share one "Copilot" tile (the rule Haik approved in Part
+  A). `agent-lists --check` now names three missing README paragraphs (Part B).
+- 2026-11-06: renders started (`run-all-e.sh` in the build folder: tracks 0 to 3, one at a time, every check, then the
+  round 6 final and poster back into `media/out/`). Backups: `out-backup\` (sha256 c35177c7... and 5abbdc2b...),
+  `repo-backup\` (`music.json`, `CREDITS.md` with the keys rows). If cut off: copy those back.
+- 2026-11-06 23:31: track 0 (Funky Disco Beats): every check ok, `check-rebuild --final` ok; 38.02 s, 8.50 MB,
+  -15.32 LUFS, -1.47 dBTP. Frames 1.5, 5.4 and 12.4 s taken from the MP4 and looked at. Docs written while the
+  others run: `promo-video.md` (pace and text rows, Sound, storyboard 38 s with row 1 new and rows 2 to 8 four seconds
+  later, counts, Music and effects, Formats, the Antigravity note), `media/README.md`, `docs/research.md` (a new
+  section on the keystrokes).
+- 2026-11-06 23:39 and 23:48: tracks 1 and 2: every check ok, `check-rebuild --final` ok (-1.84 and -1.60 dBTP).
+- 2026-11-06 ~23:50 (orchestrator): Haik: "ok our music was the best. I already checked it. + I like the video." So
+  track 0 stays. Track 3's run (in its draft render) stopped: the task, then its shells, node, Chrome and ffmpeg by PID
+  (`taskkill /T`, only processes this card started). Put back: `public/music/funked-up.mp3` removed (only
+  `funky-disco-beats.ogg` left), `music.json` and `CREDITS.md` from the backup (sha256 equal). Track 0's final and
+  poster copied into `media/out/` (the bytes `npm run video` makes now; its run passed `check-rebuild --final`). The
+  draft built again with track 0 (`check-video --draft` ok, 9.10 MB); `check-video` on the final ok. `check.mjs`,
+  `check-pace`, typecheck ok; `agent-lists --check` fails only on the three README paragraphs (Part B). Backups
+  deleted. `promo-video.md`: the pick, options 1 to 3 "offered, not picked", the Part E size and loudness.
 
 ## Result
 
@@ -589,3 +722,168 @@ A copy of the same cut rendered as a final (no DRAFT mark, 0.1.0 speed numbers),
 3. **Part B**: the two-agent tooltip capture and the speed numbers on the new install; then the final render into
    `media/out/`, `check-video`, `check-rebuild --final`, loudness, and Haik's look.
 4. Haik's answer on the contact sheet and on this cut.
+
+### Part D (2026-11-06): Haik's notes on the Part C draft, steps 11 to 14
+
+Status of Part D: done. Waits for Haik's music pick; then that track goes into the repo and its final into
+`media/out/` (below).
+
+#### What changed
+
+- **The pain is 8 s, the video 34 s** (step 11). 0 to 3 s close on the laptop's screen, the agent at work with its
+  text about 30 px; 3 s the camera pulls back; 3.5 s the idle timer dims the screen while the agent still works;
+  4.5 s the screen goes off, the work stops, the power light breathes, "Sleeping" pops, "Laptop sleeping."; 5.5 s it
+  all sinks into the dark as the camera eases back; 6 s "Tired of sleepy laptops?" alone; 8 s the light. 16 beats, so
+  the music's lift still lands on a bar line. Every shot after it starts 4 s later; nothing else in them changed.
+- **A clean frame behind the question** (step 12). Frame by frame, Part C put a veil to 86% black over the laptop
+  from the question's first frame: for 12 frames the question came in over the full picture, then the laptop and its
+  chip stayed as a ghost at 14%. Now the laptop, its chip, the words and the stage's lift fade out before the
+  question starts, and the question sits on the same plain stage the light then comes on in.
+- **Music at one level** (step 13). No soft hook, no silence before the light, no 5 dB lid dip, no 4 dB duck of the
+  whole music under each chime. Instead: a slow leveler evens each track to its own median; under each chime only the
+  chime's band gives way (6 dB bell at 1.5 kHz); when the laptop sleeps the track goes on behind a low-pass, the beat
+  still going, and opens over the beat before the light. `make-sounds.mjs` stops when the music's 3 s loudness leaves
+  its median by more than 2 LU (6 inside the muffle). Each of the four tracks reads within 0.5 LU of its median
+  outside the muffle, and 0.1 to 2.2 LU under it inside.
+- **Three new tracks** (step 14), CC0, picked by numbers (not heard) from ten a helper agent found; each licence read
+  again by curl on its page. Sources, licences, numbers: `docs/research/promo-video.md`, "Music and effects".
+
+#### The four renders (final look, every check passed)
+
+In `C:\Users\haika\AppData\Local\Temp\claude\f7c2c08a8f04f07b\2a1d3942-3be1-4fdb-95cd-69265f507ad6\scratchpad\p6-agents-video-readme\candidates\`:
+
+| File | Length, size | Loudness after AAC | Track, licence and source | In one line (from tags and numbers, not heard) |
+|---|---|---|---|---|
+| `wakeshot-promo-34s-0-funky-disco-beats.mp4` | 34.0 s, 8.45 MB | -15.25 LUFS, -1.45 dBTP | "Funky Disco Beats to Boogie/Woogie to", Fupi, CC0, opengameart.org/content/funky-disco-beats-to-boogiewoogie-to | the current pick: a funky disco loop whose bass sits mostly below 100 Hz (78% of its energy), so small speakers show little of it |
+| `wakeshot-promo-34s-1-cant-stop-my-feet.mp4` | 34.0 s, 8.45 MB | -15.26 LUFS, -1.82 dBTP | "Can't Stop My Feet !", Loyalty Freak Music, CC0, Free Music Archive (album "ROLLER DISCO DANCE DANCE") | roller disco, brighter and the evenest of the four (130 to 120 BPM, A minor), 2.4 times the current track's share in 100 to 250 Hz; its page says "Instrumental: No" |
+| `wakeshot-promo-34s-2-lost-in-the-rythm.mp4` | 34.0 s, 8.45 MB | -15.27 LUFS, -1.58 dBTP | "Lost In The Rythm", HoliznaCC0, CC0, Free Music Archive (album "Lost") | disco-dance with the most bass over mids and a dark, soft top (105 to 120 BPM, sped up 14%), A minor, instrumental |
+| `wakeshot-promo-34s-3-funked-up.mp4` | 34.0 s, 8.45 MB | -15.23 LUFS, -2.27 dBTP | "Funked Up", Joth, CC0, opengameart.org/content/funked-up (its notice asks for a credit) | 70s funk loop with live-style drums, bass guitar and Rhodes (116 to 120 BPM), A minor, the most bass in the range small speakers play; funk more than disco |
+
+Also there: `opening-contact-sheet-0-to-8.5s.png` (35 frames of the new opening, every 7.5 frames, final look),
+`wakeshot-promo-poster-34s-frame-300.png` (the new poster, the same for all four), and each run's log.
+
+**Pick (principal designer): option 1, "Can't Stop My Feet !".** It is the same type Haik likes (disco, from a roller
+disco album), has far more of the bass small speakers play (26% of its energy in 100 to 250 Hz against 11%), keeps a
+bright top so it stays lively, has the steadiest level of the four (LRA 4.4 LU), and is in A minor like the current
+track, so both chimes stay in key. Risk: its page marks it not instrumental, and no one has heard it yet. Change it
+when Haik's ear says otherwise.
+
+To use a pick: copy its file from the build folder's `music-raw\` unchanged into `media/public/music/`, set
+`data/music.json` (file, `bpm`, `lift` from `promo-video.md`'s table, title, author, page), write its `CREDITS.md`
+line (replacing Fupi's), remove `funky-disco-beats.ogg` if it is not kept, then `npm run video` and the checks. If Haik
+keeps the current track, `wakeshot-promo-34s-0-funky-disco-beats.mp4` is the same bytes `npm run video` makes now
+(checked), so it can be copied over `media/out/wakeshot-promo.mp4` with the poster above.
+
+#### Files changed
+
+`media/src/timeline.ts` (34 s; the pain's moments, places, camera, captions, events, sounds; `MUSIC.muffle` and
+`open`; the thud and lid chime a little softer), `media/src/promo/Promo.tsx` (the pain place, the sink, the chip in
+the world, the veil out), `media/src/promo/LaptopTilt.tsx` (`every`, `preset`), `media/src/promo/world.ts`
+(`SLEEP_CHIP_AT`), `media/scripts/lib/fit-music.mjs` (one level, leveler, muffle), `media/scripts/lib/audio.mjs`
+(`shortTerm`, `svf`), `media/scripts/make-sounds.mjs` (the band cut, the evenness rule), `media/scripts/check-pace.mjs`
+(the name by 9 s), `media/scripts/check-video.mjs` (the timeline's length, 45 s at most), `media/scripts/build.mjs`
+(poster frame 300), `media/README.md`, `media/CREDITS.md` (poster frame), `docs/research/promo-video.md` (pace rows,
+Sound, storyboard, counts, Music and effects, Formats), `docs/research.md` (a new section), this card. Not touched:
+`README.md`, `site/`, `docs/product.md`, Rust. No git. No screen capture.
+
+#### Checks (Part D)
+
+| Check | Outcome |
+|---|---|
+| `check.mjs`, `check-pace.mjs` | ok: 89 files, 31 assets credited, 18 colour pairs; 47 starts on the beat, 11 framings of 2 to 4 s, 96 new things, longest gap 1.90 s, at most 5 things within 2 s, 14 lines |
+| `agent-lists.mjs --check` (third part of `npm run check`) | FAIL, expected: no **Copilot CLI.** and **OpenCode.** paragraphs in `README.md` (Part B step 5) |
+| typecheck, `check-art.mjs` | ok, ok (all 9,458,740 pixels), for each of the four runs |
+| `check-video --draft` and `check-video` | ok for each of the four (34.01 s, 8.45 MB final, 8.48 MB draft) |
+| Loudness after AAC, at most -1 dBTP | ok: -1.45, -1.82, -1.58, -2.27 dBTP; -15.23 to -15.27 LUFS; LRA 4.4 to 5.4 LU (round 6: 6.6) |
+| Music evenness (`make-sounds.mjs`) | ok: -0.5 to +0.4 LU outside the muffle for all four |
+| `check-rebuild --final` | ok for each of the four (14 outputs the same bytes). One earlier run of option 1 had its final differ once; its rerun passed and made the same final bytes; the pain rendered twice was equal in every pixel (`docs/research.md`) |
+| Frames looked at | the hook before (16 frames) and after (17, then 35 on the contact sheet), frames 300, 330, 480, 1019 |
+| ASCII, LF, no em dash | ok in every file edited |
+| `check-video` on the committed final | FAIL, expected: it is the round 6 final (30.02 s) until the pick's final goes in ("Found outside scope" 8) |
+
+#### Open items
+
+1. Haik's pick by ear; then the pick into the repo and its final into `media/out/` (above), and `CREDITS.md`'s line.
+2. Part B as before: the README paragraphs, the two-agent tooltip capture, the speed numbers on the new install.
+3. The rebuild mismatch seen once: not located. If it comes back, `candidate.sh` in the build folder keeps the copy
+   and names the first differing frames.
+
+### Part E (2026-11-06): Haik's notes on the Part D renders, steps 15 to 17
+
+Status of Part E: done. Haik picked the current track ("Funky Disco Beats", Fupi, CC0) and likes the video (about
+23:50); the 38 s final with it is in `media/out/`.
+
+#### The opening in five lines
+
+1. **0 to 3 s:** close on a terminal window (`claude` already run); a person types "migrate billing to API v2" into
+   the agent's input box, key by key, about 11 a second; only real keystrokes and a faint room and fan, no music.
+2. **3 to 6.5 s:** Enter; the agent mostly waits: a turning spinner, "Thinking" with a slow shimmer, its clock in real
+   time, then a time lapse into minutes; a tool line now and then.
+3. **6.5 to 9.5 s:** a cut to the laptop with the same screen; the idle timer dims it while the agent still thinks;
+   it sleeps: the screen goes dark, the power light breathes, "Sleeping", a soft power-down and the fan winding down.
+4. **10 to 12 s:** "Tired of sleepy laptops?" alone on the plain stage, near silence, a riser of air into the light.
+5. **12 s:** the light comes on and the music starts on its lift; the rest as signed off, 4 s later; 38 s in all.
+
+#### Decisions (principal designer)
+
+1. **A flat terminal seen close, then a cut to the laptop** (not a pull back from the laptop's tilted screen): the
+   typed prompt reads straight on at about 52 px. Change it when Haik wants one continuous move.
+2. **No words over the pain, only the question:** the prompt, the thinking line and the chip tell it, and big words
+   would cover the typing. Change it when a muted viewer misses the sleep: put "Laptop sleeping." back over the laptop.
+3. **The agent's clock as a time lapse** (real time 1.2 s, then 150 clock seconds a second: about 4 minutes at the
+   cut, 9 at the sleep) says "long task, nobody at the laptop" without words. Change it when it reads as fake: a time
+   cut instead.
+4. **Real CC0 keystrokes, not code-made:** no one could listen before the pick, and a recording is far likelier to
+   sound real. Change it when Haik's ear finds them too clicky: lower the high end or use another take set.
+5. **A very low room tone and fan under the opening:** the keys do not sit on digital silence, and the fan winding
+   down is the laptop's own sound of sleeping. Change it when they read as hiss: drop the room, keep the fan.
+6. **A 0.5 s riser into the light:** the music lands as a drop with the low hit. Change it when it feels like one
+   effect too many.
+7. **The prompt shortened** to "migrate billing to API v2" (was "... and run all tests"): 25 keys in 2.3 s. The lid
+   shot's laptop shows the same prompt.
+8. **Four tiles, not five:** both Copilots passed, so they share one "Copilot" tile (the rule approved in Part A);
+   the README and site lists name all five ("Found outside scope" 10).
+
+#### The render (Haik's pick)
+
+`C:\Users\haika\AppData\Local\Temp\claude\f7c2c08a8f04f07b\2a1d3942-3be1-4fdb-95cd-69265f507ad6\scratchpad\p6-agents-video-readme\candidates\wakeshot-promo-38s-0-funky-disco-beats.mp4`,
+the same bytes as `C:\Users\haika\code\wakeshot\media\out\wakeshot-promo.mp4` (sha256 `123d674c...`): 38.02 s,
+8,497,349 bytes (8.50 MB), -15.32 LUFS, -1.47 dBTP, LRA 16.2 LU (the quiet opening widens it; the music alone sits
+within -0.5 to +0.4 LU of its median from the light). Poster frame 420 in `media/out/` and the same folder. Also
+rendered, every check passing, not picked: options 1 and 2 (`...-38s-1-cant-stop-my-feet.mp4`, -1.84 dBTP;
+`...-38s-2-lost-in-the-rythm.mp4`, -1.60 dBTP). Option 3's run stopped at Haik's pick.
+
+Stills (final look): `C:\Users\haika\AppData\Local\Temp\claude\f7c2c08a8f04f07b\2a1d3942-3be1-4fdb-95cd-69265f507ad6\scratchpad\p6-agents-video-readme\stills-e\`:
+`00-opening-0-to-12.5s-every-quarter-second.png` (51 frames) and 12 full-size frames, `01-f000` to `12-f530` (the
+agents shot with the final list).
+
+#### Files changed
+
+`media/src/timeline.ts`, `media/src/copy.ts`, `media/src/agents.ts` (final v1 list), `media/src/promo/AgentTerminal.tsx`
+(new), `media/src/promo/Terminal.tsx` (`TitleBar` exported), `media/src/promo/LaptopTilt.tsx`, `media/src/promo/Promo.tsx`,
+`media/src/promo/world.ts`, `media/scripts/make-sounds.mjs`, `media/scripts/lib/fit-music.mjs`,
+`media/scripts/check-pace.mjs`, `media/scripts/check-video.mjs` (comment), `media/scripts/build.mjs` (poster 420),
+`media/public/keys/` (18 new WAVs, CC0), `media/CREDITS.md`, `media/README.md`, `media/out/wakeshot-promo.mp4` and
+`media/out/wakeshot-promo-poster.png` (the new final), `README.md` line 65 and `site/index.html` line 57 (the generated
+list only), `docs/research/promo-video.md`, `docs/research.md` (new section), this card. No git, no Rust, no screen.
+
+#### Checks (Part E)
+
+| Check | Outcome |
+|---|---|
+| `check.mjs` (dashes, emoji, credits, colours) | ok: 108 files, 49 assets credited, 18 colour pairs |
+| `check-pace.mjs` | ok: 47 starts on the beat, 12 framings of 2 to 4 s, 90 new things, longest gap 1.90 s, at most 5 within 2 s, 12 lines; the name at 12.5 s (rule now by 13 s); frame 0 opens on the terminal |
+| `agent-lists --check` | FAIL, expected: no **Copilot CLI.**, **Copilot in VS Code.**, **OpenCode.** paragraphs in `README.md` (Part B step 5) |
+| typecheck, `check-art.mjs` | ok, ok (every pixel), in each run |
+| `check-video --draft`, `check-video` | ok: 38.02 s, 8.50 MB final (9.10 MB draft), codecs, BT.709, loops, state icons |
+| Loudness after AAC, at most -1 dBTP | ok: -1.47 dBTP, -15.32 LUFS (options 1 and 2: -1.84, -1.60) |
+| Music evenness from the light | ok: -0.5 to +0.4 LU |
+| `check-rebuild --final` | ok on tracks 0, 1 and 2 (a clean copy gives every output the same bytes, the final and soundtrack included) |
+| Frames looked at | the contact sheet, 13 stills, 3 frames from the rendered MP4 |
+| ASCII, LF, no em dash | ok in every file edited |
+
+#### Open items
+
+1. Part B: the three README paragraphs, the two-agent tooltip capture, the speed numbers on the new install, then
+   the final render again with those numbers.
+2. Haik has heard the keys, the power down and the riser only in this render; levels were set by script.

@@ -6,17 +6,21 @@
 // - The effects and the music bed are made here from sine waves and seeded noise: no outside file, so no licence
 //   question and the same bytes on every run. The bed is a 120 BPM sequencer (kick, hats, bass, pluck, pad) in C
 //   major, because the chimes are C6 and G6.
+// - The keys of the opening are real keystrokes (`public/keys/`, CC0, `CREDITS.md`), one take per key, placed on
+//   the frames the letters appear; the room, the laptop's fan and its power going down are made here.
 // - The music: the track named in `data/music.json` (Haik's pick), fitted to the video on every build
 //   (`lib/fit-music.mjs`); the code bed when that file names none. `--music <file.wav>` puts a track already fitted
 //   by `scripts/music-candidate.mjs` in place of both; `--out <file.wav>` writes somewhere else.
-// The music ducks 4 dB under each chime; the mix is set to -15 LUFS integrated with its peaks held under -2.5 dBFS.
+// Before the light there is no music (Part E): only the keys, the room and the laptop going to sleep. Under each
+// chime the music gives way only in the chime's own band (a 6 dB bell cut around 1.5 kHz), so its level does not dip;
+// the mix is set to -15 LUFS integrated with its peaks held under -2.5 dBFS.
 import {mkdirSync, readFileSync} from 'node:fs';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {RATE, fade, limit, loudness, peakOf, readWav, rng, writeWav} from './lib/audio.mjs';
-import {fitTrack} from './lib/fit-music.mjs';
+import {RATE, fade, limit, loudness, peakOf, readWav, rng, shortTerm, svf, writeWav} from './lib/audio.mjs';
+import {decode, fitTrack} from './lib/fit-music.mjs';
 import {BAR, BEAT, FPS} from '../src/beat.ts';
-import {MUSIC, SOUNDS, VIDEO} from '../src/timeline.ts';
+import {END_CARD, MUSIC, SOUNDS, T, VIDEO} from '../src/timeline.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const media = join(here, '..');
@@ -37,7 +41,18 @@ const MIX_LUFS = -15;
 // Sample peaks at -2.5 dBFS keep the true peak (between samples, after AAC) under -1 dBTP with room to spare: at -1.5
 // it read -0.9, and at -2 the Part C cut read -1.01, so one more agent's tick could cross it.
 const CEILING = 10 ** (-2.5 / 20);
-const DUCK_DB = -4;
+/**
+ * Under a chime the music is cut by `db` in the chime's band only (C6 and G6 and their overtones, 1 to 3 kHz), the
+ * way a mixing engineer makes room for a voice: the chime reads clearly and the music keeps its level. Part D: the old
+ * 4 dB cut of the whole music under each chime was one of the dips Haik heard.
+ */
+const CHIME_ROOM = {db: -6, hz: 1500, q: 0.8};
+/**
+ * The music's short-term loudness (3 s) may sit at most this far from its median, under or over, from the light, where
+ * it starts, to the end card (Part D: no dips Haik can hear; a loud stretch makes the rest sound like a dip). The
+ * build stops past it.
+ */
+const MOST_DIP_LU = 2;
 
 // ---- Wakeshot's chimes, from chime.rs ----
 
@@ -224,7 +239,97 @@ const FX = {
   ],
   // The soft landing of a number.
   settle: [() => tone(0.3, () => 392, (t) => 0.35 * fade(t / 0.003) * Math.exp(-t * 16), [1, 0.35, 0.1]), 0],
+  // The room the laptop stands in: a soft, dark air under the opening, so the keys do not sound pasted on silence. It
+  // goes under the music in the light's first beat.
+  room: [
+    () => {
+      const len = secondsOf(MUSIC.full) + 0.5;
+      return noise(len, 47, 1100, 70, (t) => 0.02 * fade(t / 0.05) * fade((len - t) / 0.5));
+    },
+    0,
+  ],
+  // The laptop's fan: a low airy band with a faint hum in it, until the laptop sleeps; then it winds down over 1.6 s,
+  // the hum falling with it. Part of the laptop's sound of going to sleep, with `powerDown`.
+  fan: [
+    () => {
+      const sleep = secondsOf(T.hook.sleep);
+      const len = sleep + 1.8;
+      const spin = (t) => (t < sleep ? 1 : Math.max(0, 1 - fade((t - sleep) / 1.6)));
+      const air = noise(len, 53, 0, 160, (t) => 0.025 * fade(t / 0.05) * spin(t), (t) => 300 + 900 * spin(t));
+      const hum = tone(len, (t) => 118 + 2 * Math.sin(2 * Math.PI * 0.3 * t) - 70 * (1 - spin(t)), (t) => 0.006 * fade(t / 0.05) * spin(t), [1, 0.5]);
+      return add(air, hum);
+    },
+    0,
+  ],
+  // The screen going off and the laptop going to sleep: a soft tick (the backlight), a low glide falling two octaves
+  // and a breath of air falling with it. Made here; Windows itself plays nothing when it sleeps.
+  powerDown: [
+    () =>
+      add(
+        add(
+          noise(0.03, 59, 6000, 1500, (t) => 0.5 * Math.exp(-t * 260)),
+          tone(1.3, (t) => 220 * 2 ** (-2.2 * fade(t / 1.1)), (t) => 0.45 * fade(t / 0.012) * Math.exp(-t * 2.4), [1, 0.25, 0.08]),
+        ),
+        noise(1.1, 61, 0, 60, (t) => 0.3 * fade(t / 0.02) * Math.exp(-t * 3), (t) => 2400 * 2 ** (-3.5 * fade(t / 1.0)) + 150),
+      ),
+    0,
+  ],
+  // Air that rises over the beat before the light and stops on it, where the music and the low hit come in.
+  riser: [
+    () =>
+      noise(
+        0.5,
+        67,
+        0,
+        200,
+        (t) => 0.8 * (t / 0.5) ** 2 * fade((0.5 - t) / 0.006),
+        (t) => 400 + 9000 * (t / 0.5) ** 2,
+      ),
+    0.5,
+  ],
 };
+
+// ---- The keys: real keystrokes, CC0 ----
+
+/**
+ * Takes of single keystrokes from "Keyboard Soundpack #1" by unicaegames (OpenGameArt, CC0; a Cherry KC 1000, a
+ * low-profile office keyboard), each file unchanged in `public/keys/`. Picked by numbers, not by ear: the
+ * letters are mid-level takes with their key-up after them; the space bar the one deep take (a fifth of it under
+ * 300 Hz); Enter a firm take with more low end; shift a soft one with no key-up (it is held).
+ */
+const KEY_TAKES = {
+  key: [2, 3, 5, 7, 8, 11, 12, 14, 15, 24, 25, 26, 27, 29, 32],
+  keySpace: [20],
+  keyReturn: [28],
+  keyShift: [16],
+};
+/** Each take's peak is set to this, then each key varies by up to 1.5 dB either way, as real strokes do. */
+const KEY_PEAK = 0.22;
+
+const takeFile = (n) => join(media, 'public', 'keys', `keypress-${String(n).padStart(3, '0')}.wav`);
+const takes = new Map();
+/**
+ * One keystroke: its take decoded to 48 kHz, cut from 3 ms before the stroke (so the cue's frame is the stroke) with a
+ * 1 ms fade in, its top softened a little (heard from the seat, not from the close microphone), its peak set.
+ */
+function keystroke(sound, variant) {
+  const list = KEY_TAKES[sound];
+  const n = list[(variant * 7) % list.length];
+  if (!takes.has(n)) {
+    const [x] = decode(takeFile(n), null);
+    let peak = 0;
+    for (const v of x) peak = Math.max(peak, Math.abs(v));
+    const on = Math.max(0, x.findIndex((v) => Math.abs(v) > 0.1 * peak) - Math.round(0.003 * RATE));
+    const cut = x.subarray(on);
+    const {low} = svf(cut, () => 6500, 0.7);
+    const soft = cut.map((v, i) => (0.5 * v + 0.5 * low[i]) * fade(i / (0.001 * RATE)) * fade((cut.length - i) / (0.02 * RATE)));
+    let top = 0;
+    for (const v of soft) top = Math.max(top, Math.abs(v));
+    takes.set(n, soft.map((v) => (v * KEY_PEAK) / top));
+  }
+  const vary = 10 ** ((1.5 * (2 * rng(1000 + variant)() - 1)) / 20);
+  return takes.get(n).map((v) => v * vary);
+}
 
 // ---- The 120 BPM sequencer: the music bed ----
 
@@ -239,11 +344,10 @@ const CHORD = {
 const BARS = ['C', 'C', 'C', 'Am', 'F', 'F', 'Am', 'G', 'F', 'C', 'Am', 'F', 'G', 'C', 'C'];
 const chordAt = (t) => CHORD[BARS[Math.min(BARS.length - 1, Math.floor(t / BAR_SECONDS))]];
 
-/** How much of each part plays at second `t`: the storyboard's shape (`MUSIC` in timeline.ts). */
+/** How much of each part plays at second `t`: the storyboard's shape (`MUSIC` in timeline.ts); nothing before the light. */
 function partsAt(t) {
   const s = secondsOf;
-  if (t < s(MUSIC.sparseTo)) return {kick: 0, hat: 0.5, bass: 0, pluck: 0, pad: 0.7, open: 0};
-  if (t < s(MUSIC.full)) return {kick: 0, hat: 0, bass: 0, pluck: 0, pad: 0.7, open: 0};
+  if (t < s(MUSIC.full)) return {kick: 0, hat: 0, bass: 0, pluck: 0, pad: 0, open: 0};
   if (t < s(MUSIC.thin[0])) return {kick: 1, hat: 1, bass: 1, pluck: 1, pad: 1, open: 0};
   if (t < s(MUSIC.thin[1])) return {kick: 0, hat: 0, bass: 0.7, pluck: 0.5, pad: 1, open: 0};
   if (t < s(MUSIC.lift)) return {kick: 0.8, hat: 0.7, bass: 1, pluck: 1, pad: 1, open: 0};
@@ -264,14 +368,13 @@ function codeBed() {
   };
   const kick = tone(0.35, (t) => 45 + 75 * Math.exp(-t * 28), (t) => fade(t / 0.002) * Math.exp(-t * 9), [1, 0.15]);
   const hat = (seed, open) => noise(open ? 0.14 : 0.04, seed, 14000, 6000, (t) => fade(t / 0.001) * Math.exp(-t * (open ? 28 : 110)));
-  const silentFrom = secondsOf(MUSIC.silentFrom);
   const full = secondsOf(MUSIC.full);
   const resolve = secondsOf(MUSIC.resolve);
   const eighth = BEAT_SECONDS / 2;
   // Drums, bass and plucks on the eighth-note grid.
   for (let k = 0; k * eighth < resolve; k++) {
     const t = k * eighth;
-    if (t >= silentFrom && t < full) continue;
+    if (t < full) continue;
     const p = partsAt(t);
     const c = chordAt(t);
     const onBeat = k % 2 === 0;
@@ -297,8 +400,7 @@ function codeBed() {
     L[i] += 0.22 * R[i - dl];
     R[i] += 0.22 * L[i - dl];
   }
-  // The pad: two detuned voices per note, a slow swell per chord. In the hook it falls an octave to a low hum.
-  const fallFrom = secondsOf(MUSIC.sparseTo);
+  // The pad: two detuned voices per note, a slow swell per chord, from the light on.
   // Bars of one chord in a row are one held chord; the resolve starts a chord of its own.
   const held = [];
   for (let b = 0; b * BAR_SECONDS < TOTAL; b++) {
@@ -323,14 +425,13 @@ function codeBed() {
         for (let i = 0; i < n && first + i < LENGTH; i++) {
           const t = start + i / RATE;
           const u = i / RATE;
-          if (t >= silentFrom && t < full) continue;
-          const falling = t >= fallFrom && t < full ? (t - fallFrom) / (silentFrom - fallFrom) : 0;
-          const hz = midi(m) * 2 ** (cents / 1200) * 2 ** (-falling);
+          if (t < full) continue;
+          const hz = midi(m) * 2 ** (cents / 1200);
           phase += (2 * Math.PI * hz) / RATE;
           const level = partsAt(t).pad || (last ? 1 : 0);
           // The last chord rings out over the end card and is gone by the end.
           const ring = last ? Math.exp(-u * 0.9) * fade((TOTAL - t) / 0.6) : 1;
-          const env = fade(u / (last ? 0.02 : 0.6)) * (u < span ? 1 : fade(1 - (u - span) / 1.0)) * ring * (1 - 0.6 * Math.min(1, falling));
+          const env = fade(u / (last ? 0.02 : 0.6)) * (u < span ? 1 : fade(1 - (u - span) / 1.0)) * ring;
           const s = (Math.sin(phase) + 0.2 * Math.sin(2 * phase)) * env * level * 0.045;
           L[first + i] += s * Math.sqrt(1 - pan);
           R[first + i] += s * Math.sqrt(pan);
@@ -374,13 +475,15 @@ const chimes = readChimes();
 const rendered = {lidChime: renderChime(chimes.lidChime), sleepChime: renderChime(chimes.sleepChime)};
 const fxL = new Float64Array(LENGTH);
 const fxR = new Float64Array(LENGTH);
-const duck = new Float64Array(LENGTH).fill(1);
+// How deep the chime band is cut at each sample, 0 to 1 of `CHIME_ROOM.db`.
+const room = new Float64Array(LENGTH);
 const made = {};
 for (const cue of SOUNDS) {
   const chime = cue.sound === 'lidChime' || cue.sound === 'sleepChime';
   let samples;
   let lead = 0;
   if (chime) samples = rendered[cue.sound];
+  else if (cue.sound in KEY_TAKES) samples = keystroke(cue.sound, cue.variant ?? 0);
   else {
     made[cue.sound] ??= FX[cue.sound][0]();
     samples = made[cue.sound];
@@ -395,22 +498,44 @@ for (const cue of SOUNDS) {
     fxR[first + i] += samples[i] * gain * Math.sqrt(pan) * Math.SQRT2;
   }
   if (chime) {
-    // The music dips 4 dB while the chime sounds, easing in over 0.1 s and out over 0.3 s.
-    const depth = 1 - 10 ** (DUCK_DB / 20);
+    // The band is cut while the chime sounds, easing in over 0.1 s and out over 0.3 s.
     const len = samples.length / RATE;
     for (let i = Math.max(0, first - 0.1 * RATE); i < Math.min(LENGTH, first + (len + 0.3) * RATE); i++) {
       const t = (i - first) / RATE;
-      const d = t < 0 ? fade(1 + t / 0.1) : t < len ? 1 : fade(1 - (t - len) / 0.3);
-      duck[i] = Math.min(duck[i], 1 - depth * d);
+      room[i] = Math.max(room[i], t < 0 ? fade(1 + t / 0.1) : t < len ? 1 : fade(1 - (t - len) / 0.3));
     }
   }
+}
+
+// The music with room made for the chimes: a bell cut, the signal plus (G - 1) times its unity-peak band.
+const cut = 10 ** (CHIME_ROOM.db / 20) - 1;
+const music = [mL, mR].map((x) => {
+  const {band} = svf(x, () => CHIME_ROOM.hz, CHIME_ROOM.q);
+  return x.map((v, i) => (v + cut * room[i] * band[i]) * musicGain);
+});
+
+// Evenness: the music alone, moment to moment, from the light, where it starts, to the end card: only windows wholly
+// inside that stretch. Found tracks only: the code bed is the fallback.
+const st = shortTerm(music[0], music[1]).filter((w) => w.t - 1.5 >= MUSIC.full / VIDEO.fps && w.t + 1.5 <= END_CARD / VIDEO.fps);
+if (process.env.SOUND_DEBUG) console.log(st.map((w) => `${w.t.toFixed(1)}:${w.lufs.toFixed(1)}`).join(' '));
+const sorted = st.map((w) => w.lufs).sort((a, b) => a - b);
+const median = sorted[Math.floor(sorted.length / 2)];
+const lowest = st.reduce((m, w) => (w.lufs < m.lufs ? w : m), {t: 0, lufs: Infinity});
+const highest = st.reduce((m, w) => (w.lufs > m.lufs ? w : m), {t: 0, lufs: -Infinity});
+const even =
+  `music ${median.toFixed(1)} LUFS (3 s median) from the light; ${(lowest.lufs - median).toFixed(1)} LU at ${lowest.t.toFixed(1)} s ` +
+  `to +${(highest.lufs - median).toFixed(1)} LU at ${highest.t.toFixed(1)} s`;
+const uneven = median - lowest.lufs > MOST_DIP_LU || highest.lufs - median > MOST_DIP_LU;
+if (musicName !== 'code bed' && uneven) {
+  console.error(`the music is uneven: ${even}; at most ${MOST_DIP_LU} LU either way`);
+  if (!process.env.SOUND_ALLOW_DIP) process.exit(1);
 }
 
 const L = new Float64Array(LENGTH);
 const R = new Float64Array(LENGTH);
 for (let i = 0; i < LENGTH; i++) {
-  L[i] = mL[i] * musicGain * duck[i] + fxL[i];
-  R[i] = mR[i] * musicGain * duck[i] + fxR[i];
+  L[i] = music[0][i] + fxL[i];
+  R[i] = music[1][i] + fxR[i];
 }
 const before = loudness(L, R);
 const gain = 10 ** ((MIX_LUFS - before) / 20);
@@ -432,5 +557,5 @@ mkdirSync(dirname(out), {recursive: true});
 writeWav(out, L, R);
 console.log(
   `wrote ${out}: ${TOTAL.toFixed(2)} s, music ${musicName}, ` +
-    `${loudness(L, R).toFixed(1)} LUFS, peak ${(20 * Math.log10(peakOf(L, R))).toFixed(1)} dBFS, limiter ${pulled.toFixed(1)} dB`,
+    `${loudness(L, R).toFixed(1)} LUFS, peak ${(20 * Math.log10(peakOf(L, R))).toFixed(1)} dBFS, limiter ${pulled.toFixed(1)} dB; ${even}`,
 );

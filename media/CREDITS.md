@@ -39,11 +39,13 @@ screenshots: not checked.
 | File | Source | Licence |
 |---|---|---|
 | `public/music/funky-disco-beats.ogg` | "Funky Disco Beats to Boogie/Woogie to" by Fupi, from https://opengameart.org/content/funky-disco-beats-to-boogiewoogie-to (file `funkydiscobeatstoboogieslashwoogieto_0.ogg`, 133.1 s, Vorbis 160 kbit/s, 44.1 kHz stereo, SHA-256 `89f796ee542f3cfd0fa587a07b4c5bc8856c076e6c836c44b95a78176f9eded6`), unchanged. Haik's pick of 2026-11-06 from four new CC0 options (`docs/tasks/p6-media.md`, round 5). `make-sounds.mjs` fits it to the video on every build with the numbers in `data/music.json` (110.25 BPM conformed to 120, its lift at 45.75 s on the light) | CC0: the page's License(s) block reads "CC0" and lists no other licence; the author writes "Just got in the mood to make a funky disco loop so here it is!!" (read 2026-11-06, for the options and again for the final) |
-| `public/sound/soundtrack.wav` | Made by `scripts/make-sounds.mjs`: the music above fitted to the video, the effects from sine waves and seeded noise, Wakeshot's own two chimes rendered from the numbers in `crates/wakeshot-windows/src/sound/chime.rs`. Not kept in git; every build makes it again | MIT, ours, over the CC0 music |
+| `public/sound/soundtrack.wav` | Made by `scripts/make-sounds.mjs`: the music above fitted to the video, the effects from sine waves and seeded noise, Wakeshot's own two chimes rendered from the numbers in `crates/wakeshot-windows/src/sound/chime.rs`. Not kept in git; every build makes it again | MIT, ours, over the CC0 music and keys |
+| `public/keys/keypress-002.wav`, `public/keys/keypress-003.wav`, `public/keys/keypress-005.wav`, `public/keys/keypress-007.wav`, `public/keys/keypress-008.wav`, `public/keys/keypress-011.wav`, `public/keys/keypress-012.wav`, `public/keys/keypress-014.wav`, `public/keys/keypress-015.wav`, `public/keys/keypress-016.wav`, `public/keys/keypress-020.wav`, `public/keys/keypress-024.wav`, `public/keys/keypress-025.wav`, `public/keys/keypress-026.wav`, `public/keys/keypress-027.wav`, `public/keys/keypress-028.wav`, `public/keys/keypress-029.wav`, `public/keys/keypress-032.wav` | Single keystrokes from "Keyboard Soundpack #1 [Typing and Single Keystrokes]" by unicaegames, https://opengameart.org/content/keyboard-soundpack-1-typing-and-single-keystrokes (zip `unicae_games_keyboard_soundpack_1_0.zip`, 8,515,609 bytes, SHA-256 `935eae2fa5c3742eacdd38c4ea0e9047f3887faa0701996498492c256db1b351`; its folder `Single Keys`), unchanged: 18 of its 32 takes, each 0.25 s, 16-bit 44.1 kHz mono. A Cherry KC 1000 (a low-profile office keyboard), recorded with a Shure SM7B, cleaned by the author with iZotope Neutron 2 (the page and its `readme.txt`). `make-sounds.mjs` places one take per typed key in the opening (Part E of `p6-agents-video-readme`): the letters, the space bar (020), Enter (028) and shift (016), picked by numbers, not by ear | CC0: the page says "License(s): CC0" and "Free to use however you like." (read 2026-11-06) |
 
 The code bed (a 120 BPM sequencer in `make-sounds.mjs`) is the fallback when `data/music.json` names no file. The
-launch research picked Kenney (CC0) effects; the code effects are used instead, so there is no third-party effect
-file. The earlier pick, "A Chill Fever (Loopable)" by Pro Sensory (CC0, https://opengameart.org/content/a-chill-fever-loopable),
+launch research picked Kenney (CC0) effects; the code effects are used instead, so the keys above are the only
+third-party effect files. The room, the laptop's fan, its power going down and the riser into the light are made in
+code too. The earlier pick, "A Chill Fever (Loopable)" by Pro Sensory (CC0, https://opengameart.org/content/a-chill-fever-loopable),
 was the music from 2026-11-05 until it was replaced on 2026-11-06; its file is no longer in the repo. The other
 candidates and options were not used and are not in the repo. The tempo was found by the script's autocorrelation, and
 for this track by its low and high bands apart, not checked by ear.
@@ -66,8 +68,8 @@ pictures and video; the font files are not shipped in any output, only drawn int
 |---|---|---|
 | `out/icon-loop-light.gif` | `src/loop/IconLoop.tsx` and the tray glyph, the held light (`src/art/`), written by `scripts/lib/gif.mjs` | MIT, ours |
 | `out/icon-loop-dark.gif` | Same | MIT, ours |
-| `out/wakeshot-promo.mp4` | `src/promo/`, the pictures, the sound and the fonts above, the speed numbers of `data/speed.json` | MIT, ours, over the CC0 music and the OFL fonts |
-| `out/wakeshot-promo-poster.png` | A still of the video (frame 120) | MIT, ours |
+| `out/wakeshot-promo.mp4` | `src/promo/`, the pictures, the sound and the fonts above, the speed numbers of `data/speed.json` | MIT, ours, over the CC0 music and keys and the OFL fonts |
+| `out/wakeshot-promo-poster.png` | A still of the video (frame 420) | MIT, ours |
 | `out/state-holding-light.png` | The tray glyph, holding, for the light taskbar: `tray_mask` at 32 px from the art port (`src/art/heldLight.ts`), written by `npm run states` | MIT, ours |
 | `out/state-holding-dark.png` | Same, for the dark taskbar | MIT, ours |
 | `out/state-idle-light.png` | Same, idle, light taskbar | MIT, ours |

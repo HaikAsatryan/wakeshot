@@ -4,9 +4,7 @@
 
 export const COPY = {
   name: 'Wakeshot',
-  /** The pain: the laptop sleeps under an agent at work. Only "working" takes the green, which means awake. */
-  hook: ['Agent *working*.', 'Laptop sleeping.'],
-  /** Haik's line, 2026-11-06. */
+  /** Haik's line, 2026-11-06. Since Part E the only words over the pain: the terminal and the chip tell the rest. */
   question: 'Tired of sleepy laptops?',
   tagline: 'keeps it *awake* while agents work.',
   /**
@@ -20,13 +18,11 @@ export const COPY = {
    * tile's name; an agent with no line here gets `taskFallback`, so the list can grow with no new copy.
    */
   tasks: {
-    Antigravity: 'run the e2e tests',
     'Claude Code': 'fix the failing tests',
     'Codex CLI': 'refactor the auth flow',
     Copilot: 'write the API docs',
     'Copilot CLI': 'write the API docs',
     'Copilot in VS Code': 'write the API docs',
-    Cursor: 'build the settings page',
     OpenCode: 'migrate the database',
   } as Record<string, string>,
   taskFallback: 'work on a long task',
@@ -57,7 +53,12 @@ export const COPY = {
     title: 'Terminal',
     path: 'PS C:\\code\\shop>',
     command: 'claude',
-    prompt: 'migrate billing to API v2 and run all tests',
+    /** Typed key by key in the pain (`KEYS` in timeline.ts has one gap per key: change both together). */
+    prompt: 'migrate billing to API v2',
+    /** The pain's waiting line, under a turning spinner, with the agent's clock after it. */
+    thinking: 'Thinking',
+    /** The pain's tool lines, now and then while the agent thinks: indexes into `lines`. */
+    now: [0, 2, 4, 5],
     /** The tray shot's shorter task: its terminal shows the prompt and one status line, large enough to read. */
     trayPrompt: 'fix the failing tests',
     working: 'Working',
