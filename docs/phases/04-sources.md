@@ -119,6 +119,9 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-opencode-source` | no | Part B after `p4-contracts-r2` | Part A done 2026-11-06 (`research/opencode-signals.md`); Part B (2.x only: 1.x needs the `message` table, outside Haik's yes) running (2026-11-06 ~16:25) |
 | `p4-vscode-source` | no | `p4-contracts-r2` | running (2026-11-06 ~16:25) |
 | `p4-contracts-r3` | no | `p4-contracts-r2`, the hooks security review and its fixes; runs alone among Rust cards | ready once the review fixes pass; starts when the running Rust cards drain |
+| `p4-cursor-source` | only if the editor puts the payload on the command line (design Question 4) | `p4-contracts-r3`, the hooks review verify | card written 2026-11-06 |
+| `p4-agent-hooks-install` | no | `p4-contracts-r3`, the hooks review verify | card written 2026-11-06 |
+| `p4-antigravity-source` | only if its payload is on the command line | `p4-cursor-source`, `p4-agent-hooks-install` | card written 2026-11-06 |
 | `p4-cursor-gemini-research` | no | none | done 2026-11-06 (`research/cursor-gemini-signals.md`): Cursor big, Gemini CLI enterprise only since 2026-06-18; hooks question for Haik |
 | `p4-watch-data` | no | `p4-hold-files`, `p4-watch-reads` | done (21:12): 19 tests |
 | `p4-watch-agents` | no | `p4-watch-reads` | done (22:43): 19 tests; API changes for `p4-watch-thread` in its Result |
@@ -338,3 +341,11 @@ limit; Copilot waiting does not hold. The cards build these.
   command-line form would put prompts in audit logs). The design worker fixes them; the same reviewer checks the
   majors; M3's check becomes the first step of `p4-cursor-source`, and Haik decides if the editor uses the command
   line.
+- 2026-11-06 ~16:40: `p4-contracts-r2` committed (24f7405); `p4-opencode-source` Part B and `p4-vscode-source`
+  running. The design worker fixed all 13 review findings but minor 13 (two lines in files it does not own:
+  `product.md` "nothing that touches other apps" and the stale `research/cursor-gemini-signals.md`; both go to the
+  README and docs card later). The design now has six contract items (`p4-contracts-r3` reads them from the design).
+  The same reviewer checks the three majors (`docs/reviews/p4-hooks-design-security-verify.md`). Design question 5
+  (a time cap on a hooked turn): orchestrator decision, no cap, by the product rule that every signal is checked
+  against a fact, for Haik's review. Question 4 (if the Cursor editor puts prompts on the command line, does the
+  editor hook ship; default no) goes to Haik only if `p4-cursor-source`'s first step finds that.
