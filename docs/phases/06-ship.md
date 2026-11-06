@@ -670,3 +670,9 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   polished opening sleep scene (past 30 s is fine), a clean frame behind "Tired of sleepy laptops?", no music dips,
   and 3 new tracks of the same funky disco type with a bit more bass to pick from. Part D runs now: the new cut
   rendered once per track, for his pick in context.
+- 2026-11-06 21:53: `p6-agents-video-readme` Part D done: an 8 s opening (the agent at work, the screen dims and turns
+  off, the question alone on a clean stage), the video now 34 s; the music at one level (no ducks under the chimes, a
+  muffle while the laptop sleeps). Four renders, one per track, all CC0 and every check passing: 0 Funky Disco Beats
+  (current), 1 Can't Stop My Feet (Loyalty Freak Music; its page says "Instrumental: No"), 2 Lost in the Rythm
+  (HoliznaCC0), 3 Funked Up (Joth). Sent to Haik for his pick. Not committed until the pick (the candidate track
+  files). Open: one clean rebuild differed once and was not reproduced.
