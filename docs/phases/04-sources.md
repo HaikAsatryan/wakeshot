@@ -538,7 +538,7 @@ limit; Copilot waiting does not hold. The cards build these.
   button is exact (`stop` "aborted", hold ends about 1.4 s later); a window close ends the found process in 20 ms; the
   Cursor CLI fires only `sessionEnd`, so it is not covered in v1 (editor only). VS Code: Stop, approve and deny exact
   for both chat kinds (Local chats up to a minute late, at their 60 s save); no fix needed so far.
-- 2026-11-06 20:41: `p4-live-cursor` done (three rounds with Haik). One fix (Ctrl+F4 fired `sessionEnd` and the old
+- 2026-11-06 20:38: `p4-live-cursor` done (three rounds with Haik). One fix (Ctrl+F4 fired `sessionEnd` and the old
   rule ended the hold 50 s early). Not tested: a chat deleted while it runs (the code suggests no `stop` would come,
   a blocker under "No guessing" if so); it is step 5 of the Cursor steps in `p6-agents-install-e2e` Part 2. Four
   Cursor project folders from the test windows are left in Haik's profile (his to delete). `p4-antigravity-exact-end`
