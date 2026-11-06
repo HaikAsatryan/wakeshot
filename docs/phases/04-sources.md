@@ -125,7 +125,7 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-live-vscode` | no | `p4-vscode-source`, `p4-live-harness`; live cards in parallel since 18:50 | done, partly (2026-11-06 ~21:05, 857909e): 5 prompts; new chats go to the Copilot harness (the Copilot source holds them since 00e0120); Local chat files save on a 60 s beat (first save 44 s after a send, 34 s after an end), waiting posted 25 ms after the save; approve, stop and crash not tested (they need a click) |
 | `p4-live-opencode` | no | `p4-opencode-source`, the OpenCode review fixes; live cards in parallel since 18:50 | done (2026-11-06 ~22:20, b27d82a): working 0.07 to 1.9 s after a turn starts, idle 0.85 to 2 s after it ends (a 2 s poll of the 48-byte `-shm` header); schedules held and fired; crash `Gone` in 66 ms; leftover rows do not hold; three fixes |
 | `p4-live-cursor` | yes: about 5 minutes (`agent login`; four short prompts typed in its test window; steps in the card) | `p4-antigravity-source`; fixes the hooks code review first | blocked (2026-11-06 ~21:55, de156d5): review fixes done (M1 and six minors, 8.3 path for Antigravity); the plugin added at Medium; live steps wait for Haik |
-| `p4-live-antigravity` | no | `p4-antigravity-source`; beside `p4-live-cursor` | running (2026-11-06 ~21:35) |
+| `p4-live-antigravity` | IDE only: the first-run "Get Started" pass (steps in the card's Result, Open items 1) | `p4-antigravity-source`; beside `p4-live-cursor` | CLI done (2026-11-06 ~22:30, 67a542f): 11 prompts; hold 0.03 to 0.1 s after Enter, ends at Stop or exit; approval wait holds; Esc runs no Stop; IDE blocked on Haik |
 | `p4-core-linux-tests` | no | none | done (2026-11-06 ~20:10, 750b023): Codex and OpenCode tests join one level at a time; CI core step runs `--no-fail-fast`; three VS Code tests sent to `p4-live-vscode`; no Linux run here (rustup in WSL refused by the permission check; no C compiler there) |
 | `p4-live-uninstall` | no | every other card of the bigger v1 (only when the work is fully finalized) | later (Haik, 2026-11-06 ~21:20) |
 | `p4-cursor-gemini-research` | no | none | done 2026-11-06 (`research/cursor-gemini-signals.md`): Cursor big, Gemini CLI enterprise only since 2026-06-18; hooks question for Haik |
@@ -502,3 +502,9 @@ limit; Copilot waiting does not hold. The cards build these.
   `p4-agent-hooks-install`'s staging and removed folders moved outside the plugins folder (587f788, by
   `p4-live-cursor`). Running: `p4-live-antigravity` only. Waiting on Haik: `p4-live-cursor` steps, the Antigravity
   IDE first-run screen.
+- 2026-11-06 ~22:30: `p4-live-antigravity` CLI done (67a542f): stdin every run (wakeshot.exe under cmd under agy;
+  PreInvocation costs a median 42 ms for cmd); the hold starts 0.03 to 0.1 s after Enter, ends at Stop, `/exit` or a
+  kill (by liveness); a 60 s approval wait holds. Esc runs no Stop, so the state stays working until the next prompt
+  ends or agy exits. The plugin folder was removed by `hook antigravity remove`; the backup matches. Questions for Haik
+  from the card: the Esc hold with no cap, and the background-command gap for v1. No agent runs now. Session
+  wakeshot-56 hands over to wakeshot-f5 (Haik's idle session) with a continuation prompt.
