@@ -517,3 +517,13 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
   Orchestrator decision, for Haik's review: the headline memory number is the private memory (4.3 MB; Task Manager's
   Memory column read 3.4 MB), not the working set (17.1 MB, counts shared Windows files). Started: `p6-media` round 4
   (the final video), `p6-readme` round 4 (his story, media, numbers, site copy in line) and the new `p6-repo-files`.
+- 2026-11-06 04:35: done and committed: `p6-readme` round 4 (da11c61: "Why I built it" and "What comes next" from
+  Haik's words, every rival claim checked; his "no time left, can't refresh" left out because current Awake shows the
+  time left and restarts a re-picked time, for his review), `p6-repo-files` (4be7fa8), `p6-media` round 4 (7204499:
+  the final video, 7.10 MB, every check passing, same bytes on rebuild; the closed-lid shot ends "Later, it sleeps as
+  usual." with no countdown). The README state table got the six state icons the media worker exported (orchestrator
+  edit). The product name Haik keeps out of the repo was in four lines (plan Status 2026-11-05 ~02:30, two cards):
+  reworded; older commits keep it until the Phase 8 squash. Haik's install updated to 7204499 (adds the high
+  contrast menu fix): tray quit by `WM_CLOSE` (settings restored, code 0), `Setup.exe --silent` at Medium through
+  Explorer (exit 0, exe hash equals the build, `config.json` kept), tray started through Explorer. Final review of
+  the video running (`docs/reviews/p6-media-final.md`); the MP4 and poster are committed after its fixes.
