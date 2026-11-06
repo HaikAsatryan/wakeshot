@@ -30,9 +30,10 @@ kept.
 
 1. **First, before any code: the editor's payload form** (review major 3, design live test 0). Read the Cursor
    editor's hook spawn code (the current Windows build, as data) and write down how the payload reaches the hook:
-   stdin, a temp file, or the command line. If it is the command line, stop the editor part, write it under
-   "Questions for Haik" (design Question 4, default: the editor hook does not ship), tell the orchestrator, and go on
-   with the CLI part and the shared code only.
+   stdin, a temp file, or the command line. The editor and the CLI load one plugin folder, and the transport is a
+   runtime option in Cursor's code (verify review), so follow the design's privacy Gate as it reads after the verify:
+   if the editor can use the command line, Wakeshot adds no Cursor plugin at all. Then write it under "Questions for
+   Haik" (design Question 4), tell the orchestrator, and go on with the shared code only.
 2. `crates/wakeshot-core/src/sources/hooked.rs`: the state file format, the id rule, the event rules, the parent walk
    over a process list, as the design says.
 3. `crates/wakeshot-core/src/sources/cursor.rs`: Cursor's event table, the `AgentSource`, fixed labels.
