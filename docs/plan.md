@@ -304,6 +304,12 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   Gemini and hooks. Haik: "You can do anything": workers may install agents and Ollama for his user, the orchestrator
   decides what is easy to undo and logs it for his review, computer use where a command line cannot drive an app,
   hooks as in `product.md`. He gets the Codex subscription himself.
-- Next (orchestrator): the continuation prompt of 2026-11-06 (Phase 6 work log, last lines): one contracts card run
-  alone; then the OpenCode, VS Code, Cursor and Antigravity builds in parallel; live tests run by agents, one at a
-  time; README and site; then the video, upload, Pages, Phase 7 field test, Phase 8 cleanup.
+- 2026-11-06 ~18:55 (orchestrator after a /clear): done and committed: `p4-contracts-r2`, `p4-antigravity-research`
+  (hooks only, free test), `p4-hooks-design` (`docs/agent-hooks.md`) with a security review and verify (0 blockers;
+  3 majors fixed), `p4-live-harness` (every agent installed for Haik's user, ConPTY driver; Haik did the Cursor and
+  Antigravity sign-in), `p4-vscode-source`, `p4-opencode-source` Part B (2.x only) with its review (1 major, moved to
+  `p4-contracts-r3`) and minor fixes, `p4-live-codex` (passed; Codex in the tray). Running: `p4-contracts-r3` (alone),
+  `p6-agents-video-readme` Part A (Haik's request: video and README for every AI agent). Not pushed since 8c2637a.
+- Next (orchestrator): the order in the `04-sources.md` work log, 2026-11-06 ~18:50 line (live cards in parallel).
+  Then whole-workspace checks, push, a fresh install over Haik's, an end-to-end check per agent, the hooks install
+  review result, `p6-agents-video-readme` Part B; then ask Haik about the video, upload, Pages, Phase 7, Phase 8.
