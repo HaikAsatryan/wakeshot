@@ -1,8 +1,7 @@
 # OpenCode source
 
-Phase: 4. Status: blocked (new 2026-11-06, Haik: OpenCode ships in v1). Part A done 2026-11-06. Part B needs Haik's
-answer to "Questions for Haik" 1, then runs after `p4-codex-source` and `p4-copilot-source` are done (the orchestrator
-says go). Needs Haik: yes, question 1 (a live card follows).
+Phase: 4. Status: Part B ready once `p4-contracts-r2` is done (new 2026-11-06, Haik: OpenCode ships in v1). Part A
+done 2026-11-06; Haik answered question 1 (below). Needs Haik: no (a live card follows).
 Agent: `wakeshot-worker`. Size: about 150K tokens.
 Runs after: nothing for Part A. Parallel with: `p4-codex-source`, `p4-copilot-source`, the research cards.
 Build folder: `<scratchpad>\p4-opencode-source\` (`target\` for cargo in Part B; downloaded source as data only).
@@ -37,7 +36,34 @@ OpenCode sessions on Windows, from OpenCode's own files, never its secrets.
 
 ## Part B: build (after the orchestrator's go)
 
-Written from Part A's Result by the orchestrator.
+Written by the orchestrator, 2026-11-06, from Part A's Result and Haik's answers. Build the design in the Result,
+2.x only, with these changes:
+
+1. **Contracts first.** Read `docs/tasks/p4-contracts-r2.md` Result: it added `SourceId::OpenCode`, the stub
+   `sources/opencode.rs`, `WantedFile::Query`, `Liveness::ImageSince`, the watch thread plumbing and the stub
+   `crates/wakeshot-windows/src/sqlite.rs`. Where its shapes differ from this card's design, its shapes win. You
+   change no contract, no module list and no `Cargo` file; if you need one, stop and ask the orchestrator.
+2. **2.x only.** The 1.x query needs the `message` table, whose rows hold prompt text; Haik's yes covers "only the
+   session and schedule tables". So no `v1` query, no `message` or `session` table in any SQL. The `tables` probe asks
+   for `session_v2` and `schedule` only. If 1.x looks cheap once 2.x works, write it as a question for Haik with your
+   default; build nothing for it.
+3. **The table test Haik asked for**: one test lists every SQL string the source can emit and checks that the only
+   tables named are `sqlite_master`, `session_v2` and `schedule` (a plain token scan of `FROM` and `JOIN` targets is
+   enough; say how you checked it catches a new table by breaking it once). A second test shows nothing read from the
+   database reaches the log: no row value, no SQLite error text.
+4. **`sqlite.rs`**: fill the stub with the `winsqlite3.dll` loader from the design, with its Windows tests on a temp
+   WAL database the test writes itself. It must never open the file for writing, never create `-wal` or `-shm` files,
+   and never block a writer (the checkpoint test).
+5. Registering the source in the tray and the harness is the live card's work, not this card's.
+
+Owns: `crates/wakeshot-core/src/sources/opencode.rs`, `crates/wakeshot-core/tests/opencode_source.rs`,
+`crates/wakeshot-core/tests/fixtures/opencode/`, `crates/wakeshot-windows/src/sqlite.rs` and its tests,
+`docs/research/opencode-signals.md` (a "Built" note), lines in `docs/architecture.md` sections 7 and 11 (re-read
+right before each edit; other source cards add lines at the same time).
+Checks while other cards run: `cargo fmt` on your own files, `cargo clippy -p wakeshot-core -p wakeshot-windows
+--all-targets --locked -- -D warnings` and the same without `--all-targets`, `cargo test -p wakeshot-core -p
+wakeshot-windows --locked`, on your own `CARGO_TARGET_DIR` (`<scratchpad>\p4-opencode-source\target`, deleted when
+done). A failure in another card's file is reported, never fixed. The orchestrator runs the whole-workspace checks.
 
 ## Rules
 

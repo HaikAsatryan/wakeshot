@@ -602,3 +602,4 @@ INSERT INTO schedule VALUES ('sch_1', 'active', 1793703600000);
 - Cursor: which hooks the CLI fires; when transcripts are written.
 - Not researched: Antigravity CLI (likely more users than Gemini CLI now), OpenCode 1.x storage, Amp local state,
   Kiro CLI on Windows.
+- Antigravity CLI and IDE, researched 2026-11-06: `antigravity-signals.md` (hooks from a plugin folder; Free plan).
