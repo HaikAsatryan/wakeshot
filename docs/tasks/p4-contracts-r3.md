@@ -45,6 +45,9 @@ first version; where it differs, the design wins:
    A test that fails before the fix (the reviewer's probe scripts are in
    `<scratchpad>\p4-opencode-review\scripts\`, data only).
 
+7. `docs/architecture.md` section 7: the Codex "can outlive its session" mark now applies only to the fallback when
+   Restart Manager fails (`docs/tasks/p4-live-codex.md` Result, Restart Manager named the session's own `codex.exe`).
+
 Tests for each new piece that has behavior (the parse, the stub command's output and exit code, the parent field,
 the core's answer to `HooksAdded`). `docs/architecture.md`: lines in sections 6 and 12 for what you added (re-read
 right before each edit).

@@ -40,9 +40,9 @@ Values this plan sets, each with why. Haik signed them off with the plan (2026-1
 Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2026-11-03 they had moved to after v1).
 
 7. **Codex and Copilot: the lock file ties a session to its process.** The watch thread asks Restart Manager which
-   process holds the lock file open and checks that pid and start time. Only if the live test shows Restart Manager
-   cannot see the holder does the weaker rule stay ("any `codex.exe` alive and the lock file exists", marked "can
-   outlive its session" in the docs).
+   process holds the lock file open and checks that pid and start time. The Codex live test (2026-11-06, 0.167.0)
+   showed Restart Manager names the session's own `codex.exe`, so the weaker rule ("any `codex.exe` alive and the
+   lock file exists", "can outlive its session") is only the fallback when Restart Manager fails.
 8. **Codex goals (`goals_1.sqlite`) are not read in v1.** Between two goal turns the gap is seconds, far below any
    sleep timeout; reading SQLite would add a dependency for nothing.
 9. **Copilot schedules are computed in the PC's own zone.** Their events carry a `tz`; Copilot runs on the same PC,
@@ -134,7 +134,7 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-cli-commands` | no; screen once (opens one file in the default app; global lane, review M6) | `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 30 tests; screen step ran once |
 | `p4-cli-restore` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09; nothing to add) | `p3-journal`, `p3-power-plan`, `p2-ownership-restore`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 10 tests |
 | `p4-live-claude` | optional: 3 minutes for the VS Code check; agent-session lane | `p4-watch-thread`, `p4-claude-transcript`, `p4-cli-run`, `p3-process`, the Claude parsing review (`docs/phases/02-06-lighter.md`) | done (committed 01:59): every live case passed (Claude Code 2.1.317); m6 fixed; the VS Code check waits for Haik |
-| `p4-live-codex` | no: Codex logged in by Haik (2026-11-06); agents run it with `p4-live-harness` | `p4-contracts-r2`, `p4-live-harness`; one live card at a time | running (2026-11-06 ~17:20, Round 3: agents run every step) |
+| `p4-live-codex` | no: Codex logged in by Haik (2026-11-06); agents run it with `p4-live-harness` | `p4-contracts-r2`, `p4-live-harness`; one live card at a time | done (2026-11-06 ~18:25, a1ca2ce): Codex 0.167.0, 7 one-line prompts; holds 0.3 s after a turn starts, ends in 17 ms; reverted thread followed; crash ends the hold in 115 ms; Codex in the tray |
 | `p4-live-copilot` | only if the sign-in sitting is needed | `p4-contracts-r2`, `p4-live-harness`; one live card at a time | ready once those two are done |
 | `p4-watch-tick-flake` | no | `p4-watch-thread` | done (15:00: ticks wait for their check; data files written atomically; 20 serial and 24 of 24 load runs pass) |
 | `p4-contracts-r2` | no | the four 2026-11-06 source and research cards (done); runs alone among Rust cards | done (2026-11-06 ~16:20, 24f7405): `FindNewest` (Codex reverted threads) and `Recent` as new variants, `Query`, `ImageSince`; 1541 tests; whole-workspace checks green on x64 and ARM64; no Cargo change |
@@ -385,3 +385,12 @@ limit; Copilot waiting does not hold. The cards build these.
   notices), so it goes to `p4-contracts-r3`, which runs alone; `p4-live-codex` may edit `watch/agents.rs` now. The
   minors in the OpenCode card's own files go to its worker now (shim refuses deletes, table test gaps, no checkpoint
   on close). The same reviewer checks the major after `p4-contracts-r3`.
+- 2026-11-06 ~18:25: `p4-live-codex` done (a1ca2ce): every step run by the agent at Medium, 7 one-line prompts
+  (gpt-6-luna, low). Restart Manager names the session's own `codex.exe` (TUI and `exec`); an approval wait held;
+  Esc writes `turn_aborted`; `FindNewest` followed a reverted thread live; a crash posted `Gone` in 115 ms (the stale
+  lock stays until the next Codex start deletes it). Fix: the source now lists `sessions\` one level deep so the
+  tree is watched; before it, a turn reached a post only at the 30 s tick and a 12 s turn was never seen. Codex is
+  in the tray (`CODEX_HOME`, else `.codex`). Worker calls for Haik's review: that listing workaround instead of a
+  contract change; each notice walks all date folders; a background terminal left running after Esc does not hold;
+  `CODEX_HOME` from the tray's own environment only. Track note 7 updated. Next: `p4-contracts-r3` runs alone once
+  the OpenCode minor fixes end; then `p4-cursor-source`, `p4-agent-hooks-install` and `p4-live-copilot` in parallel.
