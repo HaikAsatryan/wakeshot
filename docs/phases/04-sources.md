@@ -117,7 +117,7 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-copilot-source` | no | `p4-cron` | done 2026-11-06 (schema of 1.0.106, not tested live; 42 tests) |
 | `p4-copilot-vscode-research` | no | none | done 2026-11-06: a partly reliable signal, medium confidence (`research/copilot-vscode-signals.md`); a source card follows, after a contracts change run alone |
 | `p4-opencode-source` | no | Part B after `p4-contracts-r2` | Part A done 2026-11-06 (`research/opencode-signals.md`); Part B (2.x only: 1.x needs the `message` table, outside Haik's yes) running (2026-11-06 ~16:25) |
-| `p4-vscode-source` | no | `p4-contracts-r2` | running (2026-11-06 ~16:25) |
+| `p4-vscode-source` | no | `p4-contracts-r2` | done (2026-11-06 ~17:45, 5869c5c): 31 tests; `ImageSince` on `Code.exe` with the newest send time; label "Copilot in VS Code"; Insiders read, portable not (worker calls, for Haik's review); not live yet |
 | `p4-contracts-r3` | no | `p4-contracts-r2`, the hooks security review and its fixes; runs alone among Rust cards | ready once the review fixes pass; starts when the running Rust cards drain |
 | `p4-cursor-source` | only if the editor puts the payload on the command line (design Question 4) | `p4-contracts-r3`, the hooks review verify | card written 2026-11-06 |
 | `p4-agent-hooks-install` | no | `p4-contracts-r3`, the hooks review verify | card written 2026-11-06 |
@@ -130,13 +130,13 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-cli-commands` | no; screen once (opens one file in the default app; global lane, review M6) | `p4-hold-files`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 30 tests; screen step ran once |
 | `p4-cli-restore` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09; nothing to add) | `p3-journal`, `p3-power-plan`, `p2-ownership-restore`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 10 tests |
 | `p4-live-claude` | optional: 3 minutes for the VS Code check; agent-session lane | `p4-watch-thread`, `p4-claude-transcript`, `p4-cli-run`, `p3-process`, the Claude parsing review (`docs/phases/02-06-lighter.md`) | done (committed 01:59): every live case passed (Claude Code 2.1.317); m6 fixed; the VS Code check waits for Haik |
-| `p4-live-codex` | no: Codex logged in by Haik (2026-11-06); agents run it with `p4-live-harness` | `p4-contracts-r2`, `p4-live-harness`; one live card at a time | ready once those two are done (may run before `p4-live-copilot`) |
+| `p4-live-codex` | no: Codex logged in by Haik (2026-11-06); agents run it with `p4-live-harness` | `p4-contracts-r2`, `p4-live-harness`; one live card at a time | running (2026-11-06 ~17:20, Round 3: agents run every step) |
 | `p4-live-copilot` | only if the sign-in sitting is needed | `p4-contracts-r2`, `p4-live-harness`; one live card at a time | ready once those two are done |
 | `p4-watch-tick-flake` | no | `p4-watch-thread` | done (15:00: ticks wait for their check; data files written atomically; 20 serial and 24 of 24 load runs pass) |
 | `p4-contracts-r2` | no | the four 2026-11-06 source and research cards (done); runs alone among Rust cards | done (2026-11-06 ~16:20, 24f7405): `FindNewest` (Codex reverted threads) and `Recent` as new variants, `Query`, `ImageSince`; 1541 tests; whole-workspace checks green on x64 and ARM64; no Cargo change |
 | `p4-antigravity-research` | no | none | done (2026-11-06): CLI 1.5.2 (`agy.exe`) and IDE 2.6.0 both need hooks (a Wakeshot plugin folder under `~\.gemini\config\plugins\`); free test yes (Google's claim; Armenia listed); build in v1 (`research/antigravity-signals.md`) |
 | `p4-hooks-design` | no; a security review reads it before any build | `p4-cursor-gemini-research` | done (2026-11-06): `docs/agent-hooks.md`; one command `wakeshot.exe hook <agent> <event>` from a Wakeshot plugin folder per agent, state files read with `Folder` and `Process`; `main.log` dropped; security review running (`docs/reviews/p4-hooks-design-security.md`) |
-| `p4-live-harness` | yes: one sign-in sitting (about 10 min, Cursor and Antigravity only; steps in the card) | `p4-live-claude`; Part B after `p4-contracts-r2` | Part A done (2026-11-06 ~17:05, bb53377): every agent installed at Medium, Codex, Copilot CLI and VS Code logins reused, OpenCode on Ollama; ConPTY driver `spikes/agent-drive/` works; Part B running |
+| `p4-live-harness` | yes: one sign-in sitting (about 10 min, Cursor and Antigravity only; steps in the card) | `p4-live-claude`; Part B after `p4-contracts-r2` | Part A done (2026-11-06 ~17:05, bb53377): every agent installed at Medium, Codex, Copilot CLI and VS Code logins reused, OpenCode on Ollama; ConPTY driver `spikes/agent-drive/` works; Part B done (d119019): `agent-watch --source claude,codex,copilot` |
 
 Bundles (one worker, both cards in order; `docs/phases/02-06-lighter.md`): `p4-cli-args` + `p4-cli-run`;
 `p4-cli-commands` + `p4-cli-restore`; `p4-watch-reads` + `p4-watch-data`. Codex and Copilot moved to after v1 (Haik,
@@ -366,3 +366,11 @@ limit; Copilot waiting does not hold. The cards build these.
   chain; `p4-contracts-r3` runs at the next drain. For the live cards: a folder listing showed a stale size and time
   for a file another process held open, so `FindNewest` and `Recent` may miss writes until a read or a close (time
   it); the VS Code `copilot` shim stays as a parent, so one Copilot session has two `copilot.exe` images.
+- 2026-11-06 ~17:30: Haik did the sign-in sitting (Cursor editor and CLI, Antigravity CLI and IDE): "Done
+  everything", no step reported as different. `p4-live-codex` running (Round 3, no Haik). Every v1 agent can now be
+  tested live by agents.
+- 2026-11-06 ~17:45: `p4-vscode-source` done (5869c5c). Haik asked for a card to rework the video and `README.md` so
+  the focus is every AI agent, not Claude Code ("ok that the example is on Claude Code in the video, but the tray will
+  have a new look (AI apps)"): `docs/tasks/p6-agents-video-readme.md` (Part A a plan with stills for his yes, Part B
+  after the live tests). It also takes the Round 4 README and `site/` list, the `product.md` README entry and the
+  hooks review minor 13. One question to Haik on what "new look (AI apps)" means.

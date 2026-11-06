@@ -5430,3 +5430,64 @@ has `whoami /groups` "Medium Mandatory Level"). Installs and remove commands: th
   `cmd.exe` > `node.exe` > `copilot.exe`), not the shim. A crashed Codex TUI left `thread-writer-locks\<id>.lock`
   with no rollout (no prompt was sent). `agent-watch --source copilot` and `--source codex` showed both as idle and
   `Gone`. **Verified** (driver tree, file names, harness run).
+
+## VS Code chat source checks
+
+Card `p4-vscode-source`, 2026-11-06. How checked: files of `microsoft/vscode` tag 1.145.1 fetched one by one with `gh
+api` and read as data in the card's scratch folder; `gh search code` in `microsoft/vscode` and `microsoft/vscode-docs`.
+Nothing was run and no real chat file was opened. Details: `docs/research/copilot-vscode-signals.md`, "Built".
+
+- **Every log entry ends with `\n`** (`objectMutationLog.ts:339,419,448`), so a read during a write sees an unfinished
+  last line, never a broken line in the middle. **Verified** in the source; real write timing not seen.
+- **`modelState` is set whole**, never by its parts (`chatSessionOperationLog.ts:159`, a primitive); a Set to
+  undefined is written with no `v`. **Verified** in the source.
+- **A retry from an error card keeps the request's first `timestamp`** while the request goes back to Pending
+  (`chatModel.ts:1945-1961`, `chatServiceImpl.ts:1471,2029`). So a send time alone can miss a retried request in a
+  later VS Code run; the source counts such a request while any `Code.exe` runs. **Verified** in the source; how often
+  users retry an old error: not verified.
+- **VS Code Insiders**: data folder `Code - Insiders` (`vscode-docs`, `docs/configure/profiles.md`), image
+  `Code - Insiders.exe` (`test/sanity/src/context.ts:1005,1242`). **Verified** in docs and code; no Insiders install
+  seen.
+- **Portable mode is invisible to other programs**: VS Code sets `VSCODE_PORTABLE` in its own process from a `data`
+  folder next to the install (`src/bootstrap-node.ts:205-244`). **Verified** in the source.
+- **Data folder order**: `VSCODE_PORTABLE`, then `VSCODE_APPDATA`, then `--user-data-dir`, then `APPDATA` (else
+  `%USERPROFILE%\AppData\Roaming`), each joined with the product's folder; an empty value is unset
+  (`src/vs/platform/environment/node/userDataPath.ts:43-105`). **Verified** in the source.
+- **serde_json's nesting limit** (128 levels) would make a log with deeper JSON unreadable. Whether real chat data
+  nests that deep: not verified.
+
+## OpenCode SQLite reader checks
+
+2026-11-06, `p4-opencode-source` Part B. Source read as data: SQLite 3.54.1's amalgamation (`sqlite3/sqlite3.c` in the
+crate `libsqlite3-sys` 0.39.1, Part A's scratch copy), `@opencode/cli` 2.2.5. Tests: `wakeshot-windows`
+`sqlite::tests`, on temp WAL databases a `winsqlite3` writer makes, with this laptop's `winsqlite3.dll` 3.53.4.
+
+- **A reader opens the `-wal` with `CREATE`**: `sqlite3WalOpen` passes `READWRITE | CREATE | WAL` to the VFS
+  `xOpen` and marks the WAL read only only when the open came back read only (`sqlite3.c:68629-68632`). The `-shm`
+  is opened later, at the first read, by `winOpenSharedMemory` through `winHandleOpen` directly, not through `xOpen`
+  (`sqlite3.c:52559-52660`). **Verified** in the 3.54.1 source; 3.53.4's code not read.
+- **A VFS shim stops both files**: a shim whose `xOpen` drops `READWRITE` and `CREATE` (adds `READONLY`) for the
+  main database and the `-wal` makes a read of a closed WAL database fail with no `-wal` or `-shm` made, while a plain
+  `SQLITE_OPEN_READONLY` open of the same file made both and left them. **Verified** by test
+  (`a_read_runs_only_while_the_agent_has_the_database_open_and_creates_no_file`).
+- **A read-only `-wal` cannot checkpoint**: `sqlite3WalCheckpoint` returns `SQLITE_READONLY` when the WAL is read
+  only (`sqlite3.c:71284`), and `sqlite3WalClose` deletes the `-wal` and `-shm` only after a checkpoint that succeeded
+  (`sqlite3.c:69461-69520`). So the reader's close never writes or deletes the agent's files. **Verified** in the
+  3.54.1 source; not tested.
+- **Read-only WAL reads need 3.22.0**: sqlite.org/wal.html, "Read-Only Databases": "This constraint was relaxed
+  beginning with SQLite version 3.22.0 (2018-01-22)". **Verified** in the docs (fetched 2026-11-06).
+- **The exports**: `winsqlite3.dll` 3.53.4 here exports `sqlite3_vfs_find`, `sqlite3_vfs_register`,
+  `sqlite3_libversion_number` and the nine statement calls the reader uses; its default VFS is version 3 or later.
+  **Verified** by test (`the_dll_loads_with_its_shim_and_a_missing_one_gives_no_sqlite`). On ARM64: builds, not run.
+- **A read never waits for a writer**: while a writer held `BEGIN IMMEDIATE` with an uncommitted insert, the read gave
+  the last committed rows, not `SQLITE_BUSY` (a wait on a lock held for the whole read would have run out the 100 ms
+  busy timeout and ended busy), and the commit then worked. **Verified** by test.
+- **A finished read does not hold back a checkpoint**: after 50 writes and a read, the writer's
+  `wal_checkpoint(TRUNCATE)` gave `0, 0, 0` and the `-wal` was 0 bytes. With one statement left mid-read it gave busy
+  `1` and 114 frames left, so the test sees a held reader. **Verified** by test (the second by a change made on
+  purpose and taken back).
+- **A read-only connection fails a write**: `DELETE` and `CREATE TABLE` on it end in a step error and change
+  nothing. **Verified** by test.
+- **OpenCode ids and times**: `ses_` or `sch_` plus 26 letters and digits (`schema/src/identifier.ts`,
+  `session-id.ts`, `schedule.ts:8-12`); event times from `Clock.currentTimeMillis` (`core/src/bus.ts:524`), so
+  `time_busy` and the schedule times are wall ms. **Verified** in the 2.2.5 source.

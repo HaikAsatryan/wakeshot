@@ -1,7 +1,7 @@
 # OpenCode source
 
-Phase: 4. Status: Part B ready once `p4-contracts-r2` is done (new 2026-11-06, Haik: OpenCode ships in v1). Part A
-done 2026-11-06; Haik answered question 1 (below). Needs Haik: no (a live card follows).
+Phase: 4. Status: done (Part A and Part B, 2026-11-06). Haik answered question 1; question 2 (1.x) is open and does
+not block. Needs Haik: no (a live card follows).
 Agent: `wakeshot-worker`. Size: about 150K tokens.
 Runs after: nothing for Part A. Parallel with: `p4-codex-source`, `p4-copilot-source`, the research cards.
 Build folder: `<scratchpad>\p4-opencode-source\` (`target\` for cargo in Part B; downloaded source as data only).
@@ -94,6 +94,26 @@ done). A failure in another card's file is reported, never fixed. The orchestrat
 - 2026-11-06: 2.2.5 `job` rows can stay `running` after an interrupt-only exit (`core/src/job.ts:267-283`): not used
   as a hold. Desktop sidecar `opencode-cli.exe serve --service` shares the file. Wrote
   `docs/research/opencode-signals.md` and the pointer line; design in Result. Part A done.
+- 2026-11-06: Part B started. Read the card, `p4-contracts-r2` Result, plan "How we work". 2.x only.
+- 2026-11-06: `sources/opencode.rs` written (three queries, ids checked, a read problem as one `opencode.db` entry);
+  builds. Read SQLite 3.54.1's `wal.c` (scratch copy, as data): a reader opens the `-wal` with `CREATE`, and the
+  `-shm` only after the `-wal`, so `sqlite.rs` gets a small VFS shim that opens the db and the `-wal` read only and
+  never creates. Next: `sqlite.rs`.
+- 2026-11-06: `sqlite.rs` written (loader, shim, 8 tests on temp WAL databases a `winsqlite3` writer makes); core
+  tests `tests/opencode_source.rs` (14) and 12 answer fixtures. All pass. Next: break behaviors on purpose.
+- 2026-11-06: broke 11 behaviors in three rounds, each failed its tests, then copied the originals back (byte
+  compare): any text taken as an id; a table that goes keeps its rows; the shim lets the `-wal` be made; the db
+  opened read-write with the shim's db rule off; no `-shm` check; the SQL text in an error; a row value in the
+  problem's format (both log scans named it: `unknown id "sch_MARK3R"`; I moved the scans before the other checks so
+  they are what catches it); `JOIN message` added to the working query (the table test: `left: ["message"]`); a
+  reader that leaves a statement mid-read (the checkpoint test: busy 1, 114 frames left).
+- 2026-11-06: clippy wanted typed transmutes (fixed); a heredoc put a raw NUL and lost a `\` in two lines (fixed,
+  files scanned: no NUL, no CR). `tests/vscode_source.rs` (`p4-vscode-source`) did not compile for a while
+  (`wants` not found, line 216), then did: not touched. fmt, clippy both ways (x64; ARM64 with `--all-targets`) and
+  `cargo test -p wakeshot-core -p wakeshot-windows --locked` clean. Next: docs.
+- 2026-11-06: dropped a timing assert that could flake under load (the rows check already proves no wait). Docs:
+  architecture sections 7 and 11, research "OpenCode SQLite reader checks", the "Built" note. All checks run again on
+  the final code: clean. Build folder, scratch files and two temp folders from the break runs deleted. Part B done.
 
 ## Questions for Haik
 
@@ -101,7 +121,13 @@ done). A failure in another card's file is reported, never fixed. The orchestrat
    `opencode.db` that holds the session state, in 1.x and 2.x. No other file has the working signal. The design opens
    that file read only and runs four fixed queries on `sqlite_master`, `session_v2`, `schedule`, `session` and
    `message` only. It never queries the token tables, so SQLite never loads their pages, and nothing is stored or
-   logged. Is that OK? Default: yes. If no, OpenCode cannot be supported, and Part B is dropped.
+   logged. Is that OK? Default: yes. If no, OpenCode cannot be supported, and Part B is dropped. (Answered: yes.)
+2. (Part B, not blocking.) Add OpenCode 1.x? It is most users (npm, week to 11-04: 4.29 M downloads of 1.x, 0.61 M
+   of 2.x). It needs one more query on the `session` and `message` tables. SQLite would read each session's newest
+   `message` row, whose JSON holds prompt text, inside Wakeshot's process to pick two fields (role, completed time);
+   nothing would be kept or logged, but the table test would then allow two more tables. Cost: about a quarter of
+   this card (one query, its row reader, fixtures, the live test of 1.x). Default: no, until the 2.x live test passes
+   and you say yes.
 
 ## Found outside scope
 
@@ -110,8 +136,92 @@ done). A failure in another card's file is reported, never fixed. The orchestrat
   launcher). Its rule's `time_suspended IS NULL` is wrong for 2.2.5. Left as it is, per this card; the pointer line
   names the second.
 - `docs/architecture.md` section 7 does not name OpenCode, and section 11 will need a `winsqlite3` line. For Part B.
+  (Done in Part B.)
+- Part B: `docs/architecture.md` section 6 (not mine) says a `Query` reads "only while its `-wal` file exists"; the
+  reader now also needs the `-shm`. One word.
+- Part B: `crates/wakeshot-core/tests/vscode_source.rs` (`p4-vscode-source`) failed to compile once during my clippy
+  run (`wants` not found, line 216), then built and passed (31 tests): a file mid-edit. Not touched.
+- Part B: the harness example `crates/wakeshot-windows/examples/agent-watch.rs` prints each session's key id to the
+  console; for OpenCode that id comes from the database. The source takes only id-shaped values (no prompt text can
+  pass), and the console is not the log, so no change asked; named for the live card.
 
 ## Result
+
+### Part B (2026-11-06): done
+
+Built the Part A design, 2.x only, in the shapes of `p4-contracts-r2`. No contract, module list or `Cargo` change.
+Nothing was run against a real OpenCode (the live card does that).
+
+**What it does.** `OpenCodeSource` (`LABEL` "OpenCode", `SourceId::OpenCode`) reads `<data>\opencode\opencode.db`
+(`opencode_db(profile, XDG_DATA_HOME)`) through three `WantedFile::Query` wants: `tables` (a `sqlite_master` probe for
+`session_v2` and `schedule`), then only for the tables found `working` (`time_busy` newer than `time_idle`) and
+`schedules` (active, due at the later of `next_due_at` and `retry_at`). Facts per session: working sessions `Working`
+with `ImageSince { opencode.exe, opencode-cli.exe; since time_busy }`; schedule due times as `timers`, on their
+session's entry or on `schedule:<id>` (idle, `since None`); idle sessions are not listed; `open_tasks` 0. Any error
+answer, bytes that are not the JSON, or a row of the wrong shape gives one `Unreadable("opencode.db")` entry keyed
+`opencode.db`; good rows stay. `Gone` drops that query's rows; a gone probe drops all. `sqlite.rs` loads
+`winsqlite3.dll` from System32 (version 3.22.0 or later), reads through a VFS shim, and answers `Busy` unless the db,
+`-wal` and `-shm` all exist.
+
+**The table test.** `every_query_names_only_the_session_and_schedule_tables` (`tests/opencode_source.rs`) collects
+every SQL string from `wanted()` in each probe state, checks it equals `ALL_SQL`, and token-scans each for the names
+after `FROM`, `JOIN` and commas (subqueries, aliases, quoted and `main.` names too; its own test has 11 cases). Only
+`sqlite_master`, `session_v2` and `schedule` pass. Proof it catches a new table: I added `JOIN message m ON ...` to
+the working query; the test failed with `left: ["message"]`; then I put the file back (byte compare).
+
+**The log test.** Two tests feed the mark `MARK3R` into ids, kept and dropped rows, SQLite's own "no such column"
+error and an error answer's text, then scan every log line: `nothing_from_an_answer_reaches_a_format_problem_or_the_core_log`
+(core: the facts run through the real `Core`) and `nothing_read_from_the_database_reaches_a_log` (`sqlite.rs`: a
+real database, the real `Agents` watch layer with a `MemoryLog`, then the real `Core`). Proof: with a row value put
+into the problem's format, both failed naming `unknown id "sch_MARK3R"`.
+
+**Files.** New: `crates/wakeshot-core/tests/opencode_source.rs`, `crates/wakeshot-core/tests/fixtures/opencode/`
+(12 answers and a README). Filled: `crates/wakeshot-core/src/sources/opencode.rs`,
+`crates/wakeshot-windows/src/sqlite.rs` (the stub test replaced by 8 tests). Docs: `docs/architecture.md` sections 7
+(an OpenCode paragraph, the `sqlite.rs` line) and 11 (a SQLite row); `docs/research.md` "OpenCode SQLite reader
+checks" (new last section); `docs/research/opencode-signals.md` "Built" note; this card.
+
+**Tests.** Core `opencode_source` 14. `sqlite::tests` 8 on temp WAL databases a `winsqlite3` writer makes: the
+queries on the 2.2.5 table shapes (working, idle, never run, shutdown-claimed, first turn; schedules with a later and
+an earlier `retry_at`, no session, paused, done, no due), no read and no file made without the agent's `-wal` and
+`-shm` (and the plain open shown to make both), a held write transaction does not block, a writer's
+`wal_checkpoint(TRUNCATE)` after a read gives `0,0,0`, the reader cannot write, fixed error words (`prepare`, `type`,
+`size`, text escaped), a missing DLL gives `no_sqlite`, and the log test. Broken on purpose: 11 behaviors in three
+rounds (Log), each failed its tests.
+
+**Checks** (own `CARGO_TARGET_DIR`, `--locked`, no `RUSTFLAGS`, final code): rustfmt on my three Rust files: clean.
+`cargo clippy -p wakeshot-core -p wakeshot-windows --all-targets --locked -- -D warnings` and without
+`--all-targets`: clean on x64; the `--all-targets` run on `aarch64-pc-windows-msvc`: clean (not run there).
+`cargo test -p wakeshot-core -p wakeshot-windows --locked`: all pass (core unit 707, `claude_status` 11,
+`claude_transcript` 25, `codex_source` 18, `copilot_source` 42, `opencode_source` 14, `vscode_source` 31;
+`wakeshot-windows` 649 with 24 ignored). Whole-workspace and release checks: the orchestrator's.
+
+**Choices** (mine), each with when to change it:
+
+1. A VFS shim (about 60 lines of FFI) so a read can never create the `-wal` or `-shm`, even when OpenCode closes the
+   file in the instant between the check and the open; it also opens the `-wal` read only, so the reader can never
+   checkpoint or delete OpenCode's files. Change it when a Windows build's default VFS is older than version 3 or
+   the live test shows the shim failing a read: then drop it and keep only the file check.
+2. A read needs the `-shm` too, not only the `-wal`. Change it when the live test shows OpenCode with a `-wal` and no
+   `-shm` (exclusive locking).
+3. Minimum SQLite 3.22.0, not Part A's 3.38.0: with 1.x out no query uses JSON functions, and 3.22.0 is the first
+   that reads a WAL file read only. Change it when a query needs a newer feature.
+4. Read problems are one extra entry (`opencode.db`, idle, held only through the notice), as `SessionFacts` has no
+   source-level health; good rows of a partly bad answer still count. Change it when the core gets a source-level
+   format channel.
+5. Ids are taken only in OpenCode's shape (`ses`/`sch_` prefix, `[A-Za-z0-9_.+-]`, at most 128), so a key can
+   never carry other text. Change it when OpenCode changes its id form (the notice shows it).
+6. Error words beyond Part A's three: `step`, `type` (a real or blob cell) and `size` (over 10,000 rows). Change the
+   cap when a live file has more active rows.
+7. A query feed is always `Fed::Taken`: an answer is one consistent snapshot, so a retry 200 ms later cannot mend it.
+
+**Open items.** The live card: register the source in the tray and the harness, and run "What is left" in
+`docs/research/opencode-signals.md` (plus that `-wal` and `-shm` exist while 2.x has the file open). An older 2.x
+without `time_busy` shows "update Wakeshot" (which release added it: not verified). Question 2 (1.x). The Part A
+scratch folder (`de37e39e-...\scratchpad\p4-opencode-source`, downloaded sources and the probe) was made by the Part A
+worker, not me, so I left it.
+
+### Part A (2026-11-06)
 
 Part A done 2026-11-06. Facts in `docs/research/opencode-signals.md` (new); pointer line in
 `docs/research/other-agent-signals.md`. No Rust or Cargo change. Checks: none (docs only). The probe script and the

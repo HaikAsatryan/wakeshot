@@ -1224,8 +1224,10 @@ What a source can ask the watch thread for (`WantedFile`; the full rules are in 
 - `Query` (`p4-contracts-r2`, OpenCode): read-only SQL on a SQLite database through `sqlite::query`, fed as JSON
   (`{"rows":[...]}` or `{"error":"<kind>"}`) under `FileId::query(db, name)`. It runs only while `<db>-wal` exists, on
   a change of the db's files in its folder, at most once a second per want (a run held back comes when due, with no
-  tick), and on the safety tick; `Gone` once the db or its `-wal` goes; `SQLITE_BUSY` gives no feed. `sqlite.rs` is a
-  stub that answers `no_sqlite` until Part B of `p4-opencode-source` loads `winsqlite3.dll`.
+  tick), and on the safety tick; `Gone` once the db or its `-wal` goes; `SQLITE_BUSY` gives no feed. `sqlite.rs`
+  (`p4-opencode-source`) loads Windows' `winsqlite3.dll` (3.22.0 or later, else `no_sqlite`) and reads through a VFS
+  shim that opens the db and its `-wal` read only and never creates them; it reads only while the db, `-wal` and
+  `-shm` exist, and finalizes and closes on every call, so it never blocks the agent's writes or checkpoints.
 
 `Liveness::ImageSince` (`p4-contracts-r2`): alive while the system process list (no rights needed) has a process of
 one of the images, case ignored, that started at or before `since_wall_ms` plus 2 s (`IMAGE_SINCE_SLACK_MS`), or at
@@ -1264,6 +1266,32 @@ exists"). That Codex rule can outlive its session: a crash leaves the lock file 
 Manager `RmGetList`; not verified for this lock) and checks that pid and start time; until then the Codex rule is marked
 "can outlive its session". Each agent gets one live test (product). `wakeshot run` and hold files are not a source; the
 watch thread parses them into `Event::Holds`.
+
+OpenCode (in v1, 2.x only, Haik 2026-11-06; built by `p4-opencode-source`, not registered in the tray until its live
+card): `OpenCodeSource` reads `<data>\opencode\opencode.db` (`XDG_DATA_HOME`, else `%USERPROFILE%\.local\share`) with
+three `Query` wants: a `sqlite_master` probe for `session_v2` and `schedule`, then the sessions with `time_busy` newer
+than `time_idle` (working, `ImageSince` from `time_busy` on `opencode.exe` or `opencode-cli.exe`) and the active
+schedules (timers, due at the later of `next_due_at` and `retry_at`). No query names another table: the file also
+holds OpenCode's login tokens, and a test fails if one does. A failed or odd answer is one `Unreadable("opencode.db")`
+entry. 1.x is not read (its state is in `message` rows, which hold prompt text). `docs/research/opencode-signals.md`.
+
+VS Code chat (in v1, Haik 2026-11-06; built by `p4-vscode-source`, not registered in the tray until its live card):
+`VsCodeSource` follows `research/copilot-vscode-signals.md` rules 1 to 5 and 7, label "Copilot in VS Code".
+
+- Two `Recent` wants per build (Stable and Insiders, found from `VSCODE_APPDATA`, else `APPDATA`):
+  `<User>\workspaceStorage\<workspace>\chatSessions\<id>.jsonl` and `<User>\globalStorage\emptyWindowChatSessions\
+  <id>.jsonl`, the latter watched as its own folder so `globalStorage`'s other writes give no notices. Portable
+  installs are not read (VS Code sets `VSCODE_PORTABLE` inside its own process).
+- Each feed is a whole log, replayed from scratch on `requests` with VS Code's own line rules; only the outcome is
+  kept (activity, a time, a problem), never the requests or any text. Key: the session id from the file name; the same
+  id in two folders (a chat moved from an empty window) is one session, the file that says most stands.
+- Working if any request's `modelState.value` is 0, waiting (no time, not remote) if any is 4, else idle. An unknown
+  `kind` on a path the source reads, or an unknown value on the newest request, is `UnknownValue`; a line that does not
+  read, or no Initial line, is `RetryOnce`, then `Unreadable`.
+- Liveness: `ImageSince { images: ["Code.exe"] (or "Code - Insiders.exe"), since_wall_ms }` with the newest send time
+  of the requests that decide the activity, so a crash leftover stops counting once VS Code starts anew; `None` (any
+  start) when such a request has no usable time or went back from done to Pending (a retry keeps its first time).
+  Rule 6 (`AnyProcess` on `state.vscdb`) is not used.
 
 ## 8. Errors and logging
 
@@ -1430,6 +1458,7 @@ Checked 2026-11-03 on crates.io (research, "Phase 1 design checks").
 | `velopack` | 1.2.161 | tray only (`velo.rs`), pinned `=1.2.161` in the root `[workspace.dependencies]` since `p6-velopack-dependency` (`Cargo.lock` 80 to 181 packages, 160 since `p6-tray-size`); ARM64 builds need clang for `ring` | installer and updates; 1.3.39-g8d2844f is a pre-release |
 | `idna_adapter` | 1.0.0 | tray only, pinned `=1.0.0` in the root `[workspace.dependencies]` since `p6-tray-size`; never named in code | picks the IDNA back end with no Unicode data for velopack's `url`, so the 21 ICU packages leave the build; `url` then rejects non-ASCII host names, and the one URL the tray parses is ASCII (research, "Tray size") |
 | cron next time | none: our own code | core (`sources::cron`) | `sources/cron.rs` (`p4-cron`) copies Claude Code's own scheduler (parser, search, jitter; research "Cron checks"), so a due time is the one Claude Code picks; no `croner` or `jiff` |
+| SQLite | none: Windows' own `winsqlite3.dll`, loaded at run time | `wakeshot-windows` (`sqlite.rs`) | OpenCode's `opencode.db`; zero size and no C build, Microsoft documents it for app use and updates it with Windows (`research/opencode-signals.md`). Change it when a supported Windows lacks it or Wakeshot needs more SQLite: then `rusqlite` with `bundled` |
 
 - `windows`: windows-rs moved its smaller crates to 0.100.0 on 2026-09-03 but has not published `windows` or
   `windows-sys` at that version, and says they may come later with changed API shapes (research). 0.62.2 is the
@@ -1439,9 +1468,9 @@ Checked 2026-11-03 on crates.io (research, "Phase 1 design checks").
 
 ## 12. Agent hooks
 
-Design: `agent-hooks.md` (card `p4-hooks-design`, 2026-11-06; a security review reads it before the build). In
-short, for an agent with no file signal (Cursor; Antigravity the same way, from `.gemini\config\plugins\wakeshot\`
-with `PreInvocation` and `Stop`):
+Design: `agent-hooks.md` (card `p4-hooks-design`, 2026-11-06, with the fixes of
+`reviews/p4-hooks-design-security.md`). In short, for an agent with no file signal (Cursor; Antigravity the same way,
+from `.gemini\config\plugins\wakeshot\` with `PreInvocation` and `Stop`):
 
 - The installed tray adds a folder of its own that the agent loads, `%USERPROFILE%\.cursor\plugins\local\wakeshot\`
   (a Cursor local plugin), once per user, with one notice; never an edit of the user's own settings. A folder the
@@ -1449,9 +1478,17 @@ with `PreInvocation` and `Stop`):
 - The hook runs `wakeshot.exe hook cursor <event>` on `beforeSubmitPrompt`, `stop` and `sessionEnd`. It keeps four
   input fields, names the agent process by walking up its parents, writes or deletes
   `%LocalAppData%\Wakeshot\agents\cursor\<chat>.json`, prints `{}` and always exits 0.
+- File work in agent folders and in `agents\` runs only at Medium integrity: an elevated hook or uninstall hands it
+  to a Medium copy of itself (`process::spawn_outside_tree`), an elevated tray skips it. The plugin's file set is
+  fixed in code; nothing reads a path from the marker.
+- A hook ships for an agent only when every app that loads its folder hands the hook its input through a temp file
+  or stdin, never on a command line (audit logs). Cursor's editor and CLI share one folder, so a command-line editor
+  means no Cursor plugin at all. The build checks it in the editor's code first, and each hook run checks its parent
+  PowerShell's command line and removes the plugin if a later Cursor switches.
 - `sources::cursor` reads that folder (`WantedFile::Folder`), one working session per file with
   `Liveness::Process`. No new `WantedFile` or `Liveness` variant.
 - The uninstall hook removes the plugin right after the registry steps, before the restore.
-- Code: `sources::cursor` and `sources::antigravity` (core), `agent_hooks` (Windows: add, rewrite, remove, the
-  parent walk), the CLI's `hook` command (one for every agent), a step in `hooks.rs`, a call in `app/startup.rs`,
-  `Event::HooksAdded` and `Notice::HooksAdded`.
+- Code: `sources::hooked` (core: the state file, the id rule, the event rules, the parent walk over a process list),
+  `sources::cursor` and `sources::antigravity` (core), `agent_hooks` (Windows: add, rewrite, remove), `process`
+  (the list with parents, image paths, the token check), the CLI's `hook` command (one for every agent), a step in
+  `hooks.rs`, a call in `app/startup.rs`, `Event::HooksAdded` and `Notice::HooksAdded`.

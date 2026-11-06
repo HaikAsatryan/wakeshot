@@ -254,3 +254,18 @@ Windows build turns out to lack the DLL or JSON: then `rusqlite` with `bundled`.
 - A live test of both versions on this laptop with a free local model (both have local providers; not run): a long
   tool call, an Esc interrupt, a permission prompt, a crash (kill the process), a 2.x service restart mid-turn, a 2.x
   schedule, and a 2.x background shell job (whether its `job` row closes).
+
+## Built (Part B, 2026-11-06)
+
+`p4-opencode-source` Part B built the 2.x rules above; nothing of it was run against a real OpenCode.
+
+- `crates/wakeshot-core/src/sources/opencode.rs`: three queries on `sqlite_master`, `session_v2` and `schedule` only
+  (1.x not read, Haik 2026-11-06). Ids are taken only in OpenCode's shape (`ses` or `sch_` prefix, letters, digits,
+  at most 128 characters; OpenCode makes `ses_` or `sch_` plus 26, `schema/src/identifier.ts`, `session-id.ts`,
+  `schedule.ts:8-12`). Row times are wall ms (`Clock.currentTimeMillis`, `core/src/bus.ts:524`).
+- `crates/wakeshot-windows/src/sqlite.rs`: the `winsqlite3.dll` reader, with a VFS shim that opens the database and
+  its `-wal` read only and never creates them (`docs/research.md`, "OpenCode SQLite reader checks").
+- An older 2.x whose `session_v2` has no `time_busy` (before migration `20261029073502_session_time_busy`) fails the
+  working query, so it shows "update Wakeshot". Which 2.x release added the column: not verified.
+- Still to check live (the live card): every item of "What is left", plus that the `-wal` and `-shm` exist whenever
+  OpenCode 2.x has the file open (the reader answers nothing otherwise).
