@@ -127,6 +127,7 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-live-cursor` | yes: about 5 minutes (`agent login`; four short prompts typed in its test window; steps in the card) | `p4-antigravity-source`; fixes the hooks code review first | blocked (2026-11-06 ~21:55, de156d5): review fixes done (M1 and six minors, 8.3 path for Antigravity); the plugin added at Medium; live steps wait for Haik |
 | `p4-live-antigravity` | IDE only: the first-run "Get Started" pass (steps in the card's Result, Open items 1) | `p4-antigravity-source`; beside `p4-live-cursor` | CLI done (2026-11-06 ~22:30, 67a542f): 11 prompts; hold 0.03 to 0.1 s after Enter, ends at Stop or exit; approval wait holds; Esc runs no Stop; IDE turn on hold: only if `p4-antigravity-exact-end` Part A finds Antigravity can stay |
 | `p4-antigravity-exact-end` | no for Part A; the IDE first-run pass only if Antigravity stays | `p4-live-antigravity`; Part B after `p4-live-cursor` | Part A running since 18:55 (Haik's "No guessing" rule: an exact signal for Esc and background commands, or Antigravity leaves v1) |
+| `p4-live-vscode-stop` | no, unless no command path can press Stop or approve | `p4-live-vscode` | running since 19:30 (Haik's "No guessing" rule: Stop, approve and a window close were never tested) |
 | `p4-core-linux-tests` | no | none | done (2026-11-06 ~20:10, 750b023): Codex and OpenCode tests join one level at a time; CI core step runs `--no-fail-fast`; three VS Code tests sent to `p4-live-vscode`; no Linux run here (rustup in WSL refused by the permission check; no C compiler there) |
 | `p4-live-uninstall` | no | every other card of the bigger v1 (only when the work is fully finalized) | later (Haik, 2026-11-06 ~21:20) |
 | `p4-cursor-gemini-research` | no | none | done 2026-11-06 (`research/cursor-gemini-signals.md`): Cursor big, Gemini CLI enterprise only since 2026-06-18; hooks question for Haik |
@@ -517,3 +518,11 @@ limit; Copilot waiting does not hold. The cards build these.
   Antigravity from v1 if Esc cannot be seen exactly. Background commands hold only if their start and end are exact.
   The IDE first-run pass is not asked of Haik until Part A says Antigravity stays. Pushed 8ec4bdc at 18:45 (Haik:
   the orchestrator pushes).
+- 2026-11-06 19:30: Haik took every default (19:25): OpenCode 2.x only in v1 ("OpenCode 2.x" in the README);
+  Antigravity named in plain text ("works with") only if `p4-antigravity-exact-end` passes; no agent logos. "Do
+  everything in parallel." Checked the passed live cards against the "No guessing" rule: Codex (`turn_aborted`), Copilot
+  CLI (`abort` on Ctrl+C) and OpenCode (idle 1.2 s after Esc) see a cancel exactly; VS Code's Stop was never tested,
+  so new card `p4-live-vscode-stop` runs now. Claude's cancelled wakeup (Esc writes nothing; the hold lasts until
+  the due time, at most 1 hour) asked of Haik. Running: `p4-live-cursor` (finishing after Haik's 19:00 steps: the
+  cancel was the Stop button on a count to 10K; `cursor-live2` did not open), `p4-antigravity-exact-end` Part A,
+  `p4-live-vscode-stop`, and the video Part C render.

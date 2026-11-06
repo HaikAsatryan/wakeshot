@@ -47,7 +47,9 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
 - **Other agents** (v1 grows, Haik 2026-11-06; on 2026-11-03 v1 was Claude Code only): Codex CLI, Copilot CLI,
   Copilot agent mode in VS Code (`research/copilot-vscode-signals.md`), OpenCode, Cursor (editor and CLI), and
   Antigravity if a free option exists to test it (`research/cursor-gemini-signals.md`). OpenCode: 2.x first, 1.x only
-  if cheap ("we are focusing the future"); Wakeshot may open `opencode.db` read only and query only the session and
+  if cheap ("we are focusing the future"); Haik, 2026-11-06 19:25: v1 supports 2.x only, and says "OpenCode 2.x".
+  Antigravity, same day: named in plain text only ("works with"), and only if its end of work is seen exactly. No
+  agent logos in the video, README or site (their owners' rules need approval or are unclear): names only; Wakeshot may open `opencode.db` read only and query only the session and
   schedule tables, though the file also holds OpenCode's login tokens, with a test that no other table is ever read
   (`research/opencode-signals.md`). Gemini CLI is dropped: since 2026-06-18 it serves only enterprise and paid-API
   users. Not planned: Aider, Amp, Kiro. Logic may be ported from the MIT rivals with credit. Every agent gets a live
