@@ -118,11 +118,11 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-copilot-vscode-research` | no | none | done 2026-11-06: a partly reliable signal, medium confidence (`research/copilot-vscode-signals.md`); a source card follows, after a contracts change run alone |
 | `p4-opencode-source` | no | Part B after `p4-contracts-r2` | Part A done 2026-11-06 (`research/opencode-signals.md`); Part B done (2026-11-06 ~17:55, 1c58f43): 2.x only, 14 + 8 tests, the table test (caught a planted `JOIN message`), a log leak test; a VFS shim so a read never creates `-wal` or `-shm`; minimum SQLite 3.22.0; 1.x question for Haik (default no); review running (`docs/reviews/p4-opencode-db-read.md`) |
 | `p4-vscode-source` | no | `p4-contracts-r2` | done (2026-11-06 ~17:45, 5869c5c): 31 tests; `ImageSince` on `Code.exe` with the newest send time; label "Copilot in VS Code"; Insiders read, portable not (worker calls, for Haik's review); not live yet |
-| `p4-contracts-r3` | no | `p4-contracts-r2`, the hooks security review and its fixes; runs alone among Rust cards | running alone (2026-11-06 ~18:40); also takes the OpenCode review major and the Codex line in architecture section 7 |
-| `p4-cursor-source` | only if the editor puts the payload on the command line (design Question 4) | `p4-contracts-r3`, the hooks review verify | card written 2026-11-06 |
-| `p4-agent-hooks-install` | no | `p4-contracts-r3`, the hooks review verify | card written 2026-11-06 |
+| `p4-contracts-r3` | no | `p4-contracts-r2`, the hooks security review and its fixes; runs alone among Rust cards | done (2026-11-06 ~19:30, 98c8795): the six hooks contract items, the OpenCode `-shm` loop fix, Copilot, VS Code and OpenCode in the tray; 1622 tests; whole-workspace checks green on x64 and ARM64; one `windows` feature added (`Wdk_System_Threading`) |
+| `p4-cursor-source` | only if the editor puts the payload on the command line (design Question 4) | `p4-contracts-r3`, the hooks review verify | running (2026-11-06 ~19:35) |
+| `p4-agent-hooks-install` | no | `p4-contracts-r3`, the hooks review verify | running (2026-11-06 ~19:35) |
 | `p4-antigravity-source` | only if its payload is on the command line | `p4-cursor-source`, `p4-agent-hooks-install` | card written 2026-11-06 |
-| `p4-live-vscode` | no | `p4-vscode-source`, `p4-live-harness`; live lane after `p4-live-copilot` | card written 2026-11-06 |
+| `p4-live-vscode` | no | `p4-vscode-source`, `p4-live-harness`; live cards in parallel since 18:50 | running (2026-11-06 ~19:35) |
 | `p4-live-opencode` | no | `p4-opencode-source`, the OpenCode review fixes; live lane after `p4-live-vscode` | card written 2026-11-06 |
 | `p4-live-cursor` | only if the payload check finds the command line | `p4-cursor-source`, `p4-agent-hooks-install`, the hooks code review fixes; live lane after `p4-live-opencode` | card written 2026-11-06 |
 | `p4-live-antigravity` | only if its payload is on the command line | `p4-antigravity-source`, `p4-live-cursor` | card written 2026-11-06 |
@@ -135,7 +135,7 @@ Notes 7, 8 and 9 apply: Codex and Copilot are back in v1 (Haik, 2026-11-06; on 2
 | `p4-cli-restore` | no (Phase 1 Question 12: the default, Haik 2026-11-03 18:09; nothing to add) | `p3-journal`, `p3-power-plan`, `p2-ownership-restore`, `p3-store`, `p3-process`, `p3-log` | done (00:36): 10 tests |
 | `p4-live-claude` | optional: 3 minutes for the VS Code check; agent-session lane | `p4-watch-thread`, `p4-claude-transcript`, `p4-cli-run`, `p3-process`, the Claude parsing review (`docs/phases/02-06-lighter.md`) | done (committed 01:59): every live case passed (Claude Code 2.1.317); m6 fixed; the VS Code check waits for Haik |
 | `p4-live-codex` | no: Codex logged in by Haik (2026-11-06); agents run it with `p4-live-harness` | `p4-contracts-r2`, `p4-live-harness`; one live card at a time | done (2026-11-06 ~18:25, a1ca2ce): Codex 0.167.0, 7 one-line prompts; holds 0.3 s after a turn starts, ends in 17 ms; reverted thread followed; crash ends the hold in 115 ms; Codex in the tray |
-| `p4-live-copilot` | only if the sign-in sitting is needed | `p4-contracts-r2`, `p4-live-harness`; one live card at a time | ready once those two are done |
+| `p4-live-copilot` | no (Round 3) | `p4-contracts-r2`, `p4-live-harness`; live cards in parallel since 18:50 | running (2026-11-06 ~19:35) |
 | `p4-watch-tick-flake` | no | `p4-watch-thread` | done (15:00: ticks wait for their check; data files written atomically; 20 serial and 24 of 24 load runs pass) |
 | `p4-contracts-r2` | no | the four 2026-11-06 source and research cards (done); runs alone among Rust cards | done (2026-11-06 ~16:20, 24f7405): `FindNewest` (Codex reverted threads) and `Recent` as new variants, `Query`, `ImageSince`; 1541 tests; whole-workspace checks green on x64 and ARM64; no Cargo change |
 | `p4-antigravity-research` | no | none | done (2026-11-06): CLI 1.5.2 (`agy.exe`) and IDE 2.6.0 both need hooks (a Wakeshot plugin folder under `~\.gemini\config\plugins\`); free test yes (Google's claim; Armenia listed); build in v1 (`research/antigravity-signals.md`) |
@@ -404,3 +404,8 @@ limit; Copilot waiting does not hold. The cards build these.
   `p4-agent-hooks-install`, `p4-live-copilot`, `p4-live-vscode` (four), then `p4-live-opencode` when a slot frees and
   the OpenCode major is verified; then `p4-antigravity-source` beside the hooks code review; then `p4-live-cursor`
   and `p4-live-antigravity` together. Estimate told to Haik: about 22:00 to 22:30 (a guess).
+- 2026-11-06 ~19:35: `p4-contracts-r3` done (98c8795): whole-workspace checks green on x64 and ARM64 (1622 tests),
+  one `windows` feature (`Wdk_System_Threading`, missed by the design); `image_path` and `command_line_contains` take
+  a `ProcessRef`. Pushed 98c8795 (25 commits, secret scan clean). Started: `p4-cursor-source`,
+  `p4-agent-hooks-install`, `p4-live-copilot`, `p4-live-vscode`, and the OpenCode major verify. Haik may use the
+  laptop for normal work; he was told to keep away from the AI apps, sleep and the lid until the live tests end.
