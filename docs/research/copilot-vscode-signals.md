@@ -332,3 +332,38 @@ Line 2 is Working, line 3 Waiting, line 4 Working again, line 6 Idle. A compacte
 7. Background (`copilotcli`) sessions: which process owns the lock (extension host or a child).
 8. Whether Claude in the chat panel writes a `~\.claude\sessions\<pid>.json`, and Codex a rollout plus writer lock.
 9. Copilot Free: whether the Copilot harness works on Free.
+
+## Built (`p4-vscode-source`, 2026-11-06)
+
+`crates/wakeshot-core/src/sources/vscode.rs`, tests in `crates/wakeshot-core/tests/vscode_source.rs`, fixtures (from
+the schema) in `crates/wakeshot-core/tests/fixtures/vscode/`. Not registered in the tray yet and not tested on a real
+chat: the live card does both. What differs from the rules above, and what was checked again in the 1.145.1 source:
+
+- **Rules built:** 1 (Stable and Insiders, `VSCODE_APPDATA`), 2, 3, 4, 5 and 7. Rule 6 is not used: rule 7 needs no
+  Restart Manager and drops a crash leftover once VS Code starts anew. Rules 8 and 9: rule 8 is the Copilot CLI live
+  card's; rule 9 holds because the name filter passes only `<id>.jsonl`.
+- **Insiders**, rule 1's guess, is now verified: its folder is `Code - Insiders` (VS Code docs,
+  `docs/configure/profiles.md` in `microsoft/vscode-docs`) and its image `Code - Insiders.exe`
+  (`test/sanity/src/context.ts:1005,1242`). Its chats live by its own image.
+- **Portable installs are not read.** VS Code sets `VSCODE_PORTABLE` inside its own process when a `data` folder sits
+  next to the install (`src/bootstrap-node.ts:205-244`), so the tray never sees it. `--user-data-dir` is not seen
+  either. Empty-window chats use the default profile's `globalStorage` for every profile
+  (`chatSessionStore.ts:68-73`), and the older empty-window folder `workspaceStorage\no-workspace\chatSessions`
+  (line 75) is inside the workspace want.
+- **Line rules** (`objectMutationLog.ts:195-215,334-501`): every entry is written with a closing `\n`; Delete sets
+  the value to undefined; a Set to undefined has no `v`; a write past the end of a list leaves holes; Push cuts at
+  `i`, then appends; a Set or Delete on the root does nothing; the reader throws on a line before the Initial line and
+  on an unknown `kind` (`assertNever`). `modelState` is a primitive (`chatSessionOperationLog.ts:159`), so it is always
+  set whole at `["requests",n,"modelState"]`; the source also takes `["requests",n,"modelState","value"]` in case that
+  changes. `requestId` is the key: a changed request is replaced from its index by a Push with `i`.
+- **A retry keeps the old time.** `reopen()` (`chatModel.ts:1945-1961`) turns a done request back to Pending with its
+  first `timestamp`; `resendRequest` does it for a retry that keeps the request id (`chatServiceImpl.ts:1471,2029`,
+  used by the error card, `chatErrorConfirmationPart.ts`). A request seen going from done back to Pending or
+  NeedsInput therefore counts while any `Code.exe` runs. Compaction drops that history, so a compacted reopened
+  request falls back to its first time (not verified how often this happens).
+- **Unknown kinds count only on a path the source reads** (`requests`, one request, its `modelState` or `timestamp`, or
+  no path). A new kind of write elsewhere, for example in the answer text, is skipped, so it cannot hold the PC. An
+  unknown `modelState.value` counts only on a chat's newest request: requests run one after the other, so an older
+  one's value is history.
+- **Not verified:** serde_json stops at 128 levels of JSON nesting, so a chat whose saved tool data nests deeper would
+  be unreadable; whether real chats nest that deep was not checked.
