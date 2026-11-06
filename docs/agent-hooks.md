@@ -18,15 +18,19 @@ Cursor editor `3.29.9` (commit `306d153d51d7`, Linux `.deb`; its app JS is share
 | Agent | Folder Wakeshot adds | Runs on | Removed |
 |---|---|---|---|
 | Cursor (editor and CLI) | `%USERPROFILE%\.cursor\plugins\local\wakeshot\` | prompt sent, agent stopped, chat ended | at uninstall; or delete the folder yourself |
-| Antigravity (CLI and IDE) | `%USERPROFILE%\.gemini\config\plugins\wakeshot\` | each model call, agent stopped | the same |
+| Antigravity CLI | `%USERPROFILE%\.gemini\config\plugins\wakeshot\` | each model call, agent stopped | the same |
 
 - What runs: one command for every agent, `wakeshot.exe hook <agent> <event>`, from Wakeshot's install folder. It
   writes one small file per chat in `%LocalAppData%\Wakeshot\agents\<agent>\` while the agent works, and deletes it
   when the agent stops.
-- What it keeps: the chat's id, the turn's id and the agent's process. Never the prompt, file names or your email.
+- What it keeps: the chat's id, the turn's id and the agent's process (Antigravity CLI: also the name of `agy`'s log
+  and when the hook started). Never the prompt, your file names or your email.
 - While a hook runs, the agent hands it your prompt, and in some modes writes it to a temp file or a command line
   first (Cursor's CLI uses a temp file it deletes after the hook). Wakeshot's hook keeps none of it. Wakeshot does not
   add a hook to an agent that would put prompts on a command line (see "Privacy").
+- Antigravity CLI fires no hook when you press Esc or Ctrl+C, so Wakeshot also reads `agy`'s own log
+  (`%USERPROFILE%\.gemini\antigravity-cli\log\`) for the one line `agy` writes then. That log also holds your
+  prompts: Wakeshot keeps nothing of it but the chat id and the time of that line.
 - If you delete the folder, Wakeshot does not add it again. To get it back: reinstall Wakeshot, or delete
   `%LocalAppData%\Wakeshot\agent-hooks.json` and restart Wakeshot.
 - Each agent loads the folder at its next start (Cursor also at Developer: Reload Window).
@@ -376,6 +380,7 @@ The notice, once, when Wakeshot adds the folder (`Notice::HooksAdded { agent: "C
 | `stop` never comes (crash, kill) | The file stays; the hold lasts until the named process ends, or the chat's next `stop` or `sessionEnd`. When that process is long-lived and shared (Cursor's agent host daemon, which may outlive a window: not verified; Antigravity's IDE hub, one `agy.exe` for all IDE chats; its Remote Control daemon, which runs from logon), a missed end holds for the whole session on AC. The walk takes the nearest match, which is the process that ran the hook, so it never picks a longer-lived one above it. Live test rows: Esc and a crash in each. Any fallback beyond this is a time cap, which the product rule forbids: product question 5. |
 | An agent elevated as another account (over-the-shoulder UAC) | The Medium copy runs as the Explorer user, so the file lands in that user's data folder and the console user's tray holds. It holds only ids; accepted. |
 | Esc or the stop button | Editor 3.27.12, live: the Stop button fires `stop` `aborted` with the turn's id, and the hold ends about 1.4 s later; Esc does not cancel a turn (the turn goes on and ends with its own `stop`). CLI: three `stop` calls in code (completed, aborted, error), not run with the gate open. |
+| Antigravity CLI: Esc or Ctrl+C | No hook fires; the cancel line in `agy`'s log ends the hold at the next read, within 30 s (live, "Exact end"). An `agy` version not tested: no hold, "update Wakeshot" |
 | A chat left running behind a new one (Ctrl+N), or its tab closed (Ctrl+F4) | Live: the turn goes on in the background and fires its own `stop` when it ends. Ctrl+F4 also fires `sessionEnd` with `final_status` `generating` at once, which keeps the chat working (fixed in the live card: the first rule deleted the file there, 50 s before the work ended). |
 | A chat deleted while it runs | Code: `triggerStopHook` returns with no `stop` when the chat's data is gone. If so, the hold lasts until the window closes. **Not run**; the install check runs it. |
 | Cursor CLI (interactive and `-p`) | Live (CLI 2026.11.05-86047df): with only the plugin, the CLI fires `sessionEnd` and no `beforeSubmitPrompt` or `stop`, in both modes, so the CLI shows nothing and holds nothing. If the user has their own `~/.cursor/hooks.json` with those events, the gate opens and ours run too (code read, not run). Product question 1. |
@@ -430,6 +435,11 @@ The notice, once, when Wakeshot adds the folder (`Notice::HooksAdded { agent: "C
   one line and cannot close the here-string. Whether PowerShell also ends a line at U+2028 or U+2029 (which
   `JSON.stringify` leaves raw): **not verified**. Moot while the gate holds.
 - The README says it in the main text, not a fold (the lines below).
+- `agy`'s own log (Antigravity CLI, "Exact end"): `agy` writes every prompt into it in plain text. The tray reads it
+  for the cancel line only; its bytes pass through memory once, and the source keeps the pid of line 1, a version
+  check, a shape check and the cancel lines' chat ids and times. No line text reaches a file, a session, a tooltip or
+  a log line (a test with the marker in prompt lines and near-miss lines checks the source's whole state). The hook
+  reads at most 512 bytes of a log's head and keeps only the pid.
 
 ## Antigravity
 
@@ -441,9 +451,9 @@ It needs hooks: `research/antigravity-signals.md` (card `p4-antigravity-research
 | Folder | `%USERPROFILE%\.gemini\config\plugins\wakeshot\` with `plugin.json` and `hooks.json` (not `hooks/hooks.json`); CLI and IDE read the same folder; a disabled plugin runs no hooks | The same marker, record, add, rewrite and removal rules; fixed files `plugin.json`, `hooks.json`, `wakeshot-hooks.json` in `wakeshot\` only. The global `~\.gemini\config\hooks.json` is the user's file, never edited |
 | Presence | `.gemini` is also Gemini CLI's folder (dropped from v1) | The research's rule 1: `agy.exe` in `%LOCALAPPDATA%\agy\bin\` or `%USERPROFILE%\.gemini\bin\`, and `.gemini\config\` already exists. Wakeshot never creates `config\` itself (it may create `plugins\` in it). With `ANTIGRAVITY_GEMINI_DIR` set (meaning not verified): add nothing |
 | File | Named hook groups: `{ "wakeshot": { "PreInvocation": [...], "Stop": [...] } }`; `timeout` in seconds, default 30 | `timeout` 5 |
-| Events | `PreInvocation` before every model call; `Stop` when the loop ends, with `fullyIdle` (false: background tasks still run); no session end event, no approval event | `PreInvocation`: write the file with `"state": "working"` (skip the write when it already says so for this process). `Stop` with `fullyIdle` true: delete; false: rewrite it with `"state": "background"`, which the source reads as `Activity::Idle` with one open task, so it holds while `agy.exe` lives, like Claude's `shell` (the research's rule 4). Approval waits count as working |
+| Events | `PreInvocation` before every model call; `Stop` when the loop ends, with `fullyIdle` (false: background tasks still run); no session end event, no approval event | Since `p4-antigravity-exact-end` ("Exact end" below): `PreInvocation` writes the file `working`, naming `agy`'s log and when `agy` started the hook; `Stop` deletes it whatever `fullyIdle` says (background commands are not held); a cancel line in the log ends the turn. Approval waits count as working |
 | Session | `conversationId` (camelCase, a UUID) on stdin | File name, the same UUID rule, lowercased |
-| Agent process | `agy.exe`: the CLI from `%LOCALAPPDATA%\agy\bin\`, the IDE's hub from `%USERPROFILE%\.gemini\bin\` (one hub for all IDE chats) | Walk to the first `agy.exe`; label by its folder ("Antigravity CLI", "Antigravity") |
+| Agent process | `agy.exe`: the CLI from `%LOCALAPPDATA%\agy\bin\`, the IDE's hub from `%USERPROFILE%\.gemini\bin\` (one hub for all IDE chats) | Walk to the first `agy.exe`; label by its folder ("Antigravity CLI", "Antigravity"). Since `p4-antigravity-exact-end` only the CLI is held: the hub's hook runs and writes nothing |
 | Shell | How Windows starts the command (direct, `cmd` or PowerShell) is not documented; how it passes the input (stdin, a file or the command line) neither | The same command, `wakeshot.exe hook antigravity <event>`, as a bare absolute path, only when every character of the path is in an allow list: `A-Z a-z 0-9 \ : . _ -` and letters above ASCII. Anything else (a space, a quote, `{ } [ ] = ! @ # & ( ) ; , ^ % $`, backtick) gets no Antigravity hooks (one log line) until the live check names the shell and its quoting. The input form is the Privacy gate's check. The research's idea of a copy of the exe inside the plugin folder is rejected: an exe in another app's folder outlives Wakeshot and needs a copy at each update |
 | Cost | `PreInvocation` fires on every model call, so a turn with 30 steps runs the hook about 30 times | Measure in the live test; the exe stays under 50 ms |
 | Output | Docs disagree on `Stop`'s `decision`; non-zero exits fail open | Print `{}`; the live test confirms a stop goes through |
@@ -462,9 +472,8 @@ form"). Where the build differs from or settles the table above:
   Added by `p4-live-cursor`: a path the list refuses (a space in the profile path) uses its 8.3 form
   (`GetShortPathNameW`) when that passes the list with `~` allowed inside a name; a volume that makes no short names
   gives the long form back, so no hooks then, as before (tested on this PC's `C:`).
-- Input: `fullyIdle` is always in a `Stop` input (protojson `EmitUnpopulated`, a plain bool), so a `Stop` without a
-  plain `true` or `false` there is unreadable input: `problem.json`, the "update Wakeshot" notice, the chat's file
-  left as it was. The input has no event name, turn id or version field, so none is checked or logged.
+- Input: the input has no event name, turn id or version field, so none is checked or logged. (`fullyIdle` was read
+  here until "Exact end" below; it is not read now.)
 - Labels: "Antigravity CLI" for an `agy.exe` under `%LocalAppData%\agy\bin\`, "Antigravity" for any other (the IDE's
   hub in `.gemini\bin`, or an install the research did not name), so the hook never misses an `agy.exe` it could pair
   with; the walk takes the nearest, as for Cursor.
@@ -490,13 +499,74 @@ the agent that went. A reinstall between two tray starts is not seen (the folder
 hooks stay removed: change it when that shows up, for example by keeping the agent folder's creation time in the
 record.
 
+### Exact end (`p4-antigravity-exact-end`, 2026-11-06)
+
+Haik's "No guessing" rule (`product.md`): Esc and Ctrl+C in `agy` 1.5.2 fire no hook (22 of 22 interrupts, card
+Part A), so by hooks alone a chat stayed "working" after the work ended. Haik, 19:52: Wakeshot may read `agy`'s own
+log for its cancel line, with a guard. Built:
+
+| Case | What ends the hold | Seen live (debug build, dry-run tray) |
+|---|---|---|
+| A turn ends | `Stop` deletes the chat's file | at the `Stop` |
+| Esc or Ctrl+C in a turn (model call, tool run, approval wait, streamed answer) | The log's `Cancelling conversation <chat id>` line, at or after the latest model call's hook start | at the next 30 s safety tick: 7.6 to 20.4 s after the line (4 runs) |
+| `/exit`, a crash, the terminal closed | The `agy.exe`'s end (`Liveness::Process`) | at the process's end, before the tick |
+| A background command still runs after `Stop` | Nothing: not held | |
+
+- **The hook**: on `PreInvocation` it finds the log its `agy.exe` writes: a file `cli-<yyyymmdd>_<hhmmss>.log` in
+  `%USERPROFILE%\.gemini\antigravity-cli\log\` (the profile as Go's `os.UserHomeDir` reads it), made at or after that
+  process started, whose line 1 is "Starting language server process with pid <pid>"; it reads at most 512 bytes of
+  each candidate and keeps only the pid. The file gets two more fields: `"log":"<bare file name>"` and
+  `"turnAt":"<FILETIME>"`, the start of the `cmd /c` that `agy` ran the hook in (from the process list the walk
+  already reads), the earliest moment the hook can name. So each model call writes its file (a few ms); before, a
+  call whose file already said `working` wrote nothing. An elevated hook finds the log and hands both values to its
+  Medium copy as two more checked values (the copy starts later than the moment they name), only with a write. No log
+  found: the file names none.
+- **The source** (`sources::antigravity::AntigravitySource`, the shared `HookedSource` plus the log) tails each log a
+  working CLI chat names (`WantedFile::Tail`, a bare name joined to the fixed folder) and keeps only: the pid of line
+  1, whether line 2 ("Language server version: <v>") names a tested version, whether any line broke the tested shape,
+  and per cancel line the chat id and its glog time. A chat is idle once a cancel line for it has a local time at or
+  after `turnAt` in local time (the PC's zone at that instant, `LocalOffset`; glog writes local time with no year,
+  so the year that puts the line nearest `turnAt` is taken). Another chat's cancel, the "Cancelling in-progress
+  response" and "Cancelling steps" lines, and a prompt that quotes a cancel line change nothing.
+- **The guard**: a chat whose file names no log, whose log's line 1 or 2 has another shape or names another pid,
+  whose version is not in `TESTED_VERSIONS` (1.5.2), or with a line "Cancelling conversation" in another shape or
+  level, is `FormatHealth::Unreadable("Antigravity CLI log")`: idle (no hold) and "update Wakeshot" while that
+  `agy.exe` lives. A missing cancel line cannot be seen, so a later `agy` is held only once a live test of its log
+  passes and its version joins the list.
+- **The IDE**: only the CLI is held in v1. The hub's hook (`agy.exe` outside `%LocalAppData%\agy\bin\`) runs, writes
+  nothing and logs nothing; its input on a command line still blocks as before. `agent_hooks` adds the plugin only when
+  the CLI's `agy.exe` is there and names it "Antigravity CLI" (notice, log lines). An old IDE or `background` file
+  holds nothing.
+- **Background commands**: not held. `fullyIdle` is not read (`false` in 5 runs and `true` in 2 while one ran, Part
+  A). Exact by process would need the command's `powershell.exe` named at its start: the next hook can come after an
+  Esc in the about 0.3 s between, and a `powershell.exe` child of `agy` may be an MCP server. Change it when `agy`
+  gives a hook or a log line at a background command's start and end, or Haik accepts holding by those processes with
+  that gap.
+- **Delay**: a folder watch sees no change while `agy` appends to its open log (tested with Wakeshot's own filter on a
+  scratch file: only "Created" and "Changed" at the close), so the log is read when the hook writes in
+  `agents\antigravity\` and at the safety tick. An Esc'd turn's hold ends within 30 s. Change it when a contract change
+  lets a source ask for a short poll of a tail; then within about 2 s.
+- **Order, not time, would leave a gap**: the hook's own read of the log's length came about 30 ms after `agy` started
+  it, on every model call, so an Esc in that gap would have kept "working". The `cmd`'s start closes it. Left: in the
+  hour that repeats when daylight saving time ends, a cancel may compare as older than a hook of the first pass and
+  be missed (the hold then lasts until the next turn or `agy`'s end); a clock set back by hand the same.
+- **Tests that failed without each rule** (mutation run, card Log): `Stop` deletes whatever `fullyIdle` says; a cancel
+  ends the turn, at the microsecond of the hook's start too; the guard; the year; the IDE writes nothing; `turnAt` is
+  `cmd`'s start; an older log with the pid does not count; the IDE's copy alone adds no plugin. The privacy test feeds
+  a log with the marker in prompt lines, a prompt's next line, a model line and a near-miss cancel line, and checks
+  the source's whole state and sessions.
+
 ## README lines
 
 For `p4-readme-agents`:
 
-- Agents: "For Cursor and Antigravity, Wakeshot adds a small hook folder of its own (`.cursor\plugins\local\wakeshot`
-  and `.gemini\config\plugins\wakeshot` in your user folder) and tells you once. Uninstalling Wakeshot removes them;
-  delete a folder to remove it yourself, and Wakeshot leaves it removed."
+- Agents: "For Cursor and Antigravity CLI, Wakeshot adds a small hook folder of its own
+  (`.cursor\plugins\local\wakeshot` and `.gemini\config\plugins\wakeshot` in your user folder) and tells you once.
+  Uninstalling Wakeshot removes them; delete a folder to remove it yourself, and Wakeshot leaves it removed."
+- Antigravity CLI (`p4-antigravity-exact-end`): "Antigravity CLI fires no hook when you press Esc or Ctrl+C, so
+  Wakeshot also reads `agy`'s own log for the line it writes then; the PC may sleep again up to 30 seconds after. That
+  log also holds your prompts; Wakeshot keeps none of it. Background commands are not held. The Antigravity IDE is not
+  supported yet."
 - Prompts, in the main text, not a fold: "While a hook runs, the agent hands it your prompt, and in some modes writes
   it to a temp file or a command line first. Wakeshot's hook keeps none of it, and Wakeshot adds no hook to an agent
   that puts prompts on a command line."
@@ -630,7 +700,9 @@ says no `stop` then; the install check runs it), an approval wait (holds until i
 | 15 | Two hook runs race on one chat file | Named mutex for the read and write, atomic rename, the turn id check on `stop` |
 | 16 | Enterprise rules | Cursor's admin switch for local plugins decides; Wakeshot never works around it |
 | 17 | Antigravity's unknown shell | Bare absolute path only when every character is in an allow list; otherwise no hooks until a live check; never an exe copied into the agent's folder |
-| 18 | Antigravity's `PreInvocation` runs on every model call | The exe skips the write when the file already says working for this process; the live test measures the cost per call |
+| 18 | Antigravity's `PreInvocation` runs on every model call | Since "Exact end" each call writes its file (its `turnAt`) and lists the log folder; measured in Part A for the release exe without that: about 30 ms in the exe per hook run |
+| 24 | `agy`'s log holds every prompt | Read for the cancel line only; nothing else kept or logged (a marker test); the hook reads 512 bytes of a head and keeps a pid; an elevated hook reads a head in a folder a Medium process could swap (links are not followed), and keeps only the name of a file whose head names the pid, in the fixed name shape |
+| 25 | `agy` changes its log | Tested versions only; another version, line shape or pid: no hold, "update Wakeshot" |
 | 19 | An elevated hook, tray or uninstall writes or deletes in a folder a Medium process can swap or hard-link | File work only at Medium: an elevated hook passes its checked values to a Medium copy (`spawn_outside_tree`), an elevated uninstall runs `hook <agent> remove` the same way, an elevated tray skips; a copy that is not Medium writes nothing; the copy re-checks every value and drops a "working" write past its deadline; temp files with `CREATE_NEW`; the prune deletes only version 1 files of gone processes and its own temp names; a junction test under an elevated token |
 | 20 | A marker anyone can write steers the rewrite or the uninstall | The file set is fixed in code; the marker has fixed keys and hashes only, no paths; any extra key, file or folder means "changed by someone"; empty folders removed only up to `wakeshot\` |
 | 21 | Gemini CLI's `.gemini` taken for Antigravity | Presence needs `agy.exe` in its install folder and an existing `.gemini\config\`; Wakeshot never creates `config\`; `ANTIGRAVITY_GEMINI_DIR` set means no hooks |

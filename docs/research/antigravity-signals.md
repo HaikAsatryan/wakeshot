@@ -12,7 +12,7 @@ run. On the laptop only folder names were checked: Antigravity is not installed 
 
 | Surface | Agent process | Best signal | Confidence | Needs hooks | Free test |
 |---|---|---|---|---|---|
-| Antigravity CLI 1.5.2 (`agy`) | `agy.exe` in a terminal | Hooks from a Wakeshot plugin folder: `PreInvocation` = working, `Stop` = turn over (`fullyIdle` says whether background tasks still run) | Medium (documented, not run) | Yes | Yes (Free plan) |
+| Antigravity CLI 1.5.2 (`agy`) | `agy.exe` in a terminal | Hooks from a Wakeshot plugin folder: `PreInvocation` = working, `Stop` = turn over; Esc and Ctrl+C fire no hook, `agy`'s own log has a cancel line for them ("Exact end" below). `fullyIdle` is not reliable | High (live, 2026-11-06) | Yes | Yes (Free plan) |
 | Antigravity IDE 2.6.0 | `agy.exe --hub`, child of the IDE (the same binary) | The same hooks, from the same plugin folder | Medium (same engine; hub mode not run) | Yes | Yes (Free plan) |
 | Without hooks | | `transcript.jsonl` per conversation, one line per step | Low (write timing not known) | No | |
 
@@ -405,3 +405,46 @@ four `Stop` fields. Keys come sorted, compact, paths with `/`, no line end. `agy
 `powershell.exe`. Through the app: the dry-run tray logged "Holding starts: Antigravity CLI" 0.1 s after Enter and
 "Holding ends" at the `Stop`, also for the first file in an `agents\antigravity\` folder the hook made while the tray
 ran.
+
+## Exact end (2026-11-06)
+
+Card `p4-antigravity-exact-end`, after Haik's "No guessing" rule. Antigravity CLI 1.5.2, Gemini 3.8 Flash, Free plan,
+TUIs at Medium under the harness driver. Part A (facts): a scratch capture plugin on all six hook events (event, times,
+ids cut to 8 characters, numbers, booleans, key names; never the prompt, `lastUserInput`, tool args or a path), a
+kernel process trace, and `agy`'s own log read with the prompt lines cut out; 42 one-line prompts. Part B (build and
+live check through a dry-run tray): 6 one-word prompts. Every time and run is in the card's Log.
+
+| Case | Hook events after the key or the end | Other exact signal | Exact? |
+|---|---|---|---|
+| Normal turn | `PreInvocation` ... `PostInvocation` (after the call's tools) ... `Stop` | `agy` exit | Yes, by hooks |
+| Esc during a model call, a tool run, an approval wait, a streamed answer (18 runs) | None after `PreInvocation` or `PreToolUse`; a foreground command's `powershell.exe` ends at once | `agy`'s log: "Cancelling conversation <chat id> (killBackgroundTasks=false)" | Hooks: no. With the log: yes |
+| Ctrl+C in a turn (3 runs; 1 more live in Part B) | Same as Esc; `agy` stays open | The same log line | With the log: yes |
+| A second prompt typed while one runs (3 runs) | Queued: the first turn's `Stop`, then the second's `PreInvocation` 0.15 to 0.46 s later | | Yes, by hooks |
+| Background command, natural end (4 runs and 2 more) | `PreToolUse` N, `PostInvocation` with no `PostToolUse` N, `PostToolUse` N 50 to 65 ms after its process ends, then the agent wakes itself | The command's `powershell.exe`, a child of `agy.exe` | By hooks or by the process |
+| Background command killed from `/tasks` or by the agent's `manage_task` (1 run each) | None for it | `/tasks`: "Cancelling steps [N]"; the agent's kill: no line; the process ends | Only by the process |
+| `fullyIdle` on `Stop` while a background command runs | `false` in 5 runs, `true` in 2 (their args had `IsDaemon`; values not read) | | No |
+
+**The log** (verified live): each `agy.exe` writes `%USERPROFILE%\.gemini\antigravity-cli\log\cli-<start time>.log`
+(glog lines `Lmmdd hh:mm:ss.uuuuuu <thread> <file>:<line>] <msg>`, local time, line ends `\n`). Line 1 is "Starting
+language server process with pid <pid>", the `agy.exe`'s own pid; line 2 is "Language server version: 1.5.2" (9 of 9
+logs on this PC). `cli.log` one folder up is a hard link to the newest process's file. Each Esc and Ctrl+C wrote the
+cancel line within 1 ms of the "Cancelling in-progress response" line, about 50 ms after the key (22 of 22 in Part A,
+5 of 5 in Part B), flushed at once; no normal turn and no Ctrl+C on an idle prompt wrote it; its id is the hook's
+full `conversationId` (Part B). All 28 such lines on this PC end in "(killBackgroundTasks=false)". The log also holds
+every prompt in plain text ("HandleUserInput called with text: ..."). Not documented anywhere found; a later `agy` may
+change any of it, so Wakeshot trusts only tested versions.
+
+**Timing** (verified): in the two fastest Part A runs (Esc 0 to 0.1 s after Enter), the cancel line came 16 and 25
+ms after the `PreInvocation` hook had started; in Part B the hook's `cmd /c` started 33 to 42 ms after Enter and the
+cancel line came about 1.1 s later. A folder watch (Wakeshot's own filter) sees no change while a process appends to
+a file it keeps open (a scratch writer: "Created" at the open, "Changed" only at the close), so the log is read at the
+hook's writes and at the 30 s safety tick: in Part B each Esc's or Ctrl+C's hold ended 7.6 to 20.4 s after the cancel
+line, and an Esc followed by `/exit` ended at the process's end.
+
+**The rule built** (`agent-hooks.md`, "Exact end"): a model call's hook names the log and the start of its `cmd /c`;
+the source ends the chat at a cancel line for it at or after that start (local time, through the PC's zone), at
+`Stop`, or at `agy`'s end. A log not as tested, or none found: no hold and "update Wakeshot". Background commands
+are not held. The IDE's hooks write nothing (the IDE is out of v1 until its own check passes).
+
+Not tested: `killBackgroundTasks=true` (never seen), `/clear` or `/new` during a turn, a turn that ends on a quota or
+network error, `/btw`, a second TUI through the tray in Part B (Part A saw each process keep its own log), the IDE.

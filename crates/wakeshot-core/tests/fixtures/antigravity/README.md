@@ -15,3 +15,9 @@ Real captures are in `live/` (`p4-live-antigravity`). They differ from the made-
 ignores: a real `Stop` has no `finalModelOutput`, its `terminationReason` was `NO_TOOL_CALL`, the paths use `/`, and
 the form is compact with sorted keys. Esc in the CLI runs no `Stop` at all, so `ide-stop-canceled.json` stays a
 made-up case. The made-up files stay for what the real ones do not show (pretty printing, an upper-case id).
+
+`log/cli-20261106_185448.log` (`p4-antigravity-exact-end`): a log in the shape of `agy` 1.5.2's own
+(`%USERPROFILE%\.gemini\antigravity-cli\log\`). Lines 1 to 4 and the cancel and "Interrupt cleared" lines of chat
+`1ad3ac30-...` at 18:56 and 18:59 are copies of a test TUI's real lines (no prompt, path or account in them); the
+second chat's line, the "Cancelling steps" line, the warning's text and every prompt line are made up. The prompt lines hold the test marker
+instead of a prompt; one prompt has a second line and one quotes a cancel line, as a real prompt could.

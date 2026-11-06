@@ -340,7 +340,11 @@ where
         log.line(Level::Warn, AREA, &text);
     }
     let mut watched = sources(log);
-    watched.extend(hooked_sources(boot.dir.root(), log));
+    watched.extend(hooked_sources(
+        boot.dir.root(),
+        std::env::home_dir().as_deref(),
+        log,
+    ));
     let watch = match WatchThread::start(
         boot.dir.clone(),
         config.clone(),
@@ -571,18 +575,31 @@ fn sources_in(home: &Path, env: AgentEnv, log: &Arc<dyn Log>) -> Vec<Box<dyn Age
     ]
 }
 
-/// The hooked agents, Cursor and Antigravity: their sources read only the files Wakeshot's own hook writes in `agents\`
-/// of the data folder (`docs/agent-hooks.md`), so no agent folder or variable decides where. Beside [`sources`], so
-/// they are watched even when the profile folder is unknown.
-fn hooked_sources(data_root: &Path, log: &Arc<dyn Log>) -> Vec<Box<dyn AgentSource + Send>> {
+/// The hooked agents, Cursor and Antigravity: their sources read the files Wakeshot's own hook writes in `agents\` of
+/// the data folder (`docs/agent-hooks.md`), so no agent folder or variable decides where. Beside [`sources`], so they
+/// are watched even when the profile folder is unknown. Antigravity CLI also reads the cancel lines of `agy`'s own log
+/// under `home`, the folder `agy` finds the way [`sources`] does; without it no Antigravity chat holds.
+fn hooked_sources(
+    data_root: &Path,
+    home: Option<&Path>,
+    log: &Arc<dyn Log>,
+) -> Vec<Box<dyn AgentSource + Send>> {
     log.line(
         Level::Info,
         AREA,
         "Cursor and Antigravity are watched in the files their Wakeshot hook writes in the data folder",
     );
+    if home.is_none() {
+        log.line(
+            Level::Warn,
+            AREA,
+            "the profile folder is unknown, so Antigravity's log is not read and no Antigravity chat holds",
+        );
+    }
+    let zone = Box::new(SystemZone::current_logged(Arc::clone(log)));
     vec![
         Box::new(cursor::source(data_root)),
-        Box::new(antigravity::source(data_root)),
+        Box::new(antigravity::source(data_root, home, zone)),
     ]
 }
 
@@ -1875,7 +1892,8 @@ mod tests {
         let root = Path::new(r"C:\Users\x\AppData\Local\Wakeshot");
         let memory = Arc::new(MemoryLog::default());
         let log: Arc<dyn Log> = memory.clone();
-        let picked = hooked_sources(root, &log);
+        let picked = hooked_sources(root, Some(Path::new(r"C:\Users\x")), &log);
+        // Antigravity's log is wanted only once a chat file names it.
         let found: Vec<(SourceId, PathBuf)> = picked
             .iter()
             .map(|source| match &source.wanted()[..] {

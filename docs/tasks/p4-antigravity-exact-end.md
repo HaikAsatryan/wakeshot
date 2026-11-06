@@ -1,6 +1,6 @@
 # Antigravity: see the end of work exactly (Esc, background commands), or leave v1
 
-Phase: 4. Status: blocked for Part B (Haik's answer to Question 1, and `p4-live-cursor` done); Part A done
+Phase: 4. Status: done 2026-11-06 21:35 (Part B); Part A done
 2026-11-06 19:27 (new 2026-11-06 18:50, Haik's "No guessing" rule in `docs/product.md`). Needs Haik: no for
 Part A; the IDE first-run pass only if Part A finds Antigravity can stay (`p4-live-antigravity` Result, Open items 1).
 Agent: `wakeshot-worker`. Size: about 150K tokens (Part A about 70K, Part B about 80K).
@@ -110,7 +110,13 @@ absence of an event. A state that can stay "working" after the work ended is not
    TUI 2's log). The live cards' minimum-token rule assumes the flag works; the footer still showed "low". Not
    checked what effort the model really ran at.
 2. **`agy` keeps every prompt in plain text in its own log** (`HandleUserInput called with text: ...`), besides the
-   transcript and `history.jsonl`. Worth a line in the Antigravity privacy notes whatever Part B decides.
+   transcript and `history.jsonl`. Worth a line in the Antigravity privacy notes whatever Part B decides. (Part B: in
+   `agent-hooks.md`, "Privacy" and "What Wakeshot adds".)
+3. **`CLAUDE.md` has no line for the new fact** that Wakeshot reads `agy`'s log (cancel lines, lines 1 and 2 only)
+   though it holds prompts. Not mine to edit; a "Facts to keep in mind" line for the orchestrator.
+4. **Haik's installed Wakeshot tray ran during the live check** (pid 11424, started 04:34, and its guard). My tray was
+   a dry run with its own data folder and the hook wrote there, so nothing crossed; noted because `CLAUDE.md` asks to
+   quit it before real-settings tests.
 
 ## Log
 
@@ -231,6 +237,64 @@ absence of an event. A state that can stay "working" after the work ended is not
   exe copy and build folder deleted. Part B does not need the capture plugin; its source stays in the scratch folder
   (`capture\`, `run\make_plugins.py`). `docs/research.md` lines are not written this round (orchestrator: card only);
   Part B writes them from this Log.
+- 2026-11-06 20:40: Part B started by a `wakeshot-worker` (orchestrator: "If Esc can be seen exactly", with Haik's
+  19:52 answer). Owns `sources/antigravity.rs`, `sources/hooked.rs`, `wakeshot-cli/src/hook.rs`, `agent_hooks.rs`,
+  their tests and fixtures, the Antigravity lines in `tray_mode.rs` and `agent-watch.rs`, `watch/*` if needed, and
+  the docs the card names. Not `cursor.rs` (so no new field in the shared `Agent` table: Antigravity's log rule
+  lives in `antigravity.rs`).
+- 20:45, checked in Part A's data: the log's cancel id is the full conversation UUID (prefix matches the hook's
+  `conversationId`); line 2 of each log is "Language server version: 1.5.2"; in the two fastest Esc runs (Esc 0 to
+  0.1 s after Enter) the cancel line came 16 and 25 ms after the `PreInvocation` hook had started (capture time
+  vs. log time), so a hook that notes the log's length first orders right. Children of `agy.exe` in the four traces:
+  only `cmd.exe` (hooks) and `powershell.exe` (commands).
+- 20:50, a folder watch with Wakeshot's own filter (`FileName | DirName | LastWrite | Size`, .NET `FileSystemWatcher`
+  on a scratch folder) and a writer that keeps its file open and appends a line each second: **no notice for the
+  appends**, only "Created" at the open and "Changed" at the close (`run\notice_test.ps1`). So the watch thread cannot
+  see `agy`'s log grow; a tail of it is read when the hook writes in `agents\antigravity\` or at the 30 s safety tick.
+  After an Esc no hook runs, so the hold ends at the next tick: within 30 s of the cancel line.
+- 20:55, design (each with a "change it when" in the Result): ordering by the log's byte length at the hook's start
+  has a gap of about 30 ms after every model call's hook spawn (cmd and exe start before the length is read), so an
+  Esc in that gap would keep "working". Ordering by time closes it: the hook notes when `agy` started it (the start
+  of its `cmd /c`, from the process list it already reads), and the source compares that, in local time through the
+  existing `LocalOffset` zone, with the cancel line's glog time. Background commands: no hold (an exact start needs a
+  hook in a ~0.3 s window an Esc can hit, and a `powershell.exe` child of `agy` may be an MCP server; not cheap and
+  exact). The IDE: its hooks write nothing; `agent_hooks` adds the plugin only when the CLI's `agy.exe` is there and
+  names it "Antigravity CLI". `cursor.rs` untouched: the log rule is in `antigravity.rs`, the hook asks it.
+- 21:05 to 21:35, built: `hooked.rs` (`LogMark`, `StateFile.log`/`turnAt`, two more checked values for a write,
+  `HookedSource::chat`/`chats`), `antigravity.rs` (`Stop` deletes, `fullyIdle` not read, `holds`, the glog parse, the
+  guard, `AntigravitySource`), `hook.rs` (`find_log`, the IDE return, the mark), `agent_hooks.rs` (CLI only),
+  `tray_mode.rs` and `agent-watch.rs` (the source's new arguments), tests and a made-up log fixture
+  (`fixtures/antigravity/log/`). The CLI's integration test of the `agy` chain asserted a background file; it now runs
+  the chain with an `agy.exe` outside the CLI's folder and asserts nothing is written. x64 clippy clean (both forms).
+- 21:10, x64 tests of `wakeshot-core`, `wakeshot-cli`, `wakeshot-windows`: 1762 passed, 0 failed, 38 ignored.
+- 21:12 to 21:18, **each new rule's test fails without the rule** (`run\mutate.py`, on a scratch copy of the workspace
+  with its own target folder, so no mutation ever sat in the repo another worker builds from): `Stop` back to
+  `fullyIdle`; no cancel ends a turn; a cancel at the hook's start not counted (`>` for `>=`); no guard; the hook
+  start's year only; the IDE held; the hook's own start for `cmd`'s; an older log with the pid counted; the IDE's copy
+  making Antigravity present: 9 of 9 failed their test. The IDE one first passed (its `Stop` deleted the file the
+  mutation let through), so the test now also checks right after the model call; then it failed as it should.
+- 21:20 to 21:26, **live, through the app** (debug build of the tree; dry-run lock taken 21:20:12, deleted 21:25:55).
+  The plugin from `agent_hooks::at_start` on a scratch profile ("Antigravity CLI: hook folder added", record
+  `added`), copied into the real `plugins\` the product's way at Medium (`agy plugin list`: `wakeshot`, enabled).
+  Dry-run tray at Medium (pid 6116, other agents on empty folders); TUI under the driver at Medium (agy 44164, its own
+  `log\cli-20261106_212049.log`), the hook writing to the tray's dry-run folder. Six one-word prompts ("hi"), each
+  reached a model:
+  - Turn: Enter 21:21:21.439, "Holding starts: Antigravity CLI" 22.934, "Holding ends" 26.455 at the `Stop` (file
+    deleted).
+  - Esc 1 to 3 (during "Generating..."): the chat's file named the log and the hook's start (`turnAt`) 33 to 42 ms
+    after Enter; cancel line 51 to 58 ms after the key, its id the file's full chat id. Holds from 0.1 s after Enter,
+    ended at the next safety tick: 13.5, 20.4 and 7.6 s after the cancel line (Esc at 21:21:52.535, 21:22:45.739,
+    21:23:28.500; "Holding ends" 21:22:06.108, 21:23:06.161, 21:23:36.135).
+  - Ctrl+C: key 21:24:26.538, cancel line 26.547, "Holding ends" 36.155 (tick, 9.6 s).
+  - Esc then `/exit`: Esc 21:25:17.911, `/exit` Enter 20.448, `agy` ended (driver) 21.283, "Holding ends" 21:25:21.224,
+    by the process's end, before the next tick.
+  Clean-up: tray quit by `taskkill /PID 6116` (no force): "Wakeshot ends with code 0". Plugin removed by
+  `wakeshot.exe hook antigravity remove` at Medium (exit 0, `{}`, "Antigravity CLI: .gemini\config\plugins\wakeshot
+  removed"; `plugins\` empty, no `wakeshot*` left in `.gemini\config`, `agy plugin list` `[]`). Driver and `agy` ended
+  by `/exit` (driver exit 0, active after 0).
+- 21:27 to 21:35: CLI tests again, the two ignored chain tests at Medium (pass), ARM64 clippy and test build, docs
+  (`agent-hooks.md`, `research/antigravity-signals.md`, `product.md`, `research.md` appended after a re-read),
+  build folders and live scratch deleted, Result written.
 
 ## Result
 
@@ -289,3 +353,71 @@ hooks), two test chats and their logs under `%USERPROFILE%\.gemini\antigravity-c
 
 **Open items:** Question 1. Not tested: `killBackgroundTasks=true` (when it comes), `/clear` or `/new` during a turn,
 a turn that ends on a quota or network error, `/btw`, the IDE.
+
+**Part B done, 2026-11-06 21:35** ("If Esc can be seen exactly", with Haik's 19:52 answer).
+
+What holds and ends now (Antigravity CLI 1.5.2):
+
+| Case | Hold | How exact |
+|---|---|---|
+| Turn | From the first model call's hook to `Stop` | Hooks (live: starts 0.1 s after Enter, ends at the `Stop`) |
+| Esc or Ctrl+C in a turn | Ends at the log's cancel line for that chat, at or after the latest model call's hook start | Log line; read at the next safety tick, so within 30 s (live: 7.6 to 20.4 s, 4 runs) |
+| `/exit`, crash, terminal closed | Ends at `agy.exe`'s end | Process (live: at the exit, before the tick) |
+| Background command after `Stop` | Not held | Rule: no exact start and end in every case; `fullyIdle` not read |
+| Log not as tested (version not 1.5.2, line 1 or 2 or a cancel line of another shape, another pid) or none found | Not held; "update Wakeshot" while that `agy.exe` lives | Guard |
+| Antigravity IDE | Not held; its hooks write nothing; no plugin when only the IDE is installed | Out of v1 |
+
+Decided by the worker, each with when to change it:
+
+1. **Order by time, not by the log's length.** The hook notes the start of the `cmd /c` that `agy` ran it in; the
+   source compares it with the cancel line's glog time in local time (the PC's zone at that instant). The length,
+   read about 30 ms after each model call's hook spawn, would miss an Esc in that gap on every call. Left: the hour
+   that repeats when daylight saving ends, and a clock set back by hand, can miss a cancel (the hold then lasts to the
+   next turn or `agy`'s end). Change it when `agy` logs UTC or a sequence number.
+2. **Read at the safety tick.** A folder watch sees no appends to an open file (tested), so the log is read when the
+   hook writes and every 30 s. Change it when a contract change lets a source ask for a short tail poll.
+3. **Background commands not held.** An exact start needs the command's process named, which the next hook may only
+   do after an Esc in the about 0.3 s between, and a `powershell.exe` child of `agy` may be an MCP server. Change it
+   when `agy` reports a background command's start and end, or Haik accepts process holds with that gap.
+4. **Version list `["1.5.2"]`.** A missing cancel line cannot be seen, so only tested versions hold. `agy` updates
+   itself (it has `AGY_CLI_DISABLE_AUTO_UPDATE`), so each `agy` release shows "update Wakeshot" and holds nothing
+   until a live re-test adds it. Change it when that churn costs more than a rare stuck hold (Haik's call).
+5. **The IDE**: its hub's hook returns at once, quietly; `agent_hooks` adds the plugin only with the CLI's `agy.exe`
+   and names it "Antigravity CLI". Change it when the IDE's own check passes.
+6. **`cursor.rs` untouched**: the log rule lives in `antigravity.rs`, and the hook asks `is_antigravity`. Change it when
+   a second agent needs a log: then a field in the shared `Agent` table.
+7. **Each model call writes its file** (its own `turnAt`) and lists the log folder (9 files here). Change it when the
+   folder grows large: take the name from the chat's own file first.
+8. **An elevated hook reads a log head** (512 bytes, links not followed) in a folder a Medium process could swap, and
+   hands only a fixed-shape name and a number to its Medium copy. Change it when the security review says otherwise.
+
+**Files changed:** `crates/wakeshot-core/src/sources/antigravity.rs`, `crates/wakeshot-core/src/sources/hooked.rs`,
+`crates/wakeshot-core/tests/antigravity_source.rs`, `crates/wakeshot-core/tests/fixtures/antigravity/log/` (new, one
+log), `crates/wakeshot-core/tests/fixtures/antigravity/README.md`, `crates/wakeshot-cli/src/hook.rs`,
+`crates/wakeshot-cli/tests/hook.rs` (the `agy` chain test), `crates/wakeshot-windows/src/agent_hooks.rs`,
+`crates/wakeshot-windows/src/app/tray_mode.rs` (`hooked_sources` takes the profile folder and a zone),
+`crates/wakeshot-windows/examples/agent-watch.rs`; `docs/agent-hooks.md` ("Exact end" and the lines it changes),
+`docs/research/antigravity-signals.md` ("Exact end"), `docs/product.md` (the Antigravity lines), `docs/research.md`
+("Antigravity exact end"); this card. No contract or `Cargo` change.
+
+**Checks** (own build folder, `--locked`, no `RUSTFLAGS`): `rustfmt --edition 2024 --check` on the 8 Rust files:
+clean. `cargo clippy -p wakeshot-core -p wakeshot-cli -p wakeshot-windows -- -D warnings`, with and without
+`--all-targets`, x64 and ARM64 (LLVM folder on that command's PATH): clean (4 runs). `cargo test` of the three, x64:
+1762 passed, 0 failed, 38 ignored; the CLI again after the last test change and `agent_hooks` after the last doc
+change: all pass. ARM64: tests built (`--no-run`); this x64 laptop cannot run them. The CLI's two ignored chain tests
+at Medium: 2 passed. Each new rule's test failed without it: 9 of 9 (Log 21:12). Privacy: the marker tests pass
+(hook input, log lines, the source's whole state). Live: Log 21:20 to 21:26.
+
+**Clean-up:** plugin removed by the product's remove path (`plugins\` empty, `agy plugin list` `[]`); dry-run tray
+ended by `taskkill /PID` (code 0); driver and `agy` ended by `/exit`; dry-run lock deleted; build folders, the
+workspace copy, the exes and the live scratch data deleted. Left: Antigravity's own test chat and log under
+`%USERPROFILE%\.gemini\antigravity-cli\` (one more file, `cli-20261106_212049.log`).
+
+**For the README and the video** (not mine): name **"Antigravity CLI"** ("works with Antigravity CLI"), not
+"Antigravity". README text in `agent-hooks.md`, "README lines": the hook folder line now says Antigravity CLI, plus
+one line that Wakeshot reads `agy`'s log for the Esc line only (it holds prompts; nothing kept), that the PC may sleep
+again up to 30 s after an Esc, that background commands are not held, and that the IDE is not supported yet.
+
+**Open items:** decision 4 (each `agy` release needs a live re-test before it holds) is worth Haik's look. Not tested:
+`killBackgroundTasks=true`, `/clear` or `/new` during a turn, a quota or network error, two TUIs through the tray, the
+daylight saving hour, the IDE.

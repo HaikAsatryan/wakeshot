@@ -5,7 +5,8 @@
 //! Every run sets `WAKESHOT_DATA_DIR` (read by debug builds only) to a temp folder, so nothing touches
 //! `%LocalAppData%\Wakeshot`; a release build skips the tests that need it.
 //!
-//! Owner: `p4-cursor-source` (first version from `p4-contracts-r3`).
+//! Owner: `p4-cursor-source` (first version from `p4-contracts-r3`); the `agy` chain test by
+//! `p4-antigravity-exact-end`.
 
 use std::ffi::OsString;
 use std::io::Write;
@@ -431,11 +432,13 @@ fn hook_under_agy(
     process
 }
 
-/// The whole Antigravity chain on this PC: `agy.exe`, `cmd /c`, the hook. A model call writes the chat's file naming
-/// that `agy.exe`, a stop with a background task keeps it as `background`, a full stop deletes it.
+/// The whole Antigravity chain on this PC: `agy.exe`, `cmd /c`, the hook, with an `agy.exe` outside the CLI's install
+/// folder, as the IDE's hub is. Only the CLI is held in v1 (`p4-antigravity-exact-end`), so every event runs through
+/// `cmd`'s quoting to the hook, answers `{}` with exit 0, and writes nothing; the in-process tests in `src/hook.rs`
+/// cover the CLI's files (the CLI's folder is the real `agy`'s, which no test writes in).
 #[test]
 #[ignore = "needs Explorer as the shell when the runner is elevated (track note 3)"]
-fn a_hook_under_agy_and_cmd_writes_the_chats_file_and_a_full_stop_deletes_it() {
+fn a_hook_under_an_agy_outside_the_clis_folder_runs_and_writes_nothing() {
     if release_build() {
         return;
     }
@@ -445,37 +448,17 @@ fn a_hook_under_agy_and_cmd_writes_the_chats_file_and_a_full_stop_deletes_it() {
         std::env::var_os("SystemRoot").map_or_else(|| PathBuf::from(r"C:\Windows"), PathBuf::from);
     let agy = temp.0.join("agy.exe");
     std::fs::copy(system.join("System32").join("cmd.exe"), &agy).unwrap();
-    let chat = "ec33ebf9-0cba-4100-8142-c61503f6c587";
-    let file = data
-        .join("agents")
-        .join("antigravity")
-        .join(format!("{chat}.json"));
-    let state = |process: wakeshot_core::process::ProcessRef, state: &str| {
-        format!(
-            r#"{{"version":1,"pid":{},"procStart":"{}","generation":"","label":"Antigravity","state":"{state}"}}"#,
-            process.pid, process.start
-        )
-    };
-    let call = hook_under_agy(
-        &agy,
-        &data,
-        "PreInvocation",
-        &agy_fixture("cli-pre-invocation.json"),
-    );
-    let text = std::fs::read_to_string(&file).expect("the chat's file");
-    assert_eq!(text, state(call, "working"));
-    let stop = hook_under_agy(
-        &agy,
-        &data,
-        "Stop",
-        &agy_fixture("cli-stop-background.json"),
-    );
-    assert_eq!(
-        std::fs::read_to_string(&file).unwrap(),
-        state(stop, "background")
-    );
-    hook_under_agy(&agy, &data, "Stop", &agy_fixture("cli-stop-idle.json"));
-    assert!(!file.exists());
+    for (event, input) in [
+        ("PreInvocation", "cli-pre-invocation.json"),
+        ("Stop", "cli-stop-background.json"),
+        ("Stop", "cli-stop-idle.json"),
+    ] {
+        hook_under_agy(&agy, &data, event, &agy_fixture(input));
+        assert!(
+            !data.join("agents").exists(),
+            "{event}: the IDE's hub is not held"
+        );
+    }
 }
 
 /// Gives `dir` a High mandatory label, so a Medium process cannot write in it and a High one can.

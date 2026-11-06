@@ -65,7 +65,8 @@ Codex in %CODEX_HOME% when set, else %USERPROFILE%\\.codex; Copilot CLI in %COPI
 %USERPROFILE%\\.copilot; VS Code chat (Stable and Insiders) in %VSCODE_APPDATA% when set, else %APPDATA%;
 OpenCode's database in %XDG_DATA_HOME%\\opencode when set, else %USERPROFILE%\\.local\\share\\opencode.
 Cursor and Antigravity in the files Wakeshot's hook writes: agents\\<agent> of the real data folder (of
-%WAKESHOT_DATA_DIR% in a debug build), read only.
+%WAKESHOT_DATA_DIR% in a debug build), read only; Antigravity CLI also in its own log in
+%USERPROFILE%\\.gemini\\antigravity-cli\\log, for its cancel lines only.
 Ctrl+C stops it.";
 
 /// How a source is built from the user's profile folder: the source, and the folder it reads for the start line.
@@ -120,7 +121,9 @@ const SOURCES: &[(&str, Build)] = &[
     ("antigravity", |home| {
         let root = hook_root(home);
         let folder = hooked::agent_folder(&root, &antigravity::AGENT);
-        (Box::new(antigravity::source(&root)), folder)
+        // `agy`'s own log, for the cancel line no hook reports, is under the profile folder.
+        let source = antigravity::source(&root, Some(home), Box::new(SystemZone::current()));
+        (Box::new(source), folder)
     }),
 ];
 

@@ -6,7 +6,7 @@
 //! Privacy ("Privacy" in the design): the parse keeps only the fields an agent's table names and skips every other
 //! value unread into memory; no `serde_json` error text leaves this module, since it can quote an input value.
 //!
-//! Owner: `p4-cursor-source`.
+//! Owner: `p4-cursor-source`; the log mark ([`LogMark`]) by `p4-antigravity-exact-end`.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -586,6 +586,35 @@ pub struct StateFile {
     pub generation: String,
     pub label: String,
     pub state: State,
+    /// The bare name of the agent process's own log, for an agent whose turn can end with no hook (Antigravity's Esc):
+    /// its source reads that log for the end. Absent for every other agent, so their files keep their bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub log: Option<String>,
+    /// With `log`: when the agent started the hook that wrote the file, so an end the log names at or after it ends
+    /// this turn, and an older one does not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_at: Option<FileTime>,
+}
+
+/// What a hook notes for an agent whose source reads the agent's own log ([`StateFile::log`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LogMark {
+    /// A bare file name of [`is_log_name`]'s shape, never a path: the source joins it to its own fixed folder.
+    pub name: String,
+    /// The start of the process the agent ran the hook in (its shell), the earliest moment the hook can name.
+    pub turn_at: FileTime,
+}
+
+/// A log file name as a state file and the checked values may carry it: 5 to 64 of `A-Z a-z 0-9 - _ .`, starting
+/// with a letter or digit and ending in `.log`, so it names no folder, no device and no other kind of file.
+pub fn is_log_name(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    (5..=64).contains(&bytes.len())
+        && bytes[0].is_ascii_alphanumeric()
+        && name.ends_with(".log")
+        && bytes
+            .iter()
+            .all(|&b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
 }
 
 /// `problem.json` and `blocked.json`.
@@ -643,6 +672,17 @@ pub fn read_problem(bytes: &[u8]) -> FileRead<ProblemFile> {
 
 /// The chat file's text.
 pub fn state_text(process: ProcessRef, turn: &str, label: &str, state: State) -> Vec<u8> {
+    state_text_marked(process, turn, label, state, None)
+}
+
+/// The chat file's text, with the agent's log noted when the hook found it.
+pub fn state_text_marked(
+    process: ProcessRef,
+    turn: &str,
+    label: &str,
+    state: State,
+    log: Option<&LogMark>,
+) -> Vec<u8> {
     let file = StateFile {
         version: FILE_VERSION,
         pid: process.pid,
@@ -650,6 +690,8 @@ pub fn state_text(process: ProcessRef, turn: &str, label: &str, state: State) ->
         generation: turn.to_owned(),
         label: label.to_owned(),
         state,
+        log: log.map(|mark| mark.name.clone()),
+        turn_at: log.map(|mark| mark.turn_at),
     };
     // Plain fields only, so serialization cannot fail.
     serde_json::to_vec(&file).unwrap_or_default()
@@ -782,8 +824,8 @@ fn is_under(path: &Path, root: &Path) -> bool {
 }
 
 /// The checked values an elevated hook hands to its Medium copy (step 4): `hook <agent> <event> --checked <chat>
-/// <turn> <pid> <procStart> <image key> <op> <deadline>`. Each is from a fixed set, and the copy checks each again,
-/// since any process of the user can run it with any values.
+/// <turn> <pid> <procStart> <image key> <op> <deadline> [<log> <turnAt>]`. Each is from a fixed set, and the copy
+/// checks each again, since any process of the user can run it with any values.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Checked {
     /// Empty for a problem, else a lowercase chat id.
@@ -794,14 +836,17 @@ pub struct Checked {
     pub op: Op,
     /// Wall ms (since 1970) after which a copy drops a `Write`, so a slow copy never lands after the turn's end.
     pub deadline_wall_ms: i64,
+    /// Only with a `Write`: the elevated hook found it, since the copy starts later than the moment it names.
+    pub log: Option<LogMark>,
 }
 
-/// The number of checked values.
+/// The number of checked values, and the two more a [`LogMark`] adds.
 pub const CHECKED_VALUES: usize = 7;
+pub const CHECKED_LOG_VALUES: usize = 2;
 
 impl Checked {
     pub fn values(&self) -> Vec<String> {
-        vec![
+        let mut values = vec![
             self.chat.clone(),
             self.turn.clone(),
             self.process.pid.to_string(),
@@ -809,11 +854,31 @@ impl Checked {
             self.image.key.to_owned(),
             op_word(self.op).to_owned(),
             self.deadline_wall_ms.to_string(),
-        ]
+        ];
+        if let Some(mark) = &self.log {
+            values.extend([mark.name.clone(), mark.turn_at.to_string()]);
+        }
+        values
     }
 
     /// The values back, each checked as the hook checks its input; `None` when one fails.
     pub fn parse(agent: &'static Agent, rule: &EventRule, values: &[String]) -> Option<Self> {
+        let (values, log) = if values.len() == CHECKED_VALUES + CHECKED_LOG_VALUES {
+            let (head, tail) = values.split_at(CHECKED_VALUES);
+            let [name, turn_at] = tail else {
+                return None;
+            };
+            if !is_log_name(name) {
+                return None;
+            }
+            let mark = LogMark {
+                name: name.clone(),
+                turn_at: FileTime(digits(turn_at)?),
+            };
+            (head, Some(mark))
+        } else {
+            (values, None)
+        };
         let [chat, turn, pid, start, key, op, deadline] = values else {
             return None;
         };
@@ -822,7 +887,8 @@ impl Checked {
             Op::Problem(_) => chat.is_empty() && turn.is_empty(),
             _ => chat_id(chat).as_deref() == Some(chat.as_str()) && is_turn_id(turn),
         };
-        if !ids_fit {
+        // A log matters only to a write: a delete or a problem ends or replaces the file that would name it.
+        if !ids_fit || (log.is_some() && !matches!(op, Op::Write(_))) {
             return None;
         }
         Some(Self {
@@ -835,6 +901,7 @@ impl Checked {
             image: agent.image(key)?,
             op,
             deadline_wall_ms: digits(deadline)?,
+            log,
         })
     }
 }
@@ -913,6 +980,24 @@ impl HookedSource {
             dir: agent_folder(data_root, agent),
             files: BTreeMap::new(),
         }
+    }
+
+    /// The chat file read last under this chat id, for a source that adds its own rules to the shared ones.
+    pub fn chat(&self, id: &str) -> Option<&StateFile> {
+        match self.files.get(id)?.entry.as_ref()? {
+            Entry::Chat(file) => Some(file),
+            Entry::Problem(_) => None,
+        }
+    }
+
+    /// Every chat file read, by chat id.
+    pub fn chats(&self) -> impl Iterator<Item = (&str, &StateFile)> {
+        self.files
+            .iter()
+            .filter_map(|(id, slot)| match slot.entry.as_ref()? {
+                Entry::Chat(file) => Some((id.as_str(), file)),
+                Entry::Problem(_) => None,
+            })
     }
 
     /// The session id and shape of a file in the agent's folder: a lowercase chat id, or a problem file; any other
@@ -1578,7 +1663,100 @@ mod tests {
             image: &TEST_AGENT.images[1],
             op,
             deadline_wall_ms: 1_762_400_000_000,
+            log: None,
         }
+    }
+
+    fn mark() -> LogMark {
+        LogMark {
+            name: "cli-20261106_185448.log".to_owned(),
+            turn_at: FileTime(134_000_000_000_000_777),
+        }
+    }
+
+    #[test]
+    fn a_log_mark_goes_with_a_write_only_and_its_name_is_checked() {
+        let mut sent = checked(Op::Write(State::Working));
+        sent.log = Some(mark());
+        let values = sent.values();
+        assert_eq!(values.len(), CHECKED_VALUES + CHECKED_LOG_VALUES);
+        assert_eq!(
+            values[CHECKED_VALUES..],
+            ["cli-20261106_185448.log", "134000000000000777"]
+        );
+        assert_eq!(
+            Checked::parse(&TEST_AGENT, rule("start"), &values),
+            Some(sent)
+        );
+        let long = format!("{}.log", "a".repeat(61));
+        for (at, value) in [
+            (7, ""),
+            (7, r"..\x.log"),
+            (7, "x/y.log"),
+            (7, r"C:\x.log"),
+            (7, ".log"),
+            (7, ".x.log"),
+            (7, "a b.log"),
+            (7, "cli.txt"),
+            (7, "CON"),
+            (7, long.as_str()),
+            (8, ""),
+            (8, "-1"),
+            (8, "0x10"),
+        ] {
+            let mut bad = values.clone();
+            bad[at] = value.to_owned();
+            assert_eq!(
+                Checked::parse(&TEST_AGENT, rule("start"), &bad),
+                None,
+                "value {at} = {value:?}"
+            );
+        }
+        // A delete or a problem carries no log; nor does a list one value short of it.
+        let mut delete = values.clone();
+        delete[5] = "none".to_owned();
+        assert_eq!(Checked::parse(&TEST_AGENT, rule("gone"), &delete), None);
+        let mut problem = values.clone();
+        problem[5] = "input".to_owned();
+        problem[0].clear();
+        problem[1].clear();
+        assert_eq!(Checked::parse(&TEST_AGENT, rule("start"), &problem), None);
+        assert_eq!(
+            Checked::parse(&TEST_AGENT, rule("start"), &values[..8]),
+            None
+        );
+    }
+
+    #[test]
+    fn a_marked_file_names_its_log_and_an_unmarked_one_keeps_its_bytes() {
+        let process = ProcessRef {
+            pid: 51_384,
+            start: FileTime(134_000_000_000_000_001),
+        };
+        let text = state_text_marked(process, "", "Test CLI", State::Working, Some(&mark()));
+        assert_eq!(
+            String::from_utf8(text.clone()).unwrap(),
+            r#"{"version":1,"pid":51384,"procStart":"134000000000000001","generation":"","label":"Test CLI","state":"working","log":"cli-20261106_185448.log","turnAt":"134000000000000777"}"#
+        );
+        let FileRead::V1(file) = read_state(&text) else {
+            panic!("reads back");
+        };
+        assert_eq!(
+            (file.log.as_deref(), file.turn_at),
+            (
+                Some("cli-20261106_185448.log"),
+                Some(FileTime(134_000_000_000_000_777))
+            )
+        );
+        assert_eq!(
+            state_text_marked(process, "t", "Test", State::Working, None),
+            state_text(process, "t", "Test", State::Working)
+        );
+        let FileRead::V1(plain) = read_state(&state_text(process, "t", "Test", State::Working))
+        else {
+            panic!("reads back");
+        };
+        assert_eq!((plain.log, plain.turn_at), (None, None));
     }
 
     #[test]

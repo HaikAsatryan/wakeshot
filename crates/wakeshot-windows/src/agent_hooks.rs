@@ -3,7 +3,8 @@
 //! uninstall step (`HookEnv::remove_agent_hooks`) calls [`on_uninstall`]. The tray's start calls [`at_start`] through
 //! `app::startup::add_agent_hooks`; the CLI's `wakeshot hook <agent> remove` calls [`remove_command`].
 //!
-//! Owner: `p4-agent-hooks-install`. `p4-antigravity-source` adds its agent to [`AGENTS`].
+//! Owner: `p4-agent-hooks-install`. `p4-antigravity-source` adds its agent to [`AGENTS`]; `p4-antigravity-exact-end`
+//! limits it to the Antigravity CLI.
 //!
 //! Every read, write and delete goes by an [`Agent`]'s fixed names, and each part of each path, from the agent's own
 //! folder down to the file, must be a plain folder or file: a reparse point of any kind (a junction, a link, a cloud
@@ -185,10 +186,11 @@ fn json_string(text: &str) -> String {
 }
 
 /// `docs/agent-hooks.md`, "Antigravity": one plugin folder, which the CLI and the IDE's hub (the same `agy.exe`) both
-/// load. `hooks.json` sits in the plugin folder itself: `agy` reads no `hooks\hooks.json` in a plugin.
+/// load. `hooks.json` sits in the plugin folder itself: `agy` reads no `hooks\hooks.json` in a plugin. Only the CLI is
+/// held in v1 (`p4-antigravity-exact-end`), so it is named so, and only its `agy.exe` makes Antigravity present.
 const ANTIGRAVITY: Agent = Agent {
     key: "antigravity",
-    label: "Antigravity",
+    label: "Antigravity CLI",
     parents: &[".gemini", "config", "plugins"],
     // `.gemini` is also Gemini CLI's folder, so only Antigravity's own `config` in it shows Antigravity was here.
     agent_made: 2,
@@ -219,14 +221,16 @@ fn antigravity_present(folders: &Folders) -> bool {
     agy_present(folders, std::env::var_os(GEMINI_DIR_ENV).is_some())
 }
 
-/// `agy.exe` where the CLI's install script puts it, or where the IDE downloads its copy. A `.gemini` with no `agy.exe`
-/// is Gemini CLI's, which Wakeshot does not hook.
+/// `agy.exe` where the CLI's install script puts it. The IDE's own copy in `.gemini\bin` does not count: the IDE is not
+/// held in v1, and its hub would run the hooks for nothing. A `.gemini` with no `agy.exe` is Gemini CLI's, which
+/// Wakeshot does not hook.
 fn agy_present(folders: &Folders, gemini_dir_moved: bool) -> bool {
-    let places = [
-        folders.local_app_data.join("agy").join("bin"),
-        folders.profile.join(".gemini").join("bin"),
-    ];
-    !gemini_dir_moved && places.iter().any(|dir| dir.join("agy.exe").is_file())
+    let cli = folders
+        .local_app_data
+        .join("agy")
+        .join("bin")
+        .join("agy.exe");
+    !gemini_dir_moved && cli.is_file()
 }
 
 /// The manifest needs `name`; the other fields are the ones `agy` 1.5.2's manifest type reads, and tell a user who
@@ -2519,7 +2523,7 @@ mod tests {
     #[test]
     fn antigravity_gets_its_plugin_folder_once_with_a_bare_command_per_event() {
         let w = World::gemini("antigravity");
-        assert_eq!(w.start(), ["Antigravity"]);
+        assert_eq!(w.start(), ["Antigravity CLI"]);
         assert_eq!(names(&w.gemini_plugins()), ANTIGRAVITY_SET);
         let want = wanted(&ANTIGRAVITY, &w.exe).unwrap();
         let dir = w.gemini_plugin();
@@ -2560,7 +2564,7 @@ mod tests {
             w.record_text().as_deref(),
             Some("{\"version\":1,\"antigravity\":\"added\"}\n")
         );
-        assert!(w.has(r"Antigravity: hook folder added (.gemini\config\plugins\wakeshot)"));
+        assert!(w.has(r"Antigravity CLI: hook folder added (.gemini\config\plugins\wakeshot)"));
 
         let before = tree(&w.temp.0);
         assert!(w.start().is_empty());
@@ -2573,7 +2577,7 @@ mod tests {
         before.retain(|path, _| !path.starts_with(r"profile\.gemini\config\plugins\wakeshot"));
         w.uninstall();
         assert_eq!(tree(&w.temp.0), before);
-        assert!(w.has(r"Antigravity: .gemini\config\plugins\wakeshot removed"));
+        assert!(w.has(r"Antigravity CLI: .gemini\config\plugins\wakeshot removed"));
     }
 
     /// A stop during the add, before the manifest: `agy` may list a dot-named folder, but one with no `plugin.json` is
@@ -2589,22 +2593,24 @@ mod tests {
         let staging = w.gemini_plugins().join(".wakeshot-new-4242");
         fs::create_dir_all(&staging).unwrap();
         fs::write(staging.join("hooks.json"), &want.files[0]).unwrap();
-        assert_eq!(w.start(), ["Antigravity"]);
+        assert_eq!(w.start(), ["Antigravity CLI"]);
         assert_eq!(names(&w.gemini_plugins()), ANTIGRAVITY_SET);
         assert!(w.has(
-            r"Antigravity: removed .gemini\config\plugins\.wakeshot-new-4242, which a stop left"
+            r"Antigravity CLI: removed .gemini\config\plugins\.wakeshot-new-4242, which a stop left"
         ));
     }
 
     #[test]
-    fn antigravity_counts_only_with_agy_and_its_config_folder() {
-        // The IDE's copy alone is enough.
+    fn antigravity_counts_only_with_the_clis_agy_and_its_config_folder() {
+        // The IDE's copy alone is not enough: the IDE is not held in v1.
         let w = World::gemini("agy-ide");
         fs::remove_file(w.folders.local_app_data.join(r"agy\bin\agy.exe")).unwrap();
         let ide = w.folders.profile.join(r".gemini\bin\agy.exe");
         fs::create_dir_all(ide.parent().unwrap()).unwrap();
         fs::write(&ide, b"MZ").unwrap();
-        assert_eq!(w.start(), ["Antigravity"]);
+        let before = tree(&w.temp.0);
+        assert!(w.start().is_empty());
+        assert_eq!(tree(&w.temp.0), before);
 
         // No `agy.exe`: Gemini CLI's `.gemini`, never touched.
         let w = World::gemini("agy-none");
@@ -2679,7 +2685,7 @@ mod tests {
         println!("the 8.3 form of the test exe: {short:?}");
         let added = at_start(&w.folders, &w.record, &spaced, Ok(false), &w.log);
         if let Some(short) = short {
-            assert_eq!(added, ["Cursor", "Antigravity"]);
+            assert_eq!(added, ["Cursor", "Antigravity CLI"]);
             let hooks =
                 fs::read_to_string(w.gemini_plugins().join(r"wakeshot\hooks.json")).unwrap();
             let command = json_string(&format!("{short} hook antigravity Stop"));
@@ -2689,7 +2695,7 @@ mod tests {
         assert_eq!(added, ["Cursor"]);
         assert!(!w.gemini_plugins().exists());
         assert!(w.has(
-            "Antigravity: the hook exe's path holds a character the hook command cannot quote, so it gets no hooks"
+            "Antigravity CLI: the hook exe's path holds a character the hook command cannot quote, so it gets no hooks"
         ));
         assert_eq!(
             w.record_text().as_deref(),
@@ -2717,7 +2723,7 @@ mod tests {
         ];
         for (what, edit) in edits {
             let w = World::gemini("agy-changed");
-            assert_eq!(w.start(), ["Antigravity"], "{what}");
+            assert_eq!(w.start(), ["Antigravity CLI"], "{what}");
             edit(&w.gemini_plugin());
             let before = tree(&w.gemini_plugin());
             assert!(w.start().is_empty(), "{what}");
@@ -2737,7 +2743,7 @@ mod tests {
     fn an_elevated_uninstall_hands_antigravity_to_its_own_medium_copy() {
         let w = World::gemini("agy-elevated");
         fs::create_dir_all(w.folders.profile.join(".cursor")).unwrap();
-        assert_eq!(w.start(), ["Cursor", "Antigravity"]);
+        assert_eq!(w.start(), ["Cursor", "Antigravity CLI"]);
         let before = tree(&w.temp.0);
         let mut asked = Vec::new();
         let mut copy = |exe: &Path, agents: &[&'static Agent]| {
@@ -2750,9 +2756,12 @@ mod tests {
         on_uninstall(&w.folders, Some(&w.exe), Ok(true), &mut copy, &w.log);
         // One call for both, so every copy starts before any wait and the waits share one budget (review m1).
         assert_eq!(asked, [(w.exe.clone(), vec!["cursor", "antigravity"])]);
-        assert!(w.has("Antigravity: hook folder removal handed to a Medium copy, which ended"));
+        assert!(w.has("Antigravity CLI: hook folder removal handed to a Medium copy, which ended"));
         assert_eq!(tree(&w.temp.0), before);
-        assert_eq!(find("antigravity").map(|a| a.label), Some("Antigravity"));
+        assert_eq!(
+            find("antigravity").map(|a| a.label),
+            Some("Antigravity CLI")
+        );
     }
 
     /// Orchestrator decision, 2026-11-06: the agent's own folder gone is the agent gone, so the record forgets it and a
@@ -2791,7 +2800,7 @@ mod tests {
 
         // Antigravity: `.gemini\config` is its own folder; `agy.exe` gone alone forgets nothing.
         let w = World::gemini("reinstalled-agy");
-        assert_eq!(w.start(), ["Antigravity"]);
+        assert_eq!(w.start(), ["Antigravity CLI"]);
         let agy = w.folders.local_app_data.join(r"agy\bin\agy.exe");
         fs::remove_file(&agy).unwrap();
         assert!(w.start().is_empty());
@@ -2802,10 +2811,10 @@ mod tests {
         fs::remove_dir_all(w.folders.profile.join(r".gemini\config")).unwrap();
         assert!(w.start().is_empty());
         assert_eq!(w.record_text().as_deref(), Some("{\"version\":1}\n"));
-        assert!(w.has(r"Antigravity: .gemini\config is gone, so Wakeshot forgets"));
+        assert!(w.has(r"Antigravity CLI: .gemini\config is gone, so Wakeshot forgets"));
         fs::write(&agy, b"MZ").unwrap();
         fs::create_dir_all(w.folders.profile.join(r".gemini\config")).unwrap();
-        assert_eq!(w.start(), ["Antigravity"]);
+        assert_eq!(w.start(), ["Antigravity CLI"]);
     }
 
     /// A junction at each part of Antigravity's path, to a tree with an older plugin folder: nothing through it is

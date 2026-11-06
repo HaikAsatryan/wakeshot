@@ -5,19 +5,26 @@
 //!
 //! The steps run behind `Env`, so the tests run them in-process with fakes; `main` gives the real one.
 //!
-//! Owner: `p4-cursor-source`.
+//! Antigravity adds two steps (`docs/agent-hooks.md`, "Antigravity"): its IDE's hub runs the same hooks and writes
+//! nothing, since only the CLI is held in v1; and a model call's file names the `agy.exe`'s own log and when `agy`
+//! started the hook, so the source can end the turn at a cancel line no hook reports.
+//!
+//! Owner: `p4-cursor-source`; the Antigravity steps by `p4-antigravity-exact-end`.
 
 use std::ffi::OsString;
+use std::fs::File;
 use std::io::{self, IsTerminal, Read, Write};
+use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, SystemTime};
 
-use wakeshot_core::process::{Alive, ProcessRef};
+use wakeshot_core::process::{Alive, FileTime, ProcessRef};
 use wakeshot_core::sources::hooked::{
-    self, Agent, Bases, Checked, EventRule, InputProblem, Listed, Op, Problem, State,
+    self, Agent, Bases, Checked, EventRule, Found, InputProblem, Listed, LogMark, Op, Problem,
+    State, Walk,
 };
 use wakeshot_core::sources::{antigravity, cursor};
 use wakeshot_windows::WinError;
@@ -110,6 +117,8 @@ trait Env {
     fn remove_hooks(&self, agent: &str, log: &dyn Log);
     /// Debug builds: whether a test asked for a panic.
     fn test_panic(&self) -> bool;
+    /// The bare name of the log `agy.exe` `agent` writes ([`find_log`]); `None` when none names it.
+    fn agy_log(&self, agent: ProcessRef) -> Option<String>;
 }
 
 struct RealEnv {
@@ -221,6 +230,72 @@ impl Env for RealEnv {
     fn test_panic(&self) -> bool {
         cfg!(debug_assertions) && std::env::var_os(PANIC_ENV).is_some()
     }
+
+    /// Under the profile folder as Go's `os.UserHomeDir` finds it (`USERPROFILE`), the one `agy` writes under; the
+    /// tray's source reads the same folder.
+    fn agy_log(&self, agent: ProcessRef) -> Option<String> {
+        find_log(&antigravity::log_dir(&std::env::home_dir()?), agent)
+    }
+}
+
+/// The log `agy.exe` `agent` writes: a plain file of the log's name shape, made at or after that process started (so
+/// an older process that had the same pid never counts), whose first line names its pid; the newest if two do. Only
+/// the first [`antigravity::HEAD_BYTES`] of a file are read, and only its pid is kept: the rest of the log holds
+/// prompts.
+fn find_log(dir: &Path, agent: ProcessRef) -> Option<String> {
+    let mut found: Option<(u64, String)> = None;
+    for entry in std::fs::read_dir(dir).ok()?.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str().filter(|name| antigravity::is_log_name(name)) else {
+            continue;
+        };
+        // A link is no file here, so a planted one is never followed.
+        if !entry.file_type().is_ok_and(|kind| kind.is_file()) {
+            continue;
+        }
+        let Ok(made) = entry.metadata().map(|meta| meta.creation_time()) else {
+            continue;
+        };
+        if made < agent.start.0 || found.as_ref().is_some_and(|(newest, _)| *newest >= made) {
+            continue;
+        }
+        let mut head = [0u8; antigravity::HEAD_BYTES];
+        let Ok(file) = File::open(entry.path()) else {
+            continue;
+        };
+        let got = read_head(file, &mut head);
+        if antigravity::head_pid(&head[..got]) == Some(agent.pid) {
+            found = Some((made, name.to_owned()));
+        }
+    }
+    found.map(|(_, name)| name)
+}
+
+fn read_head(mut file: File, head: &mut [u8]) -> usize {
+    let mut got = 0;
+    while got < head.len() {
+        match file.read(&mut head[got..]) {
+            Ok(0) => break,
+            Ok(n) => got += n,
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+            Err(_) => break,
+        }
+    }
+    got
+}
+
+/// Antigravity's hooks are the ones with steps of their own (module doc).
+fn is_antigravity(agent: &Agent) -> bool {
+    std::ptr::eq(agent, &antigravity::AGENT)
+}
+
+/// When `agy` started this hook: the start of the process it ran the hook in (`cmd /c`), or the hook's own start if
+/// it ran the hook itself. A cancel line logged at or after it ends this turn.
+fn turn_at(walk: &Walk, found: &Found, me: ProcessRef) -> FileTime {
+    walk.parent
+        .filter(|shell| *shell != found.process)
+        .unwrap_or(me)
+        .start
 }
 
 /// The log of a hook that must not write: an elevated one, whose log folder a Medium process could swap for a link.
@@ -350,6 +425,11 @@ fn hook(
         }
         return;
     };
+    // The IDE is not in v1 (Haik, 2026-11-06): its hub loads the same plugin, and its turns write nothing, quietly. A
+    // command line with the input still blocks above and below, for the IDE too.
+    if !on_command_line && is_antigravity(agent) && !antigravity::holds(found.image) {
+        return;
+    }
     let input = parsed.input.as_ref();
     let op = if on_command_line {
         log.line(Level::Warn, &format!(
@@ -375,6 +455,17 @@ fn hook(
         (Op::Problem(_), _) | (_, Err(_)) => (String::new(), String::new()),
         (_, Ok(input)) => (input.chat.clone(), input.turn.clone()),
     };
+    // Found here, before a hand-off, since the Medium copy starts later than the moment the mark names. None found:
+    // the file names no log, and the source holds nothing for it and shows "update Wakeshot".
+    let mark = match op {
+        Op::Write(State::Working) if is_antigravity(agent) => {
+            env.agy_log(found.process).map(|name| LogMark {
+                name,
+                turn_at: turn_at(&walk, &found, me),
+            })
+        }
+        _ => None,
+    };
     let checked = Checked {
         chat,
         turn,
@@ -382,6 +473,7 @@ fn hook(
         image: found.image,
         op,
         deadline_wall_ms: env.now_wall_ms() + i64::from(HAND_OFF_MS),
+        log: mark,
     };
     if medium {
         apply(env, log, name, agent, rule, &checked, None);
@@ -482,6 +574,11 @@ fn checked_copy(
         );
         return;
     };
+    // Only an older elevated hook or a hand-made call names the IDE's hub here: the IDE is not held.
+    let blocked = checked.op == Op::Problem(Problem::CommandLine);
+    if !blocked && is_antigravity(agent) && !antigravity::holds(checked.image) {
+        return;
+    }
     apply(
         env,
         log,
@@ -602,7 +699,13 @@ fn write_chat(
     state: State,
     deadline: Option<i64>,
 ) -> Result<(), WinError> {
-    let text = hooked::state_text(checked.process, &checked.turn, checked.image.label, state);
+    let text = hooked::state_text_marked(
+        checked.process,
+        &checked.turn,
+        checked.image.label,
+        state,
+        checked.log.as_ref(),
+    );
     if store::read_whole(path).ok().flatten().as_deref() == Some(&text[..]) {
         return Ok(());
     }
@@ -667,7 +770,6 @@ mod tests {
     use std::collections::BTreeSet;
     use std::fs;
 
-    use wakeshot_core::process::FileTime;
     use wakeshot_windows::log::MemoryLog;
 
     use super::*;
@@ -841,11 +943,14 @@ mod tests {
         now: Cell<i64>,
         log: MemoryLog,
         removed: RefCell<Vec<String>>,
+        /// A profile folder of its own, outside the data folder, for `agy`'s logs.
+        home: TempData,
     }
 
     impl Fake {
         fn new(tag: &str) -> Self {
             Self {
+                home: TempData::new(&format!("hook-{tag}-home")),
                 temp: TempData::new(&format!("hook-{tag}")),
                 global: Global { dry_run: false },
                 input: RefCell::new(Vec::new()),
@@ -953,7 +1058,8 @@ mod tests {
         }
 
         fn command_line_has(&self, process: ProcessRef, needle: &str) -> Result<bool, WinError> {
-            assert_eq!(process, SHELL, "the hook's own parent");
+            // By pid: a test may start each of `agy`'s `cmd /c` anew.
+            assert_eq!(process.pid, SHELL.pid, "the hook's own parent");
             assert!(
                 AGENTS.iter().any(|agent| agent.payload_key == needle),
                 "{needle}"
@@ -996,6 +1102,10 @@ mod tests {
 
         fn test_panic(&self) -> bool {
             false
+        }
+
+        fn agy_log(&self, agent: ProcessRef) -> Option<String> {
+            find_log(&antigravity::log_dir(self.home.dir.root()), agent)
         }
     }
 
@@ -1815,9 +1925,41 @@ mod tests {
         }
     }
 
+    const AGY_LOG: &str = "cli-20261106_185448.log";
+
+    /// `agy`'s log for `pid` in the fake's profile: lines 1 and 2 as 1.5.2 writes them, then a prompt line with the
+    /// marker, which no file or log line of the hook may hold.
+    fn agy_log_file(fake: &Fake, name: &str, pid: u32) -> PathBuf {
+        let dir = antigravity::log_dir(fake.home.dir.root());
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(name);
+        fs::write(
+            &path,
+            format!(
+                "I1106 18:54:48.718882      51 server.go:2275] Starting language server process with pid {pid}\n\
+                 I1106 18:54:48.727658      51 server.go:2333] Language server version: 1.5.2\n\
+                 I1106 18:55:41.100000     176 input_loop.go:301] HandleUserInput called with text: {MARKER}\n"
+            ),
+        )
+        .unwrap();
+        path
+    }
+
+    /// A model call run from a new `cmd /c`, as `agy` runs each one, started at `start` (before the hook's own start).
+    fn new_shell(fake: &mut Fake, start: u64) {
+        fake.list[1].start = FileTime(start);
+    }
+
     #[test]
-    fn antigravity_a_model_call_writes_working_once_and_a_stop_ends_or_keeps_it() {
-        let fake = agy_fake("agy-turn", &cli_agy());
+    fn antigravity_a_model_call_names_agys_log_and_when_agy_started_the_hook() {
+        let mut fake = agy_fake("agy-turn", &cli_agy());
+        agy_log_file(&fake, "cli-20261106_185447.log", AGY.pid + 1);
+        agy_log_file(&fake, AGY_LOG, AGY.pid);
+        fs::write(
+            antigravity::log_dir(fake.home.dir.root()).join("cli.log"),
+            b"I1106 18:54:48.718882 51 server.go:2275] Starting language server process with pid 650\n",
+        )
+        .unwrap();
         run_agy(
             &fake,
             "PreInvocation",
@@ -1830,62 +1972,139 @@ mod tests {
                 file.proc_start,
                 file.generation.as_str(),
                 file.label.as_str(),
-                file.state
+                file.state,
+                file.log.as_deref(),
+                file.turn_at,
             ),
-            (AGY.pid, AGY.start, "", "Antigravity CLI", State::Working),
-            "the agy.exe above cmd, never the hook or cmd"
+            (
+                AGY.pid,
+                AGY.start,
+                "",
+                "Antigravity CLI",
+                State::Working,
+                Some(AGY_LOG),
+                Some(SHELL.start)
+            ),
+            "the agy.exe above cmd, its own log, and cmd's start"
         );
 
-        // Each later model call finds the file as it would write it, so it writes nothing.
-        let path = agy_folder(&fake).join(hooked::chat_file(AGY_CHAT));
-        let old = SystemTime::now() - Duration::from_secs(600);
-        fs::File::options()
-            .write(true)
-            .open(&path)
-            .unwrap()
-            .set_modified(old)
-            .unwrap();
-        for call in ["1", "2", "3"] {
+        // Each later model call has a cmd of its own, so the file moves to its start.
+        for (call, start) in [("1", 8_100), ("2", 8_200)] {
+            new_shell(&mut fake, start);
             run_agy(
                 &fake,
                 "PreInvocation",
                 &object(AGY_CALL, &[("invocationNum", call)]),
             );
+            let file = agy_state(&fake, AGY_CHAT).unwrap();
+            assert_eq!(file.turn_at, Some(FileTime(start)), "call {call}");
+            assert_eq!(file.log.as_deref(), Some(AGY_LOG));
         }
-        assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), old);
 
+        // `fullyIdle` false or missing: the chat ends all the same, since background commands are not held.
         run_agy(&fake, "Stop", &agy_fixture("cli-stop-background.json"));
-        assert_eq!(
-            agy_state(&fake, AGY_CHAT).map(|f| f.state),
-            Some(State::Background)
-        );
+        assert_eq!(agy_state(&fake, AGY_CHAT), None);
         run_agy(&fake, "PreInvocation", &object(AGY_CALL, &[]));
-        assert_eq!(
-            agy_state(&fake, AGY_CHAT).map(|f| f.state),
-            Some(State::Working)
-        );
-        run_agy(&fake, "Stop", &agy_fixture("cli-stop-idle.json"));
+        let no_flag: Vec<(&str, &str)> = AGY_STOP
+            .iter()
+            .copied()
+            .filter(|&(key, _)| key != "fullyIdle")
+            .collect();
+        run_agy(&fake, "Stop", &object(&no_flag, &[]));
         assert_eq!(agy_state(&fake, AGY_CHAT), None);
         run_agy(&fake, "Stop", &agy_fixture("cli-stop-idle.json"));
         assert_eq!(fake.files(), BTreeSet::new());
         assert!(fake.lines().is_empty(), "{:?}", fake.lines());
         assert!(fake.handed.borrow().is_empty());
-        assert_eq!(fake.drained.get(), 8, "every run reads the pipe to its end");
+        assert_eq!(fake.drained.get(), 7, "every run reads the pipe to its end");
     }
 
     #[test]
-    fn antigravity_the_ides_hub_is_named_antigravity_and_its_chat_lowercased() {
+    fn antigravity_with_no_log_naming_agy_the_file_names_none() {
+        let fake = agy_fake("agy-no-log", &cli_agy());
+        // No log folder at all.
+        run_agy(&fake, "PreInvocation", &object(AGY_CALL, &[]));
+        let file = agy_state(&fake, AGY_CHAT).expect("written");
+        assert_eq!(
+            (file.log, file.turn_at, file.state),
+            (None, None, State::Working)
+        );
+        // Logs of other pids, or a first line of another shape: none.
+        agy_log_file(&fake, "cli-20261106_185447.log", AGY.pid + 1);
+        let odd = antigravity::log_dir(fake.home.dir.root()).join(AGY_LOG);
+        fs::write(
+            &odd,
+            format!("Starting language server process with pid {}\n", AGY.pid),
+        )
+        .unwrap();
+        run_agy(&fake, "PreInvocation", &object(AGY_CALL, &[]));
+        assert_eq!(agy_state(&fake, AGY_CHAT).unwrap().log, None);
+        assert!(fake.lines().is_empty(), "{:?}", fake.lines());
+    }
+
+    #[test]
+    fn find_log_takes_only_a_file_made_since_the_process_started_that_names_its_pid() {
+        let fake = Fake::new("find-log");
+        let dir = antigravity::log_dir(fake.home.dir.root());
+        let path = agy_log_file(&fake, AGY_LOG, 4_242);
+        let made = fs::metadata(&path).unwrap().creation_time();
+        let at = |pid: u32, start: u64| {
+            find_log(
+                &dir,
+                ProcessRef {
+                    pid,
+                    start: FileTime(start),
+                },
+            )
+        };
+        assert_eq!(at(4_242, made).as_deref(), Some(AGY_LOG));
+        assert_eq!(at(4_242, made - 1).as_deref(), Some(AGY_LOG));
+        assert_eq!(at(4_242, made + 1), None, "an older process with the pid");
+        assert_eq!(at(4_243, made), None);
+        // A folder of the name is no log; neither is any other name.
+        fs::remove_file(&path).unwrap();
+        fs::create_dir(&path).unwrap();
+        let head = b"I1106 18:54:48.718882 51 server.go:2275] Starting language server process with pid 4242
+";
+        fs::write(dir.join("cli-20261106_185449.txt"), head).unwrap();
+        fs::write(dir.join("cli.log"), head).unwrap();
+        assert_eq!(at(4_242, 0), None);
+        assert_eq!(
+            find_log(
+                &dir.join("missing"),
+                ProcessRef {
+                    pid: 1,
+                    start: FileTime(0)
+                }
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn antigravity_the_ides_hub_writes_nothing_and_logs_nothing() {
         let fake = agy_fake("agy-ide", r"C:\Users\dev\.gemini\bin\agy.exe");
+        agy_log_file(&fake, AGY_LOG, AGY.pid);
         run_agy(
             &fake,
             "PreInvocation",
             &agy_fixture("ide-pre-invocation.json"),
         );
-        let chat = "5d0c7b2e-9a41-4f3b-b8e6-2c7f1a9d4e10";
-        let file = agy_state(&fake, chat).expect("written under the lowercased id");
-        assert_eq!((file.pid, file.label.as_str()), (AGY.pid, "Antigravity"));
+        assert_eq!(fake.files(), BTreeSet::new());
         run_agy(&fake, "Stop", &agy_fixture("ide-stop-canceled.json"));
-        assert_eq!(fake.files(), BTreeSet::new(), "Esc's stop ends the turn");
+        assert_eq!(fake.files(), BTreeSet::new());
+        assert!(fake.lines().is_empty(), "{:?}", fake.lines());
+        assert!(fake.handed.borrow().is_empty());
+
+        // Its input on a command line still blocks, as for the CLI.
+        let mut fake = agy_fake("agy-ide-blocked", r"C:\Users\dev\.gemini\bin\agy.exe");
+        fake.command_line = Ok(true);
+        run_agy(&fake, "PreInvocation", &object(AGY_CALL, &[]));
+        assert_eq!(
+            fake.files(),
+            BTreeSet::from([r"agents\antigravity\blocked.json".to_owned()])
+        );
+        assert_eq!(*fake.removed.borrow(), ["antigravity"]);
 
         // No agy.exe above the hook: nothing written, one line.
         let mut fake = agy_fake("agy-none", &cli_agy());
@@ -1899,32 +2118,6 @@ mod tests {
         assert_eq!(
             fake.lines(),
             ["antigravity PreInvocation: no Antigravity process above the hook; nothing written"]
-        );
-    }
-
-    #[test]
-    fn antigravity_a_stop_without_its_idle_flag_writes_problem_json() {
-        let fake = agy_fake("agy-no-idle", &cli_agy());
-        run_agy(&fake, "PreInvocation", &object(AGY_CALL, &[]));
-        let no_flag: Vec<(&str, &str)> = AGY_STOP
-            .iter()
-            .copied()
-            .filter(|&(key, _)| key != "fullyIdle")
-            .collect();
-        run_agy(&fake, "Stop", &object(&no_flag, &[]));
-        assert_eq!(
-            fake.files(),
-            BTreeSet::from([
-                r"agents\antigravity\ec33ebf9-0cba-4100-8142-c61503f6c587.json".to_owned(),
-                r"agents\antigravity\problem.json".to_owned(),
-            ]),
-            "the chat holds while agy lives, and the notice says why"
-        );
-        assert_eq!(
-            fake.lines(),
-            [
-                "antigravity Stop: the input has no idle flag; Antigravity of an unknown version; problem.json written"
-            ]
         );
     }
 
@@ -1945,18 +2138,19 @@ mod tests {
     }
 
     #[test]
-    fn antigravity_an_elevated_hook_hands_its_stop_outcome_to_the_medium_copy() {
+    fn antigravity_an_elevated_hook_hands_its_log_and_its_stop_to_the_medium_copy() {
         let mut fake = agy_fake("agy-high", &cli_agy());
+        agy_log_file(&fake, AGY_LOG, AGY.pid);
         fake.above = Ok(true);
+        run_agy(&fake, "PreInvocation", &object(AGY_CALL, &[]));
         run_agy(&fake, "Stop", &object(AGY_STOP, &[]));
-        run_agy(&fake, "Stop", &object(AGY_STOP, &[("fullyIdle", "true")]));
         assert_eq!(fake.files(), BTreeSet::new());
         let deadline = (fake.now.get() + 2_000).to_string();
-        let args = |op: &str| {
-            [
+        let args = |event: &str, op: &str, log: &[&str]| {
+            let mut args = vec![
                 "hook",
                 "antigravity",
-                "Stop",
+                event,
                 "--checked",
                 AGY_CHAT,
                 "",
@@ -1965,37 +2159,73 @@ mod tests {
                 "cli",
                 op,
                 &deadline,
-            ]
-            .map(OsString::from)
-            .to_vec()
+            ];
+            args.extend(log);
+            args.into_iter().map(OsString::from).collect::<Vec<_>>()
         };
-        assert_eq!(*fake.handed.borrow(), [args("background"), args("none")]);
+        assert_eq!(
+            *fake.handed.borrow(),
+            [
+                args("PreInvocation", "working", &[AGY_LOG, "8000"]),
+                args("Stop", "none", &[])
+            ]
+        );
 
         // The copy, at Medium, does what was handed.
         let fake = agy_fake("agy-copy", &cli_agy());
-        let values = |op: &str| {
-            args(op)[4..]
+        let values = |args: Vec<OsString>| {
+            args[4..]
                 .iter()
                 .map(|v| v.to_string_lossy().into_owned())
                 .collect::<Vec<_>>()
         };
-        run(&fake, "antigravity", "Stop", &values("background"), None);
+        let call = values(args("PreInvocation", "working", &[AGY_LOG, "8000"]));
+        run(&fake, "antigravity", "PreInvocation", &call, None);
         assert_eq!(
-            agy_state(&fake, AGY_CHAT).map(|f| (f.state, f.label)),
-            Some((State::Background, "Antigravity CLI".to_owned()))
+            agy_state(&fake, AGY_CHAT).map(|f| (f.state, f.label, f.log, f.turn_at)),
+            Some((
+                State::Working,
+                "Antigravity CLI".to_owned(),
+                Some(AGY_LOG.to_owned()),
+                Some(FileTime(8_000))
+            ))
         );
-        run(&fake, "antigravity", "Stop", &values("none"), None);
+        run(
+            &fake,
+            "antigravity",
+            "Stop",
+            &values(args("Stop", "none", &[])),
+            None,
+        );
         assert_eq!(agy_state(&fake, AGY_CHAT), None);
-        run(&fake, "antigravity", "Stop", &values("working"), None);
+        // What a Stop could never do, a log on a delete, or the IDE's hub: nothing written.
+        for (event, handed) in [
+            ("Stop", args("Stop", "working", &[])),
+            ("Stop", args("Stop", "none", &[AGY_LOG, "8000"])),
+            (
+                "PreInvocation",
+                args("PreInvocation", "working", &[r"..\x.log", "8000"]),
+            ),
+        ] {
+            run(&fake, "antigravity", event, &values(handed), None);
+        }
+        let mut ide = call.clone();
+        ide[4] = "app".to_owned();
+        run(&fake, "antigravity", "PreInvocation", &ide, None);
         assert_eq!(fake.files(), BTreeSet::new());
         assert_eq!(
             fake.lines(),
-            ["antigravity Stop: the checked values do not pass; nothing written"]
+            [
+                "antigravity Stop: the checked values do not pass; nothing written",
+                "antigravity Stop: the checked values do not pass; nothing written",
+                "antigravity PreInvocation: the checked values do not pass; nothing written",
+            ]
         );
     }
 
     /// The privacy rule for Antigravity: the marker as the value of any field (the prompt in `lastUserInput`, the
-    /// paths, the model) or as a key never reaches a file name, a file or a log line.
+    /// paths, the model) or as a key, or in a prompt line of `agy`'s log, never reaches a file name, a file or a log
+    /// line.
     #[test]
     fn antigravity_the_marker_in_any_field_never_reaches_a_file_or_a_log_line() {
         let mut written = 0;
@@ -2009,6 +2239,7 @@ mod tests {
                 .collect();
             inputs.push(object(fields, &[(MARKER, MARKER)]));
             let fake = agy_fake("agy-marker", &cli_agy());
+            agy_log_file(&fake, AGY_LOG, AGY.pid);
             for input in inputs {
                 let _ = fs::remove_dir_all(agy_folder(&fake));
                 if event == "Stop" {
@@ -2024,10 +2255,10 @@ mod tests {
                         );
                     }
                 }
-                let state = agy_state(&fake, AGY_CHAT).map(|f| f.state);
+                let state = agy_state(&fake, AGY_CHAT);
                 let wrote = match event {
-                    "Stop" => state == Some(State::Background),
-                    _ => state == Some(State::Working),
+                    "Stop" => state.is_none(),
+                    _ => state.is_some_and(|f| f.log.as_deref() == Some(AGY_LOG)),
                 };
                 written += usize::from(wrote);
             }

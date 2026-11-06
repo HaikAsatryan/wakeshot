@@ -48,7 +48,8 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   Copilot agent mode in VS Code (`research/copilot-vscode-signals.md`), OpenCode, Cursor (editor and CLI), and
   Antigravity if a free option exists to test it (`research/cursor-gemini-signals.md`). OpenCode: 2.x first, 1.x only
   if cheap ("we are focusing the future"); Haik, 2026-11-06 19:25: v1 supports 2.x only, and says "OpenCode 2.x".
-  Antigravity, same day: named in plain text only ("works with"), and only if its end of work is seen exactly. No
+  Antigravity, same day: named in plain text only ("works with"), and only if its end of work is seen exactly (seen
+  for the CLI only, `p4-antigravity-exact-end`, so the name is "Antigravity CLI"). No
   agent logos in the video, README or site (their owners' rules need approval or are unclear): names only; Wakeshot may open `opencode.db` read only and query only the session and
   schedule tables, though the file also holds OpenCode's login tokens, with a test that no other table is ever read
   (`research/opencode-signals.md`). Gemini CLI is dropped: since 2026-06-18 it serves only enterprise and paid-API
@@ -74,11 +75,14 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   Antigravity (Haik, 2026-11-06 19:52, "ok agree"): Wakeshot may read `agy`'s own log for its cancel line only
   (the file also holds prompts: nothing else is kept or logged, with a test); if the log stops looking as tested,
   Wakeshot stops holding for Antigravity and shows "update Wakeshot". The CLI only in v1; the IDE stays out until
-  its own check passes.
+  its own check passes. Built (`p4-antigravity-exact-end`, 2026-11-06): the Antigravity CLI holds from a model call
+  to its `Stop`, to the cancel line (Esc, Ctrl+C; seen at the next read, within 30 s) or to `agy`'s end; tested
+  `agy` versions only (1.5.2). Background commands are not held: no exact end in every case (`fullyIdle` ignored).
+  The IDE's hooks write nothing.
 - Later, not v1: rules for any app ("while ffmpeg runs"). Claude Code inside WSL: its session files carry Linux pids,
   which Windows cannot check, so stale files would hold forever. Revisit with a helper inside WSL.
 - No plugins and no scripting. A new built-in source is new code.
-- Hooks (Haik, 2026-11-06): for an agent with no reliable file signal (Cursor, maybe Antigravity), Wakeshot may add
+- Hooks (Haik, 2026-11-06): for an agent with no reliable file signal (Cursor, Antigravity CLI), Wakeshot may add
   its own hook files in a folder it owns that the agent loads (a plugin or extension folder), never by editing the
   user's own settings, and never for Claude Code. It adds them by itself when it finds the agent, says so once in a
   notice, lists them in the README, and removes them at uninstall.

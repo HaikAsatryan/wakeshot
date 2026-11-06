@@ -5915,3 +5915,26 @@ close live test (2026-11-06)".
   went on.
 - **Local terminal calls ask for Allow every time** until the auto approve warning is accepted once
   (`chat.tools.terminal.autoApprove.warningAccepted`). **Verified** in the bundle and live.
+
+## Antigravity exact end
+
+Card `p4-antigravity-exact-end`, 2026-11-06. Antigravity CLI 1.5.2 at Medium under the harness driver; a scratch
+capture plugin on all six hook events (no prompt, args or path kept), a kernel process trace, `agy`'s own log read with
+its prompt lines cut out, then the built rule through a dry-run tray. Details: `research/antigravity-signals.md`,
+"Exact end (2026-11-06)".
+
+- **Esc and Ctrl+C fire no hook** (no `PostInvocation`, `PostToolUse` or `Stop`), in a model call, a tool run, an
+  approval wait and a streamed answer: 22 of 22 interrupts. **Verified** live.
+- **`agy` logs "Cancelling conversation <chat id> (killBackgroundTasks=false)" at each of them**, about 50 ms after the
+  key, flushed at once, in that process's own `%USERPROFILE%\.gemini\antigravity-cli\log\cli-<start time>.log`, whose
+  line 1 names its pid and line 2 its version (1.5.2); never at a normal end. The id is the hook's full
+  `conversationId`. 27 of 27 interrupts over both parts. **Verified** live; not documented.
+- **That log also holds every prompt in plain text** ("HandleUserInput called with text: ..."). **Verified** live.
+- **A folder watch sees no change while a process appends to a file it keeps open**: .NET `FileSystemWatcher` with
+  Wakeshot's filter on a scratch file a writer kept open and appended to each second: "Created" at the open,
+  "Changed" only at the close. **Verified** on this PC (Windows 11, NTFS).
+- **`fullyIdle` does not tell whether a background command runs**: `false` in 5 runs, `true` in 2 while one ran. A
+  background command's end is seen by its `PostToolUse` only at a natural end; a kill from `/tasks` or by the agent
+  runs no hook. **Verified** live.
+- **Through the app** (built rule, debug build, dry-run tray): Esc or Ctrl+C ended the hold at the next safety tick,
+  7.6 to 20.4 s after the cancel line (4 runs); Esc then `/exit` ended it at the process's end. **Verified** live.
