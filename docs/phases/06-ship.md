@@ -178,7 +178,7 @@ those one at a time across all tracks.
 | `p6-media-captures` | stays off the PC while it runs (Haik ~21:50: "Dell is connected go on") | `p6-media` Part C first draft | done: 22 captures on the DELL at 200% (work set S1 to S4 and S7, menu set S1 and S5a to S5d, light and dark, README stills), S9 from the log; Haik's settings equal before and after; about 11 min of screen |
 | `p6-repo-files` | yes: reads the files; turns on private vulnerability reporting | none | done (2026-11-06): `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 3.0), two issue forms and `config.yml`, a PR template; 3 questions with defaults in the card |
 | `p6-agents-video-readme` | yes: his yes to the plan, then his look at the render and README | `p6-media`, `p6-readme`; Part B after the bigger v1 live tests | Part C draft done 19:55 (Haik's new scenario: the pain of a sleeping laptop first, then Wakeshot, then the agents by name, no logos; 30.0 s, 7.49 MB, -15.3 LUFS, -1.6 dBTP; every check but the README paragraphs of Part B); the agent list has 4 passed, VS Code `partly`, Cursor and Antigravity pending; Part A done (2026-11-06 ~19:00); Haik: "Agree to everything" (~19:15); Part B: all but the agent list, the tested-live marks and the tooltip capture, which wait for the live results |
-| `p6-agents-install-e2e` | no | every `p4-live-*` card of the bigger v1 and its fixes; runs alone | card written 2026-11-06 ~21:40: whole-workspace checks, a fresh install over Haik's, one cheap turn per agent through the installed app; Part 1 done 18:28 (clock time): checks green on x64 and ARM64 (1752 tests), x64 Setup.exe 12.5 MB packed; Part 2 (checks again, install, one turn per agent) running since 21:57; the Cursor turn waits for Haik's steps |
+| `p6-agents-install-e2e` | no | every `p4-live-*` card of the bigger v1 and its fixes; runs alone | done (23:14): checks green on x64 and ARM64 (1779 tests); Haik's install replaced (WM_CLOSE, code 0; his values back; Setup 12,495,450 bytes); holds start/end: Claude Code 0.05/0.03 s, Codex 0.04/0.01, Copilot CLI 0.14/0.02, OpenCode 2.0/1.6, VS Code harness 0.14/0.06, Cursor 0.9 to 2.2 / 0.86 to 0.93 s (Stop, Ctrl+F4, window close exact); a Cursor chat deleted while it runs is not exact (only `sessionEnd`, the same as Ctrl+F4; held until the window closed, 101 s and 89 s): Haik's call |
 
 Size estimates, one worker's context: facts 100K, login and path 70K, update schedule 70K, hooks 100K, velopack
 dependency 110K, pack and release 110K, install e2e 130K, winget 60K, README 70K, Pages 60K. About 880K in all.
@@ -679,3 +679,8 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
 - 2026-11-06 21:57: `p6-agents-install-e2e` Part 2 started, alone (v1 list: Claude Code, Codex CLI, Copilot CLI,
   Copilot in VS Code harness chats, OpenCode 2.x, Cursor editor). The video's final render waits for Haik's music
   pick and this install (tooltip capture and speed numbers).
+- 2026-11-06 23:14: `p6-agents-install-e2e` done. Every agent holds and lets go through the installed app, but a Cursor
+  chat deleted while it runs sends no `stop`, only the `sessionEnd` that Ctrl+F4 also sends, so the hold lasts until
+  the window closes: not exact under "No guessing". Asked Haik: Cursor out of v1, or in with the gap in the README.
+  The HooksAdded notice showed once. A leftover `tail.exe` of Part 1 (pid 51104, this session's) ended by PID. The
+  whole-workspace checks passed on the code as it stands, so it is pushed. The video worker renders now.

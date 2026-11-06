@@ -5980,3 +5980,30 @@ Card `p4-vscode-local-off`, 2026-11-06, from Haik's answers (21:28 and about 21:
 - **A start adds no Antigravity folder and leaves an old one alone; the uninstall still removes it.** **Verified** by
   test. Why Antigravity left: its rule trusts `agy` 1.5.2 only, and `agy` releases almost daily (the orchestrator's
   count: `CHANGELOG.md` changed on about 25 days since 2026-10-02; **not verified** here).
+
+## Install check: the bigger v1 installed, one turn per agent (2026-11-06)
+
+How: `p6-agents-install-e2e` Part 2. The x64 build packed and installed over Haik's install with `Setup.exe --silent`
+at Medium; the tray started through Explorer; one cheap turn per agent at Medium. Times from each agent's own record
+(Claude status file, Codex rollout, Copilot `events.jsonl`, OpenCode row read with SQLite `mode=ro`, Cursor's hooks
+output log) to the installed tray's log line or `state.json`, read every 100 ms.
+
+- **Velopack `Setup.exe --silent` over the same version overwrites the install** ("User chose to overwrite existing
+  installation"), keeps `config.json`, runs the install hook, and does not start the tray. **Verified** (exe hashes,
+  config bytes, process list).
+- **The first start adds Cursor's hook folder with one log line and one `HooksAdded` notice**; the notice waits while
+  the session is locked and shows at the unlock (here 50 minutes later). No Antigravity folder. **Verified** (log,
+  folders).
+- **Hold start and end, installed tray**: Claude Code under 0.06 s and 0.04 s; Codex CLI 0.04 s and 0.01 s; Copilot
+  CLI 0.14 s and 0.02 s; Copilot in VS Code (harness) 0.14 s and 0.06 s; OpenCode 2.0 s and 1.6 s (its 2 s poll);
+  Cursor about 0.9 s and 0.9 s from Cursor's hook request (2.2 s for a new window's first prompt), most of it the hook's
+  own PowerShell start. **Verified** live, one turn each.
+- **The tray log names label changes only**: a second session of an agent that already holds gives no log line;
+  `state.json` counts sessions. **Verified** (log and `core.rs`).
+- **Cursor 3.27.12: a chat deleted while it runs gets no `stop`.** Deleting cancels the turn (Cursor's agent host
+  logs "Cancel action received" and "Deleted agent host session"), and the hook gets only a `sessionEnd` with
+  `final_status` `generating` and `reason` `user_close`. The second delete sent the same fields as a tab closed with
+  Ctrl+F4 (whose turn runs on and sends its own `stop`), with the same `reason`, `final_status`, `duration_ms` 0 and a
+  transcript path, only its own `generation_id` differing; the first delete differed only in `duration_ms`
+  (19152, not 0) and `transcript_path` (null). The chat's transcript file stays. So Wakeshot holds on until the
+  window's extension host exits (here 89 s and 101 s after two deletes). **Verified** live, two deletes.
