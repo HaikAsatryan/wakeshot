@@ -16,10 +16,10 @@ use std::sync::{Arc, OnceLock};
 use std::time::{Duration, SystemTime};
 
 use wakeshot_core::process::{Alive, ProcessRef};
-use wakeshot_core::sources::cursor;
 use wakeshot_core::sources::hooked::{
     self, Agent, Bases, Checked, EventRule, InputProblem, Listed, Op, Problem, State,
 };
+use wakeshot_core::sources::{antigravity, cursor};
 use wakeshot_windows::WinError;
 use wakeshot_windows::agent_hooks;
 use wakeshot_windows::clock;
@@ -55,7 +55,7 @@ const HAND_OFF_MS: u32 = 2_000;
 const TEMP_AGE: Duration = Duration::from_secs(60);
 
 /// Every agent the command knows; any other word does nothing, so a hook left by any version never fails.
-static AGENTS: &[&Agent] = &[&cursor::AGENT];
+static AGENTS: &[&Agent] = &[&cursor::AGENT, &antigravity::AGENT];
 
 /// Set once `{}` went out, so the panic hook never prints it twice.
 static ANSWERED: AtomicBool = AtomicBool::new(false);
@@ -208,7 +208,8 @@ impl Env for RealEnv {
     fn bases(&self) -> Bases {
         Bases {
             local_app_data: store::local_app_data().ok(),
-            // No table matches under the profile yet; `p4-antigravity-source` reads it for `.gemini\bin`.
+            // No table matches under the profile: Antigravity's IDE copy in `.gemini\bin` is told from the CLI by not
+            // being in the CLI's folder.
             profile: None,
         }
     }
@@ -880,7 +881,10 @@ mod tests {
 
         fn command_line_has(&self, process: ProcessRef, needle: &str) -> Result<bool, WinError> {
             assert_eq!(process, SHELL, "the hook's own parent");
-            assert_eq!(needle, "conversation_id");
+            assert!(
+                AGENTS.iter().any(|agent| agent.payload_key == needle),
+                "{needle}"
+            );
             self.command_line
         }
 
@@ -1379,7 +1383,8 @@ mod tests {
         *fake.input.borrow_mut() = prompt();
         for (agent, event) in [
             ("Cursor", "beforeSubmitPrompt"),
-            ("antigravity", "PreInvocation"),
+            // An Antigravity event Wakeshot does not hook.
+            ("antigravity", "SessionStart"),
             ("", ""),
             ("cursor", "BeforeSubmitPrompt"),
             ("cursor", "afterAgentResponse"),
@@ -1509,6 +1514,344 @@ mod tests {
         ] {
             let from_list = hooked::parse_input(&cursor::AGENT, event, &object(fields, &[])[..]);
             let from_file = hooked::parse_input(&cursor::AGENT, event, &fixture(name)[..]);
+            assert!(from_list.input.is_ok(), "{name}");
+            assert_eq!(from_list, from_file, "{name}");
+        }
+    }
+
+    const AGY_CHAT: &str = "ec33ebf9-0cba-4100-8142-c61503f6c587";
+    /// The `agy.exe` that ran the hook's `cmd /c` (`SHELL` here).
+    const AGY: ProcessRef = ProcessRef {
+        pid: 650,
+        start: FileTime(6_500),
+    };
+
+    /// `cli-pre-invocation.json` and `cli-stop-background.json` of `wakeshot-core/tests/fixtures/antigravity/`.
+    const AGY_CALL: &[(&str, &str)] = &[
+        (
+            "conversationId",
+            r#""ec33ebf9-0cba-4100-8142-c61503f6c587""#,
+        ),
+        ("workspacePaths", r#"["C:\\Users\\dev\\project"]"#),
+        (
+            "transcriptPath",
+            r#""C:\\Users\\dev\\.gemini\\antigravity-cli\\brain\\ec33ebf9-0cba-4100-8142-c61503f6c587\\.system_generated\\logs\\transcript.jsonl""#,
+        ),
+        (
+            "artifactDirectoryPath",
+            r#""C:\\Users\\dev\\.gemini\\antigravity-cli\\brain\\ec33ebf9-0cba-4100-8142-c61503f6c587""#,
+        ),
+        ("modelName", r#""gemini-3.8-flash""#),
+        ("lastUserInput", r#""Fix the failing unit test""#),
+        ("invocationNum", "0"),
+        ("initialNumSteps", "1"),
+    ];
+    const AGY_STOP: &[(&str, &str)] = &[
+        (
+            "conversationId",
+            r#""ec33ebf9-0cba-4100-8142-c61503f6c587""#,
+        ),
+        ("workspacePaths", r#"["C:\\Users\\dev\\project"]"#),
+        (
+            "transcriptPath",
+            r#""C:\\Users\\dev\\.gemini\\antigravity-cli\\brain\\ec33ebf9-0cba-4100-8142-c61503f6c587\\.system_generated\\logs\\transcript.jsonl""#,
+        ),
+        (
+            "artifactDirectoryPath",
+            r#""C:\\Users\\dev\\.gemini\\antigravity-cli\\brain\\ec33ebf9-0cba-4100-8142-c61503f6c587""#,
+        ),
+        ("modelName", r#""gemini-3.8-flash""#),
+        (
+            "lastUserInput",
+            r#""Start the dev server and keep it running""#,
+        ),
+        ("executionNum", "2"),
+        ("terminationReason", r#""NO_TOOL_CALL""#),
+        ("error", r#""""#),
+        ("fullyIdle", "false"),
+    ];
+
+    fn agy_fixture(name: &str) -> Vec<u8> {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("wakeshot-core")
+            .join("tests")
+            .join("fixtures")
+            .join("antigravity")
+            .join(name);
+        fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+    }
+
+    /// The hook, the `cmd /c` that `agy` runs it with, `agy.exe` at `path`, the user's terminal.
+    fn agy_fake(tag: &str, path: &str) -> Fake {
+        let mut fake = Fake::new(tag);
+        fake.list = vec![
+            entry(ME, SHELL.pid, "wakeshot.exe"),
+            entry(SHELL, AGY.pid, "cmd.exe"),
+            entry(AGY, 1, "agy.exe"),
+        ];
+        fake.paths = vec![(AGY.pid, PathBuf::from(path))];
+        fake
+    }
+
+    fn cli_agy() -> String {
+        local().join(r"agy\bin\agy.exe").display().to_string()
+    }
+
+    fn run_agy(fake: &Fake, event: &str, input: &[u8]) {
+        *fake.input.borrow_mut() = input.to_vec();
+        run(fake, "antigravity", event, &[], None);
+    }
+
+    fn agy_folder(fake: &Fake) -> PathBuf {
+        hooked::agent_folder(fake.temp.dir.root(), &antigravity::AGENT)
+    }
+
+    fn agy_state(fake: &Fake, chat: &str) -> Option<hooked::StateFile> {
+        let bytes = fs::read(agy_folder(fake).join(hooked::chat_file(chat))).ok()?;
+        match hooked::read_state(&bytes) {
+            hooked::FileRead::V1(file) => Some(file),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn antigravity_a_model_call_writes_working_once_and_a_stop_ends_or_keeps_it() {
+        let fake = agy_fake("agy-turn", &cli_agy());
+        run_agy(
+            &fake,
+            "PreInvocation",
+            &agy_fixture("cli-pre-invocation.json"),
+        );
+        let file = agy_state(&fake, AGY_CHAT).expect("written");
+        assert_eq!(
+            (
+                file.pid,
+                file.proc_start,
+                file.generation.as_str(),
+                file.label.as_str(),
+                file.state
+            ),
+            (AGY.pid, AGY.start, "", "Antigravity CLI", State::Working),
+            "the agy.exe above cmd, never the hook or cmd"
+        );
+
+        // Each later model call finds the file as it would write it, so it writes nothing.
+        let path = agy_folder(&fake).join(hooked::chat_file(AGY_CHAT));
+        let old = SystemTime::now() - Duration::from_secs(600);
+        fs::File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        for call in ["1", "2", "3"] {
+            run_agy(
+                &fake,
+                "PreInvocation",
+                &object(AGY_CALL, &[("invocationNum", call)]),
+            );
+        }
+        assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), old);
+
+        run_agy(&fake, "Stop", &agy_fixture("cli-stop-background.json"));
+        assert_eq!(
+            agy_state(&fake, AGY_CHAT).map(|f| f.state),
+            Some(State::Background)
+        );
+        run_agy(&fake, "PreInvocation", &object(AGY_CALL, &[]));
+        assert_eq!(
+            agy_state(&fake, AGY_CHAT).map(|f| f.state),
+            Some(State::Working)
+        );
+        run_agy(&fake, "Stop", &agy_fixture("cli-stop-idle.json"));
+        assert_eq!(agy_state(&fake, AGY_CHAT), None);
+        run_agy(&fake, "Stop", &agy_fixture("cli-stop-idle.json"));
+        assert_eq!(fake.files(), BTreeSet::new());
+        assert!(fake.lines().is_empty(), "{:?}", fake.lines());
+        assert!(fake.handed.borrow().is_empty());
+        assert_eq!(fake.drained.get(), 8, "every run reads the pipe to its end");
+    }
+
+    #[test]
+    fn antigravity_the_ides_hub_is_named_antigravity_and_its_chat_lowercased() {
+        let fake = agy_fake("agy-ide", r"C:\Users\dev\.gemini\bin\agy.exe");
+        run_agy(
+            &fake,
+            "PreInvocation",
+            &agy_fixture("ide-pre-invocation.json"),
+        );
+        let chat = "5d0c7b2e-9a41-4f3b-b8e6-2c7f1a9d4e10";
+        let file = agy_state(&fake, chat).expect("written under the lowercased id");
+        assert_eq!((file.pid, file.label.as_str()), (AGY.pid, "Antigravity"));
+        run_agy(&fake, "Stop", &agy_fixture("ide-stop-canceled.json"));
+        assert_eq!(fake.files(), BTreeSet::new(), "Esc's stop ends the turn");
+
+        // No agy.exe above the hook: nothing written, one line.
+        let mut fake = agy_fake("agy-none", &cli_agy());
+        fake.list[1] = entry(SHELL, 1, "cmd.exe");
+        run_agy(
+            &fake,
+            "PreInvocation",
+            &agy_fixture("cli-pre-invocation.json"),
+        );
+        assert_eq!(fake.files(), BTreeSet::new());
+        assert_eq!(
+            fake.lines(),
+            ["antigravity PreInvocation: no Antigravity process above the hook; nothing written"]
+        );
+    }
+
+    #[test]
+    fn antigravity_a_stop_without_its_idle_flag_writes_problem_json() {
+        let fake = agy_fake("agy-no-idle", &cli_agy());
+        run_agy(&fake, "PreInvocation", &object(AGY_CALL, &[]));
+        let no_flag: Vec<(&str, &str)> = AGY_STOP
+            .iter()
+            .copied()
+            .filter(|&(key, _)| key != "fullyIdle")
+            .collect();
+        run_agy(&fake, "Stop", &object(&no_flag, &[]));
+        assert_eq!(
+            fake.files(),
+            BTreeSet::from([
+                r"agents\antigravity\ec33ebf9-0cba-4100-8142-c61503f6c587.json".to_owned(),
+                r"agents\antigravity\problem.json".to_owned(),
+            ]),
+            "the chat holds while agy lives, and the notice says why"
+        );
+        assert_eq!(
+            fake.lines(),
+            [
+                "antigravity Stop: the input has no idle flag; Antigravity of an unknown version; problem.json written"
+            ]
+        );
+    }
+
+    #[test]
+    fn antigravity_input_on_cmds_command_line_blocks_and_removes_its_plugin() {
+        let mut fake = agy_fake("agy-blocked", &cli_agy());
+        fake.command_line = Ok(true);
+        run_agy(&fake, "PreInvocation", &object(AGY_CALL, &[]));
+        assert_eq!(
+            fake.files(),
+            BTreeSet::from([r"agents\antigravity\blocked.json".to_owned()])
+        );
+        assert_eq!(*fake.removed.borrow(), ["antigravity"]);
+        assert_eq!(
+            fake.lines()[0],
+            "antigravity PreInvocation: Antigravity put its input on a command line, where audit logs keep it; nothing kept, blocked.json written, the hook folder removed"
+        );
+    }
+
+    #[test]
+    fn antigravity_an_elevated_hook_hands_its_stop_outcome_to_the_medium_copy() {
+        let mut fake = agy_fake("agy-high", &cli_agy());
+        fake.above = Ok(true);
+        run_agy(&fake, "Stop", &object(AGY_STOP, &[]));
+        run_agy(&fake, "Stop", &object(AGY_STOP, &[("fullyIdle", "true")]));
+        assert_eq!(fake.files(), BTreeSet::new());
+        let deadline = (fake.now.get() + 2_000).to_string();
+        let args = |op: &str| {
+            [
+                "hook",
+                "antigravity",
+                "Stop",
+                "--checked",
+                AGY_CHAT,
+                "",
+                "650",
+                "6500",
+                "cli",
+                op,
+                &deadline,
+            ]
+            .map(OsString::from)
+            .to_vec()
+        };
+        assert_eq!(*fake.handed.borrow(), [args("background"), args("none")]);
+
+        // The copy, at Medium, does what was handed.
+        let fake = agy_fake("agy-copy", &cli_agy());
+        let values = |op: &str| {
+            args(op)[4..]
+                .iter()
+                .map(|v| v.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+        };
+        run(&fake, "antigravity", "Stop", &values("background"), None);
+        assert_eq!(
+            agy_state(&fake, AGY_CHAT).map(|f| (f.state, f.label)),
+            Some((State::Background, "Antigravity CLI".to_owned()))
+        );
+        run(&fake, "antigravity", "Stop", &values("none"), None);
+        assert_eq!(agy_state(&fake, AGY_CHAT), None);
+        run(&fake, "antigravity", "Stop", &values("working"), None);
+        assert_eq!(fake.files(), BTreeSet::new());
+        assert_eq!(
+            fake.lines(),
+            ["antigravity Stop: the checked values do not pass; nothing written"]
+        );
+    }
+
+    /// The privacy rule for Antigravity: the marker as the value of any field (the prompt in `lastUserInput`, the
+    /// paths, the model) or as a key never reaches a file name, a file or a log line.
+    #[test]
+    fn antigravity_the_marker_in_any_field_never_reaches_a_file_or_a_log_line() {
+        let mut written = 0;
+        for (fields, event) in [(AGY_CALL, "PreInvocation"), (AGY_STOP, "Stop")] {
+            let mut inputs: Vec<Vec<u8>> = fields
+                .iter()
+                .flat_map(|&(key, _)| {
+                    [MARKER, MARKER_NUMBER, MARKER_OBJECT]
+                        .map(|value| object(fields, &[(key, value)]))
+                })
+                .collect();
+            inputs.push(object(fields, &[(MARKER, MARKER)]));
+            let fake = agy_fake("agy-marker", &cli_agy());
+            for input in inputs {
+                let _ = fs::remove_dir_all(agy_folder(&fake));
+                if event == "Stop" {
+                    run_agy(&fake, "PreInvocation", &object(AGY_CALL, &[]));
+                }
+                run_agy(&fake, event, &input);
+                for name in fake.files() {
+                    let text = fs::read_to_string(fake.temp.dir.root().join(&name)).unwrap();
+                    for word in MARKER_WORDS {
+                        assert!(
+                            !name.contains(word) && !text.contains(word),
+                            "{name}: {text}"
+                        );
+                    }
+                }
+                let state = agy_state(&fake, AGY_CHAT).map(|f| f.state);
+                let wrote = match event {
+                    "Stop" => state == Some(State::Background),
+                    _ => state == Some(State::Working),
+                };
+                written += usize::from(wrote);
+            }
+            for line in fake.lines() {
+                for word in MARKER_WORDS {
+                    assert!(!line.contains(word), "{line}");
+                }
+            }
+        }
+        assert!(
+            written >= 40,
+            "the check saw state files of marked inputs: {written}"
+        );
+    }
+
+    #[test]
+    fn antigravity_the_field_lists_are_the_fixtures() {
+        for (fields, name, event) in [
+            (AGY_CALL, "cli-pre-invocation.json", "PreInvocation"),
+            (AGY_STOP, "cli-stop-background.json", "Stop"),
+        ] {
+            let agent = &antigravity::AGENT;
+            let from_list = hooked::parse_input(agent, event, &object(fields, &[])[..]);
+            let from_file = hooked::parse_input(agent, event, &agy_fixture(name)[..]);
             assert!(from_list.input.is_ok(), "{name}");
             assert_eq!(from_list, from_file, "{name}");
         }

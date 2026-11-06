@@ -37,6 +37,7 @@ use wakeshot_core::sources::{
     Activity, AgentSource, Fed, Feed, FileId, FormatHealth, Liveness as Seen, SessionFacts,
     SourceId, WantedFile,
 };
+use wakeshot_core::sources::{antigravity, cursor, hooked};
 use wakeshot_windows::WinError;
 use wakeshot_windows::clock;
 use wakeshot_windows::localtime::SystemZone;
@@ -54,7 +55,7 @@ agent-watch: runs the real watch thread and prints what it posts.
   agent-watch [--source <names>] [--data <folder>] [--raw <file>]
 
   --source <names> the agents to watch, comma separated or the flag again: claude, codex, copilot,
-                   vscode, opencode; default: claude
+                   vscode, opencode, cursor, antigravity; default: claude
   --data <folder>  the data folder to watch (holds, config); default: the dry-run folder
                    (%LocalAppData%\\Wakeshot\\dry-run). The real data folder is refused.
   --raw <file>     also write, per fed file, the kinds of the lines it fed (never their text)
@@ -63,6 +64,8 @@ Each agent is read where it writes: Claude Code in %CLAUDE_CONFIG_DIR% when set,
 Codex in %CODEX_HOME% when set, else %USERPROFILE%\\.codex; Copilot CLI in %COPILOT_HOME% when set, else
 %USERPROFILE%\\.copilot; VS Code chat (Stable and Insiders) in %VSCODE_APPDATA% when set, else %APPDATA%;
 OpenCode's database in %XDG_DATA_HOME%\\opencode when set, else %USERPROFILE%\\.local\\share\\opencode.
+Cursor and Antigravity in the files Wakeshot's hook writes: agents\\<agent> of the real data folder (of
+%WAKESHOT_DATA_DIR% in a debug build), read only.
 Ctrl+C stops it.";
 
 /// How a source is built from the user's profile folder: the source, and the folder it reads for the start line.
@@ -109,7 +112,24 @@ const SOURCES: &[(&str, Build)] = &[
         let db = opencode_db(home, std::env::var_os("XDG_DATA_HOME").as_deref());
         (Box::new(OpenCodeSource::new(db.clone())), db)
     }),
+    ("cursor", |home| {
+        let root = hook_root(home);
+        let folder = hooked::agent_folder(&root, &cursor::AGENT);
+        (Box::new(cursor::source(&root)), folder)
+    }),
+    ("antigravity", |home| {
+        let root = hook_root(home);
+        let folder = hooked::agent_folder(&root, &antigravity::AGENT);
+        (Box::new(antigravity::source(&root)), folder)
+    }),
 ];
+
+/// Where `wakeshot hook` writes, as a debug `wakeshot.exe` with this environment would: the real data folder, moved by
+/// `WAKESHOT_DATA_DIR` in a debug build. The hooked sources only read `agents\<agent>` in it, and `run` has already
+/// stopped if it does not resolve; `home` is then a place with no such folder.
+fn hook_root(home: &Path) -> PathBuf {
+    DataDir::real().map_or_else(|_| home.to_path_buf(), |dir| dir.root().to_path_buf())
+}
 
 /// The tray's safety tick (architecture section 4); the thread has no timer of its own.
 const TICK: Duration = Duration::from_secs(30);

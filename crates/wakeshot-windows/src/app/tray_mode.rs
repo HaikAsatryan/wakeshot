@@ -37,6 +37,7 @@ use wakeshot_core::sources::codex::{CodexSource, codex_home};
 use wakeshot_core::sources::copilot::CopilotSource;
 use wakeshot_core::sources::opencode::{OpenCodeSource, opencode_db};
 use wakeshot_core::sources::vscode::{VsCodeSource, installs};
+use wakeshot_core::sources::{antigravity, cursor};
 use wakeshot_core::text::NoticeClick;
 use wakeshot_core::view::{Cue, MenuCommand, Notice, TrayView};
 use windows::Win32::Foundation::{
@@ -338,10 +339,12 @@ where
         );
         log.line(Level::Warn, AREA, &text);
     }
+    let mut watched = sources(log);
+    watched.extend(hooked_sources(boot.dir.root(), log));
     let watch = match WatchThread::start(
         boot.dir.clone(),
         config.clone(),
-        sources(log),
+        watched,
         Arc::clone(&liveness),
         Arc::clone(&sink),
         Arc::clone(log),
@@ -351,6 +354,7 @@ where
     };
     // Not fatal: without updates the tray still does all its work.
     let updater = Updater::start(updates.feed, Arc::clone(&sink), log, Arc::clone(&loop_log));
+    let _agent_hooks = start_agent_hooks(boot, &sink, log);
     if let Some(version) = &updates.restarted {
         let text = format!("Velopack restarted the tray after the update to {version}");
         log.line(Level::Info, AREA, &text);
@@ -565,6 +569,32 @@ fn sources_in(home: &Path, env: AgentEnv, log: &Arc<dyn Log>) -> Vec<Box<dyn Age
         Box::new(VsCodeSource::new(vscode)),
         Box::new(OpenCodeSource::new(opencode)),
     ]
+}
+
+/// The hooked agents, Cursor and Antigravity: their sources read only the files Wakeshot's own hook writes in `agents\`
+/// of the data folder (`docs/agent-hooks.md`), so no agent folder or variable decides where. Beside [`sources`], so
+/// they are watched even when the profile folder is unknown.
+fn hooked_sources(data_root: &Path, log: &Arc<dyn Log>) -> Vec<Box<dyn AgentSource + Send>> {
+    log.line(
+        Level::Info,
+        AREA,
+        "Cursor and Antigravity are watched in the files their Wakeshot hook writes in the data folder",
+    );
+    vec![
+        Box::new(cursor::source(data_root)),
+        Box::new(antigravity::source(data_root)),
+    ]
+}
+
+/// Wakeshot's hook folders in the agents found (`startup::add_agent_hooks`), once per start, after the loop's sink
+/// exists: each folder added posts its notice there. Never joined: the thread ends by itself, and a quit during it
+/// leaves at most a staging folder, which the next start removes.
+fn start_agent_hooks(
+    boot: &Boot,
+    sink: &Arc<dyn EventSink>,
+    log: &Arc<dyn Log>,
+) -> Option<JoinHandle<()>> {
+    startup::add_agent_hooks(boot, Arc::clone(sink), Arc::clone(log))
 }
 
 /// The loop's own lines go to the IO thread as `Command::Log`, as the dispatcher's do, so the loop thread never
@@ -1835,6 +1865,76 @@ mod tests {
                 .map(|text| (Level::Info, (*text).to_owned()))
                 .collect();
             assert_eq!(lines(&memory)[2..], want, "{shown}");
+        }
+    }
+
+    #[test]
+    fn the_tray_watches_cursor_and_antigravity_in_their_hooks_folders() {
+        use wakeshot_core::sources::{SourceId, WantedFile};
+
+        let root = Path::new(r"C:\Users\x\AppData\Local\Wakeshot");
+        let memory = Arc::new(MemoryLog::default());
+        let log: Arc<dyn Log> = memory.clone();
+        let picked = hooked_sources(root, &log);
+        let found: Vec<(SourceId, PathBuf)> = picked
+            .iter()
+            .map(|source| match &source.wanted()[..] {
+                [WantedFile::Folder { dir, .. }] => (source.id(), dir.clone()),
+                _ => panic!("{:?} reads one folder", source.id()),
+            })
+            .collect();
+        assert_eq!(
+            found,
+            [
+                (SourceId::Cursor, root.join(r"agents\cursor")),
+                (SourceId::Antigravity, root.join(r"agents\antigravity")),
+            ]
+        );
+        assert_eq!(
+            lines(&memory),
+            [(
+                Level::Info,
+                "Cursor and Antigravity are watched in the files their Wakeshot hook writes in the data folder"
+                    .to_owned()
+            )]
+        );
+    }
+
+    /// The call `serve` makes. This test runs from `target\`, as a dev tray does, so its thread adds no hook folder to
+    /// any agent and posts nothing; a dry run starts no thread.
+    #[test]
+    fn a_tray_outside_velopacks_folder_adds_no_agent_hooks() {
+        use crate::store::DataDir;
+        use crate::watch::read::TempDir;
+
+        let dir = TempDir::new("tray-agent-hooks");
+        for dry_run in [false, true] {
+            let boot = Boot::at(
+                DataDir::at(dir.path().to_path_buf()),
+                Names::test("tray-agent-hooks"),
+                dry_run,
+            )
+            .unwrap();
+            let events = Arc::new(FakeEventSink::default());
+            let sink: Arc<dyn EventSink> = events.clone();
+            let memory = Arc::new(MemoryLog::default());
+            let log: Arc<dyn Log> = memory.clone();
+            let started = start_agent_hooks(&boot, &sink, &log);
+            assert_eq!(started.is_some(), !dry_run);
+            if let Some(thread) = started {
+                thread.join().unwrap();
+            }
+            assert!(events.events().is_empty(), "dry run {dry_run}");
+            let said: Vec<String> = lines(&memory).into_iter().map(|(_, text)| text).collect();
+            let want: &[&str] = match dry_run {
+                false => &["this tray is not Velopack's install, so it adds no agent hooks"],
+                true => &[],
+            };
+            assert_eq!(said, want, "dry run {dry_run}");
+            assert!(
+                !dir.path().join("agent-hooks.json").exists(),
+                "no record either"
+            );
         }
     }
 

@@ -249,6 +249,71 @@ fn the_marker_never_reaches_stdout_stderr_or_the_log() {
     }
 }
 
+fn agy_fixture(name: &str) -> Vec<u8> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("wakeshot-core")
+        .join("tests")
+        .join("fixtures")
+        .join("antigravity")
+        .join(name);
+    std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+}
+
+/// Antigravity's two events, as `agy` runs them: every input, its own and any other, gets `{}` and exit 0 and is read
+/// to its end; and the marker in the prompt or the model's answer reaches no file and no output.
+#[test]
+fn every_antigravity_input_answers_an_empty_object_with_exit_0_and_is_read_to_its_end() {
+    if release_build() {
+        return;
+    }
+    let data = Temp::new("agy-inputs");
+    let mut with_bom = vec![0xEF, 0xBB, 0xBF];
+    with_bom.extend(agy_fixture("cli-pre-invocation.json"));
+    let mut huge = format!(r#"{{"conversationId":"{CHAT}","lastUserInput":""#).into_bytes();
+    huge.resize(65 * 1024 * 1024, b'a');
+    huge.extend_from_slice(b"\"}");
+    let marked = String::from_utf8(agy_fixture("cli-stop-idle.json"))
+        .unwrap()
+        .replace("Fix the failing unit test", "QXV7 marker")
+        .replace("The test passes now", "77317731");
+    let inputs: Vec<(&str, Vec<u8>)> = vec![
+        ("call", agy_fixture("cli-pre-invocation.json")),
+        ("stop", agy_fixture("cli-stop-idle.json")),
+        ("background", agy_fixture("cli-stop-background.json")),
+        ("ide", agy_fixture("ide-pre-invocation.json")),
+        ("cursor's", fixture("editor-stop-completed.json")),
+        ("marked", marked.into_bytes()),
+        ("bom", with_bom),
+        ("empty", Vec::new()),
+        ("garbage", b"not json at all".to_vec()),
+        ("deep", "[".repeat(100_000).into_bytes()),
+        ("huge", huge),
+    ];
+    for (case, input) in inputs {
+        for event in ["PreInvocation", "Stop"] {
+            let mut command = Command::new(env!("CARGO_BIN_EXE_wakeshot"));
+            command
+                .args(["hook", "antigravity", event])
+                .env(DATA_DIR, &data.0);
+            let (output, all_read) = run_with_input(command, input.clone());
+            assert_answered(&output, &format!("{case} as {event}"));
+            assert!(all_read, "{case} as {event}: the pipe was read to its end");
+        }
+    }
+    // No `agy.exe` runs above this test, so the hook wrote nothing but maybe a log line, which holds no marker.
+    for (path, bytes) in files(&data.0) {
+        let log = path.extension().is_some_and(|e| e == "log");
+        assert!(log, "{}", path.display());
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(
+            MARKER_WORDS.iter().all(|w| !text.contains(w)),
+            "{}",
+            path.display()
+        );
+    }
+}
+
 /// A copy of `cmd.exe` named `Cursor.exe`, so the hook's walk finds the editor's image above it.
 fn fake_cursor(dir: &Path) -> PathBuf {
     let system =
@@ -328,6 +393,89 @@ fn a_hook_under_cursor_writes_the_chats_file_and_its_stop_deletes_it() {
         &fixture("editor-stop-completed.json"),
     );
     assert!(!chat_file(&data).exists());
+}
+
+/// Runs the hook as `agy` 1.5.2 does (`research.md`, "Antigravity hook payload form"): `agy.exe` (here a copy of
+/// `cmd.exe`) starts `cmd /c "<command>"`, the form Go's `os/exec` gives a command with spaces, with the input on
+/// stdin. So `cmd`'s own quote rule is what turns it back into the command. Gives the fake `agy.exe`'s process.
+fn hook_under_agy(
+    agy: &Path,
+    data: &Path,
+    event: &str,
+    input: &[u8],
+) -> wakeshot_core::process::ProcessRef {
+    let input_file = data.with_extension(format!("{event}.json"));
+    std::fs::write(&input_file, input).unwrap();
+    let exe = env!("CARGO_BIN_EXE_wakeshot");
+    assert!(
+        !exe.contains([' ', '"', '%', '^', '&', '(', ')', '!', '@', '~']),
+        "the hook command takes only a bare path: {exe}"
+    );
+    let line = format!(
+        r#"/d /s /c "cmd /c "{exe} hook antigravity {event}" < "{}"""#,
+        input_file.display()
+    );
+    let mut child = Command::new(agy)
+        .raw_arg(line)
+        .env(DATA_DIR, data)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let process = wakeshot_core::process::ProcessRef {
+        pid: child.id(),
+        start: process::start_of(&child).unwrap(),
+    };
+    assert!(child.wait().unwrap().success());
+    let _ = std::fs::remove_file(&input_file);
+    process
+}
+
+/// The whole Antigravity chain on this PC: `agy.exe`, `cmd /c`, the hook. A model call writes the chat's file naming
+/// that `agy.exe`, a stop with a background task keeps it as `background`, a full stop deletes it.
+#[test]
+#[ignore = "needs Explorer as the shell when the runner is elevated (track note 3)"]
+fn a_hook_under_agy_and_cmd_writes_the_chats_file_and_a_full_stop_deletes_it() {
+    if release_build() {
+        return;
+    }
+    let temp = Temp::new("agy-chain");
+    let data = temp.0.join("data");
+    let system =
+        std::env::var_os("SystemRoot").map_or_else(|| PathBuf::from(r"C:\Windows"), PathBuf::from);
+    let agy = temp.0.join("agy.exe");
+    std::fs::copy(system.join("System32").join("cmd.exe"), &agy).unwrap();
+    let chat = "ec33ebf9-0cba-4100-8142-c61503f6c587";
+    let file = data
+        .join("agents")
+        .join("antigravity")
+        .join(format!("{chat}.json"));
+    let state = |process: wakeshot_core::process::ProcessRef, state: &str| {
+        format!(
+            r#"{{"version":1,"pid":{},"procStart":"{}","generation":"","label":"Antigravity","state":"{state}"}}"#,
+            process.pid, process.start
+        )
+    };
+    let call = hook_under_agy(
+        &agy,
+        &data,
+        "PreInvocation",
+        &agy_fixture("cli-pre-invocation.json"),
+    );
+    let text = std::fs::read_to_string(&file).expect("the chat's file");
+    assert_eq!(text, state(call, "working"));
+    let stop = hook_under_agy(
+        &agy,
+        &data,
+        "Stop",
+        &agy_fixture("cli-stop-background.json"),
+    );
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        state(stop, "background")
+    );
+    hook_under_agy(&agy, &data, "Stop", &agy_fixture("cli-stop-idle.json"));
+    assert!(!file.exists());
 }
 
 /// Gives `dir` a High mandatory label, so a Medium process cannot write in it and a High one can.

@@ -425,6 +425,41 @@ It needs hooks: `research/antigravity-signals.md` (card `p4-antigravity-research
 The Antigravity build card first names how `agy` passes the input (the Privacy gate), then settles the shell and the
 command form, and checks that a dropped folder loads without `agy plugin install`.
 
+**Built** (`p4-antigravity-source`, 2026-11-06). The Privacy gate holds: `agy` 1.5.2 (the CLI, and the IDE 2.6.0's
+hub, the same binary) runs each hook as `cmd /c <command>` through Go's `os/exec`, with the input on stdin and
+`ANTIGRAVITY_CONVERSATION_ID` in the environment; the IDE's JS runs no hook (`research.md`, "Antigravity hook payload
+form"). Where the build differs from or settles the table above:
+
+- Shell and command: settled by code, not by a live check. Go wraps the command in quotes for `cmd`, which strips them
+  again; a quote inside would become `\"`, which `cmd` does not read (checked with this PC's `cmd`). So the allow list
+  stays as designed, and `~` stays out too (`agy` expands only a leading `~/`, but no known folder holds a `~`).
+- Input: `fullyIdle` is always in a `Stop` input (protojson `EmitUnpopulated`, a plain bool), so a `Stop` without a
+  plain `true` or `false` there is unreadable input: `problem.json`, the "update Wakeshot" notice, the chat's file
+  left as it was. The input has no event name, turn id or version field, so none is checked or logged.
+- Labels: "Antigravity CLI" for an `agy.exe` under `%LocalAppData%\agy\bin\`, "Antigravity" for any other (the IDE's
+  hub in `.gemini\bin`, or an install the research did not name), so the hook never misses an `agy.exe` it could pair
+  with; the walk takes the nearest, as for Cursor.
+- `PreInvocation` prunes the folder (no session end event, so it is the only turn start); `Stop` does not.
+- Files: `hooks.json` first, `plugin.json` last, then the marker: `agy`'s plugin listing has no dot-name check (code
+  read), so a staging folder becomes a plugin only with its last file. `plugin.json` holds `name`, `version`,
+  `description` and `author`, the fields `agy`'s manifest type reads.
+- Presence: `ANTIGRAVITY_GEMINI_DIR` is read from the tray's environment, like the agents' variables in
+  `tray_mode::sources`.
+- Not checked by code: that a dropped folder loads without `agy plugin install` and is enabled by default (the
+  enabled state is kept outside the folder now, in an `enabledPlugins` map), and that `{}` lets a `Stop` through
+  (`agy`'s embedded doc: any `decision` but `continue` allows it). Live test 7.
+- For the tray: `tray_mode::hooked_sources` starts both hooked sources, and `tray_mode::start_agent_hooks` makes the
+  one `startup::add_agent_hooks` call in `serve`.
+
+**Changed** (`p4-antigravity-source`, orchestrator decision 2026-11-06, for Haik's review, easy to undo): in "Adding",
+the first row ("missing | any | any | nothing") now also forgets the agent's mark. An agent's own folder gone at a
+start (`.cursor`; `.gemini` or `.gemini\config`) is the agent going away, not the user removing Wakeshot's hooks, so a
+reinstall that makes the folder again gets the hooks again, with the notice. Only Wakeshot's folder gone, the agent's
+still there, stays "the user removed it". A mark of either kind is forgotten, `removed` too: that "no" was given to
+the agent that went. A reinstall between two tray starts is not seen (the folder is back by the next start), so its
+hooks stay removed: change it when that shows up, for example by keeping the agent folder's creation time in the
+record.
+
 ## README lines
 
 For `p4-readme-agents`:
