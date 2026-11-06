@@ -5569,3 +5569,66 @@ said. Each fact is a test in the repo.
   `embed-resource`, `proptest`, `wakeshot-core`, `wakeshot-windows`, `windows` (read); with the feature
   `Wdk_System_Threading` added every `--locked` build passed. So a feature needs no lock change, and a new crate line
   in `wakeshot-cli` (for example `serde_json`) would need one. **Verified**.
+
+## Cursor hook payload form
+
+Card `p4-cursor-source`, step 1, 2026-11-06 (design live test 0, review `p4-hooks-design-security` major 3). How
+checked: the installed Cursor editor `3.27.12` (`%LocalAppData%\Programs\cursor`, `package.json`) and Cursor CLI
+`2026.11.05-86047df` (`%LocalAppData%\cursor-agent\versions\`) read as data with a text search over the minified JS.
+Nothing run, no plugin added.
+
+- **The editor runs plugin hooks from its renderer, and on Windows always through a temp file.**
+  `_executeCommandHookScript` in `out\vs\workbench\workbench.desktop.main.js` and in `workbench.glass.main.js` sets
+  the mode to the constant `"windows_temp_file"` when the backend OS is Windows (`"stdin"` otherwise), and passes the
+  payload as its own argument to `shellExecService.executeHookDirect(command, cwd, isWindows, env, timeoutMs,
+  payload)`, never inside the command. No setting or experiment flag on this path. **Verified** in code.
+- **The extension host writes that payload to a file and pipes it.** `$executeHookDirect` in
+  `out\vs\workbench\api\node\extensionHostProcess.js`: on Windows with a payload it writes
+  `%TEMP%\cursor-hook-payload-<pid>-<ms>-<hex>.json` (`writeFile`, UTF-8, no `wx` flag), runs `powershell -NoProfile
+  -NonInteractive -ExecutionPolicy Bypass -c "<UTF-8 setup>; Get-Content -LiteralPath '<file>' -Raw -Encoding UTF8 |
+  & { $input | <command> }"` and deletes the file in `finally`. The command line holds the file's path, not the
+  payload. **Verified** in code. The hook's parent is that PowerShell, and its parent the extension host
+  (`Cursor.exe`): read in code, not run.
+- **The agent host daemon defaults to the command line, but never for plugin hooks.** In
+  `extensions\cursor-agent-host\dist\agent-host-daemon\dist\bin\daemon.cjs`, `CliHooksExecutor` gives
+  `"argv_heredoc"` (`@'<json>'@ | & <command>` through `powershell -c`, so on the command line) unless
+  `options.commandHookPayloadTransport` is `"stdin"`. It is built in one place only, `createHeadlessDiskHookExecutor`,
+  with no options, and that loads only the project's `<workspace>\.cursor\hooks.json`, and only with a
+  `.workspace-trusted` marker. The file has no `pluginHooks:` and no `.updateConfig(` call, so plugin hooks never
+  reach it; tool-step hooks there hop to the editor (`surface-hook.ts`). **Verified** in code. Note: the class
+  already reads `config.pluginHooks`, so a later version could feed plugin hooks to it; the hook's runtime check
+  (the parent's command line holds `"conversation_id"`) catches that, since the here-string holds the raw JSON.
+- **The three agent extensions build no hook command.** `cursor-agent-exec`, `cursor-local-agent-runtime` and
+  `cursor-agent-host` (`dist\main.js`) hold only the list of mode names (`stdin`, `argv_base64`, `argv_heredoc`,
+  `windows_temp_file`, `prompt`). **Verified** in code.
+- **The CLI sets the option to the temp file in every local path read.** `S6(t)` returns `"stdin"` for `true`, else
+  `"legacy"` (`index.js`); the interactive loop (`3026.index.js`), `4110.index.js` and `697.index.js` pass
+  `S6(true)`; bridge mode (`2855.index.js`) passes `useCommandHookStdinTransport: true` from its one caller; the
+  exec daemon (`8123.index.js`) takes the caller's value. `connect-pool-worker.js` calls its bridge mode without the
+  flag, so the command line there; that bundle names Linux desktop processes (`xvfb`, `xfce4-panel`) and reads a
+  worker token from a file descriptor, so it looks like Cursor's cloud sandbox worker, not a user's PC: **not
+  verified**. **Verified** in code for the rest.
+- **So the privacy Gate holds for 3.27.12 and CLI 2026.11.05-86047df**: every local path that runs a plugin hook
+  hands the payload through a temp file. The Cursor plugin may ship. The check is repeated for each Cursor version
+  Wakeshot claims (`agent-hooks.md`, "How the build checks it").
+
+## Core tests on Linux: Windows path strings
+
+Card `p4-core-linux-tests`, 2026-11-06. How checked: the CI job log of `core-linux` on 98c8795 (job 127874604221,
+read with `gh api .../actions/jobs/<id>/logs`), the Rust `Path` docs, and the tests read line by line. No Linux run
+here (see the last point).
+
+- **On Linux `\` is a plain character in a path.** `Path::new(r"C:\Users\x").join(".codex")` is
+  `C:\Users\x/.codex`, and `C:\Users\x` is one relative component whose `parent()` is `Some("")`, then `None`.
+  **Verified** in the CI log (left `"C:\\Users\\x/.codex"`) and the `Path::parent` docs.
+- **So a test path is safe on both systems when each level has its own `join`.** A made-up root such as
+  `X:\home\.codex` is fine as one opaque piece, as long as the source and the test both join below it. A string
+  with `\` between levels (`join(r"2026\11\06")`, an expected `PathBuf::from(r"C:\Users\x\.codex")`) is one level on
+  Linux. **Verified**: in `codex_source.rs` that put every rollout 2 levels under `sessions` instead of 4, the
+  source ignored them, and the 15 tests that expect a rollout to change a session were exactly the 15 that failed in
+  CI (names compared one by one with the log).
+- **WSL `Ubuntu-26.04` on the test laptop has no C toolchain**: no `cc`, `gcc` or `clang`, no
+  `/usr/lib/x86_64-linux-gnu/crt1.o` or `libc.so` (libc6-dev), no `ensurepip`. Rust there needs a linker too, so a
+  no-sudo setup needs a self-contained one (for example Zig as `cc`). Checked with `which` and `ls` in WSL. The
+  agent's permission check refused the download and install, so no Linux run was done: **not verified** that a
+  Zig-linked toolchain works there.

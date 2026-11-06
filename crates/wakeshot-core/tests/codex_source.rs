@@ -30,16 +30,22 @@ fn sessions_dir() -> PathBuf {
     PathBuf::from(HOME).join("sessions")
 }
 
+/// `sessions\2026\11\<day>`, one level per `join`: `\` is a separator on Windows only, so a joined `2026\11\06`
+/// would be one folder on Linux and every rollout would sit at the wrong depth.
+fn day_dir(day: &str) -> PathBuf {
+    date_dir(sessions_dir(), day)
+}
+
+fn date_dir(root: PathBuf, day: &str) -> PathBuf {
+    root.join("2026").join("11").join(day)
+}
+
 fn lock(id: &str) -> FileId {
     FileId(locks_dir().join(format!("{id}.lock")))
 }
 
 fn rollout(id: &str) -> FileId {
-    FileId(
-        sessions_dir()
-            .join(r"2026\11\06")
-            .join(format!("rollout-2026-11-06T12-00-00-{id}.jsonl")),
-    )
+    FileId(day_dir("06").join(format!("rollout-2026-11-06T12-00-00-{id}.jsonl")))
 }
 
 fn facts(id: &str, activity: Activity, format: FormatHealth) -> SessionFacts {
@@ -291,7 +297,7 @@ fn rollout_names_match_the_plain_and_the_reverted_form_only() {
 #[test]
 fn a_reverted_thread_goes_on_in_its_new_rollout() {
     let mut source = with_thread();
-    let reverted = FileId(sessions_dir().join(r"2026\11\06").join(format!(
+    let reverted = FileId(day_dir("06").join(format!(
         "rollout-2026-11-06T12-30-00-{THREAD}_{OTHER}.jsonl"
     )));
     append(&mut source, &rollout(THREAD), &fixture("complete.jsonl"));
@@ -318,7 +324,7 @@ fn a_reverted_thread_goes_on_in_its_new_rollout() {
     assert_eq!(source.sessions(), [idle(THREAD)]);
 
     // A reverted file of another thread is not this one's.
-    let other = FileId(sessions_dir().join(r"2026\11\06").join(format!(
+    let other = FileId(day_dir("06").join(format!(
         "rollout-2026-11-06T12-31-00-{OTHER}_{THREAD}.jsonl"
     )));
     source.feed(&reverted, Feed::Gone);
@@ -513,11 +519,7 @@ fn a_gone_rollout_forgets_its_turns_and_a_restart_reads_from_the_start() {
 #[test]
 fn a_second_rollout_of_the_same_thread_waits_until_the_first_is_gone() {
     let mut source = with_thread();
-    let second = FileId(
-        sessions_dir()
-            .join(r"2026\11\07")
-            .join(format!("rollout-2026-11-07T08-00-00-{THREAD}.jsonl")),
-    );
+    let second = FileId(day_dir("07").join(format!("rollout-2026-11-07T08-00-00-{THREAD}.jsonl")));
     append(&mut source, &rollout(THREAD), &fixture("complete.jsonl"));
     append(&mut source, &second, &fixture("running.jsonl"));
     assert_eq!(source.sessions(), [idle(THREAD)]);
@@ -533,7 +535,7 @@ fn a_second_rollout_of_the_same_thread_waits_until_the_first_is_gone() {
 fn files_it_did_not_ask_for_change_nothing() {
     let mut source = with_thread();
     let running = fixture("running.jsonl");
-    let date = sessions_dir().join(r"2026\11\06");
+    let date = day_dir("06");
     let strangers = [
         // A thread with no lock file, plain and reverted.
         rollout(OTHER),
@@ -545,8 +547,7 @@ fn files_it_did_not_ask_for_change_nothing() {
         // The right name at the wrong depth, or under another root.
         FileId(sessions_dir().join(format!("rollout-2026-11-06T12-00-00-{THREAD}.jsonl"))),
         FileId(
-            PathBuf::from(HOME)
-                .join(r"archived_sessions\2026\11\06")
+            date_dir(PathBuf::from(HOME).join("archived_sessions"), "06")
                 .join(format!("rollout-2026-11-06T12-00-00-{THREAD}.jsonl")),
         ),
         FileId(date.join(format!("rollout-2026-11-06T12-00-00_{THREAD}.jsonl"))),
@@ -604,13 +605,10 @@ fn an_over_long_line_is_skipped_and_the_next_one_counts() {
 #[test]
 fn the_home_folder_is_codex_home_when_set_else_dot_codex() {
     let profile = Path::new(r"C:\Users\x");
-    assert_eq!(
-        codex::codex_home(profile, None),
-        PathBuf::from(r"C:\Users\x\.codex")
-    );
+    assert_eq!(codex::codex_home(profile, None), profile.join(".codex"));
     assert_eq!(
         codex::codex_home(profile, Some(OsStr::new(""))),
-        PathBuf::from(r"C:\Users\x\.codex"),
+        profile.join(".codex"),
         "an empty value is unset, as Codex reads it"
     );
     assert_eq!(
@@ -707,7 +705,7 @@ fn live_rollouts_move_the_activity_only_at_their_turn_events() {
 /// was the newest.
 #[test]
 fn the_live_backtrack_ends_on_the_reverted_rollout() {
-    let reverted = FileId(sessions_dir().join(r"2026\11\06").join(format!(
+    let reverted = FileId(day_dir("06").join(format!(
         "rollout-2026-11-06T14-35-34-{THREAD}_{OTHER}.jsonl"
     )));
     let mut source = with_thread();

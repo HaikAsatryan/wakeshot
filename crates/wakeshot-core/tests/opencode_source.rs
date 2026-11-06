@@ -109,8 +109,13 @@ fn with_tables() -> OpenCodeSource {
 
 #[test]
 fn the_database_is_in_the_xdg_data_folder() {
+    // One level per `join`: `\` is a separator on Windows only.
     let profile = Path::new(r"C:\Users\x");
-    let default = PathBuf::from(r"C:\Users\x\.local\share\opencode\opencode.db");
+    let default = profile
+        .join(".local")
+        .join("share")
+        .join("opencode")
+        .join("opencode.db");
     assert_eq!(opencode::opencode_db(profile, None), default);
     assert_eq!(
         opencode::opencode_db(profile, Some(OsStr::new(""))),
@@ -119,7 +124,7 @@ fn the_database_is_in_the_xdg_data_folder() {
     );
     assert_eq!(
         opencode::opencode_db(profile, Some(OsStr::new(r"D:\data"))),
-        PathBuf::from(r"D:\data\opencode\opencode.db")
+        Path::new(r"D:\data").join("opencode").join("opencode.db")
     );
 }
 
