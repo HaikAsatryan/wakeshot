@@ -638,3 +638,9 @@ and Phase 8 deletes it. Item 12: the uninstall leaves `NotifyIconSettings`, and 
 - 2026-11-06 ~19:15: Haik: "Agree to everything" (the `p6-agents-video-readme` plan and its question 1 default: no new
   tray part), "just work work and work". Part B started at once with everything that does not wait for a live
   result; the final agent list, the tested-live marks and the tooltip capture come after the live tests.
+- 2026-11-06 ~20:00: `p6-agents-video-readme` Part B first pass done (16392db): one list `media/src/agents.ts` drives
+  the shot 2 chips and the README and site lists (`npm run agent-lists`; `npm run check` fails if they differ); shot 3
+  caption, README and site text, the two `product.md` lines, the stale hooks lines in
+  `research/cursor-gemini-signals.md`. Draft checks pass (7.42 MB, -15.3 LUFS, -1.1 dBTP, rebuild same bytes). Waits:
+  each pending agent's line and paragraph, the two-agent tooltip capture and the speed numbers on the new install,
+  the final render. When resumed, it also owns `docs/research/promo-video.md` rows 2 and 3 (stale storyboard).
