@@ -99,6 +99,10 @@ absence of an event. A state that can stay "working" after the work ended is not
    is not documented, so a later `agy` may change the line. Default: yes, build it this way. If no: Antigravity
    leaves v1, as the card says.
 
+   Haik, 2026-11-06 20:00: "ok agree" (to: yes, with a guard: if the log stops looking as tested, Wakeshot stops
+   holding for Antigravity and shows "update Wakeshot", never a guess; the CLI only in v1, the IDE out until its own
+   check passes). Part B builds it once `p4-live-cursor` is done.
+
 ## Found outside scope
 
 1. **`--effort low` is ignored by `agy` 1.5.2 with Gemini 3.8 Flash.** Its log says "failed to apply model override:

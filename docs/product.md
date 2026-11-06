@@ -71,6 +71,10 @@ When no work is going on, the laptop behaves as if Wakeshot were not there: the 
   support that agent or that case, rather than end the hold on a timer or keep it on a guess. Claude's cancelled
   wakeup stays as it is (Haik, 2026-11-06 19:50): Esc writes nothing, so the hold lasts until the due time Claude
   wrote, at most 1 hour.
+  Antigravity (Haik, 2026-11-06 20:00, "ok agree"): Wakeshot may read `agy`'s own log for its cancel line only
+  (the file also holds prompts: nothing else is kept or logged, with a test); if the log stops looking as tested,
+  Wakeshot stops holding for Antigravity and shows "update Wakeshot". The CLI only in v1; the IDE stays out until
+  its own check passes.
 - Later, not v1: rules for any app ("while ffmpeg runs"). Claude Code inside WSL: its session files carry Linux pids,
   which Windows cannot check, so stale files would hold forever. Revisit with a helper inside WSL.
 - No plugins and no scripting. A new built-in source is new code.

@@ -529,3 +529,7 @@ limit; Copilot waiting does not hold. The cards build these.
 - 2026-11-06 19:50: Haik did `p4-live-cursor` round 2 ("done", nothing shown); the worker finishes the card. Haik
   kept Claude's cancelled wakeup as it is (default; `docs/product.md`, "No guessing"). `p4-antigravity-exact-end`
   Question 1 (read `agy`'s log for the cancel line) asked of him.
+- 2026-11-06 20:00: Haik, "ok agree": `p4-antigravity-exact-end` Part B reads `agy`'s log for the cancel line, with a
+  guard (a log that stops looking as tested turns Antigravity off with "update Wakeshot"); the CLI only in v1, the
+  IDE out until its own check passes (so Haik's IDE first-run pass is not needed for v1). Part B starts when
+  `p4-live-cursor` ends.
