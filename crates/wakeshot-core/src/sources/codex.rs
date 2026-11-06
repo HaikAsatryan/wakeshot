@@ -14,12 +14,13 @@
 //!   `turn_aborted` end it. Approval prompts are not written, so a turn that waits for the user reads as working
 //!   (Haik, 2026-11-03, sign-off item 1: it holds with no limit).
 //!
-//! Not followed yet: a thread reverted in the TUI (editing an earlier prompt of a paginated thread, the TUI's default
-//! in 0.167.0) goes on in `rollout-<time>-<thread id>_<rollout id>.jsonl`, which `FindTail`'s name suffix cannot
-//! name; its later turns are not seen (card Result, open item). Compressed `.jsonl.zst` rollouts are only ever old
-//! ones without a live writer, so they are never asked for.
+//! A thread reverted in the TUI (editing an earlier prompt of a paginated thread, the TUI's default in 0.167.0) goes
+//! on in a new file, `rollout-<time>-<thread id>_<rollout id>.jsonl`. Both names match the thread's
+//! `WantedFile::FindNewest`, so the watch thread follows the newest by modified time: it feeds the old file `Gone`,
+//! then the new one from its start (`p4-contracts-r2`). Not tested with a real revert yet (`p4-live-codex`).
+//! Compressed `.jsonl.zst` rollouts are only ever old ones without a live writer, so they are never asked for.
 //!
-//! Owner: `p4-codex-source`; fixes by `p4-live-codex`.
+//! Owner: `p4-codex-source`; fixes by `p4-live-codex`; reverted threads by `p4-contracts-r2`.
 
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
@@ -51,6 +52,10 @@ const DATE_DEPTH: u8 = 3;
 /// A thread id as Codex writes it: a UUID, lowercase, with hyphens.
 const ID_LEN: usize = 36;
 
+/// The longest `<rollout id>` a reverted rollout's name may carry. `p4-codex-source` read it as a UUID; any short run
+/// of letters, digits and hyphens is taken, so a different id form still matches.
+const MAX_TAG: usize = 64;
+
 /// Every turn event is an `event_msg` line, so the others are never parsed.
 const MARKER: &[u8] = b"event_msg";
 
@@ -80,10 +85,37 @@ fn is_thread_id(text: &str) -> bool {
         })
 }
 
+/// A rollout file name of `thread` (a lowercase thread id): `...-<thread id>.jsonl`, or `...-<thread id>_<rollout
+/// id>.jsonl` for a reverted thread; case ignored, as Windows does. The name filter of the thread's `FindNewest`.
+pub fn is_rollout_of(name: &str, thread: &str) -> bool {
+    rollout_thread(name).is_some_and(|id| id == thread)
+}
+
+/// The thread id a rollout name carries, lowercase. The plain form is tried first, so a name whose time part held a
+/// `_` still reads as it did before reverted threads were matched.
+fn rollout_thread(name: &str) -> Option<String> {
+    let name = name.to_ascii_lowercase();
+    let stem = name.strip_suffix(".jsonl")?;
+    id_at_end(stem).or_else(|| {
+        let (head, tag) = stem.rsplit_once('_')?;
+        let tag_ok = !tag.is_empty()
+            && tag.len() <= MAX_TAG
+            && tag.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-');
+        if tag_ok { id_at_end(head) } else { None }
+    })
+}
+
+/// `<anything>-<thread id>`: the id.
+fn id_at_end(stem: &str) -> Option<String> {
+    let at = stem.len().checked_sub(ID_LEN + 1)?;
+    let (dash, id) = stem.get(at..)?.split_at(1);
+    (dash == "-" && is_thread_id(id)).then(|| id.to_owned())
+}
+
 /// Codex CLI's sessions, one per thread lock file, keyed by thread id.
 ///
-/// The watch thread is expected to feed the lock folder's names as `Present` and `Gone`, and each `FindTail` from
-/// the start of the file it finds, as it does for Claude transcripts.
+/// The watch thread is expected to feed the lock folder's names as `Present` and `Gone`, and each `FindNewest` from
+/// the start of the file it follows, with `Gone` for the old file before a newer one.
 #[derive(Debug)]
 pub struct CodexSource {
     locks_dir: PathBuf,
@@ -128,17 +160,13 @@ impl CodexSource {
         is_lock_name(name).then(|| name[..ID_LEN].to_ascii_lowercase())
     }
 
-    /// The thread id of a rollout in `sessions\YYYY\MM\DD\`, from its name's end.
+    /// The thread id of a rollout in `sessions\YYYY\MM\DD\`, plain or reverted, from its name's end.
     fn rollout_id(&self, file: &FileId) -> Option<String> {
         let date_root = file.0.parent()?.parent()?.parent()?.parent()?;
         if date_root != self.sessions_dir {
             return None;
         }
-        let name = file.0.file_name()?.to_str()?.to_ascii_lowercase();
-        let stem = name.strip_suffix(".jsonl")?;
-        let at = stem.len().checked_sub(ID_LEN + 1)?;
-        let (dash, id) = stem.get(at..)?.split_at(1);
-        (dash == "-" && is_thread_id(id)).then(|| id.to_owned())
+        rollout_thread(file.0.file_name()?.to_str()?)
     }
 }
 
@@ -270,10 +298,11 @@ impl AgentSource for CodexSource {
             depth: 0,
             accept: is_lock_name,
         }];
-        wanted.extend(self.threads.keys().map(|id| WantedFile::FindTail {
+        wanted.extend(self.threads.keys().map(|id| WantedFile::FindNewest {
             root: self.sessions_dir.clone(),
             depth: DATE_DEPTH,
-            name_suffix: format!("-{id}.jsonl"),
+            key: id.clone(),
+            matches: is_rollout_of,
         }));
         wanted
     }

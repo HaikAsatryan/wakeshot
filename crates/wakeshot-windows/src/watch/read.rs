@@ -3,11 +3,11 @@
 //!
 //! Every open here shares read, write and delete, so a read never blocks an agent's own write, rename or delete
 //! (Claude Code deletes its status file when the session ends), and no handle outlives the call that opened it.
-//! [`names`] and [`find`] take names, types and times from the folder listing alone and open no file; only
-//! [`Finder`]'s check that a cached path is still there opens it, for attributes only (std's `fs::metadata`: no read
-//! or write access, all sharing).
+//! [`names`], [`find`], [`recent_files`] and [`Finder::newest`] take names, types, sizes and times from the folder
+//! listing alone and open no file; only [`Finder`]'s check that a cached path is still there opens it, for attributes
+//! only (std's `fs::metadata`: no read or write access, all sharing).
 //!
-//! Owner: `p4-watch-reads`; fixes by `p4-live-claude`.
+//! Owner: `p4-watch-reads`; fixes by `p4-live-claude`; `Recent` and `FindNewest` reads by `p4-contracts-r2`.
 
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
@@ -31,9 +31,30 @@ pub const WHOLE_CAP: u64 = 1 << 20;
 /// The most new bytes one [`Tail::poll`] reads, so the first poll of a long transcript never holds it all in memory.
 pub const POLL_CAP: u64 = 8 << 20;
 
+/// The largest file a `Recent` want reads whole. A VS Code chat session holds whole answers and tool output and is
+/// compacted only after 1024 lines, so it can pass [`WHOLE_CAP`] by far; its size in real use is not known (no
+/// session that large was seen). Change it when a live session file is larger.
+pub const RECENT_CAP: u64 = 64 << 20;
+
 /// How many [`Finder`] results stay cached. Each live session adds one; past this many the cache starts over, which
 /// costs one walk per session and keeps a tray that runs for weeks from growing.
 const FINDER_CAP: usize = 256;
+
+/// A file's size and last write time (a FILETIME), to tell a changed file from one that is not without reading it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Stamp {
+    pub len: u64,
+    pub written: u64,
+}
+
+impl Stamp {
+    fn of(meta: &fs::Metadata) -> Self {
+        Self {
+            len: meta.file_size(),
+            written: meta.last_write_time(),
+        }
+    }
+}
 
 /// Reads a whole file of at most [`WHOLE_CAP`] bytes, if `accept` passes its file name.
 ///
@@ -51,19 +72,29 @@ pub fn read_whole_written(
     path: &Path,
     accept: impl Fn(&str) -> bool,
 ) -> io::Result<(Vec<u8>, FileTime)> {
+    read_whole_stamped(path, accept, WHOLE_CAP)
+        .map(|(bytes, stamp)| (bytes, FileTime(stamp.written)))
+}
+
+/// [`read_whole`] with its own cap, plus the file's [`Stamp`] from the same handle.
+pub fn read_whole_stamped(
+    path: &Path,
+    accept: impl Fn(&str) -> bool,
+    cap: u64,
+) -> io::Result<(Vec<u8>, Stamp)> {
     check_name(path, &accept)?;
     let file = open_shared(path)?;
     let meta = file.metadata()?;
-    if meta.len() > WHOLE_CAP {
+    if meta.len() > cap {
         return Err(too_large());
     }
     let mut bytes = Vec::with_capacity(usize::try_from(meta.len()).unwrap_or(0));
     // One byte past the cap tells a file that grew after the size check from one that fits exactly.
-    file.take(WHOLE_CAP + 1).read_to_end(&mut bytes)?;
-    if bytes.len() as u64 > WHOLE_CAP {
+    file.take(cap + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > cap {
         return Err(too_large());
     }
-    Ok((bytes, FileTime(meta.last_write_time())))
+    Ok((bytes, Stamp::of(&meta)))
 }
 
 fn check_name(path: &Path, accept: &impl Fn(&str) -> bool) -> io::Result<()> {
@@ -231,12 +262,29 @@ fn walk(dir: &Path, depth: u8, suffix: &str, found: &mut Vec<PathBuf>) {
     }
 }
 
+#[derive(Debug)]
 struct Entry {
     path: PathBuf,
     name: String,
     is_file: bool,
     is_dir: bool,
     modified: SystemTime,
+}
+
+/// Every file at `depth` folder levels under `dir`, from the listings alone.
+fn walk_files(dir: &Path, depth: u8, found: &mut Vec<Entry>) {
+    let Ok(entries) = list(dir) else {
+        return;
+    };
+    for entry in entries {
+        if depth == 0 {
+            if entry.is_file {
+                found.push(entry);
+            }
+        } else if entry.is_dir {
+            walk_files(&entry.path, depth - 1, found);
+        }
+    }
 }
 
 /// The folder's entries from the listing alone: on Windows, `DirEntry::file_type` and `DirEntry::metadata` come from
@@ -261,17 +309,53 @@ fn list(dir: &Path) -> io::Result<Vec<Entry>> {
     Ok(entries)
 }
 
-/// [`find`] with a cache, so the tick does not walk Codex's date folders every 30 s: a want walks again only while its
+/// [`find`] with a cache, so the tick does not walk the same folders every 30 s: a want walks again only while its
 /// file is not found or once a cached path is gone. A new match elsewhere is not seen while the cached ones last,
-/// which suits names that are unique per session (a Claude session id, a Codex thread id).
+/// which suits names that are unique per session (a Claude session id).
+///
+/// [`newest`](Self::newest) must see a new match at once (a reverted Codex thread's new file), so it walks on each
+/// call, but once per root and depth until [`forget_walks`](Self::forget_walks): every want of one call shares it.
 #[derive(Debug, Default)]
 pub struct Finder {
     found: HashMap<(PathBuf, u8, String), Vec<PathBuf>>,
+    walks: HashMap<(PathBuf, u8), Vec<Entry>>,
 }
 
 impl Finder {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Of the files `root\<depth folder levels>\<name>` with `matches(name)`, the newest by modified time (from the
+    /// listing), the greater name on a tie. Folder links are not followed; an unreadable folder counts as empty.
+    pub fn newest(
+        &mut self,
+        root: &Path,
+        depth: u8,
+        matches: impl Fn(&str) -> bool,
+    ) -> Option<PathBuf> {
+        let files = self
+            .walks
+            .entry((root.to_path_buf(), depth))
+            .or_insert_with(|| {
+                let mut files = Vec::new();
+                walk_files(root, depth, &mut files);
+                files
+            });
+        files
+            .iter()
+            .filter(|e| matches(&e.name))
+            .max_by(|a, b| {
+                a.modified
+                    .cmp(&b.modified)
+                    .then_with(|| a.name.cmp(&b.name))
+            })
+            .map(|e| e.path.clone())
+    }
+
+    /// Drops the walks [`newest`](Self::newest) keeps, so the next call lists the folders again.
+    pub fn forget_walks(&mut self) {
+        self.walks.clear();
     }
 
     pub fn find(&mut self, root: &Path, depth: u8, name_suffix: &str) -> Vec<PathBuf> {
@@ -327,6 +411,77 @@ fn collect_names(
                 Err(e) if e.kind() == io::ErrorKind::NotFound => {}
                 other => other?,
             }
+        }
+    }
+    Ok(())
+}
+
+/// What [`recent_files`] found.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Recent {
+    /// The files and their stamps, sorted by path.
+    pub files: Vec<(PathBuf, Stamp)>,
+    /// Folders under the root that could not be listed, with the error code: their files are not known, so they are
+    /// not gone either.
+    pub failed: Vec<(PathBuf, Option<i32>)>,
+}
+
+/// The files `root\<depth folder levels>\<sub>\<name>` (no `sub` level when `None`) whose name `accept` passes, with
+/// their stamps, from the listings alone: no file is opened. A missing `root`, a missing folder on the way and a
+/// subfolder that goes during the walk list nothing. A `root` that cannot be listed is an error, so the caller keeps
+/// what it knew; a deeper folder that cannot be listed goes to `failed`.
+pub fn recent_files(
+    root: &Path,
+    depth: u8,
+    sub: Option<&str>,
+    accept: impl Fn(&str) -> bool,
+) -> io::Result<Recent> {
+    let mut out = Recent::default();
+    let top = if depth == 0 {
+        sub.map_or_else(|| root.to_path_buf(), |sub| root.join(sub))
+    } else {
+        root.to_path_buf()
+    };
+    match recent_level(&top, depth, sub, &accept, &mut out) {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Recent::default()),
+        other => other?,
+    }
+    out.files.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(out)
+}
+
+/// An error only for `dir`'s own listing; a deeper folder that fails goes to `failed`.
+fn recent_level(
+    dir: &Path,
+    depth: u8,
+    sub: Option<&str>,
+    accept: &impl Fn(&str) -> bool,
+    out: &mut Recent,
+) -> io::Result<()> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let kind = entry.file_type()?;
+        if depth == 0 {
+            if kind.is_file()
+                && let Some(name) = entry.file_name().to_str()
+                && accept(name)
+            {
+                out.files
+                    .push((entry.path(), Stamp::of(&entry.metadata()?)));
+            }
+            continue;
+        }
+        if !kind.is_dir() {
+            continue;
+        }
+        let next = match (depth, sub) {
+            (1, Some(sub)) => entry.path().join(sub),
+            _ => entry.path(),
+        };
+        match recent_level(&next, depth - 1, sub, accept, out) {
+            Ok(()) => {}
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => out.failed.push((next, e.raw_os_error())),
         }
     }
     Ok(())

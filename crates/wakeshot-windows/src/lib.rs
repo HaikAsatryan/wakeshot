@@ -6,6 +6,7 @@
 //!
 //! Owner: contracts card (this module list).
 
+pub mod agent_hooks;
 pub mod app;
 pub mod child;
 pub mod clock;
@@ -24,6 +25,7 @@ pub mod session;
 pub mod shell;
 pub mod sink;
 pub mod sound;
+pub mod sqlite;
 pub mod store;
 pub mod tray;
 pub mod update;

@@ -4,10 +4,11 @@
 //! the `EventSink`.
 //!
 //! Start it after `Started` is posted: its first round posts at once. Call [`WatchHandle::tick`] on each safety tick:
-//! the thread has no timer of its own beyond the 200 ms retries. It makes no power call and opens only the data
-//! folder's files and the files a source asks for; exit waits open processes with wait and query rights only.
+//! the thread has no timer of its own beyond the 200 ms retries and the query runs a source's database changes held
+//! back ([`agents::QUERY_EVERY_MS`]). It makes no power call and opens only the data folder's files and the files a
+//! source asks for; exit waits open processes with wait and query rights only.
 //!
-//! Owner: `p4-watch-thread`; fixes by `p4-live-claude`.
+//! Owner: `p4-watch-thread`; fixes by `p4-live-claude`; held-back query runs by `p4-contracts-r2`.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
@@ -72,13 +73,26 @@ impl WatchThread {
         sink: Arc<dyn EventSink>,
         log: Arc<dyn Log>,
     ) -> Result<WatchHandle, WinError> {
+        let agents = Agents::new(sources, Arc::clone(&log));
+        Self::spawn(dir, config, agents, liveness, sink, log)
+    }
+
+    /// [`start`](Self::start) with `agents` made by the caller, so a test gives its I/O.
+    fn spawn(
+        dir: DataDir,
+        config: Config,
+        agents: Agents,
+        liveness: Arc<dyn Liveness>,
+        sink: Arc<dyn EventSink>,
+        log: Arc<dyn Log>,
+    ) -> Result<WatchHandle, WinError> {
         let signals = Arc::new(Signals::new()?);
         let inner = Arc::clone(&signals);
         let thread_log = Arc::clone(&log);
         let thread = std::thread::Builder::new()
             .name("wakeshot-watch".to_owned())
             .spawn(move || {
-                Watcher::new(dir, config, sources, liveness, sink, thread_log, inner).run();
+                Watcher::new(dir, config, agents, liveness, sink, thread_log, inner).run();
             })
             .map_err(|e| WinError {
                 call: "CreateThread",
@@ -227,7 +241,7 @@ impl Watcher {
     fn new(
         dir: DataDir,
         config: Config,
-        sources: Vec<Box<dyn AgentSource + Send>>,
+        agents: Agents,
         liveness: Arc<dyn Liveness>,
         sink: Arc<dyn EventSink>,
         log: Arc<dyn Log>,
@@ -240,7 +254,7 @@ impl Watcher {
             holds_dir: dir.holds(),
             restore_file: dir.file(DataFile::RestoreRequest),
             data: DataFolder::new(dir, config.clone(), Arc::clone(&log)),
-            agents: Agents::new(sources, Arc::clone(&log)),
+            agents,
             agent_folders: BTreeMap::new(),
             retries: VecDeque::new(),
             holds_retry: None,
@@ -418,15 +432,23 @@ impl Watcher {
     }
 
     fn next_due(&self) -> Option<Instant> {
-        let agents = self.retries.front().map(|(due, _)| *due);
-        match (agents, self.holds_retry) {
-            (Some(a), Some(h)) => Some(a.min(h)),
-            (a, h) => a.or(h),
-        }
+        [
+            self.retries.front().map(|(due, _)| *due),
+            self.holds_retry,
+            self.agents.next_due(),
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     }
 
     fn run_due(&mut self) {
         let now = Instant::now();
+        if self.agents.next_due().is_some_and(|due| due <= now) {
+            let retries = self.agents.run_due();
+            self.schedule(retries);
+            self.sync_folders(true);
+        }
         while self.retries.front().is_some_and(|(due, _)| *due <= now) {
             let Some((_, batch)) = self.retries.pop_front() else {
                 break;
@@ -1419,5 +1441,116 @@ mod tests {
         // SAFETY: the pseudo handle of this process needs no close, and `count` outlives the call.
         unsafe { GetProcessHandleCount(GetCurrentProcess(), &mut count) }.unwrap();
         count
+    }
+
+    // Held-back query runs and `ImageSince` exits (`p4-contracts-r2`).
+
+    impl Rig {
+        /// [`Rig::start`] with `io` for the agents.
+        fn start_with(&mut self, config: Config, io: crate::watch::agents::AgentIo) {
+            let agents = Agents::with_io(vec![self.source.boxed()], self.log.clone(), io);
+            let handle = WatchThread::spawn(
+                self.dir.clone(),
+                config,
+                agents,
+                self.liveness.clone(),
+                self.sink.clone(),
+                self.log.clone(),
+            )
+            .unwrap();
+            self.handle = Some(handle);
+        }
+    }
+
+    #[test]
+    fn a_query_held_back_by_the_limit_runs_without_a_tick() {
+        let mut rig = Rig::new("query");
+        let db = rig.agent.path().join("opencode.db");
+        let wal = rig.agent.write("opencode.db-wal", b"");
+        rig.agent.write("opencode.db", b"");
+        let want = WantedFile::Query {
+            db: db.clone(),
+            name: "tables",
+            sql: "SELECT 1",
+        };
+        rig.source.set(|f| f.wanted = vec![want]);
+        let runs = Arc::new(Mutex::new(Vec::new()));
+        let seen = Arc::clone(&runs);
+        let io = crate::watch::agents::AgentIo {
+            query: Box::new(move |_, _| {
+                seen.lock().unwrap().push(Instant::now());
+                crate::sqlite::Answer::Json(b"{\"rows\":[]}".to_vec())
+            }),
+            ..Default::default()
+        };
+        rig.start_with(Config::default(), io);
+        let count = || runs.lock().unwrap().len();
+        until(Instant::now(), || count() >= 1, || count().to_string());
+
+        // Two writes right after the first run: one run, held back until a second after the first.
+        fs::write(&wal, b"1").unwrap();
+        std::thread::sleep(Duration::from_millis(50));
+        fs::write(&wal, b"12").unwrap();
+        until(Instant::now(), || count() >= 2, || count().to_string());
+        std::thread::sleep(QUIET);
+        let times = runs.lock().unwrap().clone();
+        assert_eq!(times.len(), 2, "{times:?}");
+        let gap = times[1] - times[0];
+        println!(
+            "the held-back run came {} ms after the first",
+            gap.as_millis()
+        );
+        assert!(
+            gap >= Duration::from_millis(990) && gap < Duration::from_millis(1_900),
+            "{gap:?}"
+        );
+        assert_eq!(
+            rig.source.fed(),
+            [(
+                FileId::query(&db, "tables"),
+                Feed::Whole(b"{\"rows\":[]}".to_vec())
+            )],
+            "the same answer is fed once"
+        );
+    }
+
+    #[test]
+    fn an_image_since_session_is_posted_gone_at_once_when_its_process_exits() {
+        let mut kid = Kid::start();
+        let process = kid.process();
+        let mut rig = Rig::new("image-since");
+        rig.liveness
+            .processes
+            .lock()
+            .unwrap()
+            .push(crate::process::ProcessEntry {
+                pid: process.pid,
+                start: process.start,
+                image: "kid.exe".to_owned(),
+            });
+        let mut facts = session(process);
+        facts.liveness = sources::Liveness::ImageSince {
+            images: &["KID.EXE"],
+            since_wall_ms: None,
+        };
+        rig.source.set(|f| f.sessions = vec![facts.clone()]);
+        rig.started(Config::default(), 2);
+        assert_eq!(
+            rig.settled(),
+            [
+                Event::Holds(vec![]),
+                claude(vec![(facts.clone(), Alive::Yes)])
+            ]
+        );
+
+        // The list now has no match, but nothing asks it: no notice, no tick.
+        rig.liveness.processes.lock().unwrap().clear();
+        assert_eq!(rig.settled().len(), 2);
+        let at = Instant::now();
+        kid.end();
+        let gone = claude(vec![(facts, Alive::Gone)]);
+        let took = rig.wait_for(at, |e| e.contains(&gone));
+        println!("image process ended: Sources after {} ms", took.as_millis());
+        assert!(took < ONE_SECOND, "{took:?}");
     }
 }

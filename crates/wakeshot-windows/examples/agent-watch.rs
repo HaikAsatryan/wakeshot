@@ -291,6 +291,7 @@ impl PrintSink {
         let liveness = match &facts.liveness {
             Seen::Process { pid, .. } => format!("pid {pid}"),
             Seen::AnyProcess { image, .. } => format!("any {image}"),
+            Seen::ImageSince { images, .. } => format!("since {}", images.join("|")),
         };
         format!(
             "{} {activity} timers=[{}] tasks={} {liveness} alive={alive:?} format={}",

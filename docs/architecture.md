@@ -1126,6 +1126,13 @@ Journal format:
   did. A version before them keeps their entries as keys it does not know and restores nothing of them, so a
   downgrade in those minutes leaves the 1-minute timeouts until a newer version runs.
 
+Agent files are only read, never written (section 7). Every open shares read, write and delete, and a source's name
+filter runs before any open; lock files are listed, never opened. A `Recent` file (VS Code chat sessions) last written
+more than 24 hours ago, and before the tray started, is not opened until it changes; it is read whole, up to 64 MiB
+(`watch::read::RECENT_CAP`). A `Query` (OpenCode's `opencode.db`) opens the database read only through Windows'
+`winsqlite3.dll` (`sqlite.rs`), and only while its `-wal` file exists; the queries name only the session and schedule
+tables (Haik, 2026-11-06, `docs/tasks/p4-opencode-source.md`).
+
 Registry values Wakeshot writes, all under HKCU, all removed by uninstall: `...\CurrentVersion\Run\Wakeshot` (start at
 login, set by the install hook); `...\CurrentVersion\RunOnce\WakeshotRestore` (only while overriding);
 `Software\Classes\AppUserModelId\velopack.HaikAsatryan.Wakeshot` with `DisplayName` "Wakeshot" and `IconUri` naming
@@ -1181,6 +1188,7 @@ pub struct SessionFacts {
     pub key: SessionKey,          // source plus its own id
     pub liveness: Liveness,       // Process { pid, start: FileTime }
                                   // | AnyProcess { image: &'static str, lock_file: PathBuf }
+                                  // | ImageSince { images: &'static [&'static str], since_wall_ms: Option<i64> }
     pub activity: Activity,       // Working | Waiting { since_wall_ms: Option<i64>, remote } | Idle
                                   // since_wall_ms None: no statusUpdatedAt in the file; the parser has no
                                   // clock, so the core keeps the time it first saw waiting
@@ -1201,6 +1209,34 @@ pub struct SessionFacts {
   repeat it (Haik, 2026-11-03).
 - Parsers read only the listed fields. Prompts and other text are never stored or logged. Claude's `.key` files are
   never opened: names are filtered before any open, as in the spike.
+
+What a source can ask the watch thread for (`WantedFile`; the full rules are in `sources.rs`):
+
+- `Folder` (whole files: Claude status files), `Names` (listed, never opened: lock files), `Tail` and `FindTail`
+  (appended lines; for `FindTail` the file found first stays the one read).
+- `FindNewest` (`p4-contracts-r2`): of the files whose name the source's `matches` passes, the newest by modified time
+  is tailed; on a switch the old file is fed `Gone`, then the new one from its start. The folders are listed again on
+  each read, once per call for one root. Codex follows a reverted thread's `..._<rollout id>.jsonl` with it.
+- `Recent` (`p4-contracts-r2`, VS Code rule 3): whole reads of the files `root\<levels>\<sub>\<name>`, only those
+  written since the tray started or in the last 24 hours, again on each change, `Gone` on delete, and one more read
+  200 ms later on `RetryOnce` (a last line cut by a write). The listing's size and write time tell a changed file, a
+  hash of its bytes an unchanged one, so a big file is not kept in memory. The root is watched with its subtree.
+- `Query` (`p4-contracts-r2`, OpenCode): read-only SQL on a SQLite database through `sqlite::query`, fed as JSON
+  (`{"rows":[...]}` or `{"error":"<kind>"}`) under `FileId::query(db, name)`. It runs only while `<db>-wal` exists, on
+  a change of the db's files in its folder, at most once a second per want (a run held back comes when due, with no
+  tick), and on the safety tick; `Gone` once the db or its `-wal` goes; `SQLITE_BUSY` gives no feed. `sqlite.rs` is a
+  stub that answers `no_sqlite` until Part B of `p4-opencode-source` loads `winsqlite3.dll`.
+
+`Liveness::ImageSince` (`p4-contracts-r2`): alive while the system process list (no rights needed) has a process of
+one of the images, case ignored, that started at or before `since_wall_ms` plus 2 s (`IMAGE_SINCE_SLACK_MS`), or at
+any time for `None`. Each match gets an exit wait with `QUERY_LIMITED | SYNCHRONIZE` only, so an exit checks again at
+once. For OpenCode rows, and for VS Code rule 7 (`research/copilot-vscode-signals.md`): a request whose `timestamp` is
+older than every running `Code.exe` is a crash leftover, so the VS Code source needs no other contract change. The list
+is asked once per snapshot round.
+
+OpenCode, VS Code chat, Cursor and Antigravity have their `SourceId` and a stub module each in `sources/` (owners
+`p4-opencode-source`, `p4-vscode-source`, `p4-cursor-source`, `p4-antigravity-source`); `Antigravity` stays even if no
+live test is possible, and Phase 8 removes it then.
 
 Claude Code (Phase 4) follows `research/claude-code-signals.md`, "Recommended detection rules" 1 to 9, with these
 rulings:
@@ -1400,3 +1436,22 @@ Checked 2026-11-03 on crates.io (research, "Phase 1 design checks").
   current `windows` crate. Change when a `windows` 0.100 or later ships; that move is a port, not a version bump.
 - Nothing else: no async runtime, no CLI parser crate (six commands), no logging or error crate.
 - Both libs have a `test-support` feature with the fakes; only dev-dependencies turn it on.
+
+## 12. Agent hooks
+
+Design: `agent-hooks.md` (card `p4-hooks-design`, 2026-11-06; a security review reads it before the build). In
+short, for an agent with no file signal (Cursor; Antigravity the same way, from `.gemini\config\plugins\wakeshot\`
+with `PreInvocation` and `Stop`):
+
+- The installed tray adds a folder of its own that the agent loads, `%USERPROFILE%\.cursor\plugins\local\wakeshot\`
+  (a Cursor local plugin), once per user, with one notice; never an edit of the user's own settings. A folder the
+  user removed is never added again; a file the user changed is never overwritten.
+- The hook runs `wakeshot.exe hook cursor <event>` on `beforeSubmitPrompt`, `stop` and `sessionEnd`. It keeps four
+  input fields, names the agent process by walking up its parents, writes or deletes
+  `%LocalAppData%\Wakeshot\agents\cursor\<chat>.json`, prints `{}` and always exits 0.
+- `sources::cursor` reads that folder (`WantedFile::Folder`), one working session per file with
+  `Liveness::Process`. No new `WantedFile` or `Liveness` variant.
+- The uninstall hook removes the plugin right after the registry steps, before the restore.
+- Code: `sources::cursor` and `sources::antigravity` (core), `agent_hooks` (Windows: add, rewrite, remove, the
+  parent walk), the CLI's `hook` command (one for every agent), a step in `hooks.rs`, a call in `app/startup.rs`,
+  `Event::HooksAdded` and `Notice::HooksAdded`.

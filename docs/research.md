@@ -5353,3 +5353,28 @@ same day. Design: `agent-hooks.md`.
   `executeCommandScript`). **Verified** in code. The editor's form: not verified.
 - **Only a single-quoted command path works in both PowerShell forms** (`& <command>` and `$input | <command>`).
   Read in code; not run.
+
+## Contracts round 2 checks
+
+Card `p4-contracts-r2`, 2026-11-06. Run elevated (High), as every agent here.
+
+- **No `Cargo` change for `sqlite.rs`.** In `windows` 0.62.2, `LoadLibraryExW`, `GetProcAddress` and
+  `LOAD_LIBRARY_SEARCH_SYSTEM32` are in `Win32::System::LibraryLoader` (feature `Win32_System_LibraryLoader`) and
+  `FreeLibrary` is in `Win32::Foundation`; `wakeshot-windows` has both features on. Checked: the crate source in the
+  cargo registry (`src/Windows/Win32/System/LibraryLoader/mod.rs` lines 233, 259, 434; `Foundation/mod.rs` line 17).
+  The process list behind `ImageSince` (`NtQuerySystemInformation`) and the exit wait rights were already in use.
+- **`ImageSince` finds a real process by image name and start** through `SystemLiveness::list`: the test process,
+  with its image name in upper case, counts for a row time at its start, and not for one 60 s before it (test
+  `image_since_finds_a_real_process_by_its_image_and_start`). At Medium: not run by this card.
+- **An `ImageSince` match's exit is posted at once**: a child ended, `Sources` with `Gone` came 4 ms later, with no
+  tick (thread test `an_image_since_session_is_posted_gone_at_once_when_its_process_exits`, one run).
+- **A held-back query run comes on time**: two `-wal` writes right after a run gave one more run, 1001 ms after the
+  first, with no tick (thread test `a_query_held_back_by_the_limit_runs_without_a_tick`, one run).
+- **A folder listing gives a file's size and write time without opening it**: a file held open with no sharing was
+  listed, skipped as old, and never opened (an open would have failed and shown as a retry and a log line; test
+  `recent_reads_only_recent_files_at_start_and_never_opens_an_old_one`).
+- **Not verified:** that NTFS keeps a listing's write time current for a file another process holds open for
+  writing (it is said to update the folder entry only at close or later). `FindNewest` and `Recent` decide by the
+  listing's times, so a stale time could delay a switch or a read until the folder entry updates; `Recent` also keeps a
+  hash of the bytes, so a read that finds the same bytes feeds nothing. The live cards (`p4-live-codex`, the VS Code
+  live card) see it with real writers.

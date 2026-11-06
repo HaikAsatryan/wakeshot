@@ -165,19 +165,25 @@ fn wants_the_lock_folder_by_name_and_one_rollout_per_listed_thread() {
     let tails: Vec<(PathBuf, u8, String)> = wanted[1..]
         .iter()
         .map(|w| match w {
-            WantedFile::FindTail {
+            WantedFile::FindNewest {
                 root,
                 depth,
-                name_suffix,
-            } => (root.clone(), *depth, name_suffix.clone()),
+                key,
+                matches,
+            } => {
+                let plain = format!("rollout-2026-11-06T12-00-00-{key}.jsonl");
+                let reverted = format!("rollout-2026-11-06T12-00-00-{key}_{THREAD}.jsonl");
+                assert!(matches(&plain, key) && matches(&reverted, key), "{key}");
+                (root.clone(), *depth, key.clone())
+            }
             other => panic!("{other:?}"),
         })
         .collect();
     assert_eq!(
         tails,
         [
-            (sessions_dir(), 3, format!("-{THREAD}.jsonl")),
-            (sessions_dir(), 3, format!("-{OTHER}.jsonl")),
+            (sessions_dir(), 3, THREAD.to_owned()),
+            (sessions_dir(), 3, OTHER.to_owned()),
         ]
     );
 }
@@ -189,17 +195,91 @@ fn no_want_opens_a_lock_file() {
     for want in source.wanted() {
         match want {
             WantedFile::Names { dir, .. } => assert_eq!(dir, locks_dir()),
-            WantedFile::FindTail {
-                root, name_suffix, ..
+            WantedFile::FindNewest {
+                root, key, matches, ..
             } => {
                 assert_eq!(root, sessions_dir());
-                assert!(name_suffix.ends_with(".jsonl"));
+                assert!(!matches(&format!("{key}.lock"), &key));
             }
-            other @ (WantedFile::Folder { .. } | WantedFile::Tail(_)) => {
+            other @ (WantedFile::Folder { .. }
+            | WantedFile::Tail(_)
+            | WantedFile::FindTail { .. }
+            | WantedFile::Recent { .. }
+            | WantedFile::Query { .. }) => {
                 panic!("a want that reads files by folder or path: {other:?}")
             }
         }
     }
+}
+
+#[test]
+fn rollout_names_match_the_plain_and_the_reverted_form_only() {
+    let date = "rollout-2026-11-06T12-00-00";
+    for name in [
+        format!("{date}-{THREAD}.jsonl"),
+        format!("{date}-{THREAD}_{OTHER}.jsonl"),
+        format!(
+            "{date}-{}_{}.JSONL",
+            THREAD.to_uppercase(),
+            OTHER.to_uppercase()
+        ),
+        format!("{date}-{THREAD}_0199aaaa.jsonl"),
+    ] {
+        assert!(codex::is_rollout_of(&name, THREAD), "{name}");
+    }
+    for name in [
+        format!("{date}-{OTHER}.jsonl"),
+        format!("{date}-{OTHER}_{THREAD}.jsonl"),
+        format!("{date}_{THREAD}.jsonl"),
+        format!("{date}-{THREAD}_.jsonl"),
+        format!("{date}-{THREAD}_a.b.jsonl"),
+        format!("{date}-{THREAD}_a_b.jsonl"),
+        format!("{date}-{THREAD}_{}.jsonl", "a".repeat(65)),
+        format!("{date}-{THREAD}.jsonl.zst"),
+        format!("{date}-{THREAD}x.jsonl"),
+        format!("{THREAD}.lock"),
+    ] {
+        assert!(!codex::is_rollout_of(&name, THREAD), "{name}");
+    }
+}
+
+/// The watch thread's switch to a reverted thread's new file: the old one `Gone`, then the new one from its start.
+#[test]
+fn a_reverted_thread_goes_on_in_its_new_rollout() {
+    let mut source = with_thread();
+    let reverted = FileId(sessions_dir().join(r"2026\11\06").join(format!(
+        "rollout-2026-11-06T12-30-00-{THREAD}_{OTHER}.jsonl"
+    )));
+    append(&mut source, &rollout(THREAD), &fixture("complete.jsonl"));
+    assert_eq!(source.sessions(), [idle(THREAD)]);
+    append(&mut source, &reverted, &fixture("running.jsonl"));
+    assert_eq!(
+        source.sessions(),
+        [idle(THREAD)],
+        "the old file is still the one it reads"
+    );
+
+    assert_eq!(source.feed(&rollout(THREAD), Feed::Gone), Fed::Taken);
+    append(&mut source, &reverted, &fixture("running.jsonl"));
+    assert_eq!(source.sessions(), [working(THREAD)]);
+    append(
+        &mut source,
+        &reverted,
+        concat!(
+            r#"{"type":"event_msg","payload":{"type":"task_complete","turn_id":"t1"}}"#,
+            "\n"
+        )
+        .as_bytes(),
+    );
+    assert_eq!(source.sessions(), [idle(THREAD)]);
+
+    // A reverted file of another thread is not this one's.
+    let other = FileId(sessions_dir().join(r"2026\11\06").join(format!(
+        "rollout-2026-11-06T12-31-00-{OTHER}_{THREAD}.jsonl"
+    )));
+    source.feed(&reverted, Feed::Gone);
+    append(&mut source, &other, &fixture("running.jsonl"));
+    assert_eq!(source.sessions(), [idle(THREAD)]);
 }
 
 #[test]
@@ -411,13 +491,13 @@ fn files_it_did_not_ask_for_change_nothing() {
     let running = fixture("running.jsonl");
     let date = sessions_dir().join(r"2026\11\06");
     let strangers = [
-        // A thread with no lock file.
+        // A thread with no lock file, plain and reverted.
         rollout(OTHER),
-        // A reverted thread's file: not followed yet (module doc).
         FileId(date.join(format!(
-            "rollout-2026-11-06T12-00-00-{THREAD}_{OTHER}.jsonl"
+            "rollout-2026-11-06T12-00-00-{OTHER}_{THREAD}.jsonl"
         ))),
         FileId(date.join(format!("rollout-2026-11-06T12-00-00-{THREAD}.jsonl.zst"))),
+        FileId(date.join(format!("rollout-2026-11-06T12-00-00-{THREAD}_.jsonl"))),
         // The right name at the wrong depth, or under another root.
         FileId(sessions_dir().join(format!("rollout-2026-11-06T12-00-00-{THREAD}.jsonl"))),
         FileId(
