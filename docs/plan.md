@@ -318,6 +318,13 @@ tests, Haik's checklist) starts when the tracks it needs are done.
   on Haik: `p4-live-cursor` (his 5-minute steps) and the Antigravity IDE first-run pass. Each live test found real
   bugs, now fixed. `p6-agents-video-readme` Part B first pass done. Pushed up to 98c8795 only; everything after waits
   for the whole-workspace checks in `p6-agents-install-e2e`.
-- Next (orchestrator): `p6-agents-install-e2e` (runs alone; the Cursor editor turn waits for Haik), then
-  `p6-agents-video-readme` Part B last steps, push and CI, Haik's review of README and video, `p4-live-uninstall` last;
-  then ask Haik about the video upload, Pages, Phase 7, Phase 8.
+- 2026-11-06 18:30 (clock time; session wakeshot-f5; the wakeshot-56 lines above run about 4 h 20 min ahead):
+  `p6-agents-install-e2e` Part 1 done (0fa3dc5): whole-workspace checks green on x64 and ARM64 at cd140e9 (1752
+  tests), x64 packed. Part 2 (the install over Haik's, one turn per agent) waits for `p4-live-cursor` and the
+  Antigravity IDE turn, since a new tray's `at_start` rewrites the Cursor card's test plugin folder. Secret scan clean
+  (34 commits since 98c8795); auto mode refused the push, so it waits for Haik. Nothing runs.
+- Next (orchestrator): Haik's push; on his "done", a worker finishes `p4-live-cursor` from its Log; on "Antigravity
+  IDE ready", a worker runs the IDE turn of `p4-live-antigravity`; then `p6-agents-install-e2e` Part 2 (runs alone;
+  checks again if code changed; the Cursor editor turn needs Haik's typing), `p6-agents-video-readme` Part B last
+  steps, push and CI, Haik's review of README and video, `p4-live-uninstall` last; then ask Haik about the video
+  upload, Pages, Phase 7, Phase 8.
