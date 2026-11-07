@@ -1,7 +1,7 @@
 name: Pages
 
-# Deploys site/ to GitHub Pages after a stable release is published, or by hand. Pages must be on, with source "GitHub
-# Actions", or the deploy job fails; it is turned on at v1 (docs/tasks/p6-pages.md, Result).
+# Deploys the page to GitHub Pages after a stable release is published, or by hand. Pages must be on, with source
+# "GitHub Actions", or the deploy job fails (docs/tasks/p6-pages.md, Result).
 #
 # Not on `release: published`: release.yml publishes with the GITHUB_TOKEN, and GitHub starts no workflow from an event
 # that token made, so that trigger would never fire. A finished Release run starts this one instead. It runs on the
@@ -24,11 +24,12 @@ concurrency:
 
 jobs:
   build:
-    name: Check and upload the page
+    name: Build, check and upload the page
     # A Release run counts only for a pushed tag (a manual run is a dry run that publishes nothing), only when it
     # succeeded, and only for a stable version: release.yml makes a version with "-" a pre-release. For a run started
     # by a tag push, head_branch holds the tag name. A failed winget job fails the Release run after the release is
-    # out; then run this workflow by hand.
+    # out; then run this workflow by hand. Run it by hand too once winget has the package, so the page shows the
+    # winget line.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
@@ -44,18 +45,21 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
 
-      # --final: a spot that still waits for another card must not go live.
-      - name: Check the page
-        run: python3 site/check_page.py --final site
+      # The page says only what is true now: the download links once a stable release has the Setup files, "not
+      # released yet" before that, the winget line once winget has the package. build_page.py asks GitHub and stops on
+      # any answer but a clear yes or no. It also adds the media files from media/ and leaves out the repo's own files.
+      - name: Build the page
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 site/build_page.py _site
 
-      # These belong to the repo, not to the page: the check script, and the social card's sources (its HTML, the
-      # script that draws it and the Regular font only that HTML loads). social-card.png itself stays: it is og:image.
-      - name: Leave the repo-only files out of the page
-        run: rm site/check_page.py site/social_card.py site/social-card.html site/fonts/InstrumentSans-Regular.woff2
+      # --final: no spot that waits for another card, no block left unbuilt, no file the page does not use.
+      - name: Check the page
+        run: python3 site/check_page.py --final _site
 
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: site/
+          path: _site/
 
   # The only job that can write to Pages.
   deploy:

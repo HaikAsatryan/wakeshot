@@ -22,11 +22,14 @@
   <link rel="preload" href="fonts/InstrumentSans-SemiBold.woff2" as="font" type="font/woff2" crossorigin>
 </head>
 <body>
+  <!-- Blocks between "if ..." and "end if" stay or go when build_page.py builds the page for Pages, by what is out
+       on GitHub at that moment. Each marker sits on a line of its own; no ids inside a block. -->
   <header class="hero">
     <div class="wrap">
       <h1 class="brand"><img class="logo" src="wakeshot.svg" width="75" height="75" alt="">Wakeshot</h1>
       <p class="lead">Your PC stays awake while your AI agent works. Then it sleeps as usual, with your own power settings back.</p>
       <p>Keep awake on demand comes in the same menu, so you never need a second tool.</p>
+      <!-- if released -->
       <p class="actions">
         <a class="button" href="https://github.com/HaikAsatryan/wakeshot/releases/latest/download/HaikAsatryan.Wakeshot-win-x64-Setup.exe">Download for Windows (x64)</a>
         <a class="button secondary" href="https://github.com/HaikAsatryan/wakeshot#readme">Read the README</a>
@@ -35,22 +38,36 @@
         Windows 11. For Windows on Arm:
         <a href="https://github.com/HaikAsatryan/wakeshot/releases/latest/download/HaikAsatryan.Wakeshot-win-arm64-Setup.exe">ARM64 Setup</a>.
         All files and notes: <a href="https://github.com/HaikAsatryan/wakeshot/releases">Releases</a>.<br>
-        Per user, no admin. Free and open source (MIT). macOS is planned for later.
+        Per user, no admin. Free and open source (MIT).
       </p>
-      <!-- waits for p6-media: icon loop. One <picture> here: the tray icon going idle to working to idle, a dark and a light GIF (<source media="(prefers-color-scheme: dark)">), plus a still PNG for <source media="(prefers-reduced-motion: reduce)">, copied into site/media/ (no other host). Alt text: "Wakeshot's tray icon wakes while an agent works and rests when it is done". Spec: docs/research/launch.md, "Specs". -->
+      <!-- end if -->
+      <!-- if not released -->
+      <p class="soon"><strong>Not released yet.</strong> The first release is on its way. Until then there is nothing to install.</p>
+      <p class="actions">
+        <a class="button" href="https://github.com/HaikAsatryan/wakeshot#readme">Read the README</a>
+        <a class="button secondary" href="https://github.com/HaikAsatryan/wakeshot">Source on GitHub</a>
+      </p>
+      <p class="fine">For Windows 11, x64 and ARM64. Per user, no admin. Free and open source (MIT).</p>
+      <!-- end if -->
       <p class="fine">
         Small and quiet: <a href="https://github.com/HaikAsatryan/wakeshot/blob/main/docs/research.md#speed-numbers-final-v1-build-2026-11-07">5 MB of private memory</a> and
         <a href="https://github.com/HaikAsatryan/wakeshot/blob/main/docs/research.md#speed-numbers-final-v1-build-2026-11-07">1 s of CPU in 10 idle minutes</a> (0.17% of one core).
         Measured on the v1 build, x64, 2026-11-07.
       </p>
+      <figure class="video">
+        <video controls playsinline preload="none" width="1920" height="1080" poster="media/wakeshot-promo-poster.png">
+          <source src="media/wakeshot-promo.mp4" type="video/mp4">
+          <a href="media/wakeshot-promo.mp4">The video as an MP4 file</a>
+        </video>
+        <figcaption>Wakeshot in 38 seconds, with sound. The same story in words: <a href="#a-night">a night with Wakeshot</a>.</figcaption>
+      </figure>
     </div>
   </header>
 
   <main class="wrap">
     <section id="what-keeps-it-awake">
       <h2>What keeps the PC awake</h2>
-      <p>Wakeshot calls each reason to stay awake a hold. While any hold counts, the PC stays awake. When the last one ends, the PC sleeps as usual, as if Wakeshot were not there.</p>
-      <!-- waits for p5-haik-check: menu words in this section (Keep awake, Keep screen on, Automatic) and the tooltip line; match them to the shipped menu. -->
+      <p>Wakeshot calls each reason to stay awake a hold. While any hold runs, the PC stays awake, even with the laptop lid closed. When the last one ends, the PC sleeps as usual, as if Wakeshot were not there.</p>
       <div class="cards">
         <article>
           <h3>AI agents</h3>
@@ -66,55 +83,127 @@
         </article>
         <article>
           <h3>Keep awake</h3>
-          <p>From the menu: 30 minutes, 1, 2 or 4 hours, or until you turn it off, with Keep screen on if you want it. It ends at sign-out or restart, so a forgotten one never survives a reboot.</p>
+          <p>From the menu: 30 minutes, 1, 2 or 4 hours, or until you turn it off, with <strong>Keep screen on</strong> if you want it. It ends at sign-out or restart, so a forgotten one never survives a reboot.</p>
         </article>
       </div>
-      <p>The tray icon shows the state: a filled light while something holds, the same light as an outline when nothing does, and the outline struck through when Automatic is off. Its tooltip names what holds the PC awake, such as "Holding awake: Codex (1 session)".</p>
-      <!-- waits for p6-media: pictures of the three icon states and of the menu with Keep awake open, each a <picture> with a dark and a light PNG (<source media="(prefers-color-scheme: dark)">), copied into site/media/. Alt text as in the README. -->
+      <p><strong>Automatic</strong> in the menu, on by default, is the switch for the agents, <code>wakeshot run</code> and hold files. <strong>Keep awake</strong> works either way.</p>
       <p>For an agent not on the list, <code>wakeshot run -- &lt;agent&gt;</code> holds for as long as the agent runs.</p>
-      <p>Not supported yet: Cursor, Antigravity and VS Code's own Local chats. Each can stop without a sign that its work ended, and Wakeshot never guesses with a timer. <a href="https://github.com/HaikAsatryan/wakeshot#limits">Why, for each</a>.</p>
+      <p>The list grows with each version. Not supported yet: Cursor, Antigravity and VS Code's own Local chats. Each can stop without a sign that its work ended, and Wakeshot never guesses with a timer. <a href="https://github.com/HaikAsatryan/wakeshot#limits">Why, for each</a>.</p>
     </section>
 
     <section id="a-night">
       <h2>A night with Wakeshot</h2>
-      <!-- waits for p6-media: the promo video here. <video controls muted playsinline preload="none" poster="media/promo-poster.png"> with media/promo.mp4 (H.264 and AAC, 1920 x 1080, under 10 MB) copied into site/media/ (no other host), and a one-line caption. Research (docs/research/launch.md, "Specs") says autoplay and loop; with sound and a 38 s length, prefer controls, no autoplay. -->
       <ol class="steps">
         <li><strong>You give your AI agent a long task and walk away.</strong> The icon's light comes on. Your screen still turns off on its usual timer; only sleep waits.</li>
         <li><strong>You close the lid.</strong> A short chime says the laptop keeps running, and Wakeshot locks it, so a closed laptop never runs unlocked.</li>
-        <li><strong>The agent finishes in the night.</strong> Wakeshot puts your lid and sleep settings back at once. After 5 minutes with no input, a soft "going to sleep" sound plays and the laptop goes to sleep, where Windows would have put it when you closed the lid.</li>
+        <li><strong>The agent finishes in the night.</strong> Wakeshot puts your lid and sleep settings back at once. After 5 minutes with no input, a soft "going to sleep" sound plays and Wakeshot puts the laptop to sleep, where Windows would have put it when you closed the lid.</li>
         <li><strong>Morning.</strong> You open the lid and sign in. A notice says how long the PC ran with the lid closed, and what kept it running.</li>
         <li><strong>The battery ran low instead?</strong> Below Windows' own energy saver level, Wakeshot steps back and puts your settings back. A closed laptop then goes to sleep after 5 minutes with no input.</li>
       </ol>
-      <!-- waits for the README rework (p6-readme): comparison. A short side by side with the 2 or 3 most popular keep-awake options (such as PowerToys Awake), on features, taken from the reworked README. Do not copy the old rival table. -->
+    </section>
+
+    <section id="what-you-see">
+      <h2>What you see</h2>
+      <p>A small icon in the tray shows what is going on, and its tooltip names what holds the PC awake.</p>
+      <div class="table">
+        <table class="states">
+          <thead>
+            <tr><th scope="col">Icon</th><th scope="col">State</th><th scope="col">The tooltip says</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><picture><source media="(prefers-color-scheme: dark)" srcset="media/state-holding-dark.png"><img src="media/state-holding-light.png" alt="A filled light over a line" width="16" height="16"></picture></td>
+              <td><strong>Holding</strong>: something needs the PC. It stays awake, and closing the lid does not stop it.</td>
+              <td>Holding awake: Codex (1 session)</td>
+            </tr>
+            <tr>
+              <td><picture><source media="(prefers-color-scheme: dark)" srcset="media/state-idle-dark.png"><img src="media/state-idle-light.png" alt="An outlined light over a line" width="16" height="16"></picture></td>
+              <td><strong>Idle</strong>: Automatic is on, and nothing needs the PC right now.</td>
+              <td>Not holding, the PC sleeps as usual</td>
+            </tr>
+            <tr>
+              <td><picture><source media="(prefers-color-scheme: dark)" srcset="media/state-off-dark.png"><img src="media/state-off-light.png" alt="An outlined light over a line, struck through" width="16" height="16"></picture></td>
+              <td><strong>Off</strong>: Automatic is off, so Wakeshot watches nothing. Keep awake still works.</td>
+              <td>Automatic is off, the PC sleeps as usual</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="shots">
+        <figure>
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="media/readme-menu-dark.png">
+            <img src="media/readme-menu-light.png" alt="Wakeshot's menu: Automatic, Keep awake, Restore my power settings, Open log and Quit" width="350" height="275" loading="lazy">
+          </picture>
+          <figcaption>Click the icon for the menu.</figcaption>
+        </figure>
+        <figure>
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="media/readme-holding-tooltip-dark.png">
+            <img src="media/readme-holding-tooltip-light.png" alt="Wakeshot's tooltip while two agents work: Holding awake: Claude Code (1 session), Codex (1 session), over the filled tray icon" width="318" height="137" loading="lazy">
+          </picture>
+          <figcaption>Point at it for the tooltip.</figcaption>
+        </figure>
+      </div>
+      <p>The menu has <strong>Automatic</strong>, <strong>Keep awake</strong> (with <strong>Keep screen on</strong>), <strong>Restore my power settings</strong>, <strong>Open log</strong> and <strong>Quit</strong>. It follows your taskbar's light or dark mode, like Windows' own tray menus. A hold that starts or ends shows only in the icon and its tooltip; anything Wakeshot does on its own gets a notice.</p>
+    </section>
+
+    <section id="how-it-compares">
+      <h2>How it compares</h2>
+      <p>PowerToys Awake, Caffeine and Don't Sleep are the most popular keep-awake tools for Windows that we could count. All three keep the PC awake while you tell them to, and so does Wakeshot. The rows in bold are what only Wakeshot does.</p>
+      <p class="fine scroll-hint">The table scrolls sideways.</p>
+      <div class="table">
+        <table class="compare">
+          <thead>
+            <tr><th scope="col">What it does</th><th scope="col">Wakeshot</th><th scope="col">PowerToys Awake</th><th scope="col">Caffeine</th><th scope="col">Don't Sleep</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Keep the PC awake for a set time, or until you turn it off</th><td>yes</td><td>yes</td><td>yes</td><td>yes</td></tr>
+            <tr class="only"><th scope="row">Stay awake on its own while an AI agent works, then sleep as usual</th><td>yes</td><td>no</td><td>no</td><td>no</td></tr>
+            <tr><th scope="row">Stay awake while a build or a script runs</th><td>yes</td><td>until a process you name ends (command line)</td><td>while a window with a given title is open, or until CPU use drops</td><td>until CPU or network use drops</td></tr>
+            <tr class="only"><th scope="row">Keep a laptop working with the lid closed</th><td>yes, and locks it</td><td>no</td><td>no</td><td>no</td></tr>
+            <tr class="only"><th scope="row">Still lock the PC when you walk away</th><td>yes</td><td>not listed; its docs say to lock the PC yourself</td><td>no, by default: its fake key presses stop the lock</td><td>not listed</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Where the others lead: years of use and many users. They run on Windows 10 too, and Caffeine and Don't Sleep are tiny downloads. Wakeshot is new, runs on Windows 11 only and knows only the agents above. Each cell comes from the tool's own pages, read in November 2026; the <a href="https://github.com/HaikAsatryan/wakeshot#how-it-compares">README</a> links the source of every cell.</p>
     </section>
 
     <section id="what-it-changes">
       <h2>What it changes on your PC</h2>
       <p>When nothing holds, Wakeshot changes nothing. While something holds, it asks Windows to keep the system running, and changes three settings of your active power plan:</p>
       <div class="table">
-        <table>
+        <table class="settings">
           <thead>
             <tr><th scope="col">Setting</th><th scope="col">While holding</th><th scope="col">Why</th></tr>
           </thead>
           <tbody>
             <tr><td>Lid close, plugged in</td><td>Do nothing</td><td>No power request can stop a lid close; only this setting keeps a closed laptop working</td></tr>
             <tr><td>Lid close, on battery</td><td>Do nothing</td><td>The same</td></tr>
-            <tr><td>Sleep after, on battery</td><td>Never</td><td>On battery, Windows ends every power request about 5 minutes after this timeout</td></tr>
+            <tr><td>Sleep after, on battery</td><td>Never</td><td>On battery, Windows ends every power request about 5 minutes after this timeout, lid open or closed</td></tr>
           </tbody>
         </table>
       </div>
-      <!-- waits for p5-haik-check: the menu item name "Restore my power settings" below; match it to the shipped menu. -->
+      <p>After work that ended with the lid closed, Wakeshot also sets the screen and sleep timeouts to 1 minute where yours are longer, so that Windows puts the laptop to sleep. They go back as soon as you open the lid or use the PC.</p>
       <ul class="ticks">
         <li>Your own values come back when the work ends, at Quit, at sign-out, at the next start and at uninstall. If Wakeshot crashes, a small guard process puts them back.</li>
         <li>Change one of these settings yourself during a hold, and your change wins at once. <strong>Restore my power settings</strong> in the menu puts them back right away.</li>
         <li>Wakeshot never lowers your security: close the lid while something holds, and it locks the PC.</li>
         <li>It never needs admin rights and never touches other apps.</li>
       </ul>
-      <p>Every detail, and the rare cases where your settings stay changed for a while, are in the <a href="https://github.com/HaikAsatryan/wakeshot#readme">README</a>.</p>
+      <p>Every detail, and the rare cases where your settings stay changed for a while, are in the <a href="https://github.com/HaikAsatryan/wakeshot#what-it-changes-on-your-pc">README</a>.</p>
     </section>
 
     <section id="install">
       <h2>Install</h2>
+      <!-- if not released -->
+      <p class="soon"><strong>Not released yet.</strong> The first release is on its way; until then there is nothing to install. This is how it will go.</p>
+      <!-- end if -->
+      <!-- if winget -->
+      <p>With winget, in a terminal:</p>
+      <pre><code>winget install HaikAsatryan.Wakeshot</code></pre>
+      <p>Then start Wakeshot once from the Start menu. From then on it starts by itself each time you sign in. Or download the Setup yourself:</p>
+      <!-- end if -->
       <ol>
         <li>Download the Setup for your PC from <a href="https://github.com/HaikAsatryan/wakeshot/releases">Releases</a>:
           <ul>
@@ -125,9 +214,7 @@
         <li>Run it. It installs for your user only and never asks for admin rights. Wakeshot starts right away, and from then on at each sign-in.</li>
         <li>Its icon may hide under the <code>^</code> arrow on the taskbar. The first notice says how to keep it in view.</li>
       </ol>
-      <p><strong>Not signed yet.</strong> v1 is not code-signed, so Windows SmartScreen may warn you before Setup runs.</p>
-      <!-- waits for the first public pre-release (v0.1.0-rc.1): the exact SmartScreen words and the steps to go on, from its capture, as the README gets them. -->
-      <!-- after v1, Phase 8: add "Or: winget install HaikAsatryan.Wakeshot" to this section once the winget package is merged. -->
+      <p><strong>Not signed yet.</strong> v1 is not code-signed, so Windows SmartScreen may stop Setup with "Windows protected your PC". Click <strong>More info</strong>: it names the Setup file and an unknown publisher. Then click <strong>Run anyway</strong>.</p>
       <p><strong>Updates.</strong> Wakeshot updates itself from GitHub Releases, and only while nothing holds, so an update never cuts your work short.</p>
       <p><strong>Uninstall</strong> from Settings &gt; Apps, like any app. It puts your power settings back if a hold was running.</p>
     </section>
@@ -153,7 +240,8 @@
         <li><a href="https://github.com/HaikAsatryan/wakeshot/issues">Report a problem</a></li>
         <li><a href="https://github.com/HaikAsatryan/wakeshot/blob/main/LICENSE">MIT license</a></li>
       </ul>
-      <p>Made by Haik Asatryan. Free, with no ads and no telemetry.</p>
+      <p>Made by Haik Asatryan. Free, with no ads and no telemetry. Windows 11 only for now; a macOS version comes if Wakeshot gets popular or gets donations.</p>
+      <p>Product names are trademarks of their owners; Wakeshot is not affiliated with them.</p>
     </div>
   </footer>
 </body>

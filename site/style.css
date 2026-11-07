@@ -113,10 +113,42 @@ code {
   padding: 0.05em 0.3em;
 }
 
+pre {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+}
+
+pre code {
+  border: 0;
+  padding: 0;
+}
+
 img,
 video {
   max-width: 100%;
   height: auto;
+}
+
+figure {
+  margin: 0;
+}
+
+figcaption {
+  color: var(--muted);
+  font-size: 0.9375rem;
+  margin-top: 0.5rem;
+}
+
+/* Says what is not out yet; build_page.py drops it once it is. */
+.soon {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
 }
 
 /* The held light: the warm light glows round the icon, over a faint moss haze along the top. The glow's centre is the
@@ -190,6 +222,21 @@ video {
 .fine {
   color: var(--muted);
   font-size: 0.9375rem;
+}
+
+/* The promo closes the hero: it shows in a glance what the sections below say in words. The ratio holds the box
+   before the poster loads, so nothing below jumps. */
+.video {
+  margin: 2rem 0 0;
+}
+
+.video video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000000;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
 }
 
 section {
@@ -268,9 +315,59 @@ th {
 
 /* On a wide screen the setting and its value stay on one line; on a phone they wrap so the reason keeps room. */
 @media (min-width: 40rem) {
-  th:nth-child(-n + 2),
-  td:nth-child(-n + 2) {
+  .settings th:nth-child(-n + 2),
+  .settings td:nth-child(-n + 2) {
     white-space: nowrap;
+  }
+}
+
+/* The tray icons at the tray's own size, 16 px, from 32 px files: sharp on a 200% screen. */
+.states picture,
+.states img {
+  display: block;
+}
+
+.states td:first-child {
+  width: 1px;
+  padding-top: 0.8rem;
+}
+
+.shots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  /* 1rem across, so the menu and the tooltip fit side by side in the text column. */
+  gap: 1.5rem 1rem;
+  margin: 1.5rem 0;
+  text-align: center;
+}
+
+.shots img {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+}
+
+/* Row labels in plain weight, so the rows only Wakeshot has stand out in bold, as in the README. On a phone the table
+   scrolls sideways inside its box rather than squeezing the cells to a word a line. */
+.compare tbody th {
+  font-weight: 400;
+  min-width: 12rem;
+}
+
+.compare tr.only th {
+  font-weight: 600;
+}
+
+.compare td {
+  min-width: 7rem;
+}
+
+/* Only where the comparison is wider than the column: a phone hides its scroll bar until a swipe. */
+@media (min-width: 46rem) {
+  .scroll-hint {
+    display: none;
   }
 }
 

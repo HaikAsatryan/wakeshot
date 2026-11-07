@@ -1,17 +1,23 @@
 """Checks the Pages page before it ships (p6-pages acceptance checks; pages.yml runs it before each deploy).
 
 Fails when: an HTML file does not parse into balanced tags; a local link, image or CSS url() does not resolve inside
-the folder; a src or href leaves https://github.com/HaikAsatryan/wakeshot and the page itself; the page has a script,
-an event handler attribute or an embedded frame; any text file holds an em dash or an emoji; a colour pair of
-style.css drops below WCAG 2.2 AA in the light or the dark theme (text 4.5, focus ring and button edge 3.0); a share
-tag (og:, twitter:) points outside the page's Pages address or to a missing file, has an image without alt text, or
-says a title or description other than the page's own. With --final it also fails while a spot still waits for
-another card (an HTML comment that starts with "waits for").
+the folder; a src or href leaves https://github.com/HaikAsatryan/wakeshot and the page itself; a link into the repo
+names a file the repo lacks, or a #heading its Markdown file lacks (README.md for the repo's own address); an image
+has no alt; the page has a script, an event handler attribute or an embedded frame; any text file holds an em dash
+or an emoji; a colour pair of style.css drops below WCAG 2.2 AA in the light or the dark theme (text 4.5, focus ring
+and button edge 3.0); a share tag (og:, twitter:) points outside the page's Pages address or to a missing file, has
+an image without alt text, or says a title or description other than the page's own.
 
-Run: python site/check_page.py [--final] [--colours] site (--colours prints every contrast ratio)
+Two kinds of folder. site/ itself (it holds build_page.py): the source, every conditional block in place, and each
+media/<name> resolved where build_page.py takes it from. A folder build_page.py wrote: what goes live. --final is for
+the second: it also fails while a spot waits for another card (an HTML comment that starts with "waits for"), while a
+conditional block is left (the folder was not built), and on any file no page uses.
+
+Run: python site/check_page.py [--final] [--colours] <folder> (--colours prints every contrast ratio)
 Python 3.8 or later, standard library only.
 """
 
+import functools
 import html
 import re
 import sys
@@ -20,7 +26,11 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+# No __pycache__ in site/ when this imports build_page: the folder is the page's source, and git would see it.
+sys.dont_write_bytecode = True
+
 REPO = "https://github.com/HaikAsatryan/wakeshot"
+REPO_ROOT = Path(__file__).resolve().parent.parent
 # Where pages.yml publishes this folder: a project site's address, https://<owner>.github.io/<repository>/. A share
 # tag must use the full address, so it names files by it.
 PAGES = "https://haikasatryan.github.io/wakeshot/"
@@ -39,9 +49,12 @@ EMOJI_RANGES = [
 ]
 EMOJI = re.compile("[" + "".join(f"{chr(a)}-{chr(b)}" for a, b in EMOJI_RANGES) + "]")
 WAITS = re.compile(r"^\s*waits for\b", re.IGNORECASE)
+# build_page.py's conditional blocks: "<!-- if released -->" to "<!-- end if -->".
+CONDITION = re.compile(r"^\s*(?:if|end if)\b")
 # Files no page links: a font's licence travels beside it; the README draws the light lockup from here (the dark one
-# is the social card's too); social-card.html is the source of social-card.png and social_card.py draws it.
-UNLINKED_OK = {"OFL.txt", "wakeshot-lockup-light.svg", "social-card.html", "social_card.py"}
+# is the social card's too); social-card.html is the source of social-card.png and social_card.py draws it;
+# build_page.py builds the folder pages.yml publishes.
+UNLINKED_OK = {"OFL.txt", "wakeshot-lockup-light.svg", "social-card.html", "social_card.py", "build_page.py"}
 
 # The colour pairs style.css must keep, by custom property name: (front, back, least WCAG ratio). "hero" is the page
 # under the hero's two see-through glows, bottom layer first: a pair must hold on the bare page, under each glow alone
@@ -65,6 +78,7 @@ class Page(HTMLParser):
         self.ids = set()
         self.urls = []
         self.waits = []
+        self.conditions = []
         self.doctype = False
         self.lang = False
         self.charset = False
@@ -118,6 +132,8 @@ class Page(HTMLParser):
                 for url in css_urls(value):
                     self.urls.append((self.where(), tag, url))
         names = dict(attrs)
+        if tag == "img" and "alt" not in names:
+            self.errors.append(f"{self.where()}: <img> has no alt (alt=\"\" for a picture that only decorates)")
         if tag == "html" and names.get("lang"):
             self.lang = True
         if tag == "meta" and (names.get("charset") or "").lower() == "utf-8":
@@ -155,6 +171,8 @@ class Page(HTMLParser):
     def handle_comment(self, data):
         if WAITS.match(data):
             self.waits.append(f"{self.where()}: {data.strip()[:100]}")
+        if CONDITION.match(data):
+            self.conditions.append(f"{self.where()}: <!--{data}-->")
 
 
 def css_urls(text):
@@ -164,8 +182,51 @@ def css_urls(text):
     return found
 
 
-def check_url(root, base_file, url, ids):
-    """Returns an error text, or None when the URL is allowed and resolves."""
+@functools.lru_cache(maxsize=None)
+def heading_ids(md_path):
+    """The ids GitHub gives the headings of a Markdown file: lower case, punctuation dropped, spaces to hyphens, a
+    repeat gets -1, -2 and so on."""
+    ids, seen, fence = set(), {}, False
+    for line in md_path.read_text(encoding="utf-8").splitlines():
+        if line.lstrip().startswith(("```", "~~~")):
+            fence = not fence
+            continue
+        m = None if fence else re.match(r"#{1,6}\s+(.+?)\s*#*\s*$", line)
+        if not m:
+            continue
+        text = re.sub(r"<[^>]+>", "", m.group(1))
+        text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+        slug = re.sub(r"[^\w\- ]", "", text.strip().lower()).replace(" ", "-")
+        count = seen.get(slug, 0)
+        seen[slug] = count + 1
+        ids.add(slug if count == 0 else f"{slug}-{count}")
+    return frozenset(ids)
+
+
+def check_repo_url(url):
+    """An error text for a link into the repo that the repo does not have, else None. Only main's files and their
+    headings are checked, against this checkout; releases, issues and the like pass."""
+    parts = urlsplit(url)
+    path = parts.path[len(urlsplit(REPO).path):]
+    fragment = unquote(parts.fragment)
+    if path in ("", "/"):
+        if fragment and fragment != "readme" and fragment not in heading_ids(REPO_ROOT / "README.md"):
+            return f"{url}: README.md has no heading #{fragment}"
+        return None
+    m = re.fullmatch(r"/(blob|tree)/main/(.+?)/?", path)
+    if not m:
+        return None
+    target = REPO_ROOT / unquote(m.group(2))
+    if not (target.is_file() if m.group(1) == "blob" else target.is_dir()):
+        return f"{url}: {m.group(2)} is not in the repo"
+    if fragment and target.suffix == ".md" and fragment not in heading_ids(target):
+        return f"{url}: {m.group(2)} has no heading #{fragment}"
+    return None
+
+
+def check_url(root, base_file, url, ids, media=None):
+    """Returns an error text, or None when the URL is allowed and resolves. media, for the source folder: finds the
+    file build_page.py takes media/<name> from."""
     url = url.strip()
     if not url:
         return "empty URL"
@@ -175,7 +236,7 @@ def check_url(root, base_file, url, ids):
     if parts.scheme:
         # The repo itself or a path under it; a look-alike such as .../wakeshot-evil does not pass.
         if url == REPO or any(url.startswith(REPO + c) for c in "/#?"):
-            return None
+            return check_repo_url(url)
         return f"{url}: outside {REPO} and the page"
     if not parts.path:
         if parts.fragment and parts.fragment not in ids:
@@ -183,12 +244,14 @@ def check_url(root, base_file, url, ids):
         return None
     target = (base_file.parent / unquote(parts.path)).resolve()
     try:
-        target.relative_to(root)
+        rel = target.relative_to(root).as_posix()
     except ValueError:
         return f"{url}: leaves the page folder"
     if target.is_dir():
         target = target / "index.html"
     if not target.is_file():
+        if media and rel.startswith("media/") and media(rel[len("media/"):]):
+            return None
         return f"{url}: file not found"
     return None
 
@@ -357,8 +420,16 @@ def main(argv):
         print(f"{root}: no index.html")
         return 2
 
-    errors, waits, used, ratios = [], [], set(), []
-    files = sorted(p for p in root.rglob("*") if p.is_file())
+    media = None
+    if (root / "build_page.py").is_file():
+        # The build script next to this one: it knows where each media file comes from in this checkout.
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import build_page
+
+        media = build_page.media_file
+
+    errors, waits, conditions, used, ratios = [], [], [], set(), []
+    files = sorted(p for p in root.rglob("*") if p.is_file() and "__pycache__" not in p.parts)
     for path in files:
         rel = path.relative_to(root).as_posix()
         if path.suffix in TEXT_SUFFIXES:
@@ -383,7 +454,7 @@ def main(argv):
             if not page.title.strip():
                 errors.append(f"{rel}: no <title>")
             for at, tag, url in page.urls:
-                problem = check_url(root, path, url, page.ids)
+                problem = check_url(root, path, url, page.ids, media)
                 if problem:
                     errors.append(f"{rel} {at}: <{tag}> {problem}")
                 elif not urlsplit(url).scheme and urlsplit(url).path:
@@ -398,6 +469,7 @@ def main(argv):
             errors += [f"{rel}: {e}" for e in share_errors]
             used |= share_used
             waits += [f"{rel} {w}" for w in page.waits]
+            conditions += [f"{rel} {c}" for c in page.conditions]
         if path.suffix == ".css":
             for url in css_urls(text):
                 problem = check_url(root, path, url, set())
@@ -414,17 +486,19 @@ def main(argv):
         if path.suffix == ".svg":
             check_svg(root, path, errors)
 
-    if final:
-        errors += [f"still waits: {w}" for w in waits]
-
     unused = [p.relative_to(root).as_posix() for p in files
               if p not in used and p.name not in ("index.html", Path(__file__).name) and p.name not in UNLINKED_OK]
+    if final:
+        errors += [f"still waits: {w}" for w in waits]
+        errors += [f"not built (run build_page.py): {c}" for c in conditions]
+        errors += [f"{u} is not used by the page: leave it out of the build" for u in unused]
+
     print(f"checked {len(files)} files in {root}")
     for row in ratios if show_colours else []:
         print(f"contrast: {row}")
     for w in waits if not final else []:
         print(f"waits: {w}")
-    for u in unused:
+    for u in unused if not final else []:
         print(f"note: {u} is not linked from any page")
     for e in errors:
         print(f"error: {e}")
