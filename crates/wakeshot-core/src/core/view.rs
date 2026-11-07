@@ -1,7 +1,5 @@
 //! The tray view and `state.json` through `present`, each sent only when it changed; `state.json` at most once a
-//! second, except as `FinishRestoreRequest` (track note 5).
-//!
-//! Owner: `p2-core-holds`, then `p2-core-settings`, then `p2-core-lid`.
+//! second, except as `FinishRestoreRequest`.
 
 use super::holds::Found;
 use crate::command::Command;
@@ -45,7 +43,7 @@ pub(super) fn show(
         out.push(Command::Tray(view.clone()));
         state.view = Some(view);
     }
-    // `wakeshot restore` waits for this file to print the result, so it skips the 1 s wait (track note 5).
+    // `wakeshot restore` waits for this file to print the result, so it skips the 1 s wait.
     if std::mem::take(&mut state.finish_restore_request) {
         out.push(Command::FinishRestoreRequest(file.clone()));
         state.state_file = Some(file);

@@ -6,8 +6,6 @@
 //! they are in force at that event, which the core builds (`Core::in_force`: each journal entry on the active plan
 //! sets its key to `written`, and an apply with no answer yet counts as written). The last plan read can be up to
 //! 10 s behind an apply, so a rule fed it would miss our Do nothing at a lid close in the first seconds of a hold.
-//!
-//! Owner: `p2-policy-power`.
 
 use crate::settings::{Guid, JournalEntry, PlanValues, SettingKey};
 use crate::time::Deadline;
@@ -18,9 +16,8 @@ pub const DO_NOTHING: u32 = 0;
 
 /// How long a new power source must last before a closed laptop is locked for it, so a dock's short AC drop does not
 /// lock someone who types on an external screen (product, "Never lower security"). The two drops seen on the test
-/// laptop lasted 5.3 s and 6.3 s (research, "Power rules checks"), so 5 s was too short; Haik picked a longer wait
-/// ("15 or even more ... can be even a minute") and the orchestrator set 30 s (2026-11-03 21:23). The cost: an
-/// unplugged, closed laptop stays unlocked up to 30 s.
+/// laptop lasted 5.3 s and 6.3 s (research, "Power rules checks"), so 5 s was too short and 30 s leaves a wide
+/// margin. The cost: an unplugged, closed laptop stays unlocked up to 30 s.
 pub const SOURCE_SETTLE_MS: u64 = 30_000;
 
 /// The lid key for a power source (`ac`: on AC).
@@ -73,9 +70,7 @@ pub fn ours(plan: &PlanValues, ac: bool, journal: &[JournalEntry]) -> bool {
         .is_some_and(|e| e.written == DO_NOTHING && e.original != DO_NOTHING)
 }
 
-/// A lock and chime that wait for a new power source to last [`SOURCE_SETTLE_MS`].
-///
-/// Owner: core track (Phase 2) keeps at most one.
+/// A lock and chime that wait for a new power source to last [`SOURCE_SETTLE_MS`]. The core keeps at most one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SourceLock {
     /// The new source: `true` for AC.

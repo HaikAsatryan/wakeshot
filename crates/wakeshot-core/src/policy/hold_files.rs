@@ -1,8 +1,6 @@
 //! Hold files to holds: one parsed hold file, Automatic and `Now`, to whether it counts now, whether to delete the
 //! file, and when that next changes on its own (architecture section 6; decisions 10, 11, 31 and 32). Also the Keep
 //! awake choice the menu shows, read back from `keep-awake.json`.
-//!
-//! Owner: `p2-policy-holds`.
 
 use crate::holds::{HoldFacts, HoldKind};
 use crate::process::Alive;
@@ -34,7 +32,7 @@ pub struct HoldAnswer {
     pub alive: Alive,
 }
 
-/// The hold file rules (architecture section 6; track note 17):
+/// The hold file rules (architecture section 6):
 ///
 /// - Counts while its process is alive and before `expires` (at `expires` it stops), and only if
 ///   [`kind_counts`] allows its kind. An expired file stays on disk while its process lives.

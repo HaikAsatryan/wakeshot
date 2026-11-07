@@ -1,20 +1,14 @@
 //! The core's entry point: events in, commands out (architecture section 3).
 //!
-//! Owner: core track (`p2-core-holds`, then `p2-core-settings`, then `p2-core-lid`) for the bodies; the
-//! signatures are contract.
-//!
 //! Each `handle` first takes the event's facts into the state, then runs one settle pass over the whole state: the
 //! holds that count now, the requests they need, the start and end of holding, the tray view with `state.json`, and
 //! the next deadline. The settle pass reads only the state, never the event, so a `Tick`, a late event or a repeated
 //! snapshot all give the same answer for the same facts and time.
 //!
-//! Power settings live in `settings`: the apply goes out from the settle pass after the requests, whenever the
-//! episode wants one and the core applies now; restores go out at the edges and as retries on the tick.
-//!
-//! The closed-lid and battery side lives in `lid`: the battery floor goes into the settle pass before the requests
-//! (stepped back takes none; its grace gives a deadline), the source lock, the step back's actions and the countdown
-//! after the episode edges.
-//! Every notice goes through `Core::notify`, which keeps it while the user is away. Updates live in `update`.
+//! `settings` sends the apply after the requests and the restores at the edges and on the tick. `lid` holds the
+//! closed-lid and battery side: the battery floor runs before the requests (stepped back takes none), the source lock,
+//! the step back and the countdown after the episode edges. Every notice goes through `Core::notify`, which keeps it
+//! while the user is away.
 
 mod holds;
 mod lid;
@@ -38,9 +32,8 @@ const MINUTE_MS: i64 = 60_000;
 
 /// Wakeshot's decisions: events in, commands out, no I/O and no clock reads.
 ///
-/// Owner: core track (Phase 2) builds the state and every rule behind these three calls; their signatures are the
-/// contract. The loop may rely on: `handle` never blocks and never fails, and `next_deadline` is read after each
-/// `handle` to set the one timer. The config in `Event::Started` wins over the one given to `new`.
+/// The loop may rely on: `handle` never blocks and never fails, and `next_deadline` is read after each `handle` to set
+/// the one timer. The config in `Event::Started` wins over the one given to `new`.
 #[derive(Debug)]
 pub struct Core {
     state: State,
@@ -99,9 +92,8 @@ impl Core {
                 state.on_console = on_console;
                 state.tray = tray;
                 state.journal = journal.map(|j| j.entries).unwrap_or_default();
-                // Start-up already tried this restore once; the tick retries it until it works (track note 9). A
-                // journal that did not read may hold a crashed tray's values, so the copy stays empty and the retry
-                // reads it again (power safety review finding 3).
+                // Start-up already tried this restore once; the tick retries it until it works. A journal that did
+                // not read may hold a crashed tray's values, so the copy stays empty and the retry reads it again.
                 if !state.journal.is_empty() || journal_unread {
                     state.retry = Some(RestoreWhy::Leftover);
                 }
@@ -179,12 +171,12 @@ impl Core {
                     }
                     KeepAwake::Off | KeepAwake::UntilOff => None,
                 };
-                // A new length keeps Keep screen on as it is; Off cleared it with the file (track note 16).
+                // A new length keeps Keep screen on as it is; Off cleared it with the file.
                 let screen = holds::keep_awake_on(&self.state, now).is_some_and(|f| f.facts.screen);
                 self.write_keep_awake(expires, screen, choice, out);
             }
             MenuCommand::KeepScreenOn(on) => {
-                // Only while Keep awake is on (track note 16); the menu greys the row otherwise.
+                // Only while Keep awake is on; the menu greys the row otherwise.
                 let Some((screen, expires)) = holds::keep_awake_on(&self.state, now)
                     .map(|f| (f.facts.screen, f.facts.expires_wall_ms))
                 else {
@@ -375,7 +367,7 @@ impl Core {
     }
 
     /// Every notice goes out here. One raised while the session is locked or another session has the PC's screen
-    /// waits for the user, in order (track note 18): a balloon shown to nobody is lost. The same notice twice in one
+    /// waits for the user, in order: a balloon shown to nobody is lost. The same notice twice in one
     /// absence says nothing new, so it waits once. Sounds never wait.
     fn notify(&mut self, notice: Notice, out: &mut Vec<Command>) {
         if self.state.session_locked || !self.state.on_console {

@@ -1,7 +1,5 @@
 //! The files in the data folder (architecture section 6), as serde structs. Every file carries `version`.
 //!
-//! Owner: contracts card. Each type's own doc names the track that owns its meaning.
-//!
 //! Version rule: a reader takes its own version and older ones. Every file but the journal is read through [`read`],
 //! which ignores a file with a newer version (the caller logs it), because a newer file may change a field's shape.
 //! The journal is read whole whatever its version: [`JournalFile`] keeps entries with keys it does not know, so a
@@ -15,24 +13,20 @@ use crate::process::FileTime;
 use crate::settings::{Guid, JournalOwner, OwnedKey, SettingKey};
 
 /// Only the `version` of any data file, read before the rest so a newer file is ignored instead of failing to parse.
-///
-/// Owner: core track (Phase 2); [`read`] uses it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VersionProbe {
     pub version: u32,
 }
 
 /// A data file with a format version, so [`read`] can tell a newer file from a bad one.
-///
-/// Owner: core track (Phase 2).
 pub trait Versioned: DeserializeOwned {
     const VERSION: u32;
 }
 
 /// What [`read`] found in a file's bytes.
 ///
-/// Owner: core track (Phase 2). Callers may rely on `Newer` meaning the file is well-formed JSON with a `version`
-/// above this one's, and `Bad` meaning anything else that is not this version's form (log it, never act on it).
+/// Callers may rely on `Newer` meaning the file is well-formed JSON with a `version` above this one's, and `Bad`
+/// meaning anything else that is not this version's form (log it, never act on it).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Read<T> {
     Value(T),
@@ -44,8 +38,6 @@ pub enum Read<T> {
 /// can forget it. Only the first JSON value counts and bytes after it are ignored, the way Claude's own files are
 /// read, so a script that appends a newline or a second object still gives the same hold. A leading UTF-8 byte order
 /// mark is skipped: Windows PowerShell 5.1 writes one with `-Encoding UTF8` (Microsoft docs, about_Character_Encoding).
-///
-/// Owner: core track (Phase 2). Readers in the sources track (watch thread, CLI) and the ship track (hooks) call it.
 pub fn read<T: Versioned>(bytes: &[u8]) -> Read<T> {
     let bytes = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes);
     let mut values = serde_json::Deserializer::from_slice(bytes).into_iter::<serde_json::Value>();
@@ -61,8 +53,8 @@ pub fn read<T: Versioned>(bytes: &[u8]) -> Read<T> {
 
 /// `config.json`: the settings that survive a restart (decision 31).
 ///
-/// Owner: core track (Phase 2) for the meaning; the tray writes it through `Command::WriteConfig`, the CLI writes it
-/// directly. A missing file means `Config::default()` (Automatic on).
+/// The tray writes it through `Command::WriteConfig`, the CLI writes it directly. A missing file means
+/// `Config::default()` (Automatic on).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     pub version: u32,
@@ -88,9 +80,9 @@ impl Default for Config {
 
 /// `holds\*.json`: one hold from `wakeshot run`, Keep awake, or any script (the user doc is `docs/hold-files.md`).
 ///
-/// Owner: sources track (Phase 4) parses it into `HoldFacts`. Scripts write it, so it stays loose: only `version`
-/// and `pid` are required. `expires` is kept as the text the writer gave (RFC 3339, `Z` or an offset), because
-/// turning it into wall ms is parsing, which `holds::file` owns. `screen` counts only in `keep-awake.json`.
+/// `holds::file` parses it into `HoldFacts`. Scripts write it, so it stays loose: only `version` and `pid` are
+/// required. `expires` is kept as the text the writer gave (RFC 3339, `Z` or an offset), because turning it into wall
+/// ms is parsing, which `holds::file` owns. `screen` counts only in `keep-awake.json`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HoldFile {
@@ -123,7 +115,7 @@ impl HoldFile {
 
 /// `restore-request.json`: `wakeshot restore` asks a running tray to restore; the file going away is the answer.
 ///
-/// Owner: sources track (Phase 4) writes it from the CLI; the watch thread turns it into `Menu(Restore)`.
+/// The CLI writes it; the watch thread turns it into `Menu(Restore)`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RestoreRequest {
     pub version: u32,
@@ -147,9 +139,8 @@ impl Default for RestoreRequest {
 
 /// `state.json`: what the tray is doing, for `wakeshot status` and `wakeshot restore`.
 ///
-/// Owner: core track (Phase 2) builds it; the CLI (Phase 4) reads it. The CLI may rely on `pid` plus `procStart`
-/// naming the tray that wrote it ("not running" when that process is gone), on `holding` being the tooltip labels,
-/// and on `overridden` being empty once nothing is ours.
+/// The CLI may rely on `pid` plus `procStart` naming the tray that wrote it ("not running" when that process is
+/// gone), on `holding` being the tooltip labels, and on `overridden` being empty once nothing is ours.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StateFile {
@@ -168,10 +159,10 @@ impl StateFile {
 
 /// A journal entry's key as the file has it: one this version knows, or one a newer version wrote.
 ///
-/// Owner: power track (Phase 3). Keeping `Other` lets this version read a newer journal without failing on it. An
-/// `Other` entry stays in the file untouched: restore, apply and the ownership check skip it, and the journal counts
-/// as empty when no known entry is left (the clean-up then clears RunOnce and stops the guard, but saves the file with
-/// only those entries), so the newer version restores them at its next start (correction 12, `p3-plan-windows-power`).
+/// Keeping `Other` lets this version read a newer journal without failing on it. An `Other` entry stays in the file
+/// untouched: restore, apply and the ownership check skip it, and the journal counts as empty when no known entry is
+/// left (the clean-up then clears RunOnce and stops the guard, but saves the file with only those entries), so the
+/// newer version restores them at its next start.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum JournalKey {
@@ -180,8 +171,6 @@ pub enum JournalKey {
 }
 
 /// One entry as stored. The fields are frozen (architecture section 6): a later version only adds fields.
-///
-/// Owner: power track (Phase 3).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JournalFileEntry {
     pub plan: Guid,
@@ -193,7 +182,7 @@ pub struct JournalFileEntry {
 
 /// `journal.json`: the keys Wakeshot owns now, with their originals (decision 24).
 ///
-/// Owner: power track (Phase 3), the only writer, always under `Local\Wakeshot.Journal`. Read whole whatever its
+/// The Windows layer is the only writer, always under `Local\Wakeshot.Journal`. Read whole whatever its
 /// `version` (see the module doc); [`crate::settings::Journal`] is the form the core gets. A save always writes
 /// [`JournalFile::VERSION`], never the version it read.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -439,8 +428,8 @@ mod tests {
         round_trip(&journal);
     }
 
-    /// The sleep route's keys (`p2-6-sleep-route`) read as known keys and keep their names on a save; a journal from
-    /// before them, with the three hold keys only, still loads as it did.
+    /// The sleep route's keys read as known keys and keep their names on a save; a journal from before them, with the
+    /// three hold keys only, still loads as it did.
     #[test]
     fn the_sleep_route_keys_round_trip_and_an_older_journal_still_loads() {
         let doc = r#"{ "version": 1, "owner": { "pid": 9120, "procStart": "5", "session": 1 },

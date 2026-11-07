@@ -1,17 +1,15 @@
 //! The battery floor: when to step back and when to hold again (decision 21).
-//!
-//! Owner: `p2-policy-power`; the grace `p2-6-floor-grace`.
 
 use crate::policy::lid::SOURCE_SETTLE_MS;
 
 /// The floor when the energy saver threshold gives none.
 pub const DEFAULT_PCT: u8 = 20;
 
-/// How long the PC must have been on battery before a step back under the floor (Haik, 2026-11-05). A USB-C dock drops
-/// AC for a few seconds (4.3 to 9.65 s in his checks, `docs/tasks/p6-int-haik-checks.md` finding 7), and each drop
-/// under the floor gave a step back with its restore, chime and notice, the notice still on screen after AC came back.
-/// The same 30 s as the closed-lid lock after an unplug, so both fall due in one settle pass. The cost: on battery
-/// under the floor a hold keeps the PC awake 30 s longer.
+/// How long the PC must have been on battery before a step back under the floor. A USB-C dock drops AC for a few
+/// seconds (4.3 to 9.65 s on the test laptop's dock), and each drop under the floor gave a step back with its restore,
+/// chime and notice, the notice still on screen after AC came back. The same 30 s as the closed-lid lock after an
+/// unplug, so both fall due in one settle pass. The cost: on battery under the floor a hold keeps the PC awake 30 s
+/// longer.
 pub const GRACE_MS: u64 = SOURCE_SETTLE_MS;
 
 /// The floor from the energy saver threshold on battery. Settings stores Never as 0 and On battery as 100 (research,
@@ -23,7 +21,7 @@ pub fn floor_pct(saver_threshold_dc: u32) -> u8 {
     }
 }
 
-/// Strictly below, so a battery at the floor still holds (phase 1, "Values I set"). An unknown percent is not below.
+/// Strictly below, so a battery at the floor still holds (product, "Battery floor"). An unknown percent is not below.
 pub fn below(battery_pct: Option<u8>, floor_pct: u8) -> bool {
     battery_pct.is_some_and(|pct| pct < floor_pct)
 }
@@ -44,11 +42,10 @@ pub enum Floor {
 /// loss itself when the AC before it lasted [`SOURCE_SETTLE_MS`], or AC since the first reading (`ac_since_mono`
 /// `None`); else `kept`, the start of the run on battery that AC came back into for less than that. So a charger that
 /// flaps, on battery under 30 s at a time with short AC between, still steps back 30 s after its first loss, while a
-/// dock's short drop between long stretches of AC waits 30 s each time (review finding 1 of `p2-6-floor-grace`, the
-/// orchestrator's decision 2026-11-05). `kept` is `None` for a tray that started on battery and saw no AC that lasted:
-/// it steps back at once, as at its start. The cost under a flapping charger: each blip of AC ends the step back, and
-/// the next loss steps back again at once, with its sound and notice. Change it when Haik wants a step back to end only
-/// once AC has lasted 30 s too.
+/// dock's short drop between long stretches of AC waits 30 s each time. `kept` is `None` for a tray that started on
+/// battery and saw no AC that lasted: it steps back at once, as at its start. The cost under a flapping charger: each
+/// blip of AC ends the step back, and the next loss steps back again at once, with its sound and notice. Change it
+/// when a step back should end only once AC has lasted 30 s too.
 pub fn battery_run_start(
     kept: Option<u64>,
     ac_since_mono: Option<u64>,

@@ -1,8 +1,6 @@
 //! Agent sessions to holds: one session's facts, its liveness answer and what the core remembers about it, to whether
 //! it holds now and when that next changes on its own (architecture section 7; decisions 5 to 8, 12 and 37). Parsers
 //! report facts only; every hold rule for agents is here.
-//!
-//! Owner: `p2-policy-holds`.
 
 use crate::process::Alive;
 use crate::sources::{Activity, FormatHealth, SessionFacts};
@@ -65,7 +63,7 @@ pub struct SessionAnswer {
     pub memory: SessionMemory,
 }
 
-/// The hold rules for one session (track note 12; architecture section 7):
+/// The hold rules for one session (architecture section 7):
 ///
 /// - Liveness `Gone`: no hold. `Unknown`: the last `Yes` or `Gone` in `memory` stands; none yet: no hold.
 /// - `Working`, or `open_tasks > 0`: holds while the process lives, no time limit (decisions 5 and 8).

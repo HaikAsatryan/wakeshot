@@ -1,8 +1,5 @@
 //! The core's state, private to the core: one struct owned by the loop thread (architecture section 3, "State is one
-//! struct"). Every field the three core cards need is declared here, so a later card fills a field instead of
-//! reshaping the struct; a field a later card fills names that card and carries an `expect(dead_code)` it removes.
-//!
-//! Owner: `p2-core-holds`, then `p2-core-settings`, then `p2-core-lid`.
+//! struct").
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -57,8 +54,7 @@ pub(crate) struct State {
     pub requests_failed: bool,
     /// From the first counted hold to the last.
     pub episode: Option<Episode>,
-    /// The last plan read that worked, with the values restores put back since (`core::lid`, power safety review
-    /// finding 5).
+    /// The last plan read that worked, with the values restores put back since (`core::lid`).
     pub plan: Option<PlanValues>,
     /// When the last `ReadPlan` went out (run time).
     pub plan_read_mono: Option<u64>,
@@ -68,8 +64,8 @@ pub(crate) struct State {
     /// Each `Apply` sent and not yet answered, oldest first: what it writes is not in the copy yet. The IO thread
     /// answers in order, so the first one on a plan is the one an `Applied` for that plan answers.
     pub applying: Vec<Applying>,
-    /// A restore failed and is still wanted, or `Started` brought a journal from an earlier run (`Leftover`, track
-    /// note 9): retried on each tick, with this reason, until a restore of every plan works.
+    /// A restore failed and is still wanted, or `Started` brought a journal from an earlier run (`Leftover`): retried
+    /// on each tick, with this reason, until a restore of every plan works.
     pub retry: Option<RestoreWhy>,
     /// `Notice::RestoreFailed` was shown in this failure streak.
     pub retry_warned: bool,
@@ -85,7 +81,7 @@ pub(crate) struct State {
     pub requests_only_warned: bool,
     /// The one restore for a journal the apply found corrupt went out; `JournalCorrupt` says the file is set aside.
     pub corrupt_restore_sent: bool,
-    /// `Menu(Restore)` waits for its `Done(Restored)`, then `FinishRestoreRequest` (track note 5).
+    /// `Menu(Restore)` waits for its `Done(Restored)`, then `FinishRestoreRequest`.
     pub restore_request: bool,
     /// The next `state.json` goes out as `FinishRestoreRequest`, at once.
     pub finish_restore_request: bool,
@@ -123,8 +119,8 @@ pub(crate) struct State {
     pub floor_countdown: bool,
     /// The countdown to sleep that runs now: derived from `work_end` and `floor_countdown` in each settle pass.
     pub countdown: Option<Countdown>,
-    /// The sleep route's 1-minute timeouts are written, or their `Apply` is out (`p2-6-sleep-route`): until they go
-    /// back at an unlock, input, the lid open, a hold start or the countdown's end.
+    /// The sleep route's 1-minute timeouts are written, or their `Apply` is out: until they go back at an unlock,
+    /// input, the lid open, a hold start or the countdown's end.
     pub short: Option<Short>,
     /// Short keys the user changed while the sleep route ran: not written again until the countdown ends, as a hold
     /// leaves a released key alone until the work ends (decision 26).
@@ -140,7 +136,7 @@ pub(crate) struct State {
     /// For the idle clamp at resume (`policy::ending::clamped_idle_ms`).
     pub last_resume_mono: Option<u64>,
     /// The last `Unlocked` (run time): the user is there, so the countdown counts idle from it too, also after a
-    /// sign-in that gave no input Windows counts (`p2-6-sleep-route`).
+    /// sign-in that gave no input Windows counts.
     pub last_unlock_mono: Option<u64>,
     /// `Session(Locked)` came and no `Unlocked` yet.
     pub session_locked: bool,
@@ -148,7 +144,7 @@ pub(crate) struct State {
     pub idle_locked_at_mono: Option<u64>,
     /// When the idle lock is due if no input comes.
     pub idle_lock_check: Option<Deadline>,
-    /// Notices raised while locked or off the console, sent at `Unlocked` or `ConsoleBack` (track note 18).
+    /// Notices raised while locked or off the console, sent at `Unlocked` or `ConsoleBack`.
     pub held_notices: Vec<Notice>,
     /// The PC ran with the lid closed on our Do nothing while holding, not reported yet.
     pub closed_lid: Option<ClosedLid>,
@@ -376,12 +372,11 @@ pub(crate) struct LockWatch {
     pub floor_waits: bool,
     /// The journal copy as the last settle pass ended, so the next one sees which entries a restore took away.
     pub journal_seen: Vec<JournalEntry>,
-    /// The lid closed while the journal was unknown and the session unlocked, so the lid-close lock did not come
-    /// (`p2-6-sleep-route` deliverable 8). It waits for the journal to be known and for a hold to hold or Wakeshot's
-    /// own Do nothing to be in force, then locks once a plan read shows the user's own lid action as not Do nothing
-    /// (`core::lid::settle_window_lock`); a failed reset locks at once. Ends when the lid opens or the session reports
-    /// `Locked`, not when the window ends, so a hold that starts or holds again later still gets the lock
-    /// (`p2-6-sleep-route-fixes`, review major 1).
+    /// The lid closed while the journal was unknown and the session unlocked, so the lid-close lock did not come. It
+    /// waits for the journal to be known and for a hold to hold or Wakeshot's own Do nothing to be in force, then locks
+    /// once a plan read shows the user's own lid action as not Do nothing (`core::lid::settle_window_lock`); a failed
+    /// reset locks at once. Ends when the lid opens or the session reports `Locked`, not when the window ends, so a
+    /// hold that starts or holds again later still gets the lock.
     pub window_close: bool,
 }
 
@@ -393,7 +388,7 @@ pub(crate) struct PendingLock {
     /// `LockFailed` went out for this lock or the one it retries.
     pub shown: bool,
     /// The lock went out while a floor step back guards the closed laptop (`core::lid::floor_guards`), whose restore
-    /// may land before the check: it is retried while that lasts (review finding 2 of `p2-6-floor-grace`).
+    /// may land before the check: it is retried while that lasts.
     pub floor: bool,
     /// When a tick decides: `core::lid::LOCK_CHECK_MS` after the lock, or at once after it failed.
     pub check_mono: u64,

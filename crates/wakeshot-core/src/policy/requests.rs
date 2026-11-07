@@ -1,12 +1,8 @@
 //! Which power requests the holds need.
-//!
-//! Owner: `p2-policy-power`.
 
 use crate::command::Command;
 
 /// What the request rule looks at. Named fields, so two flags cannot swap places at a call.
-///
-/// Owner: core track (Phase 2).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RequestFacts {
     /// At least one hold counts.
@@ -20,8 +16,6 @@ pub struct RequestFacts {
 }
 
 /// The power requests to hold. `system` means SYSTEM plus EXECUTION (decision 15).
-///
-/// Owner: core track (Phase 2).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Requests {
     pub system: bool,

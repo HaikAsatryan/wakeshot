@@ -2,17 +2,15 @@
 //! retries, the user's own actions, session end and fast user switching (architecture section 3, "Episode flow").
 //! The IO side runs the commands (section 5); this side only decides and reads the outcomes back.
 //!
-//! Owner: `p2-core-settings`, then `p2-core-lid`.
-//!
 //! An apply is sent from the settle pass, after the requests, whenever the episode's apply is `Wanted` and the core
 //! applies now. Every edge that may make the core apply sets `Wanted`: a hold start, `SettingsOwner`, `ConsoleBack`,
-//! `EndCancelled`, a plan switch, the end of a step back (`core::lid`). A failed restore is kept as
-//! `retry` and sent again at each tick, scoped so it never takes an entry a running hold uses.
+//! `EndCancelled`, a plan switch, the end of a step back (`core::lid`). A failed restore is kept as `retry` and sent
+//! again at each tick, scoped so it never takes an entry a running hold uses.
 //!
-//! A journal the copy does not know (product "User settings safety" 7, `p2-6-record-lost`): a retry wanted while the
-//! copy names no entry, or a damaged file just set aside. The retries go on for [`LOST_AFTER_MS`] of run time from the
-//! first failure; then the journal is lost and `ResetLost` puts what looks like Wakeshot's back to Windows' defaults.
-//! A damaged file is lost at once. Either way the window ends with `Core::unknown_journal_ended`.
+//! A journal the copy does not know (product "User settings safety" 7): a retry wanted while the copy names no entry,
+//! or a damaged file just set aside. The retries go on for [`LOST_AFTER_MS`] of run time from the first failure; then
+//! the journal is lost and `ResetLost` puts what looks like Wakeshot's back to Windows' defaults. A damaged file is
+//! lost at once. Either way the window ends with `Core::unknown_journal_ended`.
 
 use std::collections::BTreeSet;
 
@@ -25,7 +23,7 @@ use crate::state::{ApplyStep, Applying, Episode};
 use crate::time::{Deadline, Now};
 use crate::view::Notice;
 
-/// How long a journal may stay unknown before it is lost: Haik's 2 minutes (product "User settings safety" 7). Run
+/// How long a journal may stay unknown before it is lost: 2 minutes (product "User settings safety" 7). Run
 /// time, so a PC that slept in between still gets its tries.
 pub(super) const LOST_AFTER_MS: u64 = 120_000;
 
@@ -45,8 +43,8 @@ const ACCESS_DENIED: [u32; 2] = [5, 1260];
 
 /// The calls whose access denied means policy blocks the settings, as `power::plan` names them: the access check and
 /// the two writes. The same code from any other call (the journal mutex an elevated `wakeshot restore` holds, a file
-/// or registry write) says nothing about policy, so it holds requests only for the episode (power safety review
-/// finding 8). A name the power track changes falls to the episode rule, the side that tries again.
+/// or registry write) says nothing about policy, so it holds requests only for the episode. A name `power::plan`
+/// changes falls to the episode rule, the side that tries again.
 const SETTINGS_CALLS: [&str; 3] = [
     "PowerSettingAccessCheckEx",
     "PowerWriteACValueIndex",
@@ -170,7 +168,7 @@ impl Core {
                 out.push(Command::Apply { plan, writes });
                 self.state.applying.push(Applying { plan, short: false });
             }
-            // Track note 15: no plan values yet, so read first and apply at the answer.
+            // No plan values yet, so read first and apply at the answer.
             (ApplyStep::Wanted, true, None) => {
                 episode.apply = ApplyStep::WaitPlan;
                 self.read_plan(now, out);
@@ -222,10 +220,9 @@ impl Core {
     }
 
     /// What a restore retry takes now. While the core applies, only the entries on other plans, one restore per
-    /// plan: the hold's apply takes over the active plan's entries, or restores those whose key is released (track
-    /// note 3), so a retry never undoes a running hold (power verify minor 4). Otherwise every entry, so after a
-    /// failed apply it does not wait for an apply that never comes; the countdown's short timeouts go too, and out
-    /// again once it worked ([`Core::rewrite_short`]).
+    /// plan: the hold's apply takes over the active plan's entries, or restores those whose key is released, so a
+    /// retry never undoes a running hold. Otherwise every entry, so after a failed apply it does not wait for an apply
+    /// that never comes; the countdown's short timeouts go too, and out again once it worked ([`Core::rewrite_short`]).
     fn restore_scope(&self) -> Vec<Option<Guid>> {
         match self.state.plan.filter(|_| self.applies()) {
             Some(PlanValues { active, .. }) => {
@@ -276,8 +273,8 @@ impl Core {
         }
     }
 
-    /// `UserChanged`: the IO thread already dropped the entry. The key is released on every plan for the episode
-    /// (power verify minor 9), and the user hears it once per key.
+    /// `UserChanged`: the IO thread already dropped the entry. The key is released on every plan for the episode, and
+    /// the user hears it once per key.
     pub(super) fn take_user_changed(&mut self, changed: OwnedKey, out: &mut Vec<Command>) {
         self.state
             .journal
@@ -309,11 +306,11 @@ impl Core {
     }
 
     /// A key just released may still be ours somewhere: an apply on its way writes it (a plan switch's read posts
-    /// `Plan` before its check's `UserChanged`), or another plan's entry holds it (`p2-core-props` finding 1). The next
-    /// apply leaves the key out and restores this plan's entry for it (track note 3); with every key released no apply
-    /// comes, so a restore takes them back, and with them the short timeouts, which go out again once it worked
-    /// ([`Core::rewrite_short`]). The sleep route's apply races the same way (`p2-6-props-flake`): the switch's, or one
-    /// sent while the user's change waited for its check, and it runs while no hold applies.
+    /// `Plan` before its check's `UserChanged`), or another plan's entry holds it. The next apply leaves the key out
+    /// and restores this plan's entry for it; with every key released no apply comes, so a restore takes them back,
+    /// and with them the short timeouts, which go out again once it worked ([`Core::rewrite_short`]). The sleep
+    /// route's apply races the same way: the switch's, or one sent while the user's change waited for its check, and
+    /// it runs while no hold applies.
     fn take_back(&mut self, key: SettingKey, out: &mut Vec<Command>) {
         let ours =
             !self.state.applying.is_empty() || self.state.journal.iter().any(|e| e.key == key);
@@ -355,10 +352,9 @@ impl Core {
     /// Entries after a damaged file went aside are this tray's own apply, when this tray owns the settings: nothing
     /// else writes entries, and only the owner applies. It ran between the set-aside and this reset (the IO queue had
     /// it already), so it took the values in force as its originals, Wakeshot's own among them: a hold that starts
-    /// while the 1-minute timeouts are in force journals battery sleep with 60 s as the user's (review major 2, case
-    /// B). So its entries go back, the reset runs again on the file that is then gone, and the hold and the short
-    /// timeouts apply again over the defaults, all in this order on the IO queue. Once only: a second find keeps the
-    /// entries.
+    /// while the 1-minute timeouts are in force journals battery sleep with 60 s as the user's. So its entries go back,
+    /// the reset runs again on the file that is then gone, and the hold and the short timeouts apply again over the
+    /// defaults, all in this order on the IO queue. Once only: a second find keeps the entries.
     pub(super) fn done_reset(
         &mut self,
         reset: Vec<SettingKey>,
@@ -414,9 +410,9 @@ impl Core {
                 self.lost_reset_failed(now, out);
             }
             // Its own load may fail right after a running hold's apply wrote, and then it puts the hold's values to the
-            // defaults too (`p2-6-reset-gaps`, gap A): what a hold or the countdown still wants applies again. An
-            // apply finds nothing to write where nothing was reset; settle drops the hold's when the core does not
-            // apply. One still out was sent after this reset, since answers come in order, so it writes already.
+            // defaults too: what a hold or the countdown still wants applies again. An apply finds nothing to write
+            // where nothing was reset; settle drops the hold's when the core does not apply. One still out was sent
+            // after this reset, since answers come in order, so it writes already.
             if !self.state.applying.iter().any(|a| !a.short) {
                 self.want_apply();
             }
@@ -491,8 +487,7 @@ impl Core {
                     why: RestoreWhy::SessionEnd,
                 });
             }
-            // Plans are machine-wide: the other user would meet our Do nothing (Question 10, Haik's answer). Settle
-            // drops the display request.
+            // Plans are machine-wide: the other user would meet our Do nothing. Settle drops the display request.
             SessionChange::ConsoleLeft => {
                 self.state.on_console = false;
                 out.push(Command::Log(
@@ -550,10 +545,10 @@ impl Core {
     }
 
     /// Requests only (decision 29): for the run on access denied from a settings call, else for the episode, with one
-    /// notice per failure streak. What this episode owns goes back at once, since no apply will take it over. A failed write
-    /// restores whatever the copy holds: the apply saved and maybe wrote entries, and its own restore may have failed
-    /// to load the journal, which reports none (power safety review finding 2); a restore of a missing journal costs
-    /// nothing. A safety net failure writes nothing.
+    /// notice per failure streak. What this episode owns goes back at once, since no apply will take it over. A failed
+    /// write restores whatever the copy holds: the apply saved and maybe wrote entries, and its own restore may have
+    /// failed to load the journal, which reports none; a restore of a missing journal costs nothing. A safety net
+    /// failure writes nothing.
     fn apply_failed(&mut self, failure: Failure, wrote: bool, out: &mut Vec<Command>) {
         let Failure { call, code } = failure;
         let holding = self.state.episode.is_some();
@@ -575,7 +570,7 @@ impl Core {
         if !std::mem::replace(&mut self.state.requests_only_warned, true) {
             self.notify(Notice::RequestsOnly, out);
         }
-        // A corrupt file fails every apply until a restore sets it aside (orchestrator, 2026-11-03 20:39).
+        // A corrupt file fails every apply until a restore sets it aside.
         let corrupt = failure == JOURNAL_CORRUPT;
         let first_corrupt =
             corrupt && !std::mem::replace(&mut self.state.corrupt_restore_sent, true);
@@ -595,7 +590,7 @@ impl Core {
         journal: Vec<JournalEntry>,
         out: &mut Vec<Command>,
     ) {
-        // A failed load reports `journal: []` since nothing is known: never "nothing owned" (`p2-ownership-restore`).
+        // A failed load reports `journal: []` since nothing is known: never "nothing owned".
         let read_nothing = result.is_err() && journal.is_empty();
         if !read_nothing {
             self.state.journal = journal;
@@ -621,9 +616,9 @@ impl Core {
         if why == RestoreWhy::UserAsked && std::mem::take(&mut self.state.restore_request) {
             self.state.finish_restore_request = true;
         }
-        // A retry, or the take back of a released hold key, takes every plan's entries, the short timeouts' too
-        // (`p2-6-reset-gaps`, gap B). A plan switch's restore of one plan goes out before their apply to the new plan,
-        // which is then still out. The user's own restore wins.
+        // A retry, or the take back of a released hold key, takes every plan's entries, the short timeouts' too. A
+        // plan switch's restore of one plan goes out before their apply to the new plan, which is then still out. The
+        // user's own restore wins.
         if result.is_ok() && why != RestoreWhy::UserAsked {
             self.rewrite_short(out);
         }
@@ -631,7 +626,7 @@ impl Core {
 }
 
 /// The user took back every key a hold writes. A short key the user changed in a stepped-back episode is released too
-/// (`core::lid`), but it is not one of these, so it never stops the hold's apply (review minor 4).
+/// (`core::lid`), but it is not one of these, so it never stops the hold's apply.
 fn every_hold_key_released(episode: &Episode) -> bool {
     KEYS.iter().all(|key| episode.released.contains(key))
 }

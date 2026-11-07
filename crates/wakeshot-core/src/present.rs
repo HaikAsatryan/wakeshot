@@ -1,10 +1,8 @@
 //! `TrayView`, `MenuModel` and `StateFile` from the core's state; every word comes from `text`.
 //!
-//! Owner: `p2-present`.
-//!
 //! The core fills a [`Snapshot`] at each change the user can see and calls [`build`]; when it calls it, and the
-//! `state.json` debounce, are the core's (`p2-core-holds`). This module decides only structure: the hold groups and
-//! their order, the menu rows with their checks and enabled states, and the icon state (track notes 13 and 16).
+//! `state.json` debounce, are the core's. This module decides only structure: the hold groups and their order, the
+//! menu rows with their checks and enabled states, and the icon state.
 //!
 //! One list of groups serves three places, so `text` words a group once for all of them: the tooltip shows as many
 //! whole groups as fit in [`TOOLTIP_MAX_UTF16`] plus `text::more_groups` for the rest; the menu's status line shows
@@ -34,9 +32,8 @@ pub const KEEP_AWAKE_CHOICES: [KeepAwake; 6] = [
 
 const MINUTE_MS: u64 = 60_000;
 
-/// One hold that counts now, as the tray names it.
-///
-/// Owner: `p2-present`. The core fills one per counted agent session and hold file, from the policy's answers.
+/// One hold that counts now, as the tray names it. The core fills one per counted agent session and hold file, from
+/// the policy's answers.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Holder {
     pub kind: HoldKind,
@@ -49,8 +46,6 @@ pub struct Holder {
 }
 
 /// The core's state as the tray and `state.json` show it, rebuilt whole at each change, like `TrayView`.
-///
-/// Owner: `p2-present`; the core cards fill it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Snapshot {
     pub automatic: bool,
@@ -59,7 +54,7 @@ pub struct Snapshot {
     /// The Keep awake row the menu checks: the length picked, one of [`KEEP_AWAKE_CHOICES`], not the time left (that
     /// comes from the hold's `expires`). For a hold file the tray did not write, see [`keep_awake_choice`].
     pub keep_awake: KeepAwake,
-    /// Keep screen on. Shown only while `keep_awake` is not `Off` (track note 16).
+    /// Keep screen on. Shown only while `keep_awake` is not `Off`.
     pub screen_on: bool,
     /// The system request is on now. False while stepped back, after a failed request and while nothing holds.
     pub requests_on: bool,
@@ -123,8 +118,8 @@ fn minutes_left(expires_wall_ms: i64, now: Now) -> u32 {
         .max(1)
 }
 
-/// Track note 16: stepped back shows Idle, with its reason in the tooltip; so does a hold whose request failed, since
-/// nothing holds the PC then (decision 0).
+/// Stepped back shows Idle, with its reason in the tooltip; so does a hold whose request failed, since nothing holds
+/// the PC then (decision 0).
 fn icon(snapshot: &Snapshot) -> IconState {
     let holds = !snapshot.holds.is_empty();
     if holds && snapshot.requests_on {
@@ -462,7 +457,7 @@ mod tests {
         assert_eq!(state, state_of(&snapshot, groups));
     }
 
-    /// Track note 16: stepped back shows Idle, and the tooltip gets the reason through `Status`.
+    /// Stepped back shows Idle, and the tooltip gets the reason through `Status`.
     #[test]
     fn stepped_back_gives_idle_and_still_names_the_holds() {
         let snapshot = Snapshot {
@@ -671,7 +666,7 @@ mod tests {
         assert_eq!(checked(submenu(&view)), []);
     }
 
-    /// Track note 16: Keep screen on works only with Keep awake, so it is greyed out and shows off without it.
+    /// Keep screen on works only with Keep awake, so it is greyed out and shows off without it.
     #[test]
     fn keep_screen_on_is_disabled_while_keep_awake_is_off() {
         let snapshot = Snapshot {

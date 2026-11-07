@@ -1,6 +1,4 @@
 //! The power settings Wakeshot may own, and the journal that says which ones it owns now.
-//!
-//! Owner: contracts card. Each type's own doc names the track that owns its meaning.
 
 use std::fmt;
 use std::str::FromStr;
@@ -12,9 +10,9 @@ use crate::process::FileTime;
 
 /// A power plan id. The core cannot use the `windows` crate's GUID, so it keeps the 128 bits itself.
 ///
-/// Owner: core track (Phase 2). The value is the GUID read as one hex number, the same as `windows::core::GUID`'s
-/// `from_u128` and `to_u128`, so the Windows layer converts without reordering bytes. Text form: lowercase
-/// `8-4-4-4-12` without braces, as in the journal; parsing also takes uppercase.
+/// The value is the GUID read as one hex number, the same as `windows::core::GUID`'s `from_u128` and `to_u128`, so
+/// the Windows layer converts without reordering bytes. Text form: lowercase `8-4-4-4-12` without braces, as in the
+/// journal; parsing also takes uppercase.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Guid(pub u128);
 
@@ -90,12 +88,11 @@ impl<'de> Deserialize<'de> for Guid {
 /// The only settings Wakeshot ever writes (decision 17). A write takes this type, so no other setting can be written
 /// by mistake.
 ///
-/// Owner: core track (Phase 2). Frozen in the journal as `"lidAc"`, `"lidDc"`, `"sleepDc"`, `"sleepAc"`,
-/// `"videoIdleAc"`, `"videoIdleDc"`: a later version may add keys, never rename these, or an older version could not
-/// restore them. A hold writes the first three ([`SettingKey::HOLD`]); the sleep after a closed-lid work end writes the
-/// sleep and screen timeouts ([`SettingKey::SHORT`], `p2-6-sleep-route`). An older version keeps the last three as
-/// keys it does not know and restores nothing of them, so a downgrade during the sleep route leaves them until a newer
-/// version runs.
+/// Frozen in the journal as `"lidAc"`, `"lidDc"`, `"sleepDc"`, `"sleepAc"`, `"videoIdleAc"`, `"videoIdleDc"`: a
+/// later version may add keys, never rename these, or an older version could not restore them. A hold writes the
+/// first three ([`SettingKey::HOLD`]); the sleep after a closed-lid work end writes the sleep and screen timeouts
+/// ([`SettingKey::SHORT`]). An older version keeps the last three as keys it does not know and restores nothing of
+/// them, so a downgrade during the sleep route leaves them until a newer version runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SettingKey {
@@ -133,13 +130,11 @@ impl SettingKey {
 }
 
 /// The sleep and screen timeouts the sleep route writes, in seconds: Windows' shortest choice in Settings, so a closed
-/// laptop sleeps about a minute after nothing holds it (product, work end; `p3-idle-sleep-check`).
+/// laptop sleeps about a minute after nothing holds it (product, work end).
 pub const SHORT_TIMEOUT_S: u32 = 60;
 
 /// One key on one plan, because a plan switch keeps the old plan's entries apart from the new one's.
-///
-/// Owner: power track (Phase 3) names it in `UserChanged`; the core track (Phase 2) marks it released. Also in
-/// `state.json`, so the CLI can say what is overridden.
+/// Also in `state.json`, so the CLI can say what is overridden.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct OwnedKey {
     pub plan: Guid,
@@ -148,8 +143,8 @@ pub struct OwnedKey {
 
 /// What the IO thread read from the active plan, so the core can tell the user's own values from targets.
 ///
-/// Owner: power track (Phase 3) reads it. The core may rely on every field coming from one read of the plan named
-/// in `active`; a failed read never arrives as values (`Event::Plan(Err)`).
+/// The core may rely on every field coming from one read of the plan named in `active`; a failed read never arrives
+/// as values (`Event::Plan(Err)`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PlanValues {
     pub active: Guid,
@@ -162,7 +157,7 @@ pub struct PlanValues {
 
 /// The process that owns the journal, so a restore runs only when that exact process is gone.
 ///
-/// Owner: power track (Phase 3). Frozen in `journal.json` as `{ "pid", "procStart", "session" }`.
+/// Frozen in `journal.json` as `{ "pid", "procStart", "session" }`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JournalOwner {
@@ -173,8 +168,8 @@ pub struct JournalOwner {
 
 /// One owned key: what it was before we wrote it, and what we wrote, so ownership is "live equals `written`".
 ///
-/// Owner: power track (Phase 3) writes it; the core track (Phase 2) keeps a mirror from `Done(Applied)` and
-/// `Done(Restored)`. `restored` means the original is written back and only the `PowerSetActiveScheme` is left.
+/// The core keeps a mirror from `Done(Applied)` and `Done(Restored)`. `restored` means the original is written back
+/// and only the `PowerSetActiveScheme` is left.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct JournalEntry {
     pub plan: Guid,
@@ -185,9 +180,7 @@ pub struct JournalEntry {
 }
 
 /// The journal as this version understands it: entries whose key it knows. The file form, which also keeps keys
-/// from a newer version, is [`crate::files::JournalFile`].
-///
-/// Owner: power track (Phase 3) loads it; the core gets it once in `Event::Started`.
+/// from a newer version, is [`crate::files::JournalFile`]. The core gets it once, in `Event::Started`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Journal {
     pub owner: JournalOwner,

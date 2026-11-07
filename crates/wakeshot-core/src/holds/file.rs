@@ -1,10 +1,8 @@
 //! Hold files: parsing them into `HoldFacts`, and the RFC 3339 form of `expires` (architecture section 6).
 //!
-//! Owner: sources track (`p4-hold-files`; fixes by `p4-live-claude`). The two signatures below are contract: the
-//! core's Keep awake (Phase 2) formats `expires` with `format_expires`, so the core writes no date code of its own.
-//!
-//! Pure: the watch thread reads the bytes and asks for the process lookup; this module only decides. The user doc
-//! for the format is `docs/hold-files.md`.
+//! Pure: the watch thread reads the bytes and asks for the process lookup; this module only decides. The core's Keep
+//! awake formats `expires` with `format_expires`, so the core writes no date code of its own. The user doc for the
+//! format is `docs/hold-files.md`.
 
 use crate::files::{self, HoldFile, Read};
 use crate::holds::{HoldFacts, HoldId, HoldKind};
@@ -70,14 +68,14 @@ pub fn parse(name: &str, bytes: &[u8]) -> Parsed {
         Read::Bad => return Parsed::Bad("not a hold file: JSON with version and pid"),
     };
     // Pid 0 is the System Idle Process and pid 4 the System process: neither writes a file and neither ends before
-    // Windows does, so such a hold could never end (review m7).
+    // Windows does, so such a hold could never end.
     if file.pid == 0 {
         return Parsed::Bad("pid 0 is not a process");
     }
     if file.pid == 4 {
         return Parsed::Bad("pid 4 is the System process");
     }
-    // Track note 10: a hold whose end cannot be read is no hold, rather than a hold with no end.
+    // A hold whose end cannot be read is no hold, rather than a hold with no end.
     let expires_wall_ms = match file.expires.as_deref().map(parse_expires) {
         None => None,
         Some(Some(wall_ms)) => Some(wall_ms),
@@ -185,7 +183,7 @@ pub fn hold_alive(file: &HoldFile, running: Lookup, written: FileTime) -> Alive 
 }
 
 /// A hold file's JSON text, in the form [`parse`] reads back. For Wakeshot's own writers (`wakeshot run`), so the
-/// format and the escaping of a free-text `reason` stay beside the parser. Added by `p4-cli-run`.
+/// format and the escaping of a free-text `reason` stay beside the parser.
 pub fn render(file: &HoldFile) -> String {
     // serde_json fails only for a map with non-string keys or a `Serialize` impl that errors; `HoldFile` has neither.
     serde_json::to_string(file).expect("a HoldFile always serializes")

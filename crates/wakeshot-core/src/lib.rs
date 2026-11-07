@@ -1,11 +1,6 @@
 //! Wakeshot's core: it takes `(Now, Event)` and returns commands. It has no OS code, so it builds and tests on any OS.
 //!
-//! The public types here are the contracts between the parallel tracks (`docs/plan.md`, Phases). Each type's doc
-//! names the track that owns it and what the other side may rely on. A change to one goes through a contract card and
-//! the orchestrator, never as a side edit in a track. Each module's doc names the card that owns the file in its
-//! `Owner:` line.
-//!
-//! Owner: contracts card.
+//! Its public types are what the Windows layer and the exes use. Each type's doc says what the other side may rely on.
 
 #![forbid(unsafe_code)]
 

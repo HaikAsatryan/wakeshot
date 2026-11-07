@@ -1,10 +1,6 @@
 //! Time as the core sees it. The core never reads a clock: each event comes with a `Now`, so tests can use any time.
-//!
-//! Owner: contracts card. Each type's own doc names the track that owns its meaning.
 
-/// Both clocks, read once per event, so every rule in one step sees the same time.
-///
-/// Owner: core track (Phase 2). The tray loop reads it through [`Clock`] before each event.
+/// Both clocks, read once per event through [`Clock`], so every rule in one step sees the same time.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Now {
     /// Milliseconds since 1970-01-01 UTC. For times a person reads as clock time, such as a Keep awake end.
@@ -16,8 +12,8 @@ pub struct Now {
 
 /// When the core next needs a `Tick`, on the clock that fits the rule (architecture section 3, "Clocks").
 ///
-/// Owner: core track (Phase 2). The tray loop may rely on this: it sets one timer to the nearer of this and the next
-/// safety tick, and a `Wall` deadline can come early or late after a clock change, so the core re-checks on `Tick`.
+/// The tray loop sets one timer to the nearer of this and the next safety tick. A `Wall` deadline can come early or
+/// late after a clock change, so the core re-checks on `Tick`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Deadline {
     Wall(i64),
@@ -26,8 +22,8 @@ pub enum Deadline {
 
 /// The one place the tray reads the time, so a fake clock can drive the loop in tests.
 ///
-/// Owner: core track (Phase 2) for the trait; the real clock is `wakeshot_windows::clock::SystemClock` (Phase 3).
-/// Callers may rely on `mono_ms` never going back; `wall_ms` may jump either way.
+/// The real clock is `wakeshot_windows::clock::SystemClock`. Callers may rely on `mono_ms` never going back;
+/// `wall_ms` may jump either way.
 pub trait Clock {
     fn now(&self) -> Now;
 }

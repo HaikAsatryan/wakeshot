@@ -1,7 +1,5 @@
-//! Updates from the ship track: `ApplyUpdate` only when nothing would be lost, `Quit` once it went through, and the
-//! notice after Velopack restarted the tray (decision 42; ship Question 3, Haik 2026-11-03).
-//!
-//! Owner: `p2-core-lid`.
+//! Updates: `ApplyUpdate` only when nothing would be lost, `Quit` once it went through, and the notice after Velopack
+//! restarted the tray (decision 42).
 
 use super::Core;
 use crate::command::{Command, Failure};

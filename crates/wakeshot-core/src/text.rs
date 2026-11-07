@@ -1,15 +1,11 @@
 //! Every user-facing string: menu, status line, tooltip pieces, notices (decision 1: English only, no translation
-//! layer).
-//!
-//! Owner: tray track (`p5-text`, then `p5-haik-check`) words them; the signatures are contract, because the core's
-//! `present` (Phase 2) calls them. Tests elsewhere build their expected words from these functions, never from
-//! literals, so a wording change breaks only `wording_snapshot` here.
+//! layer). Tests elsewhere build their expected words from these functions, never from literals, so a wording change
+//! breaks only `wording_snapshot` here.
 //!
 //! One group string serves three places (`present`): the tooltip, the menu's status line and `state.json`, which
 //! `wakeshot status` prints. So groups are plain text, and only [`status_line`], the one menu text built from them,
 //! doubles `&` (the Win32 prefix rule: `&&` shows one `&`). The tooltip has two lines, "Wakeshot" and the status
-//! line's words, as the Phase 0 tray spike showed them. No clock times: the core has no UTC offset (Phase 2 track
-//! note 14), so a time left reads "25 min left".
+//! line's words. No clock times: the core has no UTC offset, so a time left reads "25 min left".
 
 use crate::holds::HoldKind;
 use crate::settings::SettingKey;
@@ -21,10 +17,10 @@ pub const TOOLTIP_MAX_UTF16: usize = 127;
 /// `NOTIFYICONDATAW`: `szInfoTitle[64]` and `szInfo[256]`, each less the end mark, in UTF-16 units.
 const TITLE_MAX_UTF16: usize = 63;
 const BODY_MAX_UTF16: usize = 255;
-/// The Windows 11 banner shows four body lines under a one-line title and cuts the rest (`p5-notices` pictures). A
-/// Segoe UI wrap model calibrated on those pictures wraps about 150 units of these words to four lines, so the
-/// closed-lid report fits its list to that, well within the page's 200 characters of English. Units only stand in for
-/// width: a long name in capitals can still take a fifth line.
+/// The Windows 11 banner shows four body lines under a one-line title and cuts the rest (screen captures,
+/// 2026-11-04). A Segoe UI wrap model calibrated on those captures wraps about 150 units of these words to four lines,
+/// so the closed-lid report fits its list to that, well within the page's 200 characters of English. Units only stand
+/// in for width: a long name in capitals can still take a fifth line.
 const BODY_SHOWN_UTF16: usize = 150;
 
 const NAME_LINE: &str = "Wakeshot\n";
@@ -131,7 +127,7 @@ pub fn tooltip(status: &Status, groups: &[String]) -> String {
 }
 
 /// The tooltip of a dry-run tray: the mark goes on the name line, so a cut never takes it. `present` fitted the
-/// tooltip without the mark, so the end may go here (dry run only, `p2-present` Found outside scope 4).
+/// tooltip without the mark, so the end may go here (dry run only).
 pub fn dry_run(tooltip: &str) -> String {
     let rest = tooltip.strip_prefix(NAME_LINE).unwrap_or(tooltip);
     fit(format!("Wakeshot (dry run)\n{rest}"), TOOLTIP_MAX_UTF16)
@@ -193,9 +189,9 @@ pub fn notice(notice: &Notice) -> NoticeText {
                  not sleep at all. Click to see your old values in the log.",
             )
         },
-        // The fallback after the 1-minute timeouts did not sleep the PC (`p2-6-sleep-route`), or the plain hibernate
-        // where they cannot be written. The 1-minute timeouts, where written, stay until the lid opens or input.
-        // "Opening the lid" says the lid is closed; a longer body wraps past the four lines the banner shows.
+        // The fallback after the 1-minute timeouts did not sleep the PC, or the plain hibernate where they cannot be
+        // written. The 1-minute timeouts, where written, stay until the lid opens or input. "Opening the lid" says the
+        // lid is closed; a longer body wraps past the four lines the banner shows.
         Notice::HibernateFailed => warning(
             "The PC did not go to sleep",
             "It could not hibernate either. Windows should sleep it once nothing else keeps it awake. Opening the \
@@ -269,8 +265,7 @@ pub fn notice(notice: &Notice) -> NoticeText {
                 )
             }
         }
-        // Silent: it comes when nobody has used the PC for a while, and a sound for an absent user helps nobody
-        // (Phase 2 track note 11).
+        // Silent: it comes when nobody has used the PC for a while, and a sound for an absent user helps nobody.
         Notice::IdleLocked => NoticeText {
             silent: true,
             ..info(
@@ -582,11 +577,11 @@ mod tests {
         ]
     }
 
-    /// How much body the banner shows: Windows cuts it after four lines under a one-line title (`p5-notices` Part B
-    /// pictures). Measured for `p2-6-sleep-route-fixes`: a greedy wrap of Segoe UI text, its line width taken from the
-    /// widest line the pictures show whole and the narrowest they wrap, reproduces every wrap in them; each body here
-    /// at most this long wraps to four lines in it, also with a 6% narrower line. A count of units only stands in for
-    /// that width, and so is checked on the notices the screen run cut.
+    /// How much body the banner shows: Windows cuts it after four lines under a one-line title (screen captures,
+    /// 2026-11-04). A greedy wrap of Segoe UI text, its line width taken from the widest line the captures show whole
+    /// and the narrowest they wrap, reproduces every wrap in them; each body here at most this long wraps to four lines
+    /// in it, also with a 6% narrower line. A count of units only stands in for that width, and so is checked on the
+    /// notices the screen run cut.
     const BODY_SHOWN: usize = 150;
 
     #[test]
@@ -614,8 +609,8 @@ mod tests {
         }
     }
 
-    /// The same wrap model found two more five-line bodies (`p2-6-docs-pass` round 6): `HibernateFailed`, worded after
-    /// the screen run, and the report with many holds, whose list was fitted to 200 units.
+    /// The same wrap model found two more five-line bodies: `HibernateFailed`, worded after the screen run, and the
+    /// report with many holds, whose list was fitted to 200 units.
     #[test]
     fn hibernate_failed_and_the_closed_lid_report_fit_four_lines() {
         let reason = "Nightly backup of the photo library to the NAS in the garage";
@@ -769,7 +764,7 @@ mod tests {
             }
         }
         // A toggle row carries the command it sends, the opposite of what it shows, so its words must not depend on
-        // the bool (`p2-present` Found outside scope 3).
+        // the bool.
         assert_eq!(
             action(MenuCommand::Automatic(true)),
             action(MenuCommand::Automatic(false))
@@ -1014,8 +1009,7 @@ mod tests {
         }
     }
 
-    /// The exact words, so every wording change is a visible diff in review. Haik reads this list once
-    /// (`p5-haik-check`).
+    /// The exact words, so every wording change is a visible diff in review.
     #[test]
     fn wording_snapshot() {
         let holding = status(IconState::Holding);

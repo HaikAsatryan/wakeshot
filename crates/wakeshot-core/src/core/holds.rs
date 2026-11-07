@@ -1,7 +1,5 @@
 //! Agent sessions and hold files to the holds that count now, through `policy::sessions` and `policy::hold_files`,
 //! with the Keep awake length the menu checks.
-//!
-//! Owner: `p2-core-holds`, then `p2-core-settings`, then `p2-core-lid`.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -267,7 +265,8 @@ pub(super) fn keep_awake_check(state: &State, expires_wall_ms: Option<i64>, now:
     }
 }
 
-/// A session as its log lines name it: the agent's label and a short id (`short_id`). Never a prompt, a title or a path.
+/// A session as its log lines name it: the agent's label and a short id (`short_id`). Never a prompt, a title or a
+/// path.
 fn session_name(facts: &SessionFacts) -> String {
     format!("{} session {}", facts.label, short_id(&facts.key.id))
 }

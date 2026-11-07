@@ -1,6 +1,4 @@
 //! Process identity as plain data. The Windows layer checks it; the core only reads the answer.
-//!
-//! Owner: contracts card. Each type's own doc names the track that owns its meaning.
 
 use std::fmt;
 
@@ -9,9 +7,9 @@ use serde::{Deserialize, Serialize, Serializer};
 
 /// A process creation time as a Windows FILETIME (100 ns units since 1601-01-01 UTC).
 ///
-/// Owner: core track (Phase 2). Kept as the raw FILETIME so a pid plus this value compares exactly with what Windows
-/// and Claude's status files report; files store it as a decimal string (`"procStart"`), the form Claude uses, and a
-/// JSON number is rejected so a script that writes one finds out at once.
+/// Kept raw so a pid plus this value compares exactly with what Windows and Claude's status files report. Files store
+/// it as a decimal string (`"procStart"`), the form Claude uses; a JSON number is rejected so a script that writes one
+/// finds out at once.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FileTime(pub u64);
 
@@ -40,8 +38,8 @@ impl fmt::Display for FileTime {
 
 /// A pid with its creation time, so a reused pid never passes for the process it once was.
 ///
-/// Owner: power track (Phase 3), which checks it (`wakeshot_windows::process`). The core, the tray and the CLI may
-/// rely on pid plus start naming at most one process ever.
+/// `wakeshot_windows::process` checks it. The core, the tray and the CLI may rely on pid plus start naming at most one
+/// process ever.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ProcessRef {
     pub pid: u32,
@@ -50,8 +48,8 @@ pub struct ProcessRef {
 
 /// The answer of one liveness check (architecture section 5, "Liveness").
 ///
-/// Owner: power track (Phase 3) gives it; the core track (Phase 2) acts on it. `Unknown` means the check itself
-/// failed: the core keeps the last state and never deletes a file or starts a restore on it.
+/// `Unknown` means the check itself failed: the core keeps the last state and never deletes a file or starts a
+/// restore on it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Alive {
     Yes,
@@ -61,8 +59,8 @@ pub enum Alive {
 
 /// What runs under a pid now, for a hold file that gives only a pid (no start time).
 ///
-/// Owner: power track (Phase 3) answers it (`Liveness::start_of_pid` in `wakeshot_windows::process`); the sources
-/// track (Phase 4) reads it. `Unknown`: the lookup itself failed, so nothing may be deleted on it.
+/// `Liveness::start_of_pid` in `wakeshot_windows::process` answers it. `Unknown`: the lookup itself failed, so
+/// nothing may be deleted on it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Lookup {
     Running(FileTime),

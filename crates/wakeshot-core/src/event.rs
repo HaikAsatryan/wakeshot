@@ -1,6 +1,4 @@
 //! Everything the core reacts to (architecture section 3). Every event comes with a `Now`.
-//!
-//! Owner: contracts card. Each type's own doc names the track that owns its meaning.
 
 use crate::command::{Command, Failure, Outcome};
 use crate::files::Config;
@@ -12,8 +10,8 @@ use crate::view::MenuCommand;
 
 /// A change to this Windows session, from `WM_WTSSESSION_CHANGE` and `WM_QUERYENDSESSION` / `WM_ENDSESSION`.
 ///
-/// Owner: power track (Phase 3) posts it. `ConsoleLeft` and `ConsoleBack` are this session leaving and getting back
-/// the PC's own screen and keyboard (`WTS_CONSOLE_DISCONNECT`, `WTS_CONSOLE_CONNECT`); the core restores while away.
+/// `ConsoleLeft` and `ConsoleBack` are this session leaving and getting back the PC's own screen and keyboard
+/// (`WTS_CONSOLE_DISCONNECT`, `WTS_CONSOLE_CONNECT`); the core restores while away.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SessionChange {
     Locked,
@@ -27,17 +25,14 @@ pub enum SessionChange {
 
 /// One input to the core. Snapshots (`Sources`, `Holds`) are full, so a lost event is mended by the next one.
 ///
-/// Owner: core track (Phase 2) for the meaning; each producer owns its variants: power track (Phase 3) `Started`,
-/// `SettingsOwner`, `Lid`, `Power`, `Plan`, `ActivePlan`, `UserChanged`, `JournalCorrupt`, `InputIdle`,
-/// `Suspending`, `Resumed`, `Session` and most `Done`; sources track (Phase 4) `Sources`, `Holds`, `ConfigChanged`;
-/// tray track (Phase 5) `Menu`; ship track (Phase 6) `UpdateReady`, `Updated`; the loop `Tick`. The core may rely on:
+/// The core may rely on:
 ///
 /// - `Started` comes first and once. Its `config` wins over the one `Core::new` got. `journal`: the entries this
 ///   version knows, `None` when there are none. `journal_unread`: `journal.json` did not read at start (then
 ///   `journal` is `None`), so what it holds is not known and the core retries it as `Restore { why: Leftover }` on
-///   each tick, for two minutes, then sends `ResetLost`. `owner`: this tray holds the settings mutex. `on_console`: this session is on the PC's own screen.
-///   `tray`: this tray's own process, for `state.json` and the Keep awake hold. `first_run`: `config.json` was
-///   missing at start, so the core shows `Notice::FirstRun` and writes the config.
+///   each tick, for two minutes, then sends `ResetLost`. `owner`: this tray holds the settings mutex. `on_console`:
+///   this session is on the PC's own screen. `tray`: this tray's own process, for `state.json` and the Keep awake
+///   hold. `first_run`: `config.json` was missing at start, so the core shows `Notice::FirstRun` and writes the config.
 /// - A tray that starts while the session is locked gets `Session(Locked)` right after `Started`, before
 ///   `JournalCorrupt` and `Updated`: the only way the core learns of a lock that began before the tray.
 /// - `Sources` pairs each session with the adapter's liveness answer; the parser never checks liveness.
@@ -50,13 +45,12 @@ pub enum SessionChange {
 ///   `ResetLost { damaged: true }` (product "User settings safety" 7).
 /// - `Suspending`: `PBT_APMSUSPEND` from the suspend-resume callback, the only route that shows a Modern Standby sleep
 ///   (research, "Idle sleep with the lid closed"). The core counts it as a sleep at the next `Resumed`, or, when that
-///   post was lost, once the next `Tick` shows the wall clock moved past run time (`p2-6-sleep-route`).
+///   post was lost, once the next `Tick` shows the wall clock moved past run time.
 /// - `UpdateReady`: an update is downloaded, at most once per version per run.
 /// - `Updated`: Velopack restarted the tray after it installed `version`. At most once per run, at start, after
 ///   `Started` (and after `JournalCorrupt` when both come); the core answers with `Notify(Notice::Updated)`.
-/// - `HooksAdded`: the tray added Wakeshot's hook folder to `agent` (its label, such as "Cursor"; `p4-agent-hooks-install`
-///   posts it from `app/startup.rs`), once per folder it adds (`docs/agent-hooks.md`, "Adding"). The core answers each
-///   with `Notify(Notice::HooksAdded)`.
+/// - `HooksAdded`: the tray added Wakeshot's hook folder to `agent` (its label, such as "Cursor"), once per folder it
+///   adds (`docs/agent-hooks.md`, "Adding"). The core answers each with `Notify(Notice::HooksAdded)`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Event {
     Started {

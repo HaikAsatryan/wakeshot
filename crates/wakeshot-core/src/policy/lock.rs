@@ -3,9 +3,7 @@
 //! Windows locks by itself when the screen turns off for idle, also while a request is held (research, "Lock"). With
 //! the display request on the screen never turns off, so Wakeshot locks instead, once input idle passes the user's
 //! own sleep timeout for the current power source. The core calls [`sleep_timeout_ms`] and [`idle_lock`] at each
-//! `InputIdle`, and on a lock sends `Lock` and `Notify(IdleLocked)` (track note 11).
-//!
-//! Owner: `p2-policy-power`.
+//! `InputIdle`, and on a lock sends `Lock` and `Notify(IdleLocked)`.
 
 use crate::policy::lid::user_value;
 use crate::settings::{JournalEntry, PlanValues, SettingKey};
@@ -13,7 +11,7 @@ use crate::time::Deadline;
 
 /// The user's own sleep timeout for a power source in ms, or `None` when it is Never (0): then Windows would never
 /// sleep or lock for idle either. It is the journal's `original` while we own the key: a hold writes battery sleep
-/// Never, and the sleep route writes 1 minute on both sources (`p2-6-sleep-route`).
+/// Never, and the sleep route writes 1 minute on both sources.
 pub fn sleep_timeout_ms(plan: &PlanValues, ac: bool, journal: &[JournalEntry]) -> Option<u64> {
     let secs = if ac {
         user_value(journal, plan.active, SettingKey::SleepAc, plan.sleep_ac)
@@ -24,8 +22,6 @@ pub fn sleep_timeout_ms(plan: &PlanValues, ac: bool, journal: &[JournalEntry]) -
 }
 
 /// What the idle lock looks at, at one input idle reading.
-///
-/// Owner: core track (Phase 2).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IdleFacts {
     /// The display request is on. Without it the screen turns off and Windows locks by itself.
@@ -39,9 +35,8 @@ pub struct IdleFacts {
     pub now_mono_ms: u64,
 }
 
-/// The idle lock after one reading.
-///
-/// Owner: core track (Phase 2) keeps `locked_at_mono_ms` for the next reading and sets a deadline at `next_check`.
+/// The idle lock after one reading. The core keeps `locked_at_mono_ms` for the next reading and sets a deadline at
+/// `next_check`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IdleLock {
     /// Send `Lock` and `Notify(IdleLocked)` now.
