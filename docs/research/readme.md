@@ -1,8 +1,8 @@
 # What makes a README people read and act on
 
-Card `docs/tasks/p6-readme.md`, Round 5, 2026-11-06 (Yerevan time, UTC+4). Haik asked for a README that leads with
-what Wakeshot does and how easy it is to install, then everything else. This file holds the research and the outline
-it leads to. Marks as in `launch.md`: **verified** (read at the link on the date given), **reported** (a third party
+Research for the README, 2026-11-06 (Yerevan time, UTC+4): a README that leads with what Wakeshot does and how easy
+it is to install, then everything else. This file holds the sources, the rules they lead to and the facts behind the
+install lines. Marks as in `launch.md`: **verified** (read at the link on the date given), **reported** (a third party
 says so; not checked by us), **not verified**.
 
 ## Sources
@@ -60,29 +60,11 @@ Also looked at, less useful here: LocalSend, Monitorian, AltTab (a 7-line README
    the old table heavy: each rival is linked once, in the table head, and the cell sources live in `launch.md`.
 10. **A small comparison, low on the page.** No source above asks for one at the top; readers decide on "what" and
     "how", and a big table pushes install down. Five rows, after the reader knows what Wakeshot does.
-11. **The story is short and true, in the author's voice.** KeepingYouAwake's "Inspired by Caffeine" does it in
-    four sentences. Ours keeps Haik's words, with every claim about another tool checked (`docs/research.md`, "Story
+11. **The story is short and true, in the author's voice.** KeepingYouAwake's "Inspired by Caffeine" does it in four
+    sentences. Ours keeps the author's words, with every claim about another tool checked (`docs/research.md`, "Story
     checks").
 12. **License and how to help, at the end.** standard-readme puts license last; the 2017 survey says users weigh
     the license, so "MIT" also sits in the install line.
-
-## The outline it leads to
-
-1. Header: the lockup, light and dark.
-2. One sentence of what Wakeshot does; one line of what holds the PC awake (a list that grows); one line on the lid,
-   your settings coming back, and how light it is.
-3. The video (one marked spot until Haik uploads it).
-4. Install: the status note, the system line, `winget install HaikAsatryan.Wakeshot`, the Start menu step,
-   `Setup.exe` as the other way; one fold for what the install sets up and the SmartScreen warning.
-5. What keeps your PC awake: a table of today's sources, and what comes next.
-6. How it works: a night with Wakeshot, five steps.
-7. What you see: the icon loop, the three states, the menu and the tooltips.
-8. How it compares: five rows, three rivals, one line on the Claude desktop app's own setting, one line on where the
-   others lead.
-9. Why I built it, and what comes next (Haik's story).
-10. Details, folded: when each source holds, what it changes on your PC, lid and battery, the menu and notices,
-    commands, updates and privacy, limits, uninstall.
-11. Credits and license.
 
 ## Facts checked for the new install lines
 
@@ -94,11 +76,10 @@ Also looked at, less useful here: LocalSend, Monitorian, AltTab (a 7-line README
   page: "The default experience shows installer progress"; in manifest terms `silentWithProgress`), which the
   manifest maps to `--silent`; a silent `Setup.exe` does not start the app
   (`docs/research.md`, "Install end to end checks", "Nothing starts the tray": Velopack's `install.rs` and a test;
-  and "Integration checklist with Haik: preparation", "Release install, sizes and times"). The manifest's
-  `InstallationNotes` say so. **Verified** (manifest, docs, source and the earlier test); a real winget install
-  waits for Phase 8.
-- **The winget package and the first release do not exist yet.** `gh release list` empty on 2026-11-06 10:40;
-  `packaging/winget/README.md`, "Phase 8: the first submission". **Verified**.
+  and the release install check in the same file). The manifest's `InstallationNotes` say so. **Verified**
+  (manifest, docs, source and the earlier test); a real winget install: not tested yet.
+- **The winget package and the first release did not exist on 2026-11-06.** `gh release list` empty at 10:40; the
+  first winget submission is a hand step (`packaging/winget/README.md`). **Verified**.
 - **A `[!NOTE]` alert renders in a repo README.** Ice's README, rendered as GitHub shows it
   (`gh api repos/jordanbaird/Ice/readme -H "Accept: application/vnd.github.html"`), holds `markdown-alert-note`; our
   README through `gh api markdown` in `gfm` mode does too (the `markdown` mode drops it). **Verified** 2026-11-06.

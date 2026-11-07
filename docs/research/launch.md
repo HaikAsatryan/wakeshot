@@ -1,6 +1,6 @@
 # Launch research: rivals, winget, Microsoft Store, media
 
-Card `docs/tasks/p6-launch-research.md`, 2026-11-04. Facts for the README, winget, Store and media cards. Marks:
+Research for the launch, 2026-11-04: facts for the README, winget, the Microsoft Store and the media. Marks:
 **verified** (read in source, docs, an API answer or a release file list at the link given, on the date given),
 **reported** (a third party says so; not checked by us), **not verified** (a guess or still open; says what would settle
 it). Times are Yerevan time (UTC+4). Nothing was installed or run; release sizes come from the GitHub and NuGet APIs.
@@ -26,7 +26,7 @@ claude, keep awake codex, lid closed, ai agents awake windows, lid windows agent
 | `stanley-projects/Insomnia` | agent aware | 7 | 2026-03-24 | 2026-09-07 | v1.4.3, 2026-05-28 | Electron |
 | `yansslo/nosleep`, `peterintech/nosleepp`, `KujalaLucien/vibe-coding-always-on` | agent aware | 4, 3, 3 | 2026 | 2026 | | CLIs or small trays, left out |
 
-All verified (gh, 2026-11-04). Stars move daily; `p6-readme` reads them again on the day it writes the table.
+All verified (gh, 2026-11-04). Stars move daily; the README's table is read again on the day it is written.
 
 ### Pick: three rivals
 
@@ -37,9 +37,9 @@ All verified (gh, 2026-11-04). Stars move daily; `p6-readme` reads them again on
    Wakeshot's own pitch ("awake only while your agents are working", lid closed, settings put back). LidKeeper has the
    same 10 stars but no release and no tray; it is a script.
 
-Rule for `p6-readme`: PowerToys Awake plus the two most-starred agent-aware tools
-that run on Windows and ship a release, read on the day the README is written; on a tie, the one with the newer
-release. Decided by the worker, for Haik's review.
+Rule for the README: PowerToys Awake plus the two most-starred agent-aware tools that run on Windows and ship a
+release, read on the day the README is written; on a tie, the one with the newer release. Round 2 below replaced
+this pick.
 
 ### Facts per rival
 
@@ -122,14 +122,14 @@ Each line is verified at the link on 2026-11-04 unless marked.
 
 ### Wakeshot's row
 
-From `docs/product.md` and `docs/architecture.md` (decisions, not yet measured on the shipped app):
+From `docs/product.md` and `docs/architecture.md` as of 2026-11-04 (decisions, not yet measured on the shipped app):
 
 - Stack: Rust with `windows-rs`, no runtime; native x64 and ARM64; Windows 11 only (product.md, "Platform and
   stack").
-- Size: **not measured (p6-media measures them)** (orchestrator, 2026-11-04 00:41: the release build was skipped
-  here). An early hint only: a Velopack `Setup.exe` was 10.6 MB (x64) and 8.6 MB (ARM64) around a small test build,
-  most of it Velopack's own `Update.exe` (`docs/research.md`, "Velopack checks for Wakeshot", point 9). So Wakeshot's
-  download will likely be larger than Agents Don't Sleep's 1.9 MB setup and far smaller than PowerToys.
+- Size: **not measured here** (the release build was skipped; measured later for the README). An early hint only: a
+  Velopack `Setup.exe` was 10.6 MB (x64) and 8.6 MB (ARM64) around a small test build, most of it Velopack's own
+  `Update.exe` (`docs/research.md`, "Velopack checks for Wakeshot", point 9). So Wakeshot's download will likely be
+  larger than Agents Don't Sleep's 1.9 MB setup and far smaller than PowerToys.
 - Agents: Claude Code in v1, from its status files and transcripts, with no hooks and no edits to Claude's settings;
   `wakeshot run -- <command>`; hold files any script can write; Keep awake from the menu or CLI (product.md, "What
   keeps the PC awake").
@@ -140,10 +140,10 @@ From `docs/product.md` and `docs/architecture.md` (decisions, not yet measured o
 - Battery: steps back at Windows' energy saver level (20% when that is Never or Always) and puts a closed laptop to
   sleep after 5 minutes with no input (hibernate only as the fallback; changed 2026-11-04, product.md). Locks at lid close while holding. No heat guard (product.md, "Power behavior").
 - Updates: automatic from GitHub Releases, applied only while nothing holds; the network is two GitHub API calls a day;
-  no telemetry (product.md, "Distribution", "UX"; `phases/06-ship.md`, "Updates").
+  no telemetry (product.md, "Distribution", "UX").
 - Install: per user, no admin (Velopack). MIT, free.
 
-### Speed numbers: how `p6-media` measures each
+### Speed numbers: how each is measured
 
 All on the installed release build, x64, on the test laptop, with the build version and date written next to each
 number. ARM64: "not measured" unless a device is at hand.
@@ -160,27 +160,6 @@ number. ARM64: "not measured" unless a device is at hand.
 The rivals publish almost none of these. The README may set Wakeshot's numbers next to the PowerToys PR's 14.3 MB
 private memory only with the note that it was a different harness.
 
-### Draft table for `p6-readme`
-
-`p6-readme` sets the final words; every rival cell keeps its link and the date read.
-
-| | Wakeshot | PowerToys Awake | LidGuard | Agents Don't Sleep |
-|---|---|---|---|---|
-| Stars (2026-11-04) | new | 140,491, for all of PowerToys | 13 | 10 |
-| Built with | Rust, no runtime | C# .NET 10, part of PowerToys | C# .NET 10 NativeAOT, a .NET tool | Rust and Tauri (web UI in WebView2) |
-| Download (x64) | from `p6-media` | 323.9 MB (all of PowerToys) | 25.3 MB, needs the .NET SDK | 1.9 MB |
-| ARM64 build | yes | yes | yes | no |
-| Idle RAM and CPU | from `p6-media` | not published (14.3 MB private memory in a test harness) | not published | not published |
-| Knows when an agent works | Claude Code; any command with `wakeshot run` | no (timer or a process id) | Codex, Claude Code, Copilot CLI, OpenCode (tested: Codex) | 8 agents (tested: Claude Code) |
-| Changes your agent's config | no | no | yes, adds hooks | yes, adds hooks |
-| Keeps working with the lid closed | yes | no | yes | yes |
-| Puts your power settings back | yes, after each hold, at quit and after a crash | changes none | yes, after a crash only at its next run | yes, also after a crash |
-| Battery floor | Windows' energy saver level | no | no | 15% by default |
-| Locks a closed laptop | yes | no | no | yes, by default |
-| Updates itself | yes, only while nothing holds | update checker | no | no |
-| Install | per user, no admin | per user or machine | per user | per user, no admin |
-| License, price | MIT, free | MIT, free | MIT, free | MIT, free |
-
 ### What this means for Wakeshot
 
 - The agent-aware field on Windows is tiny (10 to 13 stars) and young. The comparison readers care about is
@@ -195,9 +174,9 @@ private memory only with the note that it was a different harness.
 - Agents Don't Sleep is the rival to watch: same pitch, cross-platform, battery floor and lock. Its README is a good
   model (see part 4).
 
-### Round 2: popular tools only (2026-11-04, `p6-readme` round 2)
+### Round 2: popular tools only (2026-11-04)
 
-Haik (2026-11-04): compare only with the 2 or 3 most popular keep-awake options, agent aware or not, on features.
+The README compares only with the 2 or 3 most popular keep-awake options, agent aware or not, on features.
 This note replaces the pick above for the README; the results above stay as they were read. Read 11:36 to 11:50.
 
 What was checked:
@@ -211,15 +190,15 @@ What was checked:
   (362,859, 38,244, 20,307, 26,163), most likely cached; the README cites the pages. Verified. These count installs
   and upgrades through Chocolatey only, not users.
 - Not checked: Microsoft Store rating counts. winget publishes no counts.
-- "Insomnia" (Haik's word): two Windows tools carry the name. David Anson's Insomnia (2009 and 2010, Microsoft's blog
-  archive, a .NET 3.5 tray app on `SetThreadExecutionState`, no user count found) and `stanley-projects/Insomnia`
-  (7 stars, agent aware, Electron). Neither is popular by any count found. Most likely Haik meant a plain keep awake
-  in general; not verified.
+- "Insomnia" (a name raised for the comparison): two Windows tools carry the name. David Anson's Insomnia (2009 and
+  2010, Microsoft's blog archive, a .NET 3.5 tray app on `SetThreadExecutionState`, no user count found) and
+  `stanley-projects/Insomnia` (7 stars, agent aware, Electron). Neither is popular by any count found. Most likely a
+  plain keep awake in general was meant; not verified.
 
 Pick: PowerToys Awake (stars); Caffeine by Zhorn Software (the most Chocolatey downloads of any keep-awake tool
 found); Don't Sleep by SoftwareOK (the next, both packages together). Out: Mouse Jiggler (fewer downloads than
 either, and it fakes mouse moves, the other class named in "Candidates"); LidGuard and Agents Don't Sleep, by
-Haik's rule. Decided by the worker, for Haik's review.
+the popularity rule above.
 
 Facts per tool, each verified in the raw page text (`curl`) on 2026-11-04 unless marked:
 
@@ -306,7 +285,7 @@ The table built from this: `README.md`, "How it compares".
 Read in the 1.28.0 schema docs (`microsoft/winget-pkgs/doc/manifest/schema/1.28.0/installer.md`, the newest folder
 there) and the client's `latest` schema, which is `manifest.installer.1.31.0` (`microsoft/winget-cli`,
 `schemas/JSON/manifests/latest/`). The current PowerToys manifest uses `ManifestVersion: 1.12.0`. Which version
-winget-pkgs validation accepts today: `p6-winget-manifest` checks it. All read 2026-11-04.
+winget-pkgs validation accepts today: not checked here. All read 2026-11-04.
 
 | Field | What the docs say | Use for Wakeshot |
 |---|---|---|
@@ -323,7 +302,7 @@ A catch in the client: `RequireExplicitUpgrade` is stored when winget itself ins
 `UpdateFlow.cpp` says it has "the downside of not working with packages installed from another source". So a user who
 installed `Setup.exe` from GitHub and later runs `winget upgrade --all` gets Wakeshot upgraded by winget. Verified in
 source; not tested. Whether the mark survives a Velopack self-update that changes `DisplayVersion`: not verified
-(Phase 8, with a local manifest).
+(a test with a local manifest settles it).
 
 ### Setup.exe while Velopack updates, or while the app runs
 
@@ -348,8 +327,9 @@ Read in Velopack at tag `1.2.161` (the pinned version), 2026-11-04:
   (point 1 in the same research section; not tested), and a Setup that cannot kill an elevated `Update.exe` stops with
   "StopApplicationFailed" (`install.rs`; Wakeshot never runs elevated in normal use). Not tested.
 - Power settings stay safe in every order: Setup runs no uninstall or obsolete hook, only the install hook, and that
-  restores when the journal's owner is gone (`phases/06-ship.md`, "Hooks").
-- Two Setups at once (two winget runs, or winget and a Store install): not verified. What settles it: a Phase 8 test.
+  restores when the journal's owner is gone.
+- Two Setups at once (two winget runs, or winget and a Store install): not verified. What settles it: a test of
+  exactly that.
 
 ### Lag from our release to winget, and opening the PR from CI
 
@@ -367,7 +347,7 @@ Read in Velopack at tag `1.2.161` (the pinned version), 2026-11-04:
 - `wingetcreate submit --prtitle <title> --token <token> <PathToManifest>` submits a manifest folder we wrote
   ourselves (`doc/submit.md`). Verified (docs).
 
-### Rules for `p6-winget-manifest` and `release.yml`
+### Rules for the winget manifest and `release.yml`
 
 One updater at a time: Velopack updates Wakeshot; winget installs it and upgrades it only when the user names it.
 
@@ -386,7 +366,7 @@ One updater at a time: Velopack updates Wakeshot; winget installs it and upgrade
 7. The winget step runs as its own job after the GitHub release is published (assets are public only then), with
    `wingetcreate submit` on the folder `fill.ps1` wrote, so every field is ours. The token is a secret used only by
    that job. Runner-up: winget-releaser (Komac); change to it when keeping `fill.ps1` costs more than it saves.
-8. The first submission (a new package) stays a Phase 8 hand step; CI opens PRs only for later versions.
+8. The first submission (a new package) is a hand step; CI opens PRs only for later versions.
 9. README: winget users get updates from Wakeshot itself; `winget upgrade --all` skips Wakeshot; `winget upgrade
    HaikAsatryan.Wakeshot` works but ends a running `wakeshot run` wrapper and leaves Wakeshot off until the next
    sign-in (already decided). Users who installed from GitHub and want `--all` to skip it can run `winget pin add
@@ -404,9 +384,9 @@ One updater at a time: Velopack updates Wakeshot; winget installs it and upgrade
 
 ## 3. Microsoft Store
 
-Read 2026-11-04 by a research helper of this card (its notes were temporary; the quotes that matter are below); the
-four facts the answer turns on were read again by the worker the same day: the account fee, policy 10.2.9, the
-Artifact Signing countries and winget-cli #4347. One read-only command ran on this PC: `winget show --id XP89DCGQ3K6VLD
+Read 2026-11-04 by a research helper (its notes were temporary; the quotes that matter are below); the four facts
+the answer turns on were read again the same day: the account fee, policy 10.2.9, the Artifact Signing countries
+and winget-cli #4347. One read-only command ran on the test laptop: `winget show --id XP89DCGQ3K6VLD
 -s msstore` (the Store's PowerToys listing; nothing installed).
 
 ### Two paths for a Win32 app
@@ -419,7 +399,7 @@ Artifact Signing countries and winget-cli #4347. One read-only command ran on th
   certificate that chains up to a certificate issued by a Certificate Authority (CA) that is part of the Microsoft
   Trusted Root Program"; "You must submit a versioned download URL ... The binary associated with that URL must not
   change after submission"; "silent install is required, however a User Account Control (UAC) dialog is allowed"; "a
-  standalone installer and is not a downloader stub/web installer". Verified (worker read).
+  standalone installer and is not a downloader stub/web installer". Verified (read again).
   - The Store runs our installer with our switch: "The Store will need to run your installer in silent mode ... you
     need to provide the required switches"
     (https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msi/upload-app-packages). And it keeps
@@ -439,7 +419,7 @@ Artifact Signing countries and winget-cli #4347. One read-only command ran on th
     verified for a Store install; settles with one test install from a hidden ("available through link") listing.
   - Changing settings (10.2.8): "You are required to use supported methods and must obtain user consent to change any
     user's Windows settings". Power writes through the documented `PowerWrite*` API are a supported method; consent is
-    the user turning on Automatic or Keep awake (worker's reading, not checked with Microsoft).
+    the user turning on Automatic or Keep awake (our reading, not checked with Microsoft).
   - x64 and ARM64 can sit in one listing (one package entry per CPU). A GitHub Releases URL redirects to
     `release-assets.githubusercontent.com`; whether the Store accepts that as a "direct link": not verified (settles
     at the first package validation).
@@ -452,7 +432,7 @@ Artifact Signing countries and winget-cli #4347. One read-only command ran on th
   entries would have to become a StartupTask and an AppExecutionAlias, and Velopack would be gone. Verified (docs);
   that no uninstall hook exists is the absence of one in the docs, not a sentence that says so.
 
-### Haik's three conditions
+### Three conditions for the Store
 
 | Condition | EXE path | MSIX path |
 |---|---|---|
@@ -473,10 +453,11 @@ Artifact Signing countries and winget-cli #4347. One read-only command ran on th
   2024-04-04). Verified. Related open: #5345, #6435.
 - Because each Store version waits up to three business days for certification, the Store copy will often be older
   than the GitHub release and the winget manifest. So a Store listing could make `winget upgrade` move a Wakeshot
-  user to an older build, which Velopack then updates again: two updaters fighting, the thing Haik wants to avoid.
+  user to an older build, which Velopack then updates again: two updaters fighting, which the one-updater rule
+  avoids.
   Inferred from #4347; not tested.
-- The wait Haik saw: "Waiting for another install/uninstall to complete..." is winget's own lock, a named mutex
-  `WinGetCrossProcessInstallLock`, "to prevent multiple winget related processes from attempting to install (or
+- The wait seen on the test laptop: "Waiting for another install/uninstall to complete..." is winget's own lock, a named
+  mutex `WinGetCrossProcessInstallLock`, "to prevent multiple winget related processes from attempting to install (or
   uninstall) at the same time"; MSIX installs skip it ("MSIX installs are safe to run in parallel"), EXE installs take
   it (winget-cli source, read by the helper). So when the Store app and `winget upgrade --all` both install through
   winget's code, one waits for the other; it is not MSI's `_MSIExecute` mutex. That the Store's own Win32 installs go
@@ -488,7 +469,7 @@ Artifact Signing countries and winget-cli #4347. One read-only command ran on th
   Logos: 1:1 box art required (1080 x 1080 or 2160 x 2160), 2:3 poster recommended (720 x 1080 or 1440 x 2160).
   Sizes from the MSIX listing page
   (https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/screenshots-and-images); the MSI/EXE
-  page gives none. Read by the helper; not read again by the worker.
+  page gives none. Read by the helper; not read again.
 - Trailer: MP4 or MOV, 1920 x 1080, "60 seconds or less" recommended, with a 1920 x 1080 PNG thumbnail; the MSI/EXE
   docs and API say nothing of trailers, so whether an EXE listing can show one is not verified.
 - Text: description up to 10,000 characters (required); short description 1,000 (first 270 shown in some views);
@@ -503,36 +484,35 @@ Artifact Signing countries and winget-cli #4347. One read-only command ran on th
 **No Store at launch. Revisit once a free signing certificate is in hand (SignPath Foundation after Wakeshot has
 users), then on the EXE path only, never MSIX.** Reasons, in order:
 
-1. Signing is not free for Haik today, and an unsigned EXE is never accepted (10.2.9). This fails his first condition
-   outright.
+1. Signing is not free today, and an unsigned EXE is never accepted (10.2.9). This fails the "Signing free"
+   condition outright.
 2. MSIX would be free and automated but fails "uninstall must still restore", and would also drop Velopack and change
    how Wakeshot starts at login and puts itself on the Path.
 3. Even when signing is free, a Store EXE listing adds a second, slower copy of every version that winget can match
    (#4347). Before going in, a test must show that `winget upgrade --all` on a PC with both entries keeps the newest
    build.
 
-If Haik wants the Store sooner, the cheapest real path is a Certum Open Source certificate (about EUR 25 to 69 a year,
-not verified at checkout; Store acceptance not verified): it would also sign the GitHub release, though SmartScreen
-reputation for a new certificate still has to build up (not verified how fast). That is money, so it is his call.
-Haik's answer (2026-11-04 01:14): no; free paths only for signing and distribution. So the Store waits for SignPath
-Foundation.
+The cheapest real path to the Store sooner is a Certum Open Source certificate (about EUR 25 to 69 a year, not
+verified at checkout; Store acceptance not verified): it would also sign the GitHub release, though SmartScreen
+reputation for a new certificate still has to build up (not verified how fast). It costs money, and Wakeshot takes
+free paths only for signing and distribution (`product.md`). So the Store waits for SignPath Foundation.
 
 ### What this means for Wakeshot
 
-- `p8-store` stays blocked, with the reason "signing is not free yet"; it re-opens when SignPath Foundation approves
-  Wakeshot (no paid certificate: Haik, 2026-11-04 01:14).
-- When it re-opens: EXE path; the hidden-listing test of uninstall during a hold; the two-source winget test; the
-  first submission by hand (Haik: account, ID check, age rating); then the release workflow sets the package URLs
-  and submits with the four secrets.
+- The Store waits, because signing is not free yet; it opens when SignPath Foundation approves Wakeshot (no paid
+  certificate).
+- Then: the EXE path; the hidden-listing test of uninstall during a hold; the two-source winget test; the first
+  submission by hand (the account, ID check and age rating need the author); then the release workflow sets the
+  package URLs and submits with the four secrets.
 - Nothing in v1 needs to change for the Store later: the EXE path takes the same `Setup.exe`, as long as it and
   `Update.exe` and both exes are signed.
 
 ## 4. Pictures, animation and video
 
-Read 2026-11-04 by a research helper of this card (its notes were temporary; the quotes that matter are below). GitHub docs
-were read from `github/docs` through `gh api`; "observed" means seen in GitHub's REST-rendered README HTML or in HTTP
-headers, not in a browser. The worker read again the Remotion license, the attachment limits and `gh issue comment
---attach` the same day.
+Read 2026-11-04 by a research helper (its notes were temporary; the quotes that matter are below). GitHub docs were
+read from `github/docs` through `gh api`; "observed" means seen in GitHub's REST-rendered README HTML or in HTTP
+headers, not in a browser. The Remotion license, the attachment limits and `gh issue comment --attach` were read
+again the same day.
 
 ### What the rivals and well-liked tools show
 
@@ -555,10 +535,10 @@ headers, not in a browser. The worker read again the Remotion license, the attac
   on a free GitHub plan", "100MB for videos ... on a paid GitHub plan"; video formats `.mp4`, `.mov`, `.webm`; "we
   recommend using H.264 for greatest compatibility"
   (https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files). Verified
-  (worker read).
+  (read again).
 - The upload can be scripted: `gh issue comment <n> --attach <file>` uploads and writes the URL into the comment
-  (gh 2.103.3 on this laptop has it; "You need push access to the repository", GitHub CLI docs). Verified (worker ran
-  `gh issue comment --help`). Removing the link "does not necessarily delete the uploaded file"; whether deleting the
+  (gh 2.103.3 on the test laptop has it; "You need push access to the repository", GitHub CLI docs). Verified
+  (`gh issue comment --help`). Removing the link "does not necessarily delete the uploaded file"; whether deleting the
   comment breaks the URL: not verified, so the comment stays as the video's home.
 - A video plays inline only as an uploaded attachment: the bare URL line renders as `<video ... controls muted>`; no
   autoplay, no loop (GitHub strips both); sound plays when the viewer unmutes. An MP4 or WebM kept in the repo does
@@ -582,58 +562,52 @@ headers, not in a browser. The worker read again the Remotion license, the attac
 | State (2026-11-04) | v4.0.540, 2026-11-02; since 2020 | v0.9.9, 2026-11-03; created 2026-03-10 | last release 2024-12-14, dormant | last push 2026-07-15 | v0.22.1, 2026-10-27 |
 | Headless CLI render | yes, `npx remotion render`, `npx remotion still` | yes, `npx hyperframes render` | no (editor button only; issue #415 open since 2023) | yes, `renderVideo()` | yes |
 | MP4 with audio, GIF | yes; GIF without audio | yes | yes, from the editor | yes | yes |
-| Windows | "Windows (x64)"; FFmpeg bundled | yes; needs a system FFmpeg (not on this laptop) | yes | yes | yes |
+| Windows | "Windows (x64)"; FFmpeg bundled | yes; needs a system FFmpeg (not on the test laptop) | yes | yes | yes |
 | For an agent | official agent skills (`remotion-dev/skills`), `llms.txt` | built for agents, Claude Code plugin | | | built for math animation |
 | Telemetry | not checked | on by default | not checked | on by default | not checked |
 
-All from the helper's reads with links in its notes; the Remotion license lines verified by the worker
-(`LICENSE.md` in `remotion-dev/remotion`). Node v26.13.0 is on this laptop; `ffmpeg` is not on the PATH (worker
-check, 2026-11-04 01:07).
+All from the helper's reads with links in its notes; the Remotion license lines read again (`LICENSE.md` in
+`remotion-dev/remotion`). Node v26.13.0 is on the test laptop; `ffmpeg` is not on the PATH (checked 2026-11-04
+01:07).
 
 **Pick: Remotion.** Mature, one command for the MP4 with sound, the GIF loop and the stills, FFmpeg bundled, official
-agent skills, and free for Haik as an individual. The cost: it is not open source, so someone at a company of 4 or
-more who wants to rebuild the video needs a Company License; Remotion 5.0 plans "an organization or team of
-individuals with up to 3 people" (PR #3750, open), which still covers Haik. The video's code lives in `media/` and is
-not part of the MIT app. **Runner-up: HyperFrames** (Apache-2.0, plain HTML). Change to it when the media must be
-rebuildable by anyone with no license question, or when it ships a stable 1.0 and keeps it for a few months.
-Decided by the worker, for Haik's review.
+agent skills, and free for the author as an individual. The cost: it is not open source, so someone at a company of 4 or
+more who wants to rebuild the video needs a Company License; Remotion 5.0 plans "an organization or team of individuals
+with up to 3 people" (PR #3750, open), which still covers the author. The video's code lives in `media/` and is not part
+of the MIT app. **Runner-up: HyperFrames** (Apache-2.0, plain HTML). Change to it when the media must be rebuildable by
+anyone with no license question, or when it ships a stable 1.0 and keeps it for a few months.
 
 ### Sound
 
 | Source | License | Credit | Catch |
 |---|---|---|---|
-| Wakeshot's own chimes (`p5-sounds`, made in code) | MIT, ours | none | none |
+| Wakeshot's own chimes (made in code) | MIT, ours | none | none |
 | Kenney audio packs (Interface Sounds, UI Audio, Impact Sounds, Music Jingles) | CC0 ("Attribution is not required") | none | "Do not use our logo." No full music tracks |
 | Freesound | per sound: CC0, CC BY 4.0, CC BY-NC 4.0 | CC0 none; BY needs `"sound" by user ( url ) licensed under ...` | use CC0 only |
 | Pixabay | Pixabay Content License | none | "You cannot sell or distribute the Content ... on a Standalone basis": a raw track in a public repo likely breaks that (helper's reading, not legal advice); YouTube Content ID claims possible |
 | YouTube Audio Library | YouTube terms | artist credit for CC tracks | terms outside YouTube not verified; avoid |
 | Sonniss GDC bundle | own license | none | may not be redistributed "as sound effects": raw files cannot go in the repo |
 
-**Pick:** Wakeshot's own chimes for the lid beat, Kenney CC0 sounds for clicks and the rise and fall, and one CC0 music
-loop from Freesound for the bed, all committed under `media/` with their source URLs in `media/CREDITS.md` (credit is
-not required for CC0; we list it anyway). Fallback for the bed: a soft pad made in code. Decided by the worker, for
-Haik's review.
-
-Built differently (2026-11-05, `p6-media` Part C): every effect is made in code, so no Kenney file is used, and the
-music is "Funky Disco Beats to Boogie/Woogie to" by Fupi (CC0, from OpenGameArt; Freesound needs a login to download),
-Haik's pick of 2026-11-06 from four options; it replaced his first pick, "A Chill Fever (Loopable)" by Pro Sensory
-(CC0). Sources and licences: `media/CREDITS.md`; how it is fitted: `promo-video.md`.
+**As built** (2026-11-05): every effect is made in code, so no Kenney file is used, and the music is "Funky Disco Beats
+to Boogie/Woogie to" by Fupi (CC0, from OpenGameArt; Freesound needs a login to download), picked on 2026-11-06 from
+four options; it replaced a first pick, "A Chill Fever (Loopable)" by Pro Sensory (CC0). Credit is not required for CC0;
+`media/CREDITS.md` lists it anyway. Sources and licences: `media/CREDITS.md`; how it is fitted: `promo-video.md`.
 
 ### Specs
 
 | Output | Spec |
 |---|---|
-| README video | MP4, H.264 with AAC audio, 1920 x 1080, 30 fps, 30 s (plus or minus 2 s), under 10 MB (free-plan attachment limit; flat graphics compress well, else 1280 x 720). Uploaded with `gh issue comment <n> --attach` on a pinned "Media" issue; the README holds the bare URL on its own line. Plays muted with controls |
+| README video | MP4, H.264 with AAC audio, 1920 x 1080, 30 fps, 30 s planned (the cut runs 38 s, `promo-video.md`), under 10 MB (free-plan attachment limit; flat graphics compress well, else 1280 x 720). Uploaded with `gh issue comment <n> --attach` on a pinned "Media" issue; the README holds the bare URL on its own line. Plays muted with controls |
 | README icon loop | GIF in the repo, about 4 to 6 s, light and dark versions in `<picture>`, under 1 MB (no documented cap for repo images; small keeps the top fast) |
 | README stills | PNG, light and dark in `<picture>` |
-| Pages | the same MP4 committed in `site/` with `<video autoplay muted loop playsinline>` and a poster PNG; the loop GIF; no other host (`p6-pages` rule) |
+| Pages | the same MP4 committed in `site/` with `<video autoplay muted loop playsinline>` and a poster PNG; the loop GIF; no other host |
 | Store (later) | screenshots PNG 1366 x 768 to 3840 x 2160, 1 to 10; box art 1080 x 1080 or 2160 x 2160; trailer MP4 1920 x 1080 with a 1920 x 1080 PNG thumbnail, 60 s or less (part 3) |
 
 ### Capturing the real tray area by script
 
-- Stills: the spike's `BitBlt` with `CAPTUREBLT` (`spikes/tray/src/capture.rs`, per-monitor v2 aware through its
-  manifest) is enough for the icon and the menu. Gaps: the tooltip is Explorer's window, so the spike's menu-window
-  search does not find it (capture a screen rect instead); pixels inside the menu's rect but outside its round corners
+- Stills: `BitBlt` with `CAPTUREBLT` (as in a throwaway tray test program, not kept; per-monitor v2 aware through its
+  manifest) is enough for the icon and the menu. Gaps: the tooltip is Explorer's window, so a menu-window search does
+  not find it (capture a screen rect instead); pixels inside the menu's rect but outside its round corners
   show what is behind (use a plain wallpaper or mask); no cursor. pwsh 7 runs DPI-unaware here and sees the 1920 x 1200
   screen as 1536 x 960, so `CopyFromScreen` needs `SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2)` first. Helper
   read; not run.
@@ -644,10 +618,10 @@ Haik's pick of 2026-11-06 from four options; it replaced his first pick, "A Chil
 - Scale: no documented API changes the display scale at run time (only community code with an undocumented
   `DisplayConfigSetDeviceInfo` type). The test laptop already has two real scales: the DELL screen at 150 % (it holds
   the tray when docked) and the laptop screen at 125 %. **Decision: capture at 150 % and 125 %, the two real scales;
-  100 % only if Haik switches a screen to 100 % in Settings by hand.** Decided by the worker, for Haik's review.
+  100 % only if a screen is switched to 100 % in Settings by hand.**
 - Light and dark: Microsoft documents only reading the mode; writing `SystemUsesLightTheme` and broadcasting
   `ImmersiveColorSet` is community practice. The repo has already switched the mode through Settings with UI
-  Automation (`docs/research.md`, "Tray, menu and notifications"), so `p6-media` reuses that.
+  Automation (`docs/research.md`, "Tray, menu and notifications"), so the media capture reuses that.
 
 ### What this means for Wakeshot
 
@@ -662,6 +636,6 @@ Haik's pick of 2026-11-06 from four options; it replaced his first pick, "A Chil
 
 ### Storyboard and shot list
 
-Moved on 2026-11-05 to `docs/research/promo-video.md` ("Storyboard: the 30 s main cut" and "Real captures and drawn
+Moved on 2026-11-05 to `docs/research/promo-video.md` ("Storyboard: the 38 s main cut" and "Real captures and drawn
 parts"), which replaces the first storyboard and shot list that stood here. The specs, the GitHub facts and the sound
 sources above still hold. The README icon loop is unchanged: made from the art, not a screen capture (`media/README.md`).

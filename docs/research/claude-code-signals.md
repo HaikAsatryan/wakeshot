@@ -1,12 +1,12 @@
 # Claude Code signals on Windows
 
-Research on 2026-11-03 on the Windows laptop. Goal: know from outside, without hooks and without editing Claude
+Research on 2026-11-03 on the test laptop. Goal: know from outside, without hooks and without editing Claude
 settings, that a Claude Code session is working now or will start work soon.
 
 Marks: **verified** means seen in the binary code, on disk, or in the official docs. **Unverified** means a guess or
 an inference that still needs a live test.
 
-Binary read: `C:\Users\haika\.local\bin\claude.exe`, version 2.1.316, build 2026-10-30, 335,469,216 bytes. It is a Bun
+Binary read: `%USERPROFILE%\.local\bin\claude.exe`, version 2.1.316, build 2026-10-30, 335,469,216 bytes. It is a Bun
 build. The readable JavaScript sits at byte offsets 280,000,000 and up. Offsets below point into that file. Minified
 names (like `X3e`) are from this build only and change every release.
 
@@ -20,18 +20,18 @@ names (like `X3e`) are from this build only and change every release.
 - The only outside traces of pending session-only timers are in the session transcript `.jsonl`: the `CronCreate` and
   `ScheduleWakeup` tool calls with their results (next fire time in epoch ms), `CronDelete` calls, and
   `scheduled_task_fire` lines. On `--resume` Claude Code itself rebuilds its `CronCreate` jobs from these same lines,
-  but not `ScheduleWakeup` wakeups for a terminal or SDK session ("Phase 4 live shapes", "Resume findings"). So
+  but not `ScheduleWakeup` wakeups for a terminal or SDK session ("Live shapes (2026-11-03)", "Resume findings"). So
   idle-but-scheduled can be detected, with medium confidence, by replaying the transcript.
 - Durable jobs (`durable: true`, rare) are in `<project>/.claude/scheduled_tasks.json`. Exact and easy to read.
 - On the SDK path (VS Code extension, `claude -p` with stream-json) there is no `shell` value: a background shell
   shows `idle`. Only the transcript shows it. Verified live.
 - Background sessions (`claude --bg`) are different: `claude agents --json` reports `state: working` while a `/loop`
-  wakeup is pending. Haik does not use them today.
+  wakeup is pending. Not used on the test laptop.
 
 ## Status file fields
 
 File: `%USERPROFILE%\.claude\sessions\<pid>.json`, or `<CLAUDE_CONFIG_DIR>\sessions\<pid>.json` when that variable
-is set ("Phase 4 end to end"). One per running session. Written by the registration function at
+is set ("End to end (2026-11-04)"). One per running session. Written by the registration function at
 offset 285,742,500 (`jY`) and updated by `Rn` (offset 285,744,000) and `X3e` (offset 285,744,381).
 
 | Field | Meaning | Values | When written | Mark |
@@ -120,7 +120,7 @@ singleton). It does not hold the machine awake for `shell`, `waiting`, or pendin
 | Timer | Where it lives | Visible from outside | Next fire time readable | Mark |
 |---|---|---|---|---|
 | `CronCreate` session-only (the default, and what `/loop 5m ...` creates) | Process memory (`sessionCron` store, offset 281,841,055) | Only in the transcript | Yes: tool result field `nextFireAt` (epoch ms, jitter included, a float such as `1793655671863.1191`: seen live) at creation. Later fires: compute from `cron`, last `scheduled_task_fire` time and the job id | verified (code, docs) |
-| `CronCreate` durable (`durable: true`, only when the user asks to keep it) | `<project>/.claude/scheduled_tasks.json` | Yes | Computable: fields `id`, `cron`, `prompt`, `createdAt`, `lastFiredAt`, `recurring`, `permanent`, `createdBySessionId`, `createdByPid`, `createdByProcStart`, `createdInProject`, `plugin` (reader `Ubn` at 291,058,027) | verified (code); no such file on this laptop. Off in 2.1.316 here: the live CronCreate tool description says "durable persistence is not available. All jobs are session-only" |
+| `CronCreate` durable (`durable: true`, only when the user asks to keep it) | `<project>/.claude/scheduled_tasks.json` | Yes | Computable: fields `id`, `cron`, `prompt`, `createdAt`, `lastFiredAt`, `recurring`, `permanent`, `createdBySessionId`, `createdByPid`, `createdByProcStart`, `createdInProject`, `plugin` (reader `Ubn` at 291,058,027) | verified (code); no such file on the test laptop. Off in 2.1.316 here: the live CronCreate tool description says "durable persistence is not available. All jobs are session-only" |
 | `ScheduleWakeup` (dynamic `/loop` with no interval) | Process memory, stored as a one-shot job with `kind: "loop"` and `scheduledFor` (offset 300,025,404) | Only in the transcript | Yes: tool result field `scheduledFor` (epoch ms). Delay clamped to 60 to 3600 s, then rounded up to a whole minute (seen live). The result carries no job id | verified (code and live) |
 | Loop fallback wakeup | Memory. If an iteration neither reschedules nor stops, Claude Code arms one wakeup about 20 minutes later, then ends the loop if that one does not reschedule | No tool call for it in the transcript; only its `scheduled_task_fire` when it fires | Not readable, but predictable: last loop fire plus about 20 min | verified (code `$Fs`, docs, live: fired 20 min 24 s later) |
 | Desktop app scheduled tasks | Desktop app. Prompt in `~/.claude/scheduled-tasks/<name>/SKILL.md`; schedule, folder and on/off state are not in that file | Prompt file only | No (schedule kept by the app) | verified (docs); app not installed here |
@@ -139,7 +139,7 @@ Scheduler facts (module at 328,582,721, `createCronScheduler`):
   `frac(id) = parseInt(id[0..8], 16) / 2^32`. Exception: a job whose text is exactly `*/N * * * *` with a 5 minute
   gap fires 285 s after its last fire, or after its creation before the first fire, wherever that falls on the clock;
   it is "15 s early" only when that start is on a 5 minute mark (Claude Code 2.1.317 code, `docs/research.md` "Cron
-  checks"; live fixtures 09 and 10, card `p4-cron`). One-shot jobs on minute :00 or :30 run up to 90 s early.
+  checks"; live fixtures 09 and 10). One-shot jobs on minute :00 or :30 run up to 90 s early.
   **Verified** (code and docs; the 285 s rule also live).
 - Recurring jobs expire 7 days after creation (fire once more, then delete). Up to 50 jobs per session. **Verified**
   (code constant 604,800,000 ms; docs).
@@ -185,7 +185,7 @@ Claude Code itself uses two outside methods, which shows there is no better hidd
 | Background shell (`run_in_background` Bash or PowerShell) | `shell` when the main thread is idle | `tasks\b<9 chars>.output` grows. Files stay after the task ends | verified (code; file names on disk) |
 | Monitor tool, shell kind | `shell` | `tasks\b....output` | verified (code) |
 | Monitor tool, MCP or WebSocket kind | `idle` | | verified (code) |
-| Background session (`claude --bg`, agent view) | Own file with `kind: "bg"`, `jobId` | `~/.claude/jobs/<id>/state.json` (docs: not a stable interface), `~/.claude/daemon/roster.json`. `claude agents --json` gives `state` `working` / `blocked` / `done` / `failed` / `stopped`. Docs: "A running subagent, workflow, or monitor counts as working, and so does a pending session-scoped scheduled task, such as a /loop wakeup" | verified (docs, code); not used on this laptop |
+| Background session (`claude --bg`, agent view) | Own file with `kind: "bg"`, `jobId` | `~/.claude/jobs/<id>/state.json` (docs: not a stable interface), `~/.claude/daemon/roster.json`. `claude agents --json` gives `state` `working` / `blocked` / `done` / `failed` / `stopped`. Docs: "A running subagent, workflow, or monitor counts as working, and so does a pending session-scoped scheduled task, such as a /loop wakeup" | verified (docs, code); not used on the test laptop |
 | Session sent to background from inside | `parkedJobId` set; `claude agents` hides that row and shows the job instead | jobs folder | verified (code) |
 
 ## Waiting and Remote Control
@@ -194,7 +194,7 @@ Claude Code itself uses two outside methods, which shows there is no better hidd
   the person may answer from the phone, and the session continues only if the PC is awake and online. **Verified**
   (code for values; behavior after answer is common sense, not tested).
 - `bridgeSessionId` is present while Remote Control is connected and is written as `null` on disconnect. Both
-  sessions on this laptop have one (CLI pid 20636 and VS Code pid 3032), so Remote Control seems to start with every
+  sessions on the test laptop have one (CLI pid 20636 and VS Code pid 3032), so Remote Control seems to start with every
   session here. **Verified** (disk, code). Live: every test session got one about 1 s after start, and "Disconnect
   this session" wrote `bridgeSessionId: null`.
 - An idle session with Remote Control can receive a new prompt from the phone at any time. Nothing on disk predicts
@@ -204,7 +204,7 @@ Claude Code itself uses two outside methods, which shows there is no better hidd
 
 ## Desktop app
 
-- Not installed on this laptop: no `AnthropicClaude` or `Claude` folders in `%LOCALAPPDATA%` / `%APPDATA%`, no Appx
+- Not installed on the test laptop: no `AnthropicClaude` or `Claude` folders in `%LOCALAPPDATA%` / `%APPDATA%`, no Appx
   package, no winget entry, no running process. **Verified**.
 - Docs: "In a local session, the Code tab runs its own copy of Claude Code, which has its own version number. The
   desktop app downloads and updates that copy." Issue #90007 shows it at `...\Claude\claude-code\<version>\claude.exe`
@@ -228,29 +228,30 @@ Run every 5 to 10 s, or on a folder change event for `sessions\` plus a slow tim
 
 | # | Rule | Signal | Confidence |
 |---|---|---|---|
-| 1 | List `<Claude folder>\sessions\*.json` only. The Claude folder is `CLAUDE_CONFIG_DIR` when set, else `%USERPROFILE%\.claude`, as Claude Code finds it ("Phase 4 end to end"); a value set only in one shell is not seen by the tray. Skip `*.key` and `.fleetview-heartbeat` without opening them. Parse the first JSON value; on failure retry once after 200 ms, then treat the file as "no signal" for this round | Live session list | High |
+| 1 | List `<Claude folder>\sessions\*.json` only. The Claude folder is `CLAUDE_CONFIG_DIR` when set, else `%USERPROFILE%\.claude`, as Claude Code finds it ("End to end (2026-11-04)"); a value set only in one shell is not seen by the tray. Skip `*.key` and `.fleetview-heartbeat` without opening them. Parse the first JSON value; on failure retry once after 200 ms, then treat the file as "no signal" for this round | Live session list | High |
 | 2 | Count a file only if the pid is alive and the process creation FILETIME equals `procStart` (or `procStartFt`). Confirmed from an unelevated (Medium) reader against elevated sessions too. Open with exactly `PROCESS_QUERY_LIMITED_INFORMATION \| SYNCHRONIZE`; one extra right fails the open. `0x80070057` means gone. `0x80070005` means no access, never dead: fall back to the system process list (create time equal to `procStart` means alive). A leftover also vanishes at the next Claude Code start | Drops crash leftovers and reused pids | High (exact match seen; unelevated check in `research.md`, "Reading elevated Claude Code sessions from an unelevated process") |
-| 3 | `status` is `busy` or `shell`, or any value Wakeshot does not know: working while the session process lives, no cap. An unknown value also shows "update Wakeshot" (`product.md`, UX). Sessions whose `entrypoint` is not `cli` (`claude-vscode`, `sdk-*`, `claude-desktop`, `claude-desktop-3p`, `local-agent`): a tool result with `backgroundTaskId`, or a Monitor `taskId`, opens a task. A `<task-notification>` closes each task id it lists when it has a `<status>` with any value (seen: `completed`, `failed`, `stopped`; `killed` in the code); one with no `<status>` (a Monitor event) closes nothing. It counts at the start of a user line's text, of the `prompt` of an `attachment` of type `queued_command`, or of the `content` of a `queue-operation` line with `operation: "enqueue"` (written when Claude Code queues the notification, before its user line; live fixtures 01, 02, 08, 12), also after Claude Code's header (a first line `[SYSTEM NOTIFICATION - NOT USER INPUT]`, then lines up to a blank line), after which several may be joined, each after a blank line (Phase 4 rule change, "Phase 4 live shapes"; header and joined form from the 2.1.317 code, not seen live). Ends that write no notification (2.1.317 code; both seen live, "Phase 4 end to end"): a `TaskStop` call (also `KillShell`, `KillBash`), whose result `{message, task_id, task_type, command}` closes its `task_id`, as Claude Code's own resume reader does; a Monitor's timeout, so a Monitor result that is not `persistent: true` is a timer at its time plus `timeoutMs` instead of an open task (a timeout over 1 hour: a due time every hour, at most 24; no `timeoutMs`, or 0: ends after 1 hour; both named). A `TaskStop` that fails closes nothing. A stop from the UI queues a `passive` `<status>killed</status>` notification whose user line may come only at the next prompt; its `enqueue` line ends the task at once (2.1.317 code, `research.md` "Claude UI stop notice checks"; seen live for a shell stopped from the terminal tasks panel and by an SDK `stop_task` request, "Phase 4 end to end"; with the remote flag `tengu_rosy_donut` off, or a hook that holds the enqueue back, the task holds until a later line or the process end). An open task (a shell, a persistent Monitor) is working while the session process lives. No time cap (Haik, 2026-11-03, `product.md:38-40`). A terminal session's status says `shell` for its shells and Monitors, so these transcript rules add nothing there | Working now | High; each end without a notification seen live once |
-| 4 | `status` is `waiting`. `waitingFor: "dialog open"` is a slash command dialog: treat it like `idle`. Otherwise `waiting` holds only while `bridgeSessionId` is set, for at most 1 hour (`product.md:37`) | Blocked on the user. Not working | High for meaning |
-| 5 | `status` is `idle` or missing: find the transcript as `<Claude folder>\projects\*\<sessionId>.jsonl` (glob, do not rebuild the folder name). Read only new bytes since the last scan; keep parser state between reads, and after a Wakeshot restart read each transcript from its start. Remember the `tool_use` ids of `CronCreate`, `CronDelete`, `ScheduleWakeup` and the background task tools. Take each result by `tool_use_id`; skip `is_error` results. Also match `scheduled_task_fire`, `session_cron_carry`, and `<task-notification>` at the start of a user line. A reminder comes as `CronCreate` with `recurring: false` or as `ScheduleWakeup`: handle both. Keep per job: id, cron, recurring, createdAt, last fire, `nextFireAt` / `scheduledFor` (both floats). Key all job state by pid, not by `sessionId`. When `sessionId` changes, read the new transcript from its start and take `session_cron_carry` (`otherArmed`, `tasks`) as the armed jobs. Drop deleted, stopped, fired one-shots, and recurring jobs older than 7 days. Drop a wakeup at its `scheduled_task_fire` (`taskKind: "loop"`), or at `scheduledFor` plus a margin of a few minutes, which also bounds the invisible Esc cancel. Never hold past that. Loop fallback: no hold (`product.md:35-36`). Resume (`claude --resume` in a new process; no line marks it): lines older than the status file's `procStart` were written by an earlier process. Read the transcript from its start as usual, then for those lines keep `CronCreate` jobs that were not deleted (recurring ones under 7 days old, their next fire counted from `procStart`; one-shots whose time has not passed) and drop every `ScheduleWakeup` wakeup and every open background task (Claude Code does not restore wakeups, and a task does not outlive its process). A reminder may also be a background shell that sleeps (rule 3). A next fire Wakeshot computes, not read from `nextFireAt` or `scheduledFor`, is reported twice: as Claude Code's built-in scheduler values give it and as the latest any value of its remote flag `tengu_kairos_cron_config` allows, so a changed flag never makes the PC sleep through a fire; the fire line then moves the job on. A recurring job fired again after the built-in 7 days comes back, and from then on only its fire lines end it | Pending timer and its next fire time | Medium. Misses: Esc cancel of a dynamic loop (maybe), loop fallback wakeup, tasks restored after resume under a new session id |
+| 3 | `status` is `busy` or `shell`, or any value Wakeshot does not know: working while the session process lives, no cap. An unknown value also shows "update Wakeshot" (`product.md`, UX). Sessions whose `entrypoint` is not `cli` (`claude-vscode`, `sdk-*`, `claude-desktop`, `claude-desktop-3p`, `local-agent`): a tool result with `backgroundTaskId`, or a Monitor `taskId`, opens a task. A `<task-notification>` closes each task id it lists when it has a `<status>` with any value (seen: `completed`, `failed`, `stopped`; `killed` in the code); one with no `<status>` (a Monitor event) closes nothing. It counts at the start of a user line's text, of the `prompt` of an `attachment` of type `queued_command`, or of the `content` of a `queue-operation` line with `operation: "enqueue"` (written when Claude Code queues the notification, before its user line; live fixtures 01, 02, 08, 12), also after Claude Code's header (a first line `[SYSTEM NOTIFICATION - NOT USER INPUT]`, then lines up to a blank line), after which several may be joined, each after a blank line ("Live shapes (2026-11-03)"; header and joined form from the 2.1.317 code, not seen live). Ends that write no notification (2.1.317 code; both seen live, "End to end (2026-11-04)"): a `TaskStop` call (also `KillShell`, `KillBash`), whose result `{message, task_id, task_type, command}` closes its `task_id`, as Claude Code's own resume reader does; a Monitor's timeout, so a Monitor result that is not `persistent: true` is a timer at its time plus `timeoutMs` instead of an open task (a timeout over 1 hour: a due time every hour, at most 24; no `timeoutMs`, or 0: ends after 1 hour; both named). A `TaskStop` that fails closes nothing. A stop from the UI queues a `passive` `<status>killed</status>` notification whose user line may come only at the next prompt; its `enqueue` line ends the task at once (2.1.317 code, `research.md` "Claude UI stop notice checks"; seen live for a shell stopped from the terminal tasks panel and by an SDK `stop_task` request, "End to end (2026-11-04)"; with the remote flag `tengu_rosy_donut` off, or a hook that holds the enqueue back, the task holds until a later line or the process end). An open task (a shell, a persistent Monitor) is working while the session process lives. No time cap (`product.md`, "What keeps the PC awake"). A terminal session's status says `shell` for its shells and Monitors, so these transcript rules add nothing there | Working now | High; each end without a notification seen live once |
+| 4 | `status` is `waiting`. `waitingFor: "dialog open"` is a slash command dialog: treat it like `idle`. Otherwise `waiting` holds only while `bridgeSessionId` is set, for at most 1 hour (`product.md`) | Blocked on the user. Not working | High for meaning |
+| 5 | `status` is `idle` or missing: find the transcript as `<Claude folder>\projects\*\<sessionId>.jsonl` (glob, do not rebuild the folder name). Read only new bytes since the last scan; keep parser state between reads, and after a Wakeshot restart read each transcript from its start. Remember the `tool_use` ids of `CronCreate`, `CronDelete`, `ScheduleWakeup` and the background task tools. Take each result by `tool_use_id`; skip `is_error` results. Also match `scheduled_task_fire`, `session_cron_carry`, and `<task-notification>` at the start of a user line. A reminder comes as `CronCreate` with `recurring: false` or as `ScheduleWakeup`: handle both. Keep per job: id, cron, recurring, createdAt, last fire, `nextFireAt` / `scheduledFor` (both floats). Key all job state by pid, not by `sessionId`. When `sessionId` changes, read the new transcript from its start and take `session_cron_carry` (`otherArmed`, `tasks`) as the armed jobs. Drop deleted, stopped, fired one-shots, and recurring jobs older than 7 days. Drop a wakeup at its `scheduled_task_fire` (`taskKind: "loop"`), or at `scheduledFor` plus a margin of a few minutes, which also bounds the invisible Esc cancel. Never hold past that. Loop fallback: no hold (`product.md`). Resume (`claude --resume` in a new process; no line marks it): lines older than the status file's `procStart` were written by an earlier process. Read the transcript from its start as usual, then for those lines keep `CronCreate` jobs that were not deleted (recurring ones under 7 days old, their next fire counted from `procStart`; one-shots whose time has not passed) and drop every `ScheduleWakeup` wakeup and every open background task (Claude Code does not restore wakeups, and a task does not outlive its process). A reminder may also be a background shell that sleeps (rule 3). A next fire Wakeshot computes, not read from `nextFireAt` or `scheduledFor`, is reported twice: as Claude Code's built-in scheduler values give it and as the latest any value of its remote flag `tengu_kairos_cron_config` allows, so a changed flag never makes the PC sleep through a fire; the fire line then moves the job on. A recurring job fired again after the built-in 7 days comes back, and from then on only its fire lines end it | Pending timer and its next fire time | Medium. Misses: Esc cancel of a dynamic loop (maybe), loop fallback wakeup, tasks restored after resume under a new session id |
 | 6 | If rule 5 finds a recurring job but no exact next time: a cron period of 1 hour or less holds. A longer period uses the next cron time after the last fire. A one-shot uses its exact `nextFireAt` or `scheduledFor` | Next fire estimate | Medium |
 | 7 | Durable jobs (`<cwd>\.claude\scheduled_tasks.json`, the git root's, `~/.claude/scheduled_tasks.json`): dropped for v1; add when a `scheduled_tasks.json` is seen. Fact: durable jobs are off in 2.1.316 (live test 6) | Durable jobs, exact | High, but rare |
 | 8 | `<cwd>\.claude\scheduled_tasks.lock` with a live `pid` that matches a session | That session has used `/loop` or cron at some point. Use only to decide to scan its transcript | Low as a work signal |
-| 9 | Treat a pending timer as "work soon" only if it fires within 1 hour (decided, `product.md:34-35`). Otherwise let the PC sleep; the job fires once on wake | Policy | Decided |
+| 9 | Treat a pending timer as "work soon" only if it fires within 1 hour (decided, `product.md`). Otherwise let the PC sleep; the job fires once on wake | Policy | Decided |
 | 10 | `claude agents --json`: dropped for v1. It starts a 335 MB process, has open bug #101182, and `bg` sessions write status files too (line 182; that they write transcripts the same way is not verified) | Background sessions incl. pending loops | Not used in v1 |
-| 11 | Fallback when the status file is missing or unknown: transcript or `tasks\*.output` size grew in the last 60 s. Dropped (Phase 1 design, `architecture.md` section 7): it contradicts the unknown-format rule, where a file that does not parse gives no signal and an unknown `status` counts as working while the process lives | Activity | Not used in v1 |
+| 11 | Fallback when the status file is missing or unknown: transcript or `tasks\*.output` size grew in the last 60 s. Dropped (`architecture.md` section 7): it contradicts the unknown-format rule, where a file that does not parse gives no signal and an unknown `status` counts as working while the process lives | Activity | Not used in v1 |
 
-`updatedAt` is not a heartbeat or a last-write time (change 9 below).
+`updatedAt` is not a heartbeat or a last-write time: it can stay old across a write, and files are not rewritten
+without a field change (live test below).
 
 Privacy: transcripts and `CronCreate` inputs hold user text. Parse only the listed fields, never store or log prompts.
 Never read `*.key`, `.credentials.json`, or connect to `messagingSocketPath`.
 
 ## Live test results (2026-11-03)
 
-Claude Code 2.1.316 on the Windows laptop. Test sessions ran in throwaway folders in the worker's scratch folder.
-`spikes/claude-watch/ccdrive.py` drove them in a pseudo console (or over stream-json for the SDK path), and the
-watcher `spikes/claude-watch` logged every status file change and the matching transcript lines. Model: Haiku, to save
-tokens; the status code does not depend on the model.
+Claude Code 2.1.316 on the test laptop. Test sessions ran in throwaway folders. A throwaway driver drove them in a
+pseudo console (or over stream-json for the SDK path), and a throwaway watcher logged every status file change and
+the matching transcript lines (neither program is kept). Model: Haiku, to save tokens; the status code does not
+depend on the model.
 
 | # | Test | Observed | Verdict |
 |---|---|---|---|
@@ -283,80 +284,43 @@ Other facts seen live:
   `message.content` is a string that starts with `<task-notification>`, then `<task-id>`, `<tool-use-id>`,
   `<output-file>`, `<status>` and `<summary>` tags, one per line. The line also carries `origin.kind:
   "task-notification"`. The background shell result it closes has `toolUseResult.backgroundTaskId` and the same
-  `tool_use_id`. Seen in one pair only; whether `origin.kind` is always set: not verified. Redacted copy:
-  `spikes/claude-watch/fixtures/raw-transcript-lines.jsonl`.
+  `tool_use_id`. Seen in one pair only; whether `origin.kind` is always set: not verified. The redacted copy is not
+  kept.
 - Background shells started by a subagent write their output under `%TEMP%\claude\<folder>\<another id>\tasks`, not
-  under the main session id. Seen for this worker's own shells; what that id is: unverified.
+  under the main session id. Seen for the test agent's own shells; what that id is: unverified.
 - Driving tests: under ConPTY, Claude Code takes Enter only as the kitty keyboard sequence `ESC [13u`; a plain CR does
   nothing. The driver must also drop `CLAUDE_CODE_CHILD_SESSION` and the other `CLAUDE*` variables, or the test
   session writes no status file. Closing the pseudo console ends the session (clean exit).
 
-### Proposed rule changes
-
-Changes to "Recommended detection rules" above. Adopted at the Phase 0 close; Phase 4 refines. Changes 6 and 7 were
-adopted in a stricter form: both readers are dropped for v1 (rules 7 and 10 above).
-
-1. Rule 3: `shell` exists only for terminal sessions. For SDK-path sessions (`entrypoint` `sdk-*` or `claude-vscode`)
-   add a transcript check: a tool result with `backgroundTaskId` (shell) or a Monitor `taskId` opens a task; a user
-   line that starts with `<task-notification>` for that task id with status `completed`, `failed` or `killed` closes
-   it. An open task counts as working. Phase 4 widened the close to any `<status>` value and to `queued_command`
-   prompts (rule 3 above; "Phase 4 live shapes", "Rule changes").
-2. Rule 4: `waitingFor: "dialog open"` is a slash command dialog, not a block. Treat it like `idle`.
-3. Rule 5: read `nextFireAt` and `scheduledFor` as floats. A `ScheduleWakeup` result has no id: drop the pending
-   wakeup when a `scheduled_task_fire` with `taskKind: "loop"` arrives at its time, or when `scheduledFor` has passed
-   by more than a margin. The margin also covers the invisible Esc cancel. Never hold for a wakeup past
-   `scheduledFor` plus the margin.
-4. Rule 5 after `/clear`: when `sessionId` changes for the same pid, keep that pid's job list, read the new transcript
-   from its start, and take `session_cron_carry` (`otherArmed` and `tasks`) as the armed jobs at that point.
-5. Rule 5: a reminder may come as `CronCreate` with `recurring: false` or as `ScheduleWakeup`. Handle both.
-6. Rule 7: durable jobs are off in 2.1.316 here. Keep the reader (cheap), low priority.
-7. Rule 10: `claude agents --json` was fast here (0.21 s) and left no `git` processes, but adds nothing for
-   interactive sessions. Keep it for `bg` and daemon kinds only.
-8. Rule 2: confirmed. A leftover also vanishes at the next Claude Code start.
-9. Do not use `updatedAt` as "last write" or as a heartbeat: it can stay old across a write, and files are not
-   rewritten without a field change.
-10. Rule 5, loop fallback: after a `scheduled_task_fire` with `taskKind: "loop"` whose turn ends with no new
-    `ScheduleWakeup`, one hidden fire follows about 20 minutes later. Wakeshot can predict it (fire time plus 20 min,
-    on a minute boundary, up to 90 s early) but should not hold the PC awake for it by default: it is one extra run
-    that ends the loop. Haik's call if that should change.
-
 ## Live tests still open
 
-- VS Code UI (optional). Test 10 ran the same engine path, but not through the extension, which sets
-  `entrypoint: claude-vscode`. Steps:
-  1. Open VS Code and start a Claude Code chat in any folder.
-  2. Send: "Use the Bash tool with run_in_background set to true to run this exact command: ping -n 61 127.0.0.1 >
-     /dev/null && echo done. Then end your turn at once." (The PowerShell tool refuses a standalone `Start-Sleep`.)
-  3. Within 60 s, in PowerShell run:
-     `Get-ChildItem "$env:USERPROFILE\.claude\sessions\*.json" | ForEach-Object { Get-Content $_ -Raw | ConvertFrom-Json } | Where-Object entrypoint -eq 'claude-vscode' | Select-Object pid, status`
-  4. Expected: `idle` while the sleep runs. Report the value you see.
-- Desktop app, only if it gets installed later: open a Code tab session and look for a new `sessions\<pid>.json` with
-  `entrypoint: claude-desktop`.
+- The VS Code UI. Test 10 ran the same engine path, but not through the extension, which sets
+  `entrypoint: claude-vscode`. Expected: a background shell started from a VS Code chat (the Bash tool with
+  `run_in_background`) leaves that session's status `idle` while it runs. Not tested.
+- A Code tab session of the Desktop app (`entrypoint: claude-desktop`): see "Claude Desktop (2026-11-07)".
 - A stop of an MCP or WebSocket Monitor from the UI (code: writes only `[Monitor stopped]`, no `<status>`, so it
   holds until its timeout), and a Monitor whose end falls while the PC sleeps (its timer is wall clock). Not run in
-  "Phase 4 end to end": the first needs an MCP server with a Monitor, the second a PC sleep.
+  "End to end (2026-11-04)": the first needs an MCP server with a Monitor, the second a PC sleep.
 
 ## Sources
 
-- Binary: `C:\Users\haika\.local\bin\claude.exe` 2.1.316, offsets as cited.
-- Disk: `C:\Users\haika\.claude\sessions\20636.json`, `3032.json`; `C:\Users\haika\.claude\projects\` (structure and
-  key names only); `C:\Users\haika\AppData\Local\Temp\claude\` (file names only).
+- Binary: `%USERPROFILE%\.local\bin\claude.exe` 2.1.316, offsets as cited.
+- Disk: `%USERPROFILE%\.claude\sessions\20636.json`, `3032.json`; `%USERPROFILE%\.claude\projects\` (structure and
+  key names only); `%LOCALAPPDATA%\Temp\claude\` (file names only).
 - Docs: https://code.claude.com/docs/en/scheduled-tasks, https://code.claude.com/docs/en/agent-view,
   https://code.claude.com/docs/en/desktop-scheduled-tasks, https://code.claude.com/docs/en/desktop (read 2026-11-03).
 - Issues (anthropics/claude-code): #96438, #66384, #87883, #101182, #90007, #103669, #105873, #100743, #96679.
-- Live tests 2026-11-03, 01:27 to 02:00: the test session transcripts were deleted. The watcher log was kept: full
-  copy (not redacted, outside the repo) in `~/.claude/wakeshot-keep/2026-11-03-live-tests/live/watch.log`; redacted
-  extract in `spikes/claude-watch/fixtures/`. Method and tools in `spikes/claude-watch/`; step log in
-  `docs/tasks/p0-claude-live-tests.md`.
+- Live tests 2026-11-03, 01:27 to 02:00: the test session transcripts were deleted; the watcher log is kept outside
+  the repo (not redacted, not published).
 
-## Phase 4 live shapes (2026-11-03)
+## Live shapes (2026-11-03)
 
-Card `docs/tasks/p4-claude-live-shapes.md`, 18:18 to 18:40. Claude Code 2.1.317 (Phase 0 had 2.1.316). Thirteen cases
-(17 Claude Code processes with the resumed ones), model Haiku, one scratch folder each. Terminal sessions ran in a
-pseudo console (`spikes/claude-watch/ccdrive.py`, `--permission-mode auto`); SDK sessions ran over stream-json as in
-test 10. A small poller logged every status file write of these pids only, the lock file of each test folder and the
-transcript sizes. Redacted raw lines and status writes: `crates/wakeshot-core/tests/fixtures/claude/live/` (its
-`README.md` names the line of each shape). The test transcripts and folders were deleted afterwards.
+2026-11-03, 18:18 to 18:40. Claude Code 2.1.317 (the first live tests had 2.1.316). Thirteen cases (17 Claude Code
+processes with the resumed ones), model Haiku, one scratch folder each. Terminal sessions ran in a pseudo console (the
+throwaway driver, `--permission-mode auto`); SDK sessions ran over stream-json as in test 10. A small poller logged
+every status file write of these pids only, the lock file of each test folder and the transcript sizes. Redacted raw
+lines and status writes: `crates/wakeshot-core/tests/fixtures/claude/live/` (its `README.md` names the line of each
+shape). The test transcripts and folders were deleted afterwards.
 
 Marks as above: **verified** means seen live in these sessions; **not verified** means inferred or not run.
 
@@ -364,14 +328,14 @@ Marks as above: **verified** means seen live in these sessions; **not verified**
 
 | Fixture | Case | Observed | Mark |
 |---|---|---|---|
-| `01` | Background shell | As Phase 0 test 1: `busy`, `shell`, notification `completed`, `busy`, `idle` | verified |
+| `01` | Background shell | As live test 1 above: `busy`, `shell`, notification `completed`, `busy`, `idle` | verified |
 | `02` | Shell Monitor | The model's first two Monitors failed (Monitor runs its command through Bash, which expanded `$_`): each gave a notification with `<status>failed</status>`. Event notifications carry `<task-id>`, `<summary>` and `<event>`, but no `<status>` and no `<tool-use-id>`. The last one has `<status>completed</status>` | verified |
-| `03` | `/loop 1m` | `nextFireAt` = next minute plus `frac(id) * 30 s` (exact, as Phase 0). Fires 0.05 s after it, then every 60 s. `CronDelete` `{id}` | verified |
+| `03` | `/loop 1m` | `nextFireAt` = next minute plus `frac(id) * 30 s` (exact, as in test 3 above). Fires 0.05 s after it, then every 60 s. `CronDelete` `{id}` | verified |
 | `04` | Dynamic `/loop` | First `ScheduleWakeup` had `noop: true`. Fire: `taskKind: "loop"`, `cron` like `21 18 * * *`, a new `taskId`. Stop: input `{stop: true}`, result `{scheduledFor: 0, clampedDelaySeconds: 0, wasClamped: false, stopped: true, cancelledWakeups: 0}` | verified |
 | `05` | One-shot reminder | "Remind me in 2 minutes" became a background Bash sleep: a reminder can also be a background shell. Asked for `CronCreate`: `recurring: false`, cron `23 18 3 11 *`, `humanSchedule` equals the cron string, `nextFireAt` on the whole minute; fired 0.85 s after it | verified |
-| `06` | `/clear` during a loop | As Phase 0 test 9 (`session_cron_carry`, the next fire in the new transcript). New: `CronList` result `{jobs: [{id, cron, humanSchedule, prompt, recurring, durable, nextFireAt}]}`; the lock file kept the old `sessionId` and was not removed at the clean exit, so a lock with a dead pid stays | verified (one case) |
+| `06` | `/clear` during a loop | As live test 9 above (`session_cron_carry`, the next fire in the new transcript). New: `CronList` result `{jobs: [{id, cron, humanSchedule, prompt, recurring, durable, nextFireAt}]}`; the lock file kept the old `sessionId` and was not removed at the clean exit, so a lock with a dead pid stays | verified (one case) |
 | `07` | Background subagent | Result `{isAsync: true, status: "async_launched", agentId, ...}`. The first notification came as a user line. The second came while the main thread was busy: a `queue-operation` `remove`, then an `attachment` of type `queued_command` whose `prompt` starts with `<task-notification>`, and no user line for it | verified (one case each) |
-| `08` | SDK path, background shell | As Phase 0 test 10. No `turn_duration` lines at all on this path (three SDK sessions) | verified |
+| `08` | SDK path, background shell | As live test 10 above. No `turn_duration` lines at all on this path (three SDK sessions) | verified |
 | `12` | SDK path, stdin closed while a 150 s shell ran | The process did not exit: it lived until the shell ended, ran the notification turn (`busy` 1.7 s), then exited and removed its status file | verified (one case) |
 | `13` | SDK path, hard kill while a shell ran, then `--resume` | The shell's `pwsh` outlived Claude Code (killed by pid afterwards). See the resume findings | verified |
 
@@ -407,37 +371,18 @@ Not run: `claude --continue`, `/resume` inside a running session, a resume after
 process ran (docs: missed runs do not fire), a terminal resume with a background shell left open, and the VS Code
 extension's own resume.
 
-### Rule changes
+Rules 3 and 5 above hold what these tests saw. Rule 5 applies the resume at the status file's `procStart`, not
+`startedAt`, as the code does (`claude/mod.rs`, `since` from `proc_start`). The end to end run ("End to end
+(2026-11-04)") saw the same: a resumed `*/5` job came back, its wakeup did not.
 
-Proposed exact text for "Recommended detection rules". **Verified** where the table above says so; the "never open
-a task" guard is an inference (the SDK resume closed the task anyway).
+## End to end (2026-11-04)
 
-- Rule 5, add at the end: "Resume: a status file whose `sessionId` names a transcript that already has lines older
-  than the file's `startedAt` is a resumed session (`--resume` in a new process; no line marks it). Read that
-  transcript from its start as usual, then apply this at `startedAt`: keep `CronCreate` jobs that were not deleted
-  (recurring ones under 7 days old, one-shots not yet fired); for a recurring job ignore the old `nextFireAt` and use
-  rule 6; drop every `ScheduleWakeup` wakeup and every open background task from lines older than `startedAt`
-  (Claude Code does not restore wakeups, and a task does not outlive its process)."
-- Rule 3, replace "with `completed`, `failed` or `killed`" by: "with any `<status>` value (seen: `completed`,
-  `failed`, `stopped`)". Add: "Match `<task-notification>` at the start of a user line's text and at the start of
-  the `prompt` of an `attachment` of type `queued_command`. A notification with no `<status>` (a Monitor event)
-  closes nothing."
-- Rule 5, reminders: "A reminder may also be a background shell that sleeps (handled by rule 3)."
-
-The parts of this file that the resume test contradicted ("Short answer", "Claude Code itself uses two outside methods"
-item 1, the "Wakeup armed" row, rule 3's closing statuses) say now what this test saw, and rules 3 and 5 hold the texts
-above; rule 5 applies the resume at the status file's `procStart`, not `startedAt`, as the code does (`claude/mod.rs`,
-`since` from `proc_start`). The end to end run ("Phase 4 end to end") saw the same: a resumed `*/5` job came back, its
-wakeup did not.
-
-## Phase 4 end to end (2026-11-04)
-
-Card `docs/tasks/p4-live-claude.md`, 01:27 to 01:53 local time (UTC+4). Claude Code 2.1.317, model Haiku, one
-scratch folder per case, driven as in "Phase 4 live shapes" (pseudo console for terminal sessions, stream-json for
-SDK sessions). The real watch thread ran in the harness `crates/wakeshot-windows/examples/agent-watch.rs`: the Claude
-source, the real liveness checks, the PC's zone, the dry-run data folder, a tick every 30 s. It printed each event the
-thread posted as one redacted line, and with `--raw` the kinds of every line each tail fed. "Posted" below means the
-`Sources` or `Holds` event the thread sent. **Verified** means seen live in these sessions.
+2026-11-04, 01:27 to 01:53 local time (UTC+4). Claude Code 2.1.317, model Haiku, one scratch folder per case, driven as
+in "Live shapes (2026-11-03)" (pseudo console for terminal sessions, stream-json for SDK sessions). The real watch
+thread ran in the harness `crates/wakeshot-windows/examples/agent-watch.rs`: the Claude source, the real liveness
+checks, the PC's zone, the dry-run data folder, a tick every 30 s. It printed each event the thread posted as one
+redacted line, and with `--raw` the kinds of every line each tail fed. "Posted" below means the `Sources` or `Holds`
+event the thread sent. **Verified** means seen live in these sessions.
 
 ### What was run
 
@@ -450,12 +395,12 @@ thread posted as one redacted line, and with `--raw` the kinds of every line eac
 | 5 One-shot reminder | `CronCreate` `recurring: false`: timer 01:31:00, dropped at its `scheduled_task_fire` (01:31:00.9) | pass |
 | 6 Durable job | Input `durable: true`, result `durable: false`, a daily timer at 09:30 (the 30 minute jitter cap), no `scheduled_tasks.json` | durable jobs still off |
 | 7 Waiting | AskUserQuestion (`input needed`) and a permission prompt: `waiting(remote=true)`, `since` = `statusUpdatedAt`. The `/remote-control` dialog (`dialog open`): stayed `idle` | pass |
-| 8 Remote Control off | "Disconnect this session" wrote `bridgeSessionId: null` in a write of its own (status still `waiting` / `dialog open`), then `idle`. The next question: `waiting(remote=false)` | pass; the two writes are new (Phase 0 saw one) |
+| 8 Remote Control off | "Disconnect this session" wrote `bridgeSessionId: null` in a write of its own (status still `waiting` / `dialog open`), then `idle`. The next question: `waiting(remote=false)` | pass; the two writes are new (the 2026-11-03 test saw one) |
 | 9 `/clear` during a loop | New `sessionId`; the new transcript's `session_cron_carry` kept the timer; the next fire, in the new transcript, moved it | pass |
 | 10 SDK path | Background shell: `idle tasks=1`. Background subagent: `working` until its notice turn ended. Ends: next table | pass |
 | 11 Crash | `Stop-Process -Force`: `alive=Gone` 36 ms later (exit wait); the status file stayed | pass |
 | 12 `claude agents --json` | Exit 0, every live session listed; no warning, unknown value or extra post in the harness | pass |
-| 14 Loop fallback | A `ScheduleWakeup` fired at 01:31:00.3 and its turn did not reschedule. No timer was posted after it. A hidden fire came at 01:52:00.7 (21 minutes later; Phase 0 saw 20 min 24 s) and posted `working` for its 1 s turn | pass (no hold, `product.md`) |
+| 14 Loop fallback | A `ScheduleWakeup` fired at 01:31:00.3 and its turn did not reschedule. No timer was posted after it. A hidden fire came at 01:52:00.7 (21 minutes later; the 2026-11-03 test saw 20 min 24 s) and posted `working` for its 1 s turn | pass (no hold, `product.md`) |
 | Resume | `/exit` ("Exit and stop tasks") with a `*/5` job and a fired wakeup, then `claude --resume <id>` in the same folder: the new pid posted the job at its `procStart` plus 285 s (01:42:12; fired 01:42:13.7) and the grid time, and no wakeup or fallback | pass; `procStart` is the right divider |
 
 ### Ends without a status notice (rule 3), now seen
@@ -476,7 +421,7 @@ All on the SDK path, where `open_tasks` counts:
   status write, the session was already `idle`). On the SDK path the
   notice came later as `queue-operation` `remove` plus an `attachment` `queued_command` at the next turn. The watch
   thread closed the task at its next tail read: 6.8 s later (SDK) and 12 s (terminal). **Verified** with the remote
-  flags this laptop has.
+  flags the test laptop has.
 
 ### Other facts
 
@@ -497,31 +442,31 @@ All on the SDK path, where `open_tasks` counts:
 - Task output folders in 2.1.317 are `%LOCALAPPDATA%\Temp\claude\<16 hex characters, one per working folder>\<sessionId>\`
   (`tasks\` and `scratchpad\` inside), not `...\claude\<project folder name>\...` as the "Background work" table
   says. Seen for all 12 test sessions (names only); Wakeshot reads none of them.
-- Not run: the VS Code UI (waits for Haik, "Live tests still open"), the Desktop app, an MCP or WebSocket Monitor
+- Not run: the VS Code UI ("Live tests still open"), the Desktop app, an MCP or WebSocket Monitor
   stopped from the UI, a Monitor end across a PC sleep, `claude --continue`.
 
 ## Claude Desktop (2026-11-07)
 
-Card `docs/tasks/p4-live-claude-desktop.md`. Claude Desktop 4.23118.0 for Windows x64, installed per user in
+Claude Desktop 4.23118.0 for Windows x64, installed per user in
 `%LocalAppData%\AnthropicClaude` (Squirrel updated it from 2.42304.2 within a minute of the install, by the folder
 times), signed in with a
 Claude account. Read on 2026-11-07 between 03:47 and 04:10 without any input in the app: its folders (names and JSON
 shapes only, never values), its logs, `powercfg /requests`, and its main process code (`resources\app.asar`, unpacked
 to a scratch folder and read, nothing run). Minified names change with every release; quoted log strings and setting
-keys are what the next version is checked against. No Code session, prompt or click ran tonight: the live part waits
-for Haik (card, "Morning steps"). This section supersedes the "Desktop app" section above where they differ.
+keys are what the next version is checked against. No Code session, prompt or click ran: that live part is not run
+yet. This section supersedes the "Desktop app" section above where they differ.
 
-Marks: **verified (code)** means read in the app's code; **verified (disk)** or **(live)** means seen on this laptop;
-**not verified** means inferred or not run.
+Marks: **verified (code)** means read in the app's code; **verified (disk)** or **(live)** means seen on the test
+laptop; **not verified** means inferred or not run.
 
 ### What the app runs
 
 | Part | What it is | Writes the files the Claude source reads | Mark |
 |---|---|---|---|
-| Code tab, local session | The app downloads its own Claude Code (`%APPDATA%\Claude\claude-code\<version>\<hash>\claude.exe`; 2.1.317 here, at the first start after sign-in, `main.log` "[CCD] Installed at ...") and starts it through the Agent SDK (stream-json, the SDK path). Env: `CLAUDE_CODE_ENTRYPOINT=claude-desktop` (`claude-desktop-3p` with a third-party provider), `CLAUDECODE` and `CLAUDE_CODE_CHILD_SESSION` removed, no `CLAUDE_CONFIG_DIR` of its own, `CLAUDE_CODE_DISABLE_CRON` empty unless the organization turns scheduled tasks off | Yes by the code: `~/.claude/sessions/<pid>.json` with `entrypoint: claude-desktop`, and `~/.claude/projects/<folder>/<sessionId>.jsonl` (the app itself reads and copies transcripts in `<Claude folder>\projects`). So the Claude source applies as for any non-terminal session (rule 3 transcript tasks) | verified (code); live: needs Haik |
+| Code tab, local session | The app downloads its own Claude Code (`%APPDATA%\Claude\claude-code\<version>\<hash>\claude.exe`; 2.1.317 here, at the first start after sign-in, `main.log` "[CCD] Installed at ...") and starts it through the Agent SDK (stream-json, the SDK path). Env: `CLAUDE_CODE_ENTRYPOINT=claude-desktop` (`claude-desktop-3p` with a third-party provider), `CLAUDECODE` and `CLAUDE_CODE_CHILD_SESSION` removed, no `CLAUDE_CONFIG_DIR` of its own, `CLAUDE_CODE_DISABLE_CRON` empty unless the organization turns scheduled tasks off | Yes by the code: `~/.claude/sessions/<pid>.json` with `entrypoint: claude-desktop`, and `~/.claude/projects/<folder>/<sessionId>.jsonl` (the app itself reads and copies transcripts in `<Claude folder>\projects`). So the Claude source applies as for any non-terminal session (rule 3 transcript tasks) | verified (code); live: not run |
 | Code tab, helper runs | Short `claude.exe` runs for titles, usage probes, one-shot sampling and sign-in, all with `persistSession: false` (no transcript); some with a `CLAUDE_CONFIG_DIR` of their own | If one writes a status file, it holds only while it runs (seconds) | verified (code); status file not verified |
 | Cowork (`local-agent`) | Runs Claude Code inside the app's Linux VM: `CLAUDE_CONFIG_DIR=/sessions/<id>/mnt/.claude` | No: nothing in the Windows Claude folder. Here `cowork_vm_node.log` says "workspace VM not supported (status=unsupported)" | verified (code, disk) |
-| Plain chats (Chat tab) | The claude.ai web app in the app's window; replies are made on Anthropic's servers | No file, no process per chat, and no keep-awake claim for chats in the app's code | verified (code); a live chat: needs Haik |
+| Plain chats (Chat tab) | The claude.ai web app in the app's window; replies are made on Anthropic's servers | No file, no process per chat, and no keep-awake claim for chats in the app's code | verified (code); a live chat: not run |
 | SSH and cloud sessions | Run on another machine or in the cloud | No local signal needed or given | verified (docs) |
 
 Other processes: the app's own Electron processes (all named `claude.exe`, in the app folder: renderers, GPU,
@@ -540,11 +485,11 @@ Code sessions work), `code_session:<id>` (a session's own keep-awake switch), `r
   the remote device link; the same at 03:04:37, let go after 300 s), and `powercfg /requests` showed the app's
   `claude.exe` under EXECUTION only ("Electron"), not under SYSTEM. So its keep-awake is an execution request. On
   Modern Standby that alone does not stop idle sleep (Microsoft docs; not tested by us; issue #103669 says the same).
-- Settings live in `%APPDATA%\Claude\claude_desktop_config.json`, key `preferences` (the keys in Haik's file match the
-  app's preference schema): `keepAwakeEnabled` (default false), `ccKeepAwakeWhileWorking` ("Keep computer awake
-  while Claude works", default true: "Prevents idle sleep only; a closed lid still sleeps"), `ccKeepAwakeOnBattery`
-  (default true), `wakeSchedulerEnabled` (default false). None is set in Haik's file, so the defaults apply. Wakeshot
-  tests never change them. **Verified (code, disk)**.
+- Settings live in `%APPDATA%\Claude\claude_desktop_config.json`, key `preferences` (the keys in the test laptop's file
+  match the app's preference schema): `keepAwakeEnabled` (default false), `ccKeepAwakeWhileWorking` ("Keep computer
+  awake while Claude works", default true: "Prevents idle sleep only; a closed lid still sleeps"),
+  `ccKeepAwakeOnBattery` (default true), `wakeSchedulerEnabled` (default false). None is set in the test laptop's file,
+  so the defaults apply. Wakeshot tests never change them. **Verified (code, disk)**.
 - The while-working hold: taken while any Code session runs a turn, or has background tasks or loops (those count up
   to 2 hours after the last turn); let go 30 s after the work ends; a session stops counting after 1 hour with no
   progress (3 hours with background work it could lose) and after 24 hours in all. Timer values read from the code;
@@ -573,10 +518,10 @@ Code sessions work), `code_session:<id>` (a session's own keep-awake switch), `r
 - Quit: "[CCD] Stopping N active session(s) on quit", then "quit: ... stopped N local session(s)"; armed work (loops)
   is saved and restored at the next launch. How a session process ends (exit or kill) is **not verified**; either
   way Wakeshot sees it by the pid wait (rule 2).
-- Closing the window: not read; expected to leave the app in the tray with sessions running (needs Haik).
-- A crash of the app: not run (it would mean killing Haik's app). If its `claude.exe` dies, the pid wait ends the
-  hold; if it lives, the SDK path runs its work to the end and exits when its input closes ("Phase 4 live shapes",
-  fixture 12). Both are checks already tested live for the CLI and SDK; not run with the app.
+- Closing the window: not read; expected to leave the app in the tray with sessions running (not run).
+- A crash of the app: not run (it would mean killing the user's own app). If its `claude.exe` dies, the pid wait ends
+  the hold; if it lives, the SDK path runs its work to the end and exits when its input closes ("Live shapes
+  (2026-11-03)", fixture 12). Both are checks already tested live for the CLI and SDK; not run with the app.
 - A `CLAUDE_CONFIG_DIR` set only in the app (a saved local environment) moves its sessions to that folder, which the
   tray does not watch. One set as a Windows user variable is seen by both (docs: "A local session gets Desktop's
   value whether you set yours in your shell profile, your Windows user or system variables, ...").
@@ -584,7 +529,7 @@ Code sessions work), `code_session:<id>` (a session's own keep-awake switch), `r
 ### Other facts
 
 - The app reads CLI transcripts too: `main.log` "[CCD] /stats (worker) scanned 320/320 transcript files". It writes
-  nothing to `~/.claude/sessions` by itself (only the two CLI sessions' files were there tonight). **Verified (log,
-  disk)**.
+  nothing to `~/.claude/sessions` by itself (only the two CLI sessions' files were there on 2026-11-07). **Verified
+  (log, disk)**.
 - `remote-control.log`: the app's own Remote Control host is `off` here. Whether its Code sessions get a
   `bridgeSessionId` (which makes `waiting` hold, rule 4) is **not verified**.

@@ -1,23 +1,24 @@
 # Agent hooks
 
-Design, 2026-11-06 (card `p4-hooks-design`), with the fixes of its security review
-(`reviews/p4-hooks-design-security.md`). Later the top part becomes the user reference, like `hold-files.md`.
+The design for agents that leave no file signal, written 2026-11-06 and revised after a security review. Cursor and
+Antigravity used it in test builds; both are out of v1, and their code stays, tested but unwired, for a later version.
 
 Some agents leave no file that tells "working" from "idle". For those, Wakeshot adds its own small hook: a folder it
-owns, which the agent loads by itself, that runs one Wakeshot command when a turn starts and when it ends. Haik's rule
-(`product.md`, "What keeps the PC awake", Hooks, 2026-11-06): never edit the user's own settings, never for Claude
-Code; Wakeshot adds the hooks by itself when it finds the agent, says so once in a notice, lists them in the README,
-and removes them at uninstall.
+owns, which the agent loads by itself, that runs one Wakeshot command when a turn starts and when it ends. The rule
+(`product.md`, "What keeps the PC awake", Hooks): never edit the user's own settings, never for Claude Code; Wakeshot
+adds the hooks by itself when it finds the agent, says so once in a notice, lists them in the README, and removes them
+at uninstall.
 
 Marks: **verified** = read in the agent's shipped code or official docs (version and file given). **not verified**
-= inferred or not checked. Nothing was installed or run: Cursor CLI `2026.11.05-86047df` (Windows package zip) and
-Cursor editor `3.29.9` (commit `306d153d51d7`, Linux `.deb`; its app JS is shared with Windows) were unpacked as data.
+= inferred or not checked. The code facts come from Cursor CLI `2026.11.05-86047df` (Windows package zip) and Cursor
+editor `3.29.9` (commit `306d153d51d7`, Linux `.deb`; its app JS is shared with Windows), unpacked as data, not run.
+What was run is marked live.
 
 ## What Wakeshot adds (user view)
 
 v1 adds no hook to any agent. Cursor and Antigravity, the two agents Wakeshot hooked, are out of v1, each because a
-way to stop its work leaves no sign Wakeshot can see (`product.md`, "Other agents"; Cursor: Haik, 2026-11-06 23:21,
-"ok le'ts drop cursor as well."). Test builds before v1 added the folders below. Each v1 start removes them by the
+way to stop its work leaves no sign Wakeshot can see (`product.md`, "Other agents"). Test builds before v1 added the
+folders below. Each v1 start removes them by the
 uninstall's rules ("Source turned off" below): an unchanged folder is deleted, one you changed is moved to
 `wakeshot-removed` in the agent's own folder. No notice. The design stays for a later version that hooks an agent
 again.
@@ -43,11 +44,11 @@ When a version adds a hook (none in v1):
 
 ## Cursor
 
-**Out of v1** (Haik, 2026-11-06 23:21: "ok le'ts drop cursor as well."; card `p4-cursor-off`): a chat deleted while it
-runs sends no `stop`, only the `sessionEnd` with `final_status` `generating` that Ctrl+F4 also sends, whose turn goes
-on and ends with its own `stop`; no field tells the two apart, so the hold would last until the window closes
-(`p6-agents-install-e2e`, live, Cursor 3.27.12). The tray neither watches it nor adds its folder; a start removes the
-folder an earlier build added ("Source turned off"). The design and code below stay, tested, for a later version.
+**Out of v1**: a chat deleted while it runs sends no `stop`, only the `sessionEnd` with `final_status` `generating`
+that Ctrl+F4 also sends, whose turn goes on and ends with its own `stop`; no field tells the two apart, so the hold
+would last until the window closes (seen live, Cursor 3.27.12, 2026-11-06). The tray neither watches it nor adds its
+folder; a start removes the folder an earlier build added ("Source turned off"). The design and code below stay,
+tested, for a later version.
 
 ### Facts
 
@@ -62,7 +63,7 @@ folder an earlier build added ("Source turned off"). The design and code below s
 | **CLI interactive loop fires `beforeSubmitPrompt` and `stop` only when the user's or the project's `hooks.json` has that event**; plugin hooks alone are not counted there. `sessionStart` and `sessionEnd` use `hasHooksForStep`, which counts plugins | CLI `3026.index.js` (the gates before `executeHookForStep`) | verified (code), **not run** |
 | `stop` carries `status` (`completed`, `aborted`, `error`) and the turn's `generation_id`; the editor compares it with the chat's latest turn ("a newer turn owns the chat") | editor `triggerStopHook`; CLI `3026.index.js` (three `stop` calls: completed, aborted, error) | verified (code) |
 | `beforeSubmitPrompt` input holds the prompt text and attachments; every input holds `conversation_id`, `generation_id`, `user_email`, `workspace_roots`, `transcript_path`, `cursor_version` | docs; CLI `executeHookForStep` | verified |
-| On Windows the command runs in PowerShell. CLI: payload in a temp file `%TEMP%\cursor-hooks-<random>\payload.json`, then `$OutputEncoding` set to UTF-8 and `Get-Content -Raw -Encoding UTF8 <file> \| & { $input \| <command> }`. Other mode: the payload as a here-string in the PowerShell command line | CLI `619.index.js` `executeCommandScript`; `index.js` `dt`, `it` (`"stdin"` gives the temp file) | verified (code); the editor's temp file form verified live ("Phase 4 live test") |
+| On Windows the command runs in PowerShell. CLI: payload in a temp file `%TEMP%\cursor-hooks-<random>\payload.json`, then `$OutputEncoding` set to UTF-8 and `Get-Content -Raw -Encoding UTF8 <file> \| & { $input \| <command> }`. Other mode: the payload as a here-string in the PowerShell command line | CLI `619.index.js` `executeCommandScript`; `index.js` `dt`, `it` (`"stdin"` gives the temp file) | verified (code); the editor's temp file form verified live ("Live test (2026-11-06)") |
 | A command that is not found ends with exit 127; any exit but 2 fails open (the action goes on); exit 2 blocks; empty stdout counts as a failed hook; default timeout 60 s | CLI `index.js` `lt`, `R=60`; editor `extensionHostProcess.js` has the same exit 127 code | verified (code) |
 | Plugin `stop` hooks run in the workspace root, other plugin hooks in the plugin folder; `CURSOR_PLUGIN_ROOT` is set | CLI `619.index.js`; docs | verified |
 | The editor runs hook commands from its extension host or its agent host daemon, both `Cursor.exe` processes | the spawn code is in `extensionHostProcess.js` and `agent-host-daemon/dist/bin/daemon.cjs` | verified live for plugin hooks: the hook's PowerShell is a child of the window's extension host (`Cursor.exe --type=utility --utility-sub-type=node.mojom.NodeService`), which ends with the window |
@@ -109,8 +110,8 @@ also reads) are the user's own: never touched.
   spec, not re-read today) or a control character: one log line, no hooks, no notice.
 - Non-ASCII user names (Armenian, Russian): Cursor and PowerShell take UTF-16 command lines, so likely fine; how
   Cursor's shell executor hands over the command text was not traced. If any step decoded it as a legacy code page,
-  `ё` (UTF-8 `D1 91`) and `ւ` (`D6 82`) would turn into U+2018 and U+201A and break the quoting. The live test runs
-  the exe from a folder named with `ё`, `ւ` and a space.
+  `ё` (UTF-8 `D1 91`) and `ւ` (`D6 82`) would turn into U+2018 and U+201A and break the quoting. A run of the exe
+  from a folder named with `ё`, `ւ` and a space: not tested.
 - `timeout` 5 s caps the wait at 5 s instead of 60 s, whatever happens to the exe.
 - No `failClosed`, no `matcher`, no `followup_message`, no `permission`. Exit code is always 0.
 
@@ -124,11 +125,11 @@ also reads) are the user's own: never touched.
 
 - Idle and gone are "no file": the source sees only working chats.
 - `sessionEnd` with `final_status` `generating` comes when the user closes a running chat's tab (Ctrl+F4): the turn
-  goes on in the background and fires its own `stop` when it ends (live, "Phase 4 live test"). Any other value, type
-  or a missing field deletes. Closing the window fires no `sessionEnd`; its extension host ends with it.
+  goes on in the background and fires its own `stop` when it ends (live, "Live test (2026-11-06)"). Any other value,
+  type or a missing field deletes. Closing the window fires no `sessionEnd`; its extension host ends with it.
 - Waiting for approval: Cursor sends no hook event for it (the CLI maps Claude's `Notification` and
   `PermissionRequest` to nothing, `index.js`). So an approval wait counts as working, as for Codex (`product.md`,
-  "Answers to the track plan questions"). The battery floor still protects. Product question 2.
+  "Answers to the track plan questions"). The battery floor still protects.
 - Subagents run inside the parent turn, which ends with the parent's `stop`. `subagentStart`/`subagentStop` are not
   hooked. Change it when a live test shows a subagent still running after the parent's `stop`.
 - The `generation_id` check keeps a late `stop` of turn N from deleting turn N+1's file. The prompt hook and the stop
@@ -177,12 +178,14 @@ knows only a small table: the input field names, the events and the process imag
      line. A copy that runs past its deadline drops a "working" write, so a slow copy can never land after the turn's
      `stop` (the wait handle has no right to end the copy); deletes still apply. Reason for the hand-off: the
      folders below inherit the profile's rights, so any Medium process of the same user can swap them for a junction
-     or plant hard links in them; an elevated write or delete there would hand it a
-     write and delete primitive it does not have without Wakeshot (review major 1). At Medium a swap gains nothing.
+     or plant hard links in them; an elevated write or delete there would hand it a write and delete primitive it
+     does not have without Wakeshot. At Medium a swap gains nothing.
      Cost: one more process start for elevated agents.
 5. Under the mutex `Local\Wakeshot.AgentHooks` (wait at most 1 s, then go on without it): apply the event to
    `%LocalAppData%\Wakeshot\agents\cursor\<conversation_id>.json` (create the folders; `store::write_atomic`, whose
-   temp file opens with `CREATE_NEW`: contract change 6). On `beforeSubmitPrompt` also prune: delete a file in that
+   temp file `<name>.<pid>.<n>.<16 hex>.tmp` opens with `CREATE_NEW`, so a planted hard link is never written
+   through; it tries three names, then fails with `ERROR_FILE_EXISTS`, and deletes nothing to free a name). On
+   `beforeSubmitPrompt` also prune: delete a file in that
    folder only if it parses as version 1 and names a process that is not running, and temp files of
    `write_atomic`'s own name shape older than 1 minute. Nothing else is ever deleted.
 6. Print `{}` and exit 0. Always, also after any error. No path exits 2, which is Cursor's block code. `{}` merges to
@@ -216,7 +219,7 @@ start is Cursor's cost.
 
 ### How the source reads them
 
-`sources::cursor` (core, `Owner: p4-cursor-source`):
+`sources::cursor` (core):
 
 - `wanted()`: one `WantedFile::Folder { dir: <data>\agents\cursor, accept: name ends in ".json" }` (temp names from
   `write_atomic` do not end in `.json`).
@@ -231,12 +234,13 @@ start is Cursor's cost.
   same way.
 - No new `WantedFile` or `Liveness` variant is needed.
 
-**Built** (`p4-cursor-source`, 2026-11-06): "The hook command", "The files it writes" and this part, in
-`sources::hooked` (shared: the `Agent` table type, the parse, the id rules, the event rules with Antigravity's idle
-stop, the files, the walk, the checked values, a generic `HookedSource`), `sources::cursor` (`AGENT`, `LABEL`,
-`CLI_LABEL`, `source(data_root)`) and the CLI's `hook.rs`. Live test 0 is done by code reading: the editor 3.27.12
-passes the input through a temp file on every path that runs a plugin hook, so the Gate holds (`research.md`, "Cursor
-hook payload form"). Where the build differs from the text above:
+**As built** (2026-11-06): "The hook command", "The files it writes" and this part, in `sources::hooked` (shared:
+the `Agent` table type, the parse, the id rules, the event rules with Antigravity's idle stop, the files, the walk,
+the checked values, a generic `HookedSource`), `sources::cursor` (`AGENT`, `LABEL`, `CLI_LABEL`, `source(data_root)`)
+and the CLI's `hook.rs`. The CLI has no JSON crate of its own, so the input parse and the state file text live in
+`sources::hooked` (core, which has `serde`). The payload form was checked by reading code: the editor 3.27.12 passes
+the input through a temp file on every path that runs a plugin hook, so the Gate holds (`research.md`, "Cursor hook
+payload form"). Where the build differs from the text above:
 
 - The runtime check searches the bare key `conversation_id`, not `"conversation_id"`: Node writes a `"` inside an
   argument as `\"`, so the quoted needle would miss a here-string passed through Node (checked with Node 26). Found,
@@ -249,17 +253,19 @@ hook payload form"). Where the build differs from the text above:
 - A newer `version` in a file is ignored with no log line: sources have no log (core). A bad file gets `RetryOnce`,
   then no session and no notice.
 - `hook <agent> remove` hands the agent word to `agent_hooks::remove_command` as given and reads no input.
-- For the tray: `tray_mode::hooked_sources` (`p4-antigravity-source`).
+- The `hook` parse: a missing word is empty; any shape but `hook <agent> <event>` and `hook <agent> <event>
+  --checked <value>...` (one value at least) gives empty words; `--checked` and `hook` match in any case. It never
+  gives `Help` or `Bad`.
 
-**Review fixes** (`p4-live-cursor`, `reviews/p4-hooks-code.md`):
+**After the code review**:
 
-- The runtime check runs before the agent gate (M1). Found with no agent process above the hook: nothing written and
+- The runtime check runs before the agent gate. Found with no agent process above the hook: nothing written and
   no `blocked.json` (no process to name), one log line, the plugin removed (above Medium: through the Medium copy's
   `hook <agent> remove`). When the process list fails, the hook's parent has no name, so the check cannot run: one log
   line, nothing written; the next hook run checks again (`process` has no call for one process's parent; change it
   when one lands).
 - On the blocked path, and in every Medium `hook <agent> remove`, the agent's chat files (`<chat id>.json`, by the id
-  rule) are deleted under the mutex: with the hooks gone no `stop` would end them (m5). `problem.json` and
+  rule) are deleted under the mutex: with the hooks gone no `stop` would end them. `problem.json` and
   `blocked.json` stay.
 
 ### Cursor's `main.log`: dropped
@@ -268,9 +274,10 @@ The editor's own wakelock lines in `main.log` (`research/cursor-gemini-signals.m
 second signal. Reasons: they are log text with no contract (wording, level and rotation not verified); they name no
 chat, so they cannot be matched to a hook file; a second parser and a second live test cost more than they give. What
 they would add: ending a hold during an approval wait (the editor releases its lock then), and ending a hold whose
-`stop` never came. The live test found no real case with `stop` missing (Esc does not cancel a turn in 3.27.12; the
-Stop button fires `stop` `aborted`). Change it when a case shows `stop` missing, or Haik wants approval waits not to
-hold for Cursor (product question 2).
+`stop` never came. The hook live test found no case with `stop` missing (Esc does not cancel a turn in 3.27.12; the
+Stop button fires `stop` `aborted`); a later live test found one, a chat deleted while it runs ("Out of v1" above),
+and Cursor left v1 instead. Change it when Cursor comes back and needs that end, or when approval waits should stop
+holding for Cursor.
 
 ## Adding
 
@@ -284,8 +291,8 @@ when `%USERPROFILE%\.cursor\` exists: both Cursor apps create it (the CLI's conf
 first sees a Cursor process" if users install Cursor and expect it to work before the next sign-in.
 
 Wakeshot's record is `%LocalAppData%\Wakeshot\agent-hooks.json`: `{ "version": 1, "cursor": "added" | "removed",
-"antigravity": ... }`. What the tray does for Cursor (Antigravity the same, with its own folders). Out of v1 no start
-runs this table (`ADDED_AT_START` is empty since `p4-cursor-off`); each start runs "Source turned off" instead:
+"antigravity": ... }`. What the tray does for Cursor (Antigravity the same, with its own folders). In v1 no start
+runs this table (`ADDED_AT_START` is empty); each start runs "Source turned off" instead:
 
 | `.cursor` | Plugin folder | Record | Action |
 |---|---|---|---|
@@ -313,16 +320,15 @@ runs this table (`ADDED_AT_START` is empty since `p4-cursor-off`); each start ru
   `store::write_atomic`. A staging folder left by a crash: at each start and at uninstall, a `.wakeshot-new-*` folder
   that holds only the fixed files, each equal to what this version writes or to its own marker's hash, is removed by
   the fixed names, in the agent's own folder and in the plugin folder's parent (where test builds staged before).
-  Why outside: `agy` 1.5.2 lists and runs dot-named plugin folders (`p4-live-antigravity`, live), so a staging or
-  removed folder in its plugin folder would load; Cursor's CLI skips dot names (code), and one rule serves both.
+  Why outside: `agy` 1.5.2 lists and runs dot-named plugin folders (seen live, 2026-11-06), so a staging or removed
+  folder in its plugin folder would load; Cursor's CLI skips dot names (code), and one rule serves both.
 - Never fight the user. Deleting the folder is the clearest "no" a user can give, and Cursor's own plugin switch (if
   the user turns it off there) keeps the folder, so Wakeshot does nothing against it either. A reinstall deletes the
-  data folder and so starts as on a new PC, like the Run value's startup switch (`p6-uninstall-startup-approval`).
-  Product question 3 asks whether a menu item should bring them back.
+  data folder and so starts as on a new PC, like the Run value's startup switch. No menu item or command brings the
+  hooks back.
 
 The notice, once, when Wakeshot adds the folder (`Notice::HooksAdded { agent: "Cursor" }`, quiet, no click). No v1
-start shows it, since v1 adds no folder; the event, the notice and its words stay, unchanged, for a later version
-(`p4-cursor-off`: the least change, no contract change):
+start shows it, since v1 adds no folder; the event, the notice and its words stay, unchanged, for a later version:
 
 > **Wakeshot now works with Cursor**
 > It added a small hook to Cursor's plugins, so the PC stays awake while Cursor's agent works. It works from
@@ -344,13 +350,13 @@ start shows it, since v1 adds no folder; the event, the notice and its words sta
     agent loads plugins from (`agy` 1.5.2 loads dot-named folders there, live), so the plugin stops loading and the
     user's edits stay on disk. The hook file is deleted first when it is Wakeshot's, so what stays runs nothing.
     If that rename fails too, one log line; the README's uninstall line says which folder to delete. When the restore
-    then succeeds, the data folder step deletes that line with the logs, so the README is the only pointer (review m2,
-    accepted: keeping the logs needs a change of the `HookEnv` contract for a case that needs a changed or held file
-    and a failed rename; change it when a user reports hooks left after an uninstall).
+    then succeeds, the data folder step deletes that line with the logs, so the README is the only pointer (accepted:
+    keeping the logs needs a change of the `HookEnv` contract for a case that needs a changed or held file and a
+    failed rename; change it when a user reports hooks left after an uninstall).
   - The `.wakeshot-new-*` staging rule above runs here too. The record goes with the data folder step.
 - **Updated hook**: nothing. The command path does not change, and the next tray start rewrites older content.
-- **Source turned off** (built in v1 for Cursor and Antigravity, `p4-cursor-off`; also for a switch if Haik wants
-  one): each start runs the uninstall's removal above, in-process at Medium, for every agent of `AGENTS` that is not
+- **Source turned off** (in v1 for Cursor and Antigravity; it would also serve a per-agent switch): each start runs
+  the uninstall's removal above, in-process at Medium, for every agent of `AGENTS` that is not
   in `ADDED_AT_START` (`agent_hooks::retire`), before any add. Once the folder is gone (deleted, or moved to
   `wakeshot-removed`), the record drops that agent's `added` mark. It does not write `removed`: that mark means the
   user said no, and here Wakeshot removed the folder, so a later version that adds the agent again starts as on a new
@@ -363,8 +369,8 @@ start shows it, since v1 adds no folder; the event, the notice and its words sta
   are Wakeshot's own forms (above); anyone of the same user can run them, which gives no more than deleting the
   folder or writing a state file by hand.
 
-**Built** (`p4-agent-hooks-install`, 2026-11-06): "Adding" and "Removing" in
-`crates/wakeshot-windows/src/agent_hooks.rs`, with these choices where the text above leaves room:
+**As built** (2026-11-06): "Adding" and "Removing" in `crates/wakeshot-windows/src/agent_hooks.rs`, with these
+choices where the text above leaves room:
 
 - Entry points: `at_start` (the tray, through `app::startup::add_agent_hooks`, on a thread of its own, which posts
   `Event::HooksAdded` per folder added; called by `tray_mode::start_agent_hooks` in `serve`), `on_uninstall`
@@ -384,13 +390,12 @@ start shows it, since v1 adds no folder; the event, the notice and its words sta
 - Uninstall: the marker stays while a fixed file stays; empty fixed subfolders go anyway. The rename to
   `wakeshot-removed` (or `-2` to `-9`) never replaces a folder of that name. A file held open without delete sharing
   fails the delete (32), and the folder's rename then fails too (5): one log line says to delete it by hand (tested).
-- A staging folder that does not list or read is one log line and stays; the main folder's work goes on (review m3).
-  `remove` is private: only `on_uninstall` and `remove_command`, which check the level, call it (m6).
+- A staging folder that does not list or read is one log line and stays; the main folder's work goes on.
+  `remove` is private: only `on_uninstall` and `remove_command`, which check the level, call it.
 - An elevated uninstall starts a copy only for an agent whose `local` folder exists, and logs each copy's outcome; the
   copy's own lines go to the `cli` log.
 - A record that does not read as version 1 (another version, a value but `added` or `removed`, not JSON) adds nothing
   and is never rewritten: delete it to start over.
-- "Source turned off": built by `p4-cursor-off` (2026-11-06), above.
 
 ## Failure cases
 
@@ -398,15 +403,15 @@ start shows it, since v1 adds no folder; the event, the notice and its words sta
 |---|---|
 | Tray not running | The hook still writes and deletes its files. A tray that starts later sees the working chats. |
 | Automatic off | Files are written; the tray ignores agent sessions, as for every source. |
-| Wakeshot removed without cleanup (data folder deleted by hand, uninstall hook killed, install folder deleted) | Each event runs PowerShell, the exe is not found, exit 127: Cursor counts the hook failed and goes on (fail open; verified in code, CLI and editor). Live: a plugin hook naming a missing exe in the same `'<path>' args` form failed with 127 on 12 runs while all 6 prompts went through, and Haik saw no message. Cost: one PowerShell start per prompt and per stop (about 0.9 s per prompt). Fix: delete `.cursor\plugins\local\wakeshot`. |
-| Hook slow or stuck | Cursor waits for `beforeSubmitPrompt` before it sends the prompt (editor `await`, verified), so the hook delays each prompt by PowerShell's start plus the exe: about 0.85 s here, almost all of it Windows PowerShell 5.1's own start (live, "Phase 4 live test"). `timeout` 5 s caps it. The exe never waits on the tray, the network or a user. |
-| `stop` never comes (crash, kill) | The file stays; the hold lasts until the named process ends, or the chat's next `stop` or `sessionEnd`. When that process is long-lived and shared (Cursor's agent host daemon, which may outlive a window: not verified; Antigravity's IDE hub, one `agy.exe` for all IDE chats; its Remote Control daemon, which runs from logon), a missed end holds for the whole session on AC. The walk takes the nearest match, which is the process that ran the hook, so it never picks a longer-lived one above it. Live test rows: Esc and a crash in each. Any fallback beyond this is a time cap, which the product rule forbids: product question 5. |
+| Wakeshot removed without cleanup (data folder deleted by hand, uninstall hook killed, install folder deleted) | Each event runs PowerShell, the exe is not found, exit 127: Cursor counts the hook failed and goes on (fail open; verified in code, CLI and editor). Live: a plugin hook naming a missing exe in the same `'<path>' args` form failed with 127 on 12 runs while all 6 prompts went through, and Cursor showed no message. Cost: one PowerShell start per prompt and per stop (about 0.9 s per prompt). Fix: delete `.cursor\plugins\local\wakeshot`. |
+| Hook slow or stuck | Cursor waits for `beforeSubmitPrompt` before it sends the prompt (editor `await`, verified), so the hook delays each prompt by PowerShell's start plus the exe: about 0.85 s here, almost all of it Windows PowerShell 5.1's own start (live, "Live test (2026-11-06)"). `timeout` 5 s caps it. The exe never waits on the tray, the network or a user. |
+| `stop` never comes (crash, kill) | The file stays; the hold lasts until the named process ends, or the chat's next `stop` or `sessionEnd`. When that process is long-lived and shared (Cursor's agent host daemon, which may outlive a window: not verified; Antigravity's IDE hub, one `agy.exe` for all IDE chats; its Remote Control daemon, which runs from logon), a missed end holds for the whole session on AC. The walk takes the nearest match, which is the process that ran the hook, so it never picks a longer-lived one above it. Any fallback beyond this is a time cap, which the "No guessing" rule (`product.md`) forbids. |
 | An agent elevated as another account (over-the-shoulder UAC) | The Medium copy runs as the Explorer user, so the file lands in that user's data folder and the console user's tray holds. It holds only ids; accepted. |
 | Esc or the stop button | Editor 3.27.12, live: the Stop button fires `stop` `aborted` with the turn's id, and the hold ends about 1.4 s later; Esc does not cancel a turn (the turn goes on and ends with its own `stop`). CLI: three `stop` calls in code (completed, aborted, error), not run with the gate open. |
 | Antigravity CLI: Esc or Ctrl+C | No hook fires; the cancel line in `agy`'s log ends the hold at the next read, within 30 s (live, "Exact end"). An `agy` version not tested: no hold, "update Wakeshot" |
-| A chat left running behind a new one (Ctrl+N), or its tab closed (Ctrl+F4) | Live: the turn goes on in the background and fires its own `stop` when it ends. Ctrl+F4 also fires `sessionEnd` with `final_status` `generating` at once, which keeps the chat working (fixed in the live card: the first rule deleted the file there, 50 s before the work ended). |
-| A chat deleted while it runs | Code: `triggerStopHook` returns with no `stop` when the chat's data is gone. If so, the hold lasts until the window closes. **Not run**; the install check runs it. |
-| Cursor CLI (interactive and `-p`) | Live (CLI 2026.11.05-86047df): with only the plugin, the CLI fires `sessionEnd` and no `beforeSubmitPrompt` or `stop`, in both modes, so the CLI shows nothing and holds nothing. If the user has their own `~/.cursor/hooks.json` with those events, the gate opens and ours run too (code read, not run). Product question 1. |
+| A chat left running behind a new one (Ctrl+N), or its tab closed (Ctrl+F4) | Live: the turn goes on in the background and fires its own `stop` when it ends. Ctrl+F4 also fires `sessionEnd` with `final_status` `generating` at once, which keeps the chat working (the first rule deleted the file there, 50 s before the work ended; fixed after the live test). |
+| A chat deleted while it runs | Code: `triggerStopHook` returns with no `stop` when the chat's data is gone. Seen live later (Cursor 3.27.12, 2026-11-06): no `stop`, only a `sessionEnd` with `final_status` `generating`, so the hold lasts until the window closes. The reason Cursor is out of v1. |
+| Cursor CLI (interactive and `-p`) | Live (CLI 2026.11.05-86047df): with only the plugin, the CLI fires `sessionEnd` and no `beforeSubmitPrompt` or `stop`, in both modes, so the CLI shows nothing and holds nothing: the Cursor CLI is not covered. If the user has their own `~/.cursor/hooks.json` with those events, the gate opens and ours run too (code read, not run). |
 | A newer Cursor changes the hook format | File `version` 2 that drops version 1: the hook never runs, so no hold (fails safe, no notice). Renamed input fields: `problem.json`, the "update Wakeshot" notice. Renamed events: no hold. The live test is repeated on each Cursor version Wakeshot claims. |
 | Enterprise policy | "Allow Local Plugin Imports" off (the Enterprise default): the plugin is not loaded, no hold, nothing breaks. |
 | Two Wakeshot installs | Velopack installs per user, so one per user, each with its own profile and `.cursor`. A dev tray beside the installed one never touches agent folders. |
@@ -435,13 +440,13 @@ start shows it, since v1 adds no folder; the event, the notice and its words sta
   plugin, against the rule that prompts are never stored or logged (`product.md`).
 - **Gate:** Wakeshot adds a hook only for an agent whose every app that loads the folder passes the input through a
   temp file or stdin. The Cursor editor and the Cursor CLI load one folder, so **if the editor uses the command line,
-  Wakeshot adds no Cursor plugin at all**, for either app, until Haik decides (product question 4; default: none).
-  That costs little: the CLI's interactive loop does not fire plugin-only prompt and stop hooks anyway (question 1).
-  Antigravity: how `agy` passes the input is unknown; the same check is the first step of its build card.
+  Wakeshot adds no Cursor plugin at all**, for either app. That costs little: the CLI's interactive loop does not fire
+  plugin-only prompt and stop hooks anyway ("Failure cases", Cursor CLI). Both passed the gate: the Cursor editor
+  3.27.12 uses a temp file ("As built" under "How the source reads them"), and `agy` 1.5.2 uses stdin ("Antigravity").
 - **How the build checks it.** The form is a runtime option, not fixed by version: in the CLI,
   `commandHookPayloadTransport` is a parameter its callers pass (`3026.index.js`, `4110.index.js`, `697.index.js` from
-  a function, `2855.index.js` from a variable; verify review). So two checks:
-  1. Static, first step of the Cursor build card, and again for each Cursor version Wakeshot claims: in the editor's
+  a function, `2855.index.js` from a variable). So two checks:
+  1. Static, before a hook ships and again for each Cursor version Wakeshot claims: in the editor's
      code (`extensionHostProcess.js`, the agent host daemon) find every place the option is set, and say whether it is
      a constant, a user setting or an experiment flag. Anything but "temp file in every path": no Cursor plugin.
   2. Runtime, in every hook run, for versions the user updates to: before any write, the hook reads its parent
@@ -466,41 +471,37 @@ start shows it, since v1 adds no folder; the event, the notice and its words sta
 
 ## Antigravity
 
-**Out of v1** (Haik, 2026-11-06 about 21:50: "Yes remove antigravity. Too much problematic."; card
-`p4-vscode-local-off`): Esc shows only in `agy`'s own log, checked for one `agy` version, and `agy` releases almost
-daily. The tray neither watches it nor adds its folder at a start (`agent_hooks::ADDED_AT_START`); `AGENTS` keeps
-it, so a start (since `p4-cursor-off`), `wakeshot hook antigravity remove` and the uninstall remove a folder an
-earlier build added. The design and code below stay, tested, for a later version.
+**Out of v1**: Esc shows only in `agy`'s own log, checked for one `agy` version, and `agy` releases almost daily. The
+tray neither watches it nor adds its folder at a start (`agent_hooks::ADDED_AT_START`); `AGENTS` keeps it, so a
+start, `wakeshot hook antigravity remove` and the uninstall remove a folder an earlier build added. The design and
+code below stay, tested, for a later version.
 
-It needs hooks: `research/antigravity-signals.md` (card `p4-antigravity-research`, still in progress when read on
-2026-11-06; CLI 1.5.2 and IDE 2.6.0, docs, not run). The same pattern applies, with these differences:
+It needs hooks (`research/antigravity-signals.md`; CLI 1.5.2 and IDE 2.6.0). The same pattern applies, with these
+differences (the middle column from docs and code, 2026-11-06, not run):
 
 | Point | Antigravity (from that research) | Design |
 |---|---|---|
 | Folder | `%USERPROFILE%\.gemini\config\plugins\wakeshot\` with `plugin.json` and `hooks.json` (not `hooks/hooks.json`); CLI and IDE read the same folder; a disabled plugin runs no hooks | The same marker, record, add, rewrite and removal rules; fixed files `plugin.json`, `hooks.json`, `wakeshot-hooks.json` in `wakeshot\` only. The global `~\.gemini\config\hooks.json` is the user's file, never edited |
 | Presence | `.gemini` is also Gemini CLI's folder (dropped from v1) | The research's rule 1: `agy.exe` in `%LOCALAPPDATA%\agy\bin\` or `%USERPROFILE%\.gemini\bin\`, and `.gemini\config\` already exists. Wakeshot never creates `config\` itself (it may create `plugins\` in it). With `ANTIGRAVITY_GEMINI_DIR` set (meaning not verified): add nothing |
 | File | Named hook groups: `{ "wakeshot": { "PreInvocation": [...], "Stop": [...] } }`; `timeout` in seconds, default 30 | `timeout` 5 |
-| Events | `PreInvocation` before every model call; `Stop` when the loop ends, with `fullyIdle` (false: background tasks still run); no session end event, no approval event | Since `p4-antigravity-exact-end` ("Exact end" below): `PreInvocation` writes the file `working`, naming `agy`'s log and when `agy` started the hook; `Stop` deletes it whatever `fullyIdle` says (background commands are not held); a cancel line in the log ends the turn. Approval waits count as working |
+| Events | `PreInvocation` before every model call; `Stop` when the loop ends, with `fullyIdle` (false: background tasks still run); no session end event, no approval event | Since "Exact end" below: `PreInvocation` writes the file `working`, naming `agy`'s log and when `agy` started the hook; `Stop` deletes it whatever `fullyIdle` says (background commands are not held); a cancel line in the log ends the turn. Approval waits count as working |
 | Session | `conversationId` (camelCase, a UUID) on stdin | File name, the same UUID rule, lowercased |
-| Agent process | `agy.exe`: the CLI from `%LOCALAPPDATA%\agy\bin\`, the IDE's hub from `%USERPROFILE%\.gemini\bin\` (one hub for all IDE chats) | Walk to the first `agy.exe`; label by its folder ("Antigravity CLI", "Antigravity"). Since `p4-antigravity-exact-end` only the CLI is held: the hub's hook runs and writes nothing |
+| Agent process | `agy.exe`: the CLI from `%LOCALAPPDATA%\agy\bin\`, the IDE's hub from `%USERPROFILE%\.gemini\bin\` (one hub for all IDE chats) | Walk to the first `agy.exe`; label by its folder ("Antigravity CLI", "Antigravity"). Only the CLI is held ("Exact end"): the hub's hook runs and writes nothing |
 | Shell | How Windows starts the command (direct, `cmd` or PowerShell) is not documented; how it passes the input (stdin, a file or the command line) neither | The same command, `wakeshot.exe hook antigravity <event>`, as a bare absolute path, only when every character of the path is in an allow list: `A-Z a-z 0-9 \ : . _ -` and letters above ASCII. Anything else (a space, a quote, `{ } [ ] = ! @ # & ( ) ; , ^ % $`, backtick) gets no Antigravity hooks (one log line) until the live check names the shell and its quoting. The input form is the Privacy gate's check. The research's idea of a copy of the exe inside the plugin folder is rejected: an exe in another app's folder outlives Wakeshot and needs a copy at each update |
 | Cost | `PreInvocation` fires on every model call, so a turn with 30 steps runs the hook about 30 times | Measure in the live test; the exe stays under 50 ms |
 | Output | Docs disagree on `Stop`'s `decision`; non-zero exits fail open | Print `{}`; the live test confirms a stop goes through |
 
-The Antigravity build card first names how `agy` passes the input (the Privacy gate), then settles the shell and the
-command form, and checks that a dropped folder loads without `agy plugin install`.
-
-**Built** (`p4-antigravity-source`, 2026-11-06). The Privacy gate holds: `agy` 1.5.2 (the CLI, and the IDE 2.6.0's
+**As built** (2026-11-06). The Privacy gate holds: `agy` 1.5.2 (the CLI, and the IDE 2.6.0's
 hub, the same binary) runs each hook as `cmd /c <command>` through Go's `os/exec`, with the input on stdin and
 `ANTIGRAVITY_CONVERSATION_ID` in the environment; the IDE's JS runs no hook (`research.md`, "Antigravity hook payload
 form"). Where the build differs from or settles the table above:
 
 - Shell and command: settled by code, not by a live check. Go wraps the command in quotes for `cmd`, which strips them
-  again; a quote inside would become `\"`, which `cmd` does not read (checked with this PC's `cmd`). So the allow list
-  stays as designed, and `~` stays out too (`agy` expands only a leading `~/`, but no known folder holds a `~`).
-  Added by `p4-live-cursor`: a path the list refuses (a space in the profile path) uses its 8.3 form
-  (`GetShortPathNameW`) when that passes the list with `~` allowed inside a name; a volume that makes no short names
-  gives the long form back, so no hooks then, as before (tested on this PC's `C:`).
+  again; a quote inside would become `\"`, which `cmd` does not read (checked with the test laptop's `cmd`). So the
+  allow list stays as designed, and `~` stays out too (`agy` expands only a leading `~/`, but no known folder holds a
+  `~`). A path the list refuses (a space in the profile path) uses its 8.3 form (`GetShortPathNameW`) when that passes
+  the list with `~` allowed inside a name; a volume that makes no short names gives the long form back, so no hooks
+  then (tested on the test laptop's `C:`).
 - Input: the input has no event name, turn id or version field, so none is checked or logged. (`fullyIdle` was read
   here until "Exact end" below; it is not read now.)
 - Labels: "Antigravity CLI" for an `agy.exe` under `%LocalAppData%\agy\bin\`, "Antigravity" for any other (the IDE's
@@ -508,31 +509,31 @@ form"). Where the build differs from or settles the table above:
   with; the walk takes the nearest, as for Cursor.
 - `PreInvocation` prunes the folder (no session end event, so it is the only turn start); `Stop` does not.
 - Files: `hooks.json` first, `plugin.json` last, then the marker: `agy`'s plugin listing has no dot-name check (code
-  read; live: it loads them), so a staging folder becomes a plugin only with its last file. Since `p4-live-cursor`
-  the staging folder sits in `.gemini\config\`, outside `plugins\`, so that is a second guard. `plugin.json` holds `name`, `version`,
+  read; live: it loads them), so a staging folder becomes a plugin only with its last file. The staging folder sits
+  in `.gemini\config\`, outside `plugins\`, so that is a second guard. `plugin.json` holds `name`, `version`,
   `description` and `author`, the fields `agy`'s manifest type reads.
-- Presence: `ANTIGRAVITY_GEMINI_DIR` is read from the tray's environment, like the agents' variables in
-  `tray_mode::sources`.
+- Presence: `ANTIGRAVITY_GEMINI_DIR` is read from the tray's environment, like the agents' variables the tray reads
+  for its sources.
 - Not checked by code: that a dropped folder loads without `agy plugin install` and is enabled by default (the
   enabled state is kept outside the folder now, in an `enabledPlugins` map), and that `{}` lets a `Stop` through
-  (`agy`'s embedded doc: any `decision` but `continue` allows it). Live test 7.
-- For the tray: `tray_mode::hooked_sources` starts both hooked sources, and `tray_mode::start_agent_hooks` makes the
-  one `startup::add_agent_hooks` call in `serve`.
+  (`agy`'s embedded doc: any `decision` but `continue` allows it). Both seen live for the CLI
+  (`research/antigravity-signals.md`, live test of 2026-11-06); the IDE: not tested.
+- For the tray: `tray_mode::start_agent_hooks` makes the one `startup::add_agent_hooks` call in `serve`. In v1 the
+  tray starts neither hooked source.
 
-**Changed** (`p4-antigravity-source`, orchestrator decision 2026-11-06, for Haik's review, easy to undo): in "Adding",
-the first row ("missing | any | any | nothing") now also forgets the agent's mark. An agent's own folder gone at a
-start (`.cursor`; `.gemini` or `.gemini\config`) is the agent going away, not the user removing Wakeshot's hooks, so a
-reinstall that makes the folder again gets the hooks again, with the notice. Only Wakeshot's folder gone, the agent's
-still there, stays "the user removed it". A mark of either kind is forgotten, `removed` too: that "no" was given to
-the agent that went. A reinstall between two tray starts is not seen (the folder is back by the next start), so its
-hooks stay removed: change it when that shows up, for example by keeping the agent folder's creation time in the
-record.
+**Agent folder gone**: in "Adding", the first row ("missing | any | any | nothing") also forgets the agent's mark. An
+agent's own folder gone at a start (`.cursor`; `.gemini` or `.gemini\config`) is the agent going away, not the user
+removing Wakeshot's hooks, so a reinstall that makes the folder again gets the hooks again, with the notice. Only
+Wakeshot's folder gone, the agent's still there, stays "the user removed it". A mark of either kind is forgotten,
+`removed` too: that "no" was given to the agent that went. A reinstall between two tray starts is not seen (the folder
+is back by the next start), so its hooks stay removed: change it when that shows up, for example by keeping the agent
+folder's creation time in the record.
 
-### Exact end (`p4-antigravity-exact-end`, 2026-11-06)
+### Exact end (2026-11-06)
 
-Haik's "No guessing" rule (`product.md`): Esc and Ctrl+C in `agy` 1.5.2 fire no hook (22 of 22 interrupts, card
-Part A), so by hooks alone a chat stayed "working" after the work ended. Haik, 19:52: Wakeshot may read `agy`'s own
-log for its cancel line, with a guard. Built:
+The "No guessing" rule (`product.md`): Esc and Ctrl+C in `agy` 1.5.2 fire no hook (22 of 22 interrupts, tested
+2026-11-06), so by hooks alone a chat stayed "working" after the work ended. So Wakeshot reads `agy`'s own log for
+its cancel line, with a guard:
 
 | Case | What ends the hold | Seen live (debug build, dry-run tray) |
 |---|---|---|
@@ -566,11 +567,11 @@ log for its cancel line, with a guard. Built:
   nothing and logs nothing; its input on a command line still blocks as before. `agent_hooks` adds the plugin only when
   the CLI's `agy.exe` is there and names it "Antigravity CLI" (notice, log lines). An old IDE or `background` file
   holds nothing.
-- **Background commands**: not held. `fullyIdle` is not read (`false` in 5 runs and `true` in 2 while one ran, Part
-  A). Exact by process would need the command's `powershell.exe` named at its start: the next hook can come after an
-  Esc in the about 0.3 s between, and a `powershell.exe` child of `agy` may be an MCP server. Change it when `agy`
-  gives a hook or a log line at a background command's start and end, or Haik accepts holding by those processes with
-  that gap.
+- **Background commands**: not held. `fullyIdle` is not read (`false` in 5 runs and `true` in 2 while one ran).
+  Exact by process would need the command's `powershell.exe` named at its start: the next hook can come after an Esc
+  in the about 0.3 s between, and a `powershell.exe` child of `agy` may be an MCP server. Change it when `agy` gives a
+  hook or a log line at a background command's start and end, or when holding by those processes with that gap is
+  accepted.
 - **Delay**: a folder watch sees no change while `agy` appends to its open log (tested with Wakeshot's own filter on a
   scratch file: only "Created" and "Changed" at the close), so the log is read when the hook writes in
   `agents\antigravity\` and at the safety tick. An Esc'd turn's hold ends within 30 s. Change it when a contract change
@@ -579,7 +580,7 @@ log for its cancel line, with a guard. Built:
   it, on every model call, so an Esc in that gap would have kept "working". The `cmd`'s start closes it. Left: in the
   hour that repeats when daylight saving time ends, a cancel may compare as older than a hook of the first pass and
   be missed (the hold then lasts until the next turn or `agy`'s end); a clock set back by hand the same.
-- **Tests that failed without each rule** (mutation run, card Log): `Stop` deletes whatever `fullyIdle` says; a cancel
+- **Tests that failed without each rule** (mutation run, 2026-11-06): `Stop` deletes whatever `fullyIdle` says; a cancel
   ends the turn, at the microsecond of the hook's start too; the guard; the year; the IDE writes nothing; `turnAt` is
   `cmd`'s start; an older log with the pid does not count; the IDE's copy alone adds no plugin. The privacy test feeds
   a log with the marker in prompt lines, a prompt's next line, a model line and a near-miss cancel line, and checks
@@ -587,9 +588,8 @@ log for its cancel line, with a guard. Built:
 
 ## README lines
 
-For `p4-readme-agents`. v1 adds no hooks (`p4-cursor-off`, Haik 2026-11-06 23:21): no README line names Cursor or
-Antigravity as supported, and no line describes a hook folder, the hook's prompt handling or the "hooks added"
-notice. The lines below are all the README says about them:
+v1 adds no hooks: no README line names Cursor or Antigravity as supported, and no line describes a hook folder, the
+hook's prompt handling or the "hooks added" notice. The lines below are all the README says about them:
 
 - If the README lists what is not supported: "Cursor: not supported. When you delete a chat while it works, Cursor
   gives no sign that the work stopped." and "Antigravity: not supported. It leaves no reliable sign when you stop it
@@ -610,135 +610,44 @@ Kept for a later version that hooks an agent again:
 - The notice gets no link: a notice click can only open the log or the taskbar settings (`NoticeClick`), and a
   link would be one more contract change for little gain; the README is where users look.
 
-## Contract changes the build needs
+## Live test (2026-11-06)
 
-Beyond `p4-contracts-r2` (which made `SourceId::Cursor` and `Antigravity`, the stubs `sources/cursor.rs`,
-`sources/antigravity.rs` and `agent_hooks.rs`):
-
-1. `wakeshot-cli`: `Command::Hook { agent: String, event: String, values: Vec<String> }` in the frozen
-   `command.rs`, its line in `main.rs`, the parse in `args.rs` (`hook <agent> <event> [--checked <value>...]`, not in
-   `help`; `values` empty without `--checked`), a stub `hook.rs`.
-2. `wakeshot-windows::process`: the parent pid in the public list, `ProcessEntry.parent: u32` (the private `Listed`
-   already reads it from `Reserved2`); `image_path(pid) -> Result<PathBuf, WinError>`
-   (`QueryFullProcessImageNameW`); and `current_above_medium() -> Result<bool, WinError>` (this process's
-   `TokenIntegrityLevel` above Medium; the same read exists privately in `process.rs` tests and `store.rs`); and
-   `harden_dll_search()` (`SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32)`); and
-   `command_line_contains(pid, needle: &str) -> Result<bool, WinError>` for the runtime transport check, which reads
-   the command line, searches it and drops it, so no caller ever holds or logs it. The bins call Windows only through
-   `wakeshot-windows`. `spawn_outside_tree` and `ProcessHandle::wait` exist.
-3. `wakeshot-core`: `Event::HooksAdded { agent: &'static str }`, `Notice::HooksAdded { agent: &'static str }`, the
-   core's answer (`Notify`, once per event), the words in `text.rs`.
-4. `wakeshot-windows::hooks`: `HookEnv::remove_agent_hooks`, called in `on_uninstall` after `remove_notices`.
-5. A stub `wakeshot-core/src/sources/hooked.rs` for what Cursor and Antigravity share (the state file format, the id
-   rule, the event rules, the parent walk over a process list), so neither source module owns the other's code; and
-   the `Owner:` line of `agent_hooks.rs` set to the install card if the build is split (card Result).
-6. `wakeshot-windows::store`: `write_atomic`'s temp name gets a random part and opens with `CREATE_NEW`, not
-   `CREATE_ALWAYS`; on `ERROR_FILE_EXISTS` it tries a new name (at most 3 times). No delete step, so the change adds
-   no delete of a name an attacker picks. A temp file left by a crash then stays (it ends in `.tmp`, which no reader
-   opens); the hook's prune removes its own. This changes every caller. What it closes: only the hard-link overwrite.
-   A junction plus an object manager link still redirects the temp file's create, so an elevated `wakeshot run`, and
-   the uninstall's own journal and data folder work under an elevated `winget uninstall` (not checked), keep that gap
-   until they get the same Medium rule as the hooks (verify review). The hooks do not depend on it: they run at
-   Medium.
-
-No new `WantedFile`, `Liveness`, data file enum or mutex in `store::Names`. `Win32_System_Threading`,
-`Win32_System_LibraryLoader` (for `SetDefaultDllDirectories`) and `Win32_UI_Shell` are on in
-`crates/wakeshot-windows/Cargo.toml` (checked 2026-11-06); `NtQueryInformationProcess` needed one more `windows`
-feature, `Wdk_System_Threading` (added by `p4-contracts-r3`; a feature is not in `Cargo.lock`).
-
-**Built** (`p4-contracts-r3`, 2026-11-06). All six items, with these shapes where they differ from the list above:
-
-- `image_path(process: ProcessRef) -> Result<Option<PathBuf>, WinError>` and `command_line_contains(process:
-  ProcessRef, needle: &str) -> Result<bool, WinError>`: a `ProcessRef`, not a pid, so a pid reused since the list was
-  read never answers for another process; `None` and `false` when that process no longer runs. The walk has each
-  parent's start from the list.
-- `HookEnv::remove_agent_hooks(&mut self)` returns nothing: it logs one line per agent itself, through the hook's
-  log, and never fails the hook. Its `RealHookEnv` body is an empty stub for `p4-agent-hooks-install`.
-- The `hook` parse: a missing word is empty; any shape but `hook <agent> <event>` and `hook <agent> <event>
-  --checked <value>...` (one value at least) gives empty words; `--checked` and `hook` in any case. Never `Help` or
-  `Bad`.
-- `write_atomic`'s temp name is `<name>.<pid>.<n>.<16 hex>.tmp`; `store::temp_target(name)` gives `<name>` for that
-  shape only, for the prune. Three names in all, then `ERROR_FILE_EXISTS`.
-- Added beyond the list: `store::local_app_data()` (the known folder, for `%LocalAppData%\cursor-agent\`, since the
-  CLI calls Windows only through `wakeshot-windows`), and `tests/hook.rs` in the CLI (owner `p4-cursor-source`).
-- The CLI has no JSON crate of its own, so the input parse and the state file text go in `sources::hooked` (core,
-  which has `serde`), as its module doc says; a `serde_json` line in `wakeshot-cli` would change `Cargo.lock`.
-
-## Live test (for the live card)
-
-0. Before any hook ships (the first step of the Cursor build card, by reading code, no install needed): which
-   payload form the Cursor editor uses on Windows (temp file or command line), from its spawn code in
-   `extensionHostProcess.js` and the agent host daemon, at every place the option is set (constant, setting or
-   experiment flag). Command line anywhere: no Cursor plugin at all until Haik decides (product question 4). The same
-   for `agy` in the Antigravity build card. Live: the runtime check reads a real hook's parent command line.
-1. The editor loads the local plugin with no prompt; `beforeSubmitPrompt`, `stop` (completed, Esc, error) and
-   `sessionEnd` each run the exe; the process found is a `Cursor.exe` that lives as long as the window; the
-   `conversation_id` has the UUID shape.
-2. The prompt hook and the stop hook carry the same `generation_id` for one turn.
-3. The CLI: which of the three fire with only the plugin, in interactive and in `-p` mode.
-4. Time from send to the agent's start with and without the hook (PowerShell's start; whether Cursor passes
-   `-NoProfile`).
-5. With the exe renamed away: what Cursor shows, and that prompts still go.
-6. Uninstall removes the folder; a folder the user changed moves to `.cursor\wakeshot-removed`; whether the editor
-   skips dot-named folders (only for leftovers of test builds now).
-7. Antigravity: a dropped folder loads in the CLI and the IDE; dot-named folders are skipped; the shell and the
-   hook's parent; the cost per `PreInvocation`; whether Esc fires `Stop`; `fullyIdle` with a dev server; `{}` lets a
-   stop through; Esc and a crash in the IDE hub and in a Remote Control chat.
-8. Each agent with the exe in a folder named with `ё`, `ւ` and a space (a test copy of the plugin pointing there).
-9. An elevated agent: the Medium copy writes the file; a test under an elevated token with a junction in place of
-   `agents\cursor` shows that nothing is written or deleted through it (the elevated runner exists on the laptop).
-
-## Phase 4 live test (2026-11-06)
-
-`p4-live-cursor`, editor 3.27.12 and CLI 2026.11.05-86047df, Haik's user, signed in on Free. The plugin was added by
+Editor 3.27.12 and CLI 2026.11.05-86047df on the test laptop, a real user signed in on Free. The plugin was added by
 the product's `agent_hooks::at_start` (scratch hook exe, a debug build with a scratch data folder) and removed by
-`hook cursor remove`. A second, capture-only plugin saved each input redacted. Prompts in the editor were Haik's, in
-test windows of their own; times are from the payload file Cursor writes (its name holds the time) to `agent-watch`'s
-post. Fixtures: `crates/wakeshot-core/tests/fixtures/cursor/live/`.
+`hook cursor remove`. A second, capture-only plugin saved each input redacted. Prompts in the editor were typed by a
+person, in test windows of their own; times are from the payload file Cursor writes (its name holds the time) to
+`agent-watch`'s post. Fixtures: `crates/wakeshot-core/tests/fixtures/cursor/live/`.
 
 | # | Test | Result |
 |---|---|---|
 | 0 | Payload form | Temp file on every editor hook run: the hook's PowerShell command line (1,024 to 1,150 chars, read on 13 runs) never held `conversation_id`. The CLI runs `powershell.exe -ExecutionPolicy Bypass -NonInteractive -File %TEMP%\ps-script-<uuid>.ps1`, no key either. The runtime check never tripped. |
-| 1 | Load, events, process | No prompt or dialog at load (Haik; UIA tree). `beforeSubmitPrompt`, `stop` (`completed`, `aborted`) and `sessionEnd` ran the exe. The process found is the window's extension host, `Cursor.exe --type=utility --utility-sub-type=node.mojom.NodeService`; it ended 20 ms after the window closed. Ids: UUID shape. `error` status: not run. |
+| 1 | Load, events, process | No prompt or dialog at load (seen on screen; UIA tree). `beforeSubmitPrompt`, `stop` (`completed`, `aborted`) and `sessionEnd` ran the exe. The process found is the window's extension host, `Cursor.exe --type=utility --utility-sub-type=node.mojom.NodeService`; it ended 20 ms after the window closed. Ids: UUID shape. `error` status: not run. |
 | 2 | One turn id | The prompt and its `stop` carry the same `generation_id`, also for the Stop button and for turns that ended in the background. |
-| 3 | CLI | Only `sessionEnd` fires, in `-p` and in interactive mode: the CLI is not covered (product question 1). |
+| 3 | CLI | Only `sessionEnd` fires, in `-p` and in interactive mode: the CLI is not covered. |
 | 4 | Delay per prompt | Cursor's exact line rebuilt, at Medium, 10 runs: Windows PowerShell alone median 841 ms; with the hook exe (debug) 858 ms; exe gone 883 ms (exit 127). Live from Cursor's payload write to the file: 1.1 to 1.6 s with the capture hook running beside it; the first prompt in a new window 3.7 s. The editor passes `-NoProfile`; the CLI does not. |
-| 5 | Exe gone | A plugin hook naming a missing exe (same form) failed with exit 127 on 12 runs; all 6 prompts went through, Haik saw no message. Not run with Wakeshot's own exe renamed (my conductor's capture failed that round). |
+| 5 | Exe gone | A plugin hook naming a missing exe (same form) failed with exit 127 on 12 runs; all 6 prompts went through, and Cursor showed no message. Not run with Wakeshot's own exe renamed (the capture failed that round). |
 | 6 | Uninstall | Unchanged folder: removed, nothing else left in `.cursor`. `hooks.json` changed (timeout 6): moved to `.cursor\wakeshot-removed`, the changed file and the marker kept, `plugin.json` deleted. Dot-named folders in `local\`: moot since the staging fix (Wakeshot makes none there); not checked for the editor. |
 | app | Through the tray | Dry-run tray at Medium; `Cursor.exe` run as Node (`ELECTRON_RUN_AS_NODE`) ran the hook the editor's way: "Holding starts: Cursor" 0.96 s after the prompt hook started; "Holding ends" 0.91 s after `stop` `aborted`; with no `stop`, 24 ms after that process exited. |
 
-"No guessing" (`product.md`) for the editor: each end seen is an exact event or a process end. Completed: `stop`.
-Stop button: `stop` `aborted`. Esc: no cancel. Ctrl+N or Ctrl+F4 on a running chat: the turn's own `stop`, after the
-`sessionEnd` fix. Window close: the extension host ends. Not run: an `error` turn, a chat deleted while it runs (code
-says no `stop` then; the install check runs it), an approval wait (holds until its `stop`, product question 2), the
+"No guessing" (`product.md`) for the editor: each end seen is an exact event or a process end. Completed: `stop`. Stop
+button: `stop` `aborted`. Esc: no cancel. Ctrl+N or Ctrl+F4 on a running chat: the turn's own `stop`, after the
+`sessionEnd` fix. Window close: the extension host ends. Not run here: an `error` turn, a chat deleted while it runs
+(code says no `stop` then; seen live later, "Out of v1" under "Cursor"), an approval wait (holds until its `stop`), the
 "Cursor Agents" window.
 
-## Risks for the security review
+## Known risks
 
-| # | Risk | What the design does |
-|---|---|---|
-| 1 | Wakeshot writes into another app's folder, which runs commands from it | Only a plugin folder of its own name, never a user file; only the installed tray writes it; one notice; the README lists it; uninstall removes it |
-| 2 | Command injection through the exe path in `hooks.json` | Single-quoted path, ASCII `'` doubled; a path with a curly single quote or a control character gets no hooks; arguments are fixed ASCII words; `serde_json` writes the JSON; non-ASCII names in the live test |
-| 3 | A planted link redirects Wakeshot's writes or the uninstall's deletes | All agent-folder work at Medium only, where a swap gains nothing; no write or delete through a reparse point; deletes only the fixed names; never recursive |
-| 4 | The hook blocks or changes the user's prompt | Always exit 0, always `{}`, also after a panic (a panic hook prints `{}` and exits 0); no path exits 2; never `continue`, `permission`, `followup_message` or `failClosed`; tests check each event's output and exit code |
-| 5 | The hook slows every prompt | Four-field parse, one process list, one small file; target under 50 ms; `timeout` 5 s; never waits on the tray; hooks only turn start and end, never tool events |
-| 6 | Prompt text, paths or the user's email leak into Wakeshot's files or log | Parse only four fields; skipped fields never stored; fixed log text; parse errors logged by class and position only, never `serde_json`'s text; a marker-word test over files and log, also as each field's value |
-| 7 | Prompts and the email in a process command line, so in audit logs | Gate: a hook only for an agent whose every app that loads the folder uses a temp file or stdin; the Cursor editor's form is the first step of its build card (static check of every place the option is set); command line means no Cursor plugin at all, for either app, until Haik decides; a runtime check of the parent's command line removes the plugin after at most one prompt if a later version switches; the README says it in the main text |
-| 8 | A bad `conversation_id` used as a file name (traversal, device names, case twins) | UUID shape only, lowercased; anything else is unreadable input |
-| 9 | A forged state file keeps the PC awake | Any process of the same user can already do that through a hold file (a documented format). A forged file holds only while the pid and start it names run (the watch thread checks both); the battery floor still steps back. Its label maps to the source's fixed strings, so no file text reaches the tooltip. A forged `problem.json` can show a false "update Wakeshot" notice once per start: accepted |
-| 10 | A reused pid holds forever | `procStart` must match (`Liveness::Process`); the walk refuses a parent that started after its child |
-| 11 | A stuck "working" (no `stop`) | Ends with the nearest agent process, the chat's next `stop` or `sessionEnd`; the battery floor; the live test checks Esc and crashes, also in Antigravity's hub and Remote Control daemon; a time cap is Haik's call (question 5) |
-| 12 | Hooks left after Wakeshot is gone | Fail open with exit 127 (code read); the uninstall removes them first, and moves a folder it cannot empty to `wakeshot-removed` in the agent's own folder; the README says what to delete; the command form stays frozen for every later version |
-| 13 | Fighting the user | A removed folder is never added back; a changed file is never overwritten or deleted; Cursor's own plugin switch is respected by leaving the folder alone |
-| 14 | A dev build or a second copy writes hooks naming a temp exe | Only a tray in Velopack's `current` folder writes; the path names `current`, which survives updates |
-| 15 | Two hook runs race on one chat file | Named mutex for the read and write, atomic rename, the turn id check on `stop` |
-| 16 | Enterprise rules | Cursor's admin switch for local plugins decides; Wakeshot never works around it |
-| 17 | Antigravity's unknown shell | Bare absolute path only when every character is in an allow list; otherwise no hooks until a live check; never an exe copied into the agent's folder |
-| 18 | Antigravity's `PreInvocation` runs on every model call | Since "Exact end" each call writes its file (its `turnAt`) and lists the log folder; measured in Part A for the release exe without that: about 30 ms in the exe per hook run |
-| 24 | `agy`'s log holds every prompt | Read for the cancel line only; nothing else kept or logged (a marker test); the hook reads 512 bytes of a head and keeps a pid; an elevated hook reads a head in a folder a Medium process could swap (links are not followed), and keeps only the name of a file whose head names the pid, in the fixed name shape |
-| 25 | `agy` changes its log | Tested versions only; another version, line shape or pid: no hold, "update Wakeshot" |
-| 19 | An elevated hook, tray or uninstall writes or deletes in a folder a Medium process can swap or hard-link | File work only at Medium: an elevated hook passes its checked values to a Medium copy (`spawn_outside_tree`), an elevated uninstall runs `hook <agent> remove` the same way, an elevated tray skips; a copy that is not Medium writes nothing; the copy re-checks every value and drops a "working" write past its deadline; temp files with `CREATE_NEW`; the prune deletes only version 1 files of gone processes and its own temp names; a junction test under an elevated token |
-| 20 | A marker anyone can write steers the rewrite or the uninstall | The file set is fixed in code; the marker has fixed keys and hashes only, no paths; any extra key, file or folder means "changed by someone"; empty folders removed only up to `wakeshot\` |
-| 21 | Gemini CLI's `.gemini` taken for Antigravity | Presence needs `agy.exe` in its install folder and an existing `.gemini\config\`; Wakeshot never creates `config\`; `ANTIGRAVITY_GEMINI_DIR` set means no hooks |
-| 22 | DLL planting from the repo folder a `stop` hook runs in | `SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32)` first thing; no exploitable DLL known, not tested |
-| 23 | A leftover staging folder loads with live hooks | Created with "fail if it exists" in the agent's own folder, outside the folder the agent loads plugins from; removed by the fixed names at each start and at uninstall |
+Most risks of the security review are settled by the rules above and by tests. These stay open or accepted:
+
+- A forged state file: any process of the same user can write one, as it can a hold file (a documented format). It
+  holds only while the pid and start it names run, and the battery floor still steps back. A forged `problem.json`
+  can show a false "update Wakeshot" notice once per start. Accepted.
+- A missed end in a long-lived shared process (Cursor's agent host daemon, which may outlive a window: not verified;
+  Antigravity's IDE hub; its Remote Control daemon) holds for the whole session on AC. No time cap, by the "No
+  guessing" rule ("Failure cases").
+- DLL planting from the repo folder a `stop` hook runs in: the hook calls
+  `SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32)` first; no exploitable DLL known, not tested.
+- `store::write_atomic`'s `CREATE_NEW` temp file stops a planted hard link, but a junction plus an object manager
+  link still redirects the temp file's create. The hooks do not depend on it: their file work runs at Medium ("The
+  hook command", step 4). An elevated `wakeshot run`, and the uninstall's own journal and data folder work under an
+  elevated `winget uninstall`, keep that gap (not checked).

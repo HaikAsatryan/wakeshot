@@ -1,12 +1,13 @@
 # OpenCode: how to tell it is working
 
-Research for Wakeshot, 2026-11-06, card `docs/tasks/p4-opencode-source.md` Part A. It replaces the "OpenCode" section
-of `other-agent-signals.md` (2026-11-03, 2.x only), which stays as it was.
+Research for Wakeshot, 2026-11-06. It replaces the "OpenCode" section of `other-agent-signals.md` (2026-11-03, 2.x
+only), which stays as it was.
 
-Marks: **verified** = seen in source code, official docs or a probe on this laptop (path or command given).
-**not verified** = guessed, read elsewhere, or not checked. No OpenCode was installed or run.
+Marks: **verified** = seen in source code, official docs or a probe on the test laptop (path or command given).
+**not verified** = guessed, read elsewhere, or not checked. The research installed and ran no OpenCode; the last two
+sections report the build and the live test.
 
-Sources, read as data in the card's scratch folder, never built or run:
+Sources, read as data in a scratch folder, never built or run:
 
 - `anomalyco/opencode` tag `v1.19.5` (commit `810c0eb`, 2026-10-28): the npm package `opencode-ai` 1.19.5, built from
   `packages/opencode` (`packages/opencode/script/publish.ts:57`, `name: pkg.name + "-ai"`).
@@ -30,7 +31,7 @@ process with the image `opencode.exe` (the desktop app's sidecar is `opencode-cl
 the same database file (see "Secrets in the database").
 
 Which version people run: npm downloads in the week 2026-10-29 to 11-04 were 4,292,609 for `opencode-ai` and 610,990
-for `@opencode/cli` (orchestrator's numbers in the card; not verified by me). The npm `latest` tags were 1.19.5 and
+for `@opencode/cli` (numbers given to the research; not verified). The npm `latest` tags were 1.19.5 and
 2.2.5 on 2026-11-06 (verified: `registry.npmjs.org/<name>/latest`).
 
 ## Facts shared by both versions
@@ -54,7 +55,7 @@ for `@opencode/cli` (orchestrator's numbers in the card; not verified by me). Th
   2.x `core/src/database/schema.gen.ts:16-51`). SQLite stores each table in its own b-tree pages and a query reads
   only the pages of the tables and indexes it touches (SQLite file format; not traced on these files), so a query on
   `session_v2`, `message` or `schedule` never loads those values into the reader's memory. The file as a whole does
-  hold tokens. Except (review `docs/reviews/p4-opencode-db-read.md`, finding 7): after an OpenCode that died left its
+  hold tokens. Except (found in a security review): after an OpenCode that died left its
   `-wal` and `-shm`, each read rebuilds the WAL index from every frame of the `-wal`, token pages included, in
   Wakeshot's memory; nothing of it is kept or logged.
 - **Process image.** Both npm packages' `postinstall.mjs` hard-link (or copy) the native `opencode.exe` from the
@@ -175,8 +176,8 @@ for `@opencode/cli` (orchestrator's numbers in the card; not verified by me). Th
   (Microsoft.Data.Sqlite docs) names `winsqlite3.dll` "the system SQLite library on Windows 10". On ARM64: the SDK's
   ARM64 import library suggests the DLL ships there too; not checked on an ARM64 machine. The version a given
   Windows 11 build carries is not documented.
-- **Probe on this laptop** (`<scratchpad>\p4-opencode-source\scripts\probe.ps1`, P/Invoke into `winsqlite3.dll`, its
-  own scratch database, 2026-11-06): `json_extract` and `json_each` work; `pragma compile_options` has
+- **Probe on the test laptop** (a throwaway PowerShell script, not kept: P/Invoke into `winsqlite3.dll`, its own
+  scratch database, 2026-11-06): `json_extract` and `json_each` work; `pragma compile_options` has
   `THREADSAFE=1` and omits only `LOCALTIME`. A `SQLITE_OPEN_READONLY` connection read committed rows while a writer
   held the database in WAL mode; it read the old snapshot while the writer held an open `BEGIN IMMEDIATE`, with no
   `SQLITE_BUSY`; a write through it failed with code 8 (`SQLITE_READONLY`); the writer's
@@ -208,16 +209,16 @@ documents it for app use and updates it with Windows. Run-time loading (not the 
 without it still starts the tray: the source reports `Unreadable`. Every query is plain SQL over columns that exist
 since SQLite 3.8; the 1.x query needs JSON functions (built in since 3.38.0), so the reader checks
 `sqlite3_libversion_number() >= 3038000`. Change it when Wakeshot needs SQLite for something heavier, or a supported
-Windows build turns out to lack the DLL or JSON: then `rusqlite` with `bundled`. Decision for Haik's review.
+Windows build turns out to lack the DLL or JSON: then `rusqlite` with `bundled`.
 
 ### How to read safely
 
 - Read only when `<db>-wal` exists. OpenCode opens the database in WAL mode for the whole process life, and the last
   connection deletes the WAL, so a missing `-wal` means no OpenCode has the file open and nothing can run. This also
   keeps Wakeshot from creating `-wal` and `-shm` in OpenCode's folder (probe above). The other way round does not
-  hold: an OpenCode that was killed or crashed leaves both files, so a `-wal` that exists does not mean OpenCode runs
-  (review finding 1). Each read then rebuilds the `-shm`, so since `p4-contracts-r3` only a change notice of the db
-  or its `-wal` runs a query, never one of the `-shm`.
+  hold: an OpenCode that was killed or crashed leaves both files, so a `-wal` that exists does not mean OpenCode runs.
+  Each read then rebuilds the `-shm`, so only a change notice of the db or its `-wal` runs a query, never one of the
+  `-shm`.
 - Open with `SQLITE_OPEN_READONLY` (plus `SQLITE_OPEN_NOMUTEX`, one thread), `busy_timeout` 100 ms, run the fixed
   queries, finalize every statement, close. Never keep the connection or a statement open between reads: an open
   read would hold back checkpoints, and a held connection would stop OpenCode's last close from deleting its WAL.
@@ -225,6 +226,7 @@ Windows build turns out to lack the DLL or JSON: then `rusqlite` with `bundled`.
 - On `SQLITE_BUSY` keep the last answer and try at the next trigger. On a prepare error (a renamed column) report
   `Unreadable`.
 - Trigger: a change in the data folder to `opencode.db-wal`, at most one read per second, plus the safety tick.
+  Replaced after the live test, which saw no change notice for a commit: see "The fix" there.
 
 ## Liveness without `service.json`
 
@@ -254,34 +256,27 @@ Windows build turns out to lack the DLL or JSON: then `rusqlite` with `bundled`.
   `opencode.exe` in both npm platform packages; other installers not checked); `OPENCODE_DB` or a non-standard
   channel (the reader looks only for `opencode.db`); 2.x goals; 1.x background jobs.
 
-## What is left
+## Built (2026-11-06)
 
-- A live test of both versions on this laptop with a free local model (both have local providers; not run): a long
-  tool call, an Esc interrupt, a permission prompt, a crash (kill the process), a 2.x service restart mid-turn, a 2.x
-  schedule, and a 2.x background shell job (whether its `job` row closes).
-
-## Built (Part B, 2026-11-06)
-
-`p4-opencode-source` Part B built the 2.x rules above; nothing of it was run against a real OpenCode.
+The 2.x rules above as built, before the live test below:
 
 - `crates/wakeshot-core/src/sources/opencode.rs`: three queries on `sqlite_master`, `session_v2` and `schedule` only
-  (1.x not read, Haik 2026-11-06). Ids are taken only in OpenCode's shape (`ses` or `sch_` prefix, letters, digits,
-  at most 128 characters; OpenCode makes `ses_` or `sch_` plus 26, `schema/src/identifier.ts`, `session-id.ts`,
-  `schedule.ts:8-12`). Row times are wall ms (`Clock.currentTimeMillis`, `core/src/bus.ts:524`).
+  (1.x is not read: its state is in `message` rows, which hold prompt text). Ids are taken only in OpenCode's shape
+  (`ses` or `sch_` prefix, letters, digits, at most 128 characters; OpenCode makes `ses_` or `sch_` plus 26,
+  `schema/src/identifier.ts`, `session-id.ts`, `schedule.ts:8-12`). Row times are wall ms (`Clock.currentTimeMillis`,
+  `core/src/bus.ts:524`).
 - `crates/wakeshot-windows/src/sqlite.rs`: the `winsqlite3.dll` reader, with a VFS shim that opens the database and
   its `-wal` read only and never creates them (`docs/research.md`, "OpenCode SQLite reader checks").
 - An older 2.x whose `session_v2` has no `time_busy` (before migration `20261029073502_session_time_busy`) fails the
   working query, so it shows "update Wakeshot". Which 2.x release added the column: not verified.
-- Still to check live (the live card): every item of "What is left", plus that the `-wal` and `-shm` exist whenever
-  OpenCode 2.x has the file open (the reader answers nothing otherwise).
 
-## Phase 4 live test (2026-11-06)
+## Live test (2026-11-06)
 
-Card `docs/tasks/p4-live-opencode.md`, which has every time. `@opencode/cli` 2.2.5 (npm), Ollama 0.40.15 with
-`qwen3:4b-instruct`, no login. OpenCode, the harness driver, `agent-watch --source opencode` and the dry-run tray (only
-OpenCode could hold) all ran at Medium. Each OpenCode I started had `XDG_DATA_HOME` and `XDG_STATE_HOME` on a scratch
-folder, so the test database was mine; Haik's real file was only read once. About 20 one-line prompts to the local
-model. Marks as above: verified means seen live here.
+`@opencode/cli` 2.2.5 (npm), Ollama 0.40.15 with `qwen3:4b-instruct`, no login. OpenCode, the harness driver,
+`agent-watch --source opencode` and the dry-run tray (only OpenCode could hold) all ran at Medium. Each OpenCode the
+test started had `XDG_DATA_HOME` and `XDG_STATE_HOME` on a scratch folder, so the test database was its own; the user's
+real file was only read once. About 20 one-line prompts to the local model. Marks as above: verified means seen live
+here.
 
 ### What holds
 
@@ -289,10 +284,10 @@ model. Marks as above: verified means seen live here.
   TUI turns, a 60 s permission wait, Esc, a schedule's turn, two crashes, a resumed turn, `opencode run`.
 - **Permission prompt**: one busy span from the prompt to the turn's end; the approval writes no new `time_busy`. The
   60 s wait read as working and the tray held through it (the house rule: a waiting prompt holds).
-- **Esc**: two Esc 0.35 s apart interrupt (one does nothing, as `p4-live-harness` saw); OpenCode ends the tool's tree
-  with `taskkill.exe`; idle 0.5 s after the second Esc.
+- **Esc**: two Esc 0.35 s apart interrupt (one does nothing, as an earlier harness run saw); OpenCode ends the tool's
+  tree with `taskkill.exe`; idle 0.5 s after the second Esc.
 - **Files stay.** OpenCode 2.2.5 leaves `opencode.db-wal` and `-shm` after a clean `opencode service stop`, after
-  `/exit`, and after a crash (Haik's real file too: left by a stop at 14:06). So a `-wal` never says OpenCode runs.
+  `/exit`, and after a crash (the user's real file too: left by a stop at 14:06). So a `-wal` never says OpenCode runs.
 - **No change notice for a commit.** The `-wal` reached 11,684,352 bytes at the first start and kept that size
   (SQLite writes it again from the start after a checkpoint and never truncates it), and its listed write time stays
   stale while OpenCode holds it. A `FileSystemWatcher` on the folder with Wakeshot's filter logged no notice in 46 s
@@ -335,7 +330,7 @@ model. Marks as above: verified means seen live here.
   then read fine; not from the shim (it refused no delete then). Before the fix a read in that window showed "format
   problem" and the "update Wakeshot" entry for 2 s, at 2 of 2 stops. Now such an error is busy: no feed, read again
   at the next look; 4 later stops gave no problem.
-- **Cost**: one read of the three queries on Haik's real file (11.6 MB db, 11.7 MB `-wal` left over): 11.4 ms with
+- **Cost**: one read of the three queries on the user's real file (11.6 MB db, 11.7 MB `-wal` left over): 11.4 ms with
   the DLL load, then 1.7 and 2.8 ms. Beside a running OpenCode: 0.6 to 4 ms a query. Release `agent-watch`, no
   OpenCode running: 172 ms of CPU in 120 s with the header poll; the first design (a process list every 2 s, 413
   processes and 8,539 threads here) cost 859 ms, so it was dropped.

@@ -3,7 +3,8 @@
 Research for Wakeshot, 2026-11-03. Claude Code is covered in `docs/research.md`.
 
 Marks: **verified** = seen in source code or official docs (path given). **unverified** = read elsewhere, guessed,
-or not checked. Nothing here was run: no agent was installed or started.
+or not checked. The research was done without running any agent; only the two live test sections (Codex and
+Copilot CLI, 2026-11-06) report runs.
 
 ## Summary
 
@@ -114,11 +115,11 @@ with `codex-cli/`. License Apache-2.0 (`LICENSE`), verified.
 - Yes. `--oss` runs against a local Ollama or LM Studio model, no account. Verified: `utils/cli/src/shared_options.rs:26`,
   crates `ollama/`, `lmstudio/`. The rollout and turn events are the same code path (unverified by a run).
 
-### Phase 4 live test (2026-11-06)
+### Codex live test (2026-11-06)
 
-Card `docs/tasks/p4-live-codex.md`. Codex CLI 0.167.0 (npm), Haik's ChatGPT login shared with the desktop app, model
-`gpt-6-luna` at `low` effort, 7 one-line prompts. Every session ran at Medium in a pseudo console
-(`spikes/agent-drive/`), with `agent-watch --source codex` at Medium beside it and a change notice logger on
+Codex CLI 0.167.0 (npm) on the test laptop, a real ChatGPT login shared with the desktop app, model `gpt-6-luna` at
+`low` effort, 7 one-line prompts. Every session ran at Medium in a pseudo console (a throwaway driver, not kept),
+with `agent-watch --source codex` at Medium beside it and a change notice logger on
 `sessions\` and `thread-writer-locks\`. Redacted rollouts: `crates/wakeshot-core/tests/fixtures/codex/live/`.
 
 What holds (checked live):
@@ -127,11 +128,12 @@ What holds (checked live):
   makes it at start too. `/exit` and the end of `exec` delete it (posted `n=0` within 1 ms of the delete).
 - **Holder.** Restart Manager named the TUI's own `codex.exe` (the child of npm's `node.exe`), with the pid and start
   time of that process, in both TUIs and in `exec`. No app-server daemon started in these runs, although
-  `daemon_auto_start` is on (`p4-live-harness` saw two more `codex.exe` at a first TUI start; why is not known). The
+  `daemon_auto_start` is on (an earlier harness run saw two more `codex.exe` at a first TUI start; why is not
+  known). The
   desktop app's two `codex.exe` (children of `ChatGPT.exe`) never held a CLI thread's lock.
 - **Crash.** The TUI's `codex.exe` killed by pid during a turn: posted working `Gone` 115 ms later, so no hold. The
   lock file stays with no holder until the next Codex start, which deletes it (seen for a TUI start and an `exec`
-  start). So the "can outlive its session" mark goes for the Restart Manager rule (track note 7). It stays for the
+  start). So the "can outlive its session" mark goes for the Restart Manager rule. It stays for the
   fallback when Restart Manager fails: any `codex.exe` counts then, and the desktop app keeps two running.
 - **Turn events.** As the source rules say: `task_started`, `task_complete`, `turn_aborted` with `reason`
   `interrupted` after Esc. Every real line read with no format problem. An approval wait writes nothing, so it reads
@@ -159,8 +161,8 @@ command line, so whether it writes the same lock and rollout files is not known)
 ## GitHub Copilot CLI
 
 Source: npm `@github/copilot` 1.0.105 and `@github/copilot-win32-x64` 1.0.105 (build `845c22879d4`). The Windows
-package is one `copilot.exe` (Node single executable). Its JS bundle is a `copilot.tgz` asset inside the exe; I cut
-it out with a small byte parser (nothing was run). Below, `pkg/` means that unpacked bundle. Most session logic is in
+package is one `copilot.exe` (Node single executable). Its JS bundle is a `copilot.tgz` asset inside the exe, cut
+out with a small byte parser (nothing was run). Below, `pkg/` means that unpacked bundle. Most session logic is in
 a Rust native addon `pkg/prebuilds/win32-x64/runtime.node` (source path strings point to
 `src/runtime/src/session_base/locks.rs`), so some details come from strings only and are marked so.
 `github/copilot-cli` on GitHub holds only README, changelog, license and a container sample.
@@ -179,7 +181,7 @@ product, no modification. Verified.
   - An in-use lock file. Strings `inuse.` and `.lock` sit next to each other in `runtime.node`, so the name is very
     likely `inuse.<pid>.lock`. There is also "in-use handshake" file logic and "Failed to clean up dead lock file",
     so a lock whose process died is treated as dead. Name pattern and content: **unverified**.
-  - `<home>\session-state\.session-operation-locks\` folder. Seen on this laptop (empty) and in strings.
+  - `<home>\session-state\.session-operation-locks\` folder. Seen on the test laptop (empty) and in strings.
   - `<home>\session-store.db`: a session index database (string in `cli-main.js`, search `session-store.db`).
 - **Event line format.** Each line: `{"id":uuid,"timestamp":iso,"parentId":uuid|null,"type":"...","data":{...},
   "agentId"?:..., "ephemeral"?:bool}`. Events with `ephemeral: true` are "transient and not persisted to the session
@@ -208,7 +210,8 @@ product, no modification. Verified.
     `session.error`, `session.shutdown`.
   - Questions to the user (`user_input.requested`) are ephemeral, so they look like "working".
 - **Write timing: unverified.** The close path says it "flushes pending events", so writes may be buffered.
-- Haik's laptop already has `%USERPROFILE%\.copilot\session-state\` (empty). VS Code ships a `copilot-shim` on PATH.
+- The test laptop already had `%USERPROFILE%\.copilot\session-state\` (empty, 2026-11-03). VS Code ships a
+  `copilot-shim` on PATH.
 
 ### Processes
 
@@ -255,12 +258,12 @@ product, no modification. Verified.
   whether Free can use the CLI: **unverified**. The changelog mentions local models in `providers.json`, but
   sign-in may still be required (unverified).
 
-### Phase 4 live test (2026-11-06)
+### Copilot CLI live test (2026-11-06)
 
-Card `docs/tasks/p4-live-copilot.md`. Copilot CLI 1.0.106 (npm `@github/copilot`), Haik's `gh` login on Copilot
-Free (it works: the CLI takes `gh`'s login itself). Copilot Fusion (the default) picked `gpt-6-luna` each time; 7
-one-line prompts in all, one of them a schedule fire. Every
-session ran at Medium in a pseudo console (`spikes/agent-drive/`), with `agent-watch --source copilot --raw`, a
+Copilot CLI 1.0.106 (npm `@github/copilot`) on the test laptop, a real `gh` login on Copilot Free (it works: the CLI
+takes `gh`'s login itself). Copilot Fusion (the default) picked `gpt-6-luna` each time; 7 one-line prompts in all,
+one of them a schedule fire. Every session ran at Medium in a pseudo console (the throwaway driver), with
+`agent-watch --source copilot --raw`, a
 change notice logger on `session-state\` and a Restart Manager script at Medium beside it. Redacted logs:
 `crates/wakeshot-core/tests/fixtures/copilot/live/`.
 
@@ -278,8 +281,8 @@ What holds (checked live):
   loader) > `copilot.exe` (`@github\copilot-win32-x64\copilot.exe`, the CLI). The in-use files name the inner
   `copilot.exe`, and it is the holder. Killing the inner one ended the whole tree within 66 ms (the shim exits with
   it).
-- **VS Code's Copilot harness** (sessions another card started through VS Code chat, never touched here): the same
-  `session-state` folder, files `inuse.2728.*`, where 2728 is the `copilot-runtime.exe` of Haik's VS Code (elevated;
+- **VS Code's Copilot harness** (sessions another test started through VS Code chat, never touched here): the same
+  `session-state` folder, files `inuse.2728.*`, where 2728 is the `copilot-runtime.exe` of the user's VS Code (elevated;
   path `...\resources\app\node_modules.asar.unpacked\@github\copilot-sdk-win32-x64\prebuilds\win32-x64\`). Restart
   Manager asked from a Medium process named it, with its start time; the process list has it too. Their logs follow
   the same rules (`user.message`, a tool with `permission.requested` and `permission.completed` 47 ms apart,
@@ -641,11 +644,11 @@ available as Kiro CLI, a closed-source product"). Verified: that README.
 Google moved free and Google AI Pro users from Gemini CLI to Antigravity CLI (`agy`) on 2026-06-18 (Gemini CLI
 `README.md:14`). Third-party pages say it is a compiled Go binary installed under `%LOCALAPPDATA%\Antigravity\`
 with data in `~/.gemini/antigravity-cli/` (conversations, history, logs). None of this is verified. It probably
-deserves its own look before Gemini CLI does.
+deserves its own look before Gemini CLI does. Researched since: `antigravity-signals.md` (2026-11-06).
 
 ## Design notes for Wakeshot
 
-My suggestions from the findings above. Not decisions.
+Suggestions from the findings above, written before the design. The design is `architecture.md` section 7.
 
 - **One adapter per agent**, each returning `Working | Waiting | Idle | Unknown` and an optional "next scheduled
   run at". Unknown file shape = `Unknown` = no signal, same rule as for Claude Code.
@@ -657,7 +660,8 @@ My suggestions from the findings above. Not decisions.
   (needed for `node.exe`-based agents: Gemini, Qwen, OpenCode service): `NtQueryInformationProcess` with
   `ProcessCommandLineInformation`. From memory, works for same-user processes without elevation: unverified.
 - **Waiting counts as working** for Codex, OpenCode and most others, because approval prompts are not on disk.
-  Only Copilot persists `permission.requested`. Product rule needed: how long to stay awake while an agent waits.
+  Only Copilot persists `permission.requested`. The product rule (`product.md`, "Answers to the track plan
+  questions"): Codex's wait holds, Copilot's `permission.requested` does not.
 - **Long silent turns.** Codex's `sleep` tool can wait up to 12 hours inside one turn with no writes. Any "file
   grew in the last N minutes" rule ends too early there. Prefer turn markers.
 - **Scheduled work** is visible for OpenCode (`schedule.next_due_at`, epoch ms), Copilot (`session.schedule_*`
@@ -716,10 +720,8 @@ INSERT INTO schedule VALUES ('sch_1', 'active', 1793703600000);
 
 ### What is left
 
-- Live check of each rule on a real install (no agent was run). Codex and OpenCode can be tested free with Ollama.
-- Copilot: confirm the lock file name `inuse.<pid>.lock`, events.jsonl write timing, and whether Free works.
-- Qwen: confirm whether the normal terminal UI writes `turn_attempt` / `turn_result`.
-- Cursor: which hooks the CLI fires; when transcripts are written.
-- Not researched: Antigravity CLI (likely more users than Gemini CLI now), OpenCode 1.x storage, Amp local state,
-  Kiro CLI on Windows.
-- Antigravity CLI and IDE, researched 2026-11-06: `antigravity-signals.md` (hooks from a plugin folder; Free plan).
+- Codex and Copilot CLI: checked live (the two live test sections). OpenCode 1.x and 2.x: `opencode-signals.md`.
+  Antigravity CLI and IDE: `antigravity-signals.md`. Cursor's hooks: `cursor-gemini-signals.md` and
+  `../agent-hooks.md`.
+- Not checked: whether Qwen's normal terminal UI writes `turn_attempt` / `turn_result`; when the Cursor CLI writes
+  its transcripts; Amp's local state; Kiro CLI on Windows.

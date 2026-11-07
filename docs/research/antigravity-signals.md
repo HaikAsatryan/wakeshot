@@ -1,12 +1,13 @@
 # Antigravity CLI and IDE: how to tell they are working
 
-Research for Wakeshot, 2026-11-06 (card `p4-antigravity-research`). Builds on `cursor-gemini-signals.md` and the
-shape of `copilot-vscode-signals.md`.
+Research for Wakeshot, 2026-11-06. Builds on `cursor-gemini-signals.md` and the shape of
+`copilot-vscode-signals.md`.
 
 Marks: **verified** = seen in official docs, a shipped bundle or a shipped binary (URL or path given). **claim** = what
-Google says about its own product. **not verified** = inferred, guessed or not checked. Nothing was installed, run or
-signed in. Downloads were kept as data in the card's scratch folder (the CLI binary renamed to `.exe.bin`) and never
-run. On the laptop only folder names were checked: Antigravity is not installed there. All pages read 2026-11-06.
+Google says about its own product. **not verified** = inferred, guessed or not checked. The research installed, ran
+and signed in to nothing: downloads were kept as data in a scratch folder (the CLI binary renamed to `.exe.bin`) and
+never run, and on the laptop only folder names were checked (Antigravity was not installed then). All pages read
+2026-11-06. The live test sections at the end report runs.
 
 ## Summary
 
@@ -54,7 +55,8 @@ holding the main pid), but its agent is not VS Code chat: the chat `.jsonl` file
 
 ### Plans and limits
 
-From `docs/plans`, `docs/models`, `docs/faq` and `docs/install` (the "Authenticate" page), all claims of Google:
+From the `antigravity.google` docs pages Plans, Models, FAQ and Install (the "Authenticate" page), all claims of
+Google:
 
 - **Free plan exists.** "Personal Google Accounts (such as `@gmail.com` addresses) can use Google Antigravity on any
   plan, including the free tier." Users not on Google AI Pro or Ultra get "a meaningful quota, refreshed weekly" and
@@ -273,23 +275,6 @@ An agent can drive most of the CLI test alone after the sign-in: `agy -p "<promp
 `-p`: `PreInvocation` errors change the `-p` exit code, `docs/hooks`). Approval waits, Esc and the IDE panel need a
 person or UI automation.
 
-### Sign-in steps for Haik's one sign-in sitting
-
-After the harness card has installed the CLI (and the IDE if it tests the IDE):
-
-1. Open a new PowerShell window (not elevated) and run `cd <the scratch test folder the harness names>`.
-2. Run `agy`. If `agy` is not found, run `& "$env:LOCALAPPDATA\agy\bin\agy.exe"`.
-3. Pick any color scheme and rendering mode. When asked to trust the folder, answer yes (it is the test folder).
-4. A browser opens. Sign in with your personal Google account (not a work account) and accept the terms. If Google
-   asks to verify your age, do it.
-5. Back in the terminal, check that the header shows your account email. Type `/usage` and Enter: it should show a
-   Free quota. Type `/exit`.
-6. If the harness tests the IDE: start Antigravity IDE once, open the same folder, open the agent panel with Ctrl+L,
-   and check it is signed in without a new sign-in. If it asks, sign in the same way.
-
-Tell the harness when step 5 shows the quota; it runs the rest. The token stays in Windows Credential Manager;
-`/logout` removes it after the tests.
-
 ## Recommended detection rules
 
 | # | Rule | Signal | Confidence |
@@ -304,21 +289,19 @@ Tell the harness when step 5 shows the quota; it runs the rest. The token stays 
 | 8 | Do not read the conversation `.db`, `transcript*.jsonl`, `brain\` artifacts, Credential Manager, `plugin-secrets.json`, `~\.gemini\config\config.json` or the hub's port and token | Nothing safe or needed | High |
 | 9 | Uninstall: delete `plugins\wakeshot\`; retry later if a file is held | Clean removal | Not verified |
 
-## For the source card
+## Source sketch
 
-- **Files:** only Wakeshot's own hook state files (the folder and format come from `p4-hooks-design`). The source
-  never opens an Antigravity file. The plugin folder is written by the hooks install code (`agent_hooks.rs`, owned by
-  `p4-cursor-source`, or the place `p4-hooks-design` names).
+- **Files:** only Wakeshot's own hook state files (the folder and format are in `../agent-hooks.md`). The source
+  never opens an Antigravity file. The plugin folder is written by the hooks install code (`agent_hooks.rs`).
 - **Parser:** one state file in (`Feed::Whole`), one `SessionFacts` out. `key`: `SourceId::Antigravity` plus
   `conversationId`. `liveness`: `Liveness::Process { pid, start }` from the helper's walk. `activity`: rule 4.
   `timers`: none. `open_tasks`: 1 after `Stop` with `fullyIdle: false`, else 0. `label`: "Antigravity CLI" or
   "Antigravity" (hub: IDE, App or an IDE extension). `format`: rule 7.
-- **Contract needs beyond `p4-contracts-r2`:** none found. `SourceId::Antigravity` and the `sources/antigravity.rs`
-  stub come from its Deliverable 1; `Liveness::Process` exists; reading a folder of small state files is
-  `WantedFile::Folder`. If the helper cannot find a start time, `Liveness::ImageSince` (Deliverable 3) with
-  `agy.exe` is the weaker fallback.
+- **Contract needs:** none found. `SourceId::Antigravity` and `Liveness::Process` exist; reading a folder of small
+  state files is `WantedFile::Folder`. If the helper cannot find a start time, `Liveness::ImageSince` with `agy.exe`
+  is the weaker fallback.
 - **Without hooks:** no source today. If a live test shows `transcript.jsonl` gets a line when a turn starts and a
-  closing line when it ends, a transcript reader could use the recently-changed whole-file mode of Deliverable 5 on
+  closing line when it ends, a transcript reader could use a whole-file read of recently changed files on
   `brain\*\.system_generated\logs\transcript.jsonl` under both app data folders. Change it when that test passes.
 - **What else the same plugin covers:** the Antigravity App and the IDE extensions (VS Code and others start the same
   `agy --hub`, and every surface reads `~\.gemini\config\`). Claim plus code for VS Code; not verified for the others.
@@ -353,9 +336,9 @@ task). The `modelName` value is a guess.
    CLI?
 9. Is Free sign-in possible from Armenia without a card or phone?
 
-## Phase 4 live test (2026-11-06)
+## Live test (2026-11-06)
 
-Card `p4-live-antigravity`. Antigravity CLI 1.5.2 and IDE 2.6.0 for Haik's user, Free plan ("Antigravity Starter
+Antigravity CLI 1.5.2 and IDE 2.6.0 on the test laptop, a real user on the Free plan ("Antigravity Starter
 Quota"), Gemini 3.8 Flash at low effort; 11 one-line test prompts, 10 of them reached a model. Wakeshot's plugin
 folder came from the product's add code (`agent_hooks::at_start`, run on a scratch profile so the real `.cursor` was
 not touched, then its three files copied into the real `plugins\` under the staging name and renamed), naming a debug
@@ -390,10 +373,10 @@ Answers to "Open questions only a live test answers":
    `HasIdleBlockingBackgroundTasks` and a `WaitMsBeforeAsync` run-command argument, so likely only some background
    tasks block "idle" (strings only; **not verified**). A `/schedule` timer: **not tested live**.
 5. **`{}` lets a stop through**: every turn ended normally with Wakeshot's `{}` answer. Verified live.
-6. **IDE**: the hub is `%USERPROFILE%\.gemini\bin\agy.exe --hub ...`, started by the IDE's extension host for an
-   empty (trusted) window; a folder in Restricted Mode loads no Antigravity extension and starts no hub (process
-   facts, verified). The IDE's settings text says each window starts its own hub. An IDE chat could not run: the IDE
-   showed its first-run "Get Started" screen, which only Haik may finish. So a hook under the hub, the IDE's Esc and
+6. **IDE**: the hub is `%USERPROFILE%\.gemini\bin\agy.exe --hub ...`, started by the IDE's extension host for an empty
+   (trusted) window; a folder in Restricted Mode loads no Antigravity extension and starts no hub (process facts,
+   verified). The IDE's settings text says each window starts its own hub. An IDE chat could not run: the IDE showed its
+   first-run "Get Started" screen, which only the account owner may finish. So a hook under the hub, the IDE's Esc and
    crash, and a Remote Control chat are **not tested live**.
 7. Transcript timing: not looked at (the transcript holds prompt text; Wakeshot does not read it).
 8. `powercfg /requests`: not run.
@@ -408,11 +391,11 @@ ran.
 
 ## Exact end (2026-11-06)
 
-Card `p4-antigravity-exact-end`, after Haik's "No guessing" rule. Antigravity CLI 1.5.2, Gemini 3.8 Flash, Free plan,
+For the "No guessing" rule (`product.md`). Antigravity CLI 1.5.2, Gemini 3.8 Flash, Free plan,
 TUIs at Medium under the harness driver. Part A (facts): a scratch capture plugin on all six hook events (event, times,
 ids cut to 8 characters, numbers, booleans, key names; never the prompt, `lastUserInput`, tool args or a path), a
 kernel process trace, and `agy`'s own log read with the prompt lines cut out; 42 one-line prompts. Part B (build and
-live check through a dry-run tray): 6 one-word prompts. Every time and run is in the card's Log.
+live check through a dry-run tray): 6 one-word prompts.
 
 | Case | Hook events after the key or the end | Other exact signal | Exact? |
 |---|---|---|---|
@@ -427,12 +410,12 @@ live check through a dry-run tray): 6 one-word prompts. Every time and run is in
 **The log** (verified live): each `agy.exe` writes `%USERPROFILE%\.gemini\antigravity-cli\log\cli-<start time>.log`
 (glog lines `Lmmdd hh:mm:ss.uuuuuu <thread> <file>:<line>] <msg>`, local time, line ends `\n`). Line 1 is "Starting
 language server process with pid <pid>", the `agy.exe`'s own pid; line 2 is "Language server version: 1.5.2" (9 of 9
-logs on this PC). `cli.log` one folder up is a hard link to the newest process's file. Each Esc and Ctrl+C wrote the
-cancel line within 1 ms of the "Cancelling in-progress response" line, about 50 ms after the key (22 of 22 in Part A,
-5 of 5 in Part B), flushed at once; no normal turn and no Ctrl+C on an idle prompt wrote it; its id is the hook's
-full `conversationId` (Part B). All 28 such lines on this PC end in "(killBackgroundTasks=false)". The log also holds
-every prompt in plain text ("HandleUserInput called with text: ..."). Not documented anywhere found; a later `agy` may
-change any of it, so Wakeshot trusts only tested versions.
+logs on the test laptop). `cli.log` one folder up is a hard link to the newest process's file. Each Esc and Ctrl+C wrote
+the cancel line within 1 ms of the "Cancelling in-progress response" line, about 50 ms after the key (22 of 22 in Part
+A, 5 of 5 in Part B), flushed at once; no normal turn and no Ctrl+C on an idle prompt wrote it; its id is the hook's
+full `conversationId` (Part B). All 28 such lines on the test laptop end in "(killBackgroundTasks=false)". The log also
+holds every prompt in plain text ("HandleUserInput called with text: ..."). Not documented anywhere found; a later `agy`
+may change any of it, so Wakeshot trusts only tested versions.
 
 **Timing** (verified): in the two fastest Part A runs (Esc 0 to 0.1 s after Enter), the cancel line came 16 and 25
 ms after the `PreInvocation` hook had started; in Part B the hook's `cmd /c` started 33 to 42 ms after Enter and the
@@ -451,8 +434,7 @@ network error, `/btw`, a second TUI through the tray in Part B (Part A saw each 
 
 ## Out of v1 (2026-11-06)
 
-Haik, about 21:50: "Yes remove antigravity. Too much problematic." (card `p4-vscode-local-off`). The reason the
-orchestrator gave: the rule above trusts `agy` 1.5.2 only, and `agy` releases almost daily (its `CHANGELOG.md`
+Antigravity is out of v1: the rule above trusts `agy` 1.5.2 only, and `agy` releases almost daily (its `CHANGELOG.md`
 changed on about 25 days since 2026-10-02; not verified here), so it would hold nothing most of the time, and
 Esc has no other exact signal ("Exact end"). Since then the tray neither watches Antigravity nor adds its plugin
 folder at a start; `wakeshot hook antigravity remove` and the uninstall still remove a folder an earlier build added.

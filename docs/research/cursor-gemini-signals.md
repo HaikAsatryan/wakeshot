@@ -1,15 +1,15 @@
 # Cursor, Gemini CLI, and hooks as a signal
 
-Research for Wakeshot, 2026-11-06 (card `p4-cursor-gemini-research`). Builds on `other-agent-signals.md`.
+Research for Wakeshot, 2026-11-06. Builds on `other-agent-signals.md`.
 
-**Cursor is out of v1** (Haik, 2026-11-06 23:21: "ok le'ts drop cursor as well."; card `p4-cursor-off`): the hooks
-worked live, but a chat deleted while it runs sends no `stop`, only the `sessionEnd` that Ctrl+F4 also sends, so its
-end cannot be seen ("No guessing", `docs/product.md`; live, Cursor 3.27.12, `docs/tasks/p6-agents-install-e2e.md`).
+**Cursor is out of v1**: the hooks worked live, but a chat deleted while it runs sends no `stop`, only the
+`sessionEnd` that Ctrl+F4 also sends, so its end cannot be seen ("No guessing", `docs/product.md`; seen live,
+Cursor 3.27.12, 2026-11-06).
 The tray neither watches Cursor nor adds its folder, and removes the folder an earlier build added.
 
 Marks: **verified** = seen in source, a shipped bundle or official docs (path or URL given). **claim** = a number
 the company states about itself. **not verified** = read elsewhere, inferred, or not checked. Nothing was installed
-or run. Downloads were unpacked as data only, in the card's scratch folder, and deleted at the end.
+or run. Downloads were unpacked as data only, in a scratch folder, and deleted at the end.
 
 ## Summary
 
@@ -63,7 +63,7 @@ extensions or hooks (see section 4).
 | Number | Source | Mark |
 |---|---|---|
 | $608M revenue "attributable to Cursor from the Closing Date through September 30, 2026"; closing 2026-08-14 | SpaceX Form 10-Q for Q3 2026, filed 2026-10-22, `sec.gov/Archives/edgar/data/1181412/000162828026066880/spcx-20260930.htm` | verified (a filed, unaudited quarterly report) |
-| About $4.6B a year | my arithmetic: $608M / 48 days x 365. A partial period does not annualize cleanly | not verified |
+| About $4.6B a year | arithmetic: $608M / 48 days x 365. A partial period does not annualize cleanly | not verified |
 | "$1B in annualized revenue", "millions of developers", over 300 staff | Cursor blog "Series D", 2025-11-13 | claim |
 | "2x as many agent users as Tab users" (it was 2.5x the other way in March 2025); "Agent usage in Cursor has grown over 15x in the last year" | Cursor blog "The third era", Michael Truell, 2026-02-26 | claim |
 | 64% of the Fortune 500, 50,000+ enterprises | `cursor.com/enterprise`, read 2026-11-06 | claim |
@@ -223,20 +223,17 @@ Antigravity App, CLI and IDE; events `SessionStart`, `PreToolUse`, `PostToolUse`
 `PostInvocation`, `Stop`; global file `~/.gemini/config/hooks.json`, project `.agents/hooks.json`, or a plugin's
 `hooks.json`; hooks in `~/.gemini/antigravity-cli/settings.json` are not loaded; timeout default 30 s. Windows
 behavior, file state and usage: **not verified**. JetBrains counts Antigravity (the editor) at 6% of developers at
-work in January 2026. If Haik wants a Google agent, Antigravity is the one to research, not Gemini CLI.
+work in January 2026. For a Google agent, Antigravity is the one to research, not Gemini CLI (done since:
+`antigravity-signals.md`).
 
 ## 5. Hooks as a signal, per agent
 
 **Superseded (2026-11-06).** The design is `docs/agent-hooks.md`: one command, `wakeshot.exe hook <agent> <event>`,
 not a separate helper exe; a Wakeshot plugin folder per agent, which Wakeshot adds by itself when it finds the agent
 and names once in a notice (not opt-in per agent: Wakeshot has no settings window), and removes at uninstall; for the
-Cursor editor, hooks, not `main.log`. Haik's answer to section 6 is in `docs/product.md` ("Hooks"). The text below is
-the first proposal, kept as the record of this research.
-
-What Wakeshot would add: one small helper exe (`wakeshot-hook`) and a config entry per agent that runs it on turn
-start, turn end and session end. The helper writes a tiny state file in Wakeshot's data folder (like the hold file
-of `wakeshot run`) and exits at once; the tray reads those files. So the tray does not need to run for the hook to
-work, and a tray that starts later still sees the state.
+Cursor editor, hooks, not `main.log`. The product rule is in `docs/product.md` ("Hooks"). The facts below about
+each agent's hooks stay. They were gathered for a first proposal, now replaced: a small helper exe that each agent's
+hook runs at turn start, turn end and session end, writing a tiny state file the tray reads ("the helper" below).
 
 | Agent | Has another reliable signal | Events Wakeshot needs | Wakeshot-owned form (no edit of the user's file) | Clean removal | Gate or trust step |
 |---|---|---|---|---|---|
@@ -283,23 +280,12 @@ changelog; Antigravity as above. Docs only; no hook was run.
 - **Format drift.** Hook schemas are versioned (`version: 1` for Cursor and Copilot, `v1` for Kiro), which is more
   stable than log text or private files.
 
-## 6. Product question for Haik
-
-Answered by Haik on 2026-11-06: hooks from a folder Wakeshot owns, added by Wakeshot itself with one notice, never for
-Claude Code; Cursor in v1; Gemini CLI dropped (`docs/product.md`). The question as asked:
-
-May Wakeshot install hooks for agents that have no other reliable signal (today: Gemini CLI and Cursor CLI)? My
-default: yes, but only opt-in per agent ("Connect Gemini CLI" in settings, off by default), only as a file or folder
-Wakeshot owns (a Gemini extension, a Cursor local plugin), never an edit of the user's own settings file, removed when
-turned off and at uninstall, and never for Claude Code. For the Cursor editor I would start without hooks, from
-`main.log`, and keep the plugin as the fallback if a live test shows the log is not reliable.
-
 ## What is left
 
-- Live test of the Cursor `main.log` rule on Windows (needs a Cursor install; the Hobby plan may be enough: not
-  verified): the log path, info level by default, the `Started` and `Stopping` lines, approval waits, a cancel.
-- Live test that Cursor's own lock does not stop idle sleep on this Modern Standby laptop (`powercfg /requests`
-  should list it under EXECUTION, not SYSTEM).
-- Gemini: whether `AfterAgent` fires after Esc. Needs a paid key or an enterprise seat.
-- Cursor CLI: which hook events a real run fires.
-- Antigravity CLI: state on Windows, hooks, usage. Probably more individual users than Gemini CLI now.
+- Not tested live: the Cursor `main.log` rule (the log path, info level by default, the `Started` and `Stopping`
+  lines, approval waits, a cancel; the rule is dropped, `agent-hooks.md`, "Cursor's `main.log`: dropped"); that
+  Cursor's own lock shows in `powercfg /requests` under EXECUTION, not SYSTEM, so it does not stop idle sleep on a
+  Modern Standby laptop; whether Gemini's `AfterAgent` fires after Esc (needs a paid key or an enterprise seat;
+  whether the Hobby plan is enough for a Cursor test: not verified).
+- Done since: which hook events the Cursor CLI fires (`agent-hooks.md`, "Live test (2026-11-06)"); Antigravity CLI
+  (`antigravity-signals.md`).

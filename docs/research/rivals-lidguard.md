@@ -1,8 +1,8 @@
 # Rivals deep dive: LidGuard
 
-Collected on 2026-11-03 on the Windows laptop.
+Collected on 2026-11-03 on the test laptop.
 
-Marks: **V** = verified (seen in code, docs, git history or on this laptop). **U** = unverified (claim, inference or
+Marks: **V** = verified (seen in code, docs, git history or on the test laptop). **U** = unverified (claim, inference or
 guess). Code references are `repo/path:line`.
 
 ## Sources
@@ -13,9 +13,9 @@ guess). Code references are `repo/path:line`.
 
 Read: all source for detection, power, lid and lifecycle; the README; LidGuard's `.agents/skills/*/SKILL.md`
 (LLM-written design maps, very detailed); every issue and PR (4 issues, 1 PR); every commit subject and every fix
-commit body. Also read (read only) the Claude Code status files on this laptop.
+commit body. Also read (read only) the Claude Code status files on the test laptop.
 
-The repo was cloned to the scratchpad. Nothing was built or run.
+The repo was cloned to a scratch folder. Nothing was built or run.
 
 ## 1. Agent detection
 
@@ -62,7 +62,7 @@ Liveness and timing:
 | Hook to server | Probe 50 ms, connect attempt 250 ms, total 750 ms, server start wait 5 s | `Ipc/LidGuardRuntimeClient.cs:12-15` | V |
 | Earlier approach removed | A resolver that found the agent process by command line and working directory (869 lines deleted in `d8a49f5`). Rule now: "Working directory must not be used to auto-resolve watched processes" | `.agents/skills/lidguard-session-runtime/SKILL.md:14` | V (why: U) |
 
-### 1.3 Claude Code status file today (this laptop, Claude Code 2.1.314 and 2.1.316)
+### 1.3 Claude Code status file today (the test laptop, Claude Code 2.1.314 and 2.1.316)
 
 Fields seen (V): `pid`, `sessionId`, `cwd`, `startedAt`, `procStart`, `version`, `peerProtocol`, `peerFeatures`,
 `kind` (`interactive`), `entrypoint` (`cli`, `claude-vscode`), `pidDomain` (`win32:<host>`), `asksForConvertedSkills`,
@@ -138,7 +138,7 @@ open question in `docs/research.md`. Not checked: background shell tasks, `/loop
 | Docked detection | Count active external monitors: `SM_CMONITORS` cross-checked with WMI `root\wmi WmiMonitorConnectionParams` (`Active`, `VideoOutputTechnology`); internal = 6 LVDS, 11 eDP, 13 UDI embedded, 0x80000000; any external screen = no suspend (`Power/VisibleDisplayMonitorCountProvider.windows.cs:13-36,111`) V. Also skip when the saved lid action is Do nothing (`Runtime/LidGuardRuntimeCoordinator.cs:1931-1960`) V |
 | Battery floor | **None.** V |
 | Time limit | None. V |
-| Heat | Hibernate at 93 C (average of WMI `Win32_PerfFormattedData_Counters_ThermalZoneInformation`), polled every 10 s while lid closed with no external screen; Sleep if hibernate fails (`Settings/LidGuardSettings.cs:10`, `Power/SystemThermalInformation.windows.cs:9-10,64-67`, `Runtime/EmergencyHibernationThermalMonitor.cs:8`) V. On this laptop the class reads without admin: 1 zone, 323 K = 50 C. V |
+| Heat | Hibernate at 93 C (average of WMI `Win32_PerfFormattedData_Counters_ThermalZoneInformation`), polled every 10 s while lid closed with no external screen; Sleep if hibernate fails (`Settings/LidGuardSettings.cs:10`, `Power/SystemThermalInformation.windows.cs:9-10,64-67`, `Runtime/EmergencyHibernationThermalMonitor.cs:8`) V. On the test laptop the class reads without admin: 1 zone, 323 K = 50 C. V |
 | Work ends, lid closed | After 10 s: re-check sessions, lid and screens, release protection right before the request, then Sleep (default) or Hibernate (`Runtime/LidGuardRuntimeCoordinator.cs:1225-1304`). Removed the "suspend when stopped" option in `1516604`: always suspend. V |
 | Sleep on Modern Standby | `SetSuspendState(false)` returns `ERROR_NOT_SUPPORTED` (50) on some Modern Standby PCs; then if `AoAc` it broadcasts `SC_MONITORPOWER` off (`Power/SystemSuspendService.windows.cs:18,40-67`, SKILL `power-runtime:69`) V |
 | Hibernate | `SetSuspendState(true,...)`; emergency path falls back to Sleep (`ad9327b`) V |
@@ -178,8 +178,8 @@ LidGuard says it was built with AI help (README: "Built with help from OpenAI Co
    test background shells and `/loop`; maybe status files alone are enough for Claude.
 2. **Bound every "still working" signal by time.** LidGuard's 59 h leak came from one signal with no expiry. Give
    "busy" with no transcript growth a long cap, and drop Remote Control waiting after the planned limit. Not adopted
-   for `busy` (decision 3, 2026-11-03: signals are checked against facts). Kept: Remote Control waiting ends after
-   1 hour (`product.md:33`).
+   for `busy` (decision 3: signals are checked against facts). Kept: Remote Control waiting ends after 1 hour
+   (`product.md`).
 3. **Capture once; never overwrite a pending saved copy** (LidGuard learned this the hard way, `75f2aca`).
 4. **Damaged saved file must never block start, arm or restore**: set it aside and fall back, unlike LidGuard where it
    breaks every command.
@@ -190,9 +190,8 @@ LidGuard says it was built with AI help (README: "Built with help from OpenAI Co
 7. **Never call Sleep on Modern Standby**; expect `ERROR_NOT_SUPPORTED`; use screen off (`SC_MONITORPOWER` 2) to
    enter standby.
 8. **Heat guard** (LidGuard): read `Win32_PerfFormattedData_Counters_ThermalZoneInformation` (works without admin on
-   this laptop) and hibernate above a fixed threshold while lid-closed. Cheap, and it addresses the "hot in a bag"
-   report. Threshold needs testing; ACPI zones may lag CPU heat (U). Not adopted (decision 2, 2026-11-03: no heat
-   guard).
+   the test laptop) and hibernate above a fixed threshold while lid-closed. Cheap, and it addresses the "hot in a bag"
+   report. Threshold needs testing; ACPI zones may lag CPU heat (U). Not adopted (decision 2: no heat guard).
 9. **Re-check lid, screens and work right before any suspend**, and release our hold just before the request.
 10. **Tolerate odd input**: JSON `null` where a string is expected, unknown fields, unknown `status` values.
 11. **Codex later**: transcript growth in `~\.codex\sessions`, `turn_aborted` = stop, pending `request_user_input` =
@@ -209,6 +208,6 @@ LidGuard says it was built with AI help (README: "Built with help from OpenAI Co
 5. **Crash recovery that waits for the next agent run** (LidGuard): a closed lid can then do nothing for days.
 6. **No lock and no battery floor with lid Do nothing** (LidGuard).
 7. **Not touching the battery sleep timer** while relying on the request (LidGuard), if Microsoft's "requests end 5
-   min after the DC timeout" rule holds (U; test on this laptop).
+   min after the DC timeout" rule holds (U; test on the test laptop).
 8. **Settings for safety rules** (LidGuard has about 30 settings, and later removed options, `1516604`).
 9. **A named mutex held across `await`** or any thread-affine lock with async code (LidGuard #3).

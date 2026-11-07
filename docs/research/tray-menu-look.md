@@ -1,25 +1,26 @@
 # Tray menu look
 
-Desk research for the card `docs/tasks/p1-tray-menu-research.md`, 2026-11-03. No screen use: no menus opened, no
-apps run, no screenshots. The pictures and the spike change come later in `docs/tasks/p1-tray-menu-look.md`.
+Desk research, 2026-11-03, then an on-screen check the same day ("Side by side on screen"). The desk part used no
+screen: no menus opened, no apps run, no screenshots.
 
 Short answer: our menu is the classic Win32 menu. It does have Windows 11 rounded corners, but the small 4 px kind
 that Windows gives menus; current XAML menus use 8 px, a 14 px font instead of 12 px, rows about 33 px apart instead
 of 21, and an acrylic background. Pick: keep the classic menu loop, round it with one DWM call, and owner-draw the
-items (details in "Pick"). Values marked "not verified" or "est." still need the on-screen card.
+items (details in "Pick"). Values marked "not verified" or "est." were not checked on screen.
 
 ## Our menu today
 
 Measured 2026-11-03 from `docs/research/img/tray-menu-switch3-light-flush.png` (light) and
-`tray-menu-switch4-dark-flush.png` (dark), with a stdlib-only Python PNG reader (scratch scripts `png.py`,
-`measure.py`, `rows.py`, `detail.py` in the worker's scratchpad). Values are physical pixels in the picture.
+`docs/research/img/tray-menu-switch4-dark-flush.png` (dark), with a stdlib-only Python PNG reader (throwaway
+scripts, not kept). Values are physical pixels in the picture.
 
 Scale of the pictures: 125% (120 dpi). Reason: the pictures were taken at 13:01 to 13:02 while only the laptop screen
 (1920x1200 at 125%) was on (`docs/research.md`, "Live checks"), and the capital "A" of "Automatic" is 11 px tall. The
 menu font is Segoe UI 9 pt (registry read below), which is 15 px at 120 dpi; Segoe UI caps are about 0.7 of that,
 so 10.5 px. At 150% they would be about 12.6 px. So "at 100%" values below are the picture value divided by 1.25.
 
-How the capture works (`spikes/tray/src/capture.rs`): `BitBlt` of the screen with `CAPTUREBLT`, then every pixel
+How the capture works (a throwaway tray test program of that day, not kept): `BitBlt` of the screen with
+`CAPTUREBLT`, then every pixel
 outside the `#32768` window rect is painted flat grey `808080`. So **the drop shadow is cut away in every picture**:
 whatever Windows draws outside the window rect is not in our pictures. Pixels inside the rect but outside the rounded
 corner show what was behind the menu.
@@ -100,10 +101,10 @@ Sources read 2026-11-03.
   | `SurfaceStrokeColorFlyout` (border) | `#0F000000` | `#33000000` |
   | `DividerStrokeColorDefault` (separator) | `#0F000000` | `#15FFFFFF` |
 
-## Why it looks like that (spike code)
+## Why it looks like that
 
-Read 2026-11-03 in `spikes/tray/src/main.rs` (`build_menu`, `show_menu`), `src/theme.rs`, `tray-spike.exe.manifest`,
-`build.rs`.
+Read 2026-11-03 in the code of that day's throwaway tray test program (not kept): its menu building and showing, its
+theme code, its manifest and its build script.
 
 - **Classic menu, drawn by Windows.** `CreatePopupMenu` plus `AppendMenuW` with `MF_STRING`, `MF_GRAYED` (status line),
   `MF_CHECKED` (Automatic), `MF_POPUP` (Keep awake), `MF_SEPARATOR`, and `CheckMenuRadioItem` for the radio bullet in
@@ -112,23 +113,25 @@ Read 2026-11-03 in `spikes/tray/src/main.rs` (`build_menu`, `show_menu`), `src/t
 - **Shown with** `SetForegroundWindow`, then `TrackPopupMenuEx` with `TPM_RIGHTALIGN` or `TPM_LEFTALIGN` (from
   `SM_MENUDROPALIGNMENT`), `TPM_BOTTOMALIGN | TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY`, then `PostMessage
   WM_NULL`. None of these flags change the look. `TPM_NOANIMATION` is not set, so the user's menu animation applies.
-- **Font.** Classic menus use the system menu font (`lfMenuFont`): Segoe UI 9 pt here (registry read above). The spike
-  sets no font. Not verified that user32 reads exactly `lfMenuFont` on Windows 11 (the measured cap height matches it).
+- **Font.** Classic menus use the system menu font (`lfMenuFont`): Segoe UI 9 pt here (registry read above). The test
+  program sets no font. Not verified that user32 reads exactly `lfMenuFont` on Windows 11 (the measured cap height
+  matches it).
 - **Dark mode.** `theme.rs` loads undocumented uxtheme ordinals: 135 `SetPreferredAppMode(AllowDark)` once at start,
   before the first menu, then 104 and 136 (`RefreshImmersiveColorPolicyState`, `FlushMenuThemes`). That is what makes
   the menu dark; there is no documented API for dark classic menus (not verified that none exists: no Microsoft page
   found that documents one).
-- **Corners.** The spike makes no DWM call on the menu window. The 4 px rounding comes from Windows' own policy for
-  standard menus (the apply-rounded-corners page above, and our measurement).
+- **Corners.** The test program makes no DWM call on the menu window. The 4 px rounding comes from Windows' own policy
+  for standard menus (the apply-rounded-corners page above, and our measurement).
 - **Manifest** (embedded as `RT_MANIFEST` 1 by `build.rs`): Common Controls 6 dependency, `supportedOS` Windows 10/11
   GUID, per-monitor v2 DPI (`true/pm` plus `PerMonitorV2`), `asInvoker`. Common Controls 6 matters for themed common
   controls, not for menus (menus are user32). PMv2 is why the menu is drawn at the monitor's 120 dpi.
-- **Shadow.** The spike asks for nothing. What Windows draws is outside our pictures (see "How the capture works").
+- **Shadow.** The test program asks for nothing. What Windows draws is outside our pictures (see "How the capture
+  works").
 
 ## What the named apps use
 
-Checked 2026-11-03, read only: installed files (dumpbin `/imports`, a byte-string search script `strings.py` in the
-scratchpad, `AppxManifest.xml`), `Get-AppxPackage`, the `NotifyIconSettings` registry list, and the apps' public
+Checked 2026-11-03, read only: installed files (dumpbin `/imports`, a byte-string search script,
+`AppxManifest.xml`), `Get-AppxPackage`, the `NotifyIconSettings` registry list, and the apps' public
 source on GitHub where it exists. No app was run.
 
 | App | Version here | What draws its menu | Evidence |
@@ -137,13 +140,13 @@ source on GitHub where it exists. No app was run.
 | Wi-Fi quick settings (left-click on the network icon) | `ShellExperienceHost` 10.0.26100.8115 | System XAML (`Windows.UI.Xaml`) with WinUI 2 controls | `Windows.UI.QuickActions.dll` in `C:\Windows\SystemApps\ShellExperienceHost_cw5n1h2txyewy` has 112 `Windows.UI.Xaml` and 34 `Microsoft.UI.Xaml.Controls` type names and `MenuFlyout`, `MenuFlyoutItem`, `ContextMenuItem_ManageQuickActions` strings. The package manifest depends on `Microsoft.UI.Xaml.CBS` (WinUI 2 for inbox apps). It is a flyout panel, not a menu; its own right-click menu is a `MenuFlyout`. |
 | Network icon right-click menu (taskbar) | `MicrosoftWindows.Client.Core` 1000.26100.134 | System XAML `MenuFlyout`, drawn by the taskbar (hosted in `explorer.exe`: not verified) | `SystemTray.dll` and `Taskbar.View.dll` in `MicrosoftWindows.Client.Core_cw5n1h2txyewy` have `Windows.UI.Xaml` types, `MenuFlyout`, `MenuFlyoutItem`, `MenuFlyoutSeparator`, and `ContextMenu*` strings. Which DLL builds the network icon's menu: not verified. |
 | Windows Security (tray icon) | `SecurityHealthSystray.exe` 10.0.26100.8115 | Classic Win32 menu from a menu resource, same kind as ours | `SecurityHealthSystray.exe` imports no tray or menu function (only window basics and `CoCreateInstance`). `SecurityHealthSSO.dll` imports `Shell_NotifyIconW`, `LoadMenuW`, `GetSubMenu`, `TrackPopupMenuEx`, `DeleteMenu`, `DestroyMenu`, and has no `uxtheme`, `dwmapi`, dark-mode or `MenuFlyout` strings. That the exe loads this DLL through COM is inferred, not verified. |
-| Chrome | 156.0.8078.80 | Chrome's own Views menu (Skia-drawn), rounded bubble border | Chromium `chrome/browser/ui/views/status_icons/status_icon_win.cc` (last commit 2026-10-16): `views::MenuRunner(...)->RunMenuAt(...)`. `ui/views/controls/menu/menu_config_win.cc`: font = system menu font (`SystemFont::kMenu`, the same 9 pt font as ours), `use_bubble_border = corner_radius > 0`. `menu_config.cc`: `item_vertical_margin = 6`. Radius token `kMenuRadius` maps to `kMediumSmall` = 12 px (`chrome_layout_provider.cc`, `layout_provider.cc`). The tray icon shows only while Chrome runs in the background (not verified here; `chrome.exe` does have a `NotifyIconSettings` entry on this laptop). |
-| Copilot | No `Microsoft.Copilot` package here. The Copilot tray entry is `M365Copilot.exe` in `Microsoft.MicrosoftOfficeHub` 19.2610.35011 | WinUI 3 `MenuFlyout` through a XAML island, most likely | The package ships `Microsoft.UI.Xaml.dll` (14.4 MB), `Microsoft.UI.Xaml.Controls.dll` (6.3 MB), `Microsoft.WinUI.dll`, the Windows App SDK runtime, .NET (`coreclr.dll`) and WebView2. `M365Copilot.exe` (23 MB) has `Shell_NotifyIcon NIM_ADD`, `TaskbarCreated`, `SystemTrayContextMenuEnabled`, `DesktopWindowXamlSource`, and `winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem` / `MenuFlyoutSubItem` / `MenuFlyoutSeparator` strings. It also imports `TrackPopupMenu`. Which one the tray right-click uses: not verified. If Haik meant the consumer Copilot app: not installed here, not checked. |
+| Chrome | 156.0.8078.80 | Chrome's own Views menu (Skia-drawn), rounded bubble border | Chromium `chrome/browser/ui/views/status_icons/status_icon_win.cc` (last commit 2026-10-16): `views::MenuRunner(...)->RunMenuAt(...)`. `ui/views/controls/menu/menu_config_win.cc`: font = system menu font (`SystemFont::kMenu`, the same 9 pt font as ours), `use_bubble_border = corner_radius > 0`. `menu_config.cc`: `item_vertical_margin = 6`. Radius token `kMenuRadius` maps to `kMediumSmall` = 12 px (`chrome_layout_provider.cc`, `layout_provider.cc`). The tray icon shows only while Chrome runs in the background (not verified here; `chrome.exe` does have a `NotifyIconSettings` entry on the test laptop). |
+| Copilot | No `Microsoft.Copilot` package here. The Copilot tray entry is `M365Copilot.exe` in `Microsoft.MicrosoftOfficeHub` 19.2610.35011 | WinUI 3 `MenuFlyout` through a XAML island, most likely | The package ships `Microsoft.UI.Xaml.dll` (14.4 MB), `Microsoft.UI.Xaml.Controls.dll` (6.3 MB), `Microsoft.WinUI.dll`, the Windows App SDK runtime, .NET (`coreclr.dll`) and WebView2. `M365Copilot.exe` (23 MB) has `Shell_NotifyIcon NIM_ADD`, `TaskbarCreated`, `SystemTrayContextMenuEnabled`, `DesktopWindowXamlSource`, and `winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem` / `MenuFlyoutSubItem` / `MenuFlyoutSeparator` strings. It also imports `TrackPopupMenu`. Which one the tray right-click uses: not verified. The consumer Copilot app: not installed here, not checked. |
 | Explorer right-click (Windows reference) | `MicrosoftWindows.Client.FileExp` 1000.26100.10 | XAML ("the XAML context menu"); "Show more options" opens the old Win32 menu | Windows Insider blog, build 23403 (2023-03-08): "We are adding access key shortcuts into the XAML context menu in File Explorer." Windows Developer blog (2021-07-19): "'Show more options' loads the Windows 10 context menu as-is". `FileExplorerExtensions.dll` is WinUI 3 (189 `Microsoft.UI.Xaml` names, no `Windows.UI.Xaml`) and has `ContextMenuFlyout`, `MenuFlyoutControl.cpp`, `MenuFlyoutItem`; that it draws the file right-click menu is not verified. |
 
-So of the six Haik named, five draw their own menu or a XAML one (Telegram, Wi-Fi quick settings, Chrome, Copilot,
-Explorer) and one uses the same classic Win32 menu as ours (Windows Security). The old Explorer menu behind "Show more
-options" is also the classic one: a good side-by-side reference for "same as ours".
+So of the six apps named for comparison, five draw their own menu or a XAML one (Telegram, Wi-Fi quick settings, Chrome,
+Copilot, Explorer) and one uses the same classic Win32 menu as ours (Windows Security). The old Explorer menu behind
+"Show more options" is also the classic one: a good side-by-side reference for "same as ours".
 
 Also found: `windows-reactor` 0.100.0 (Microsoft, in the `windows-rs` repo, `crates/libs/reactor`, last commit
 2026-10-30), the "WinUI library for Rust" that `product.md` names, already has a tray icon (`native/notifyicon`,
@@ -162,35 +165,35 @@ is named.
 
 | # | Difference | Ours | Modern | How the others get it | How we could get it, and the cost |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Corner radius | 4 epx (5 px at 125%) | 8 epx (Geometry page); Chrome 12; Telegram its own | XAML `OverlayCornerRadius`; Chrome and Telegram paint it | `DwmSetWindowAttribute(menu window, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND)`. The menu window handle comes in `WM_ENTERIDLE` `lParam` when `wParam` is `MSGF_MENU` (learn.microsoft.com/windows/win32/dlgbox/wm-enteridle), or from `EnumThreadWindows` as `capture.rs` already does. About 30 lines, feature `Win32_Graphics_Dwm`, no crate, no runtime cost. **Not verified** that DWM honours it on a `#32768` window, nor that it applies before the first frame (`WM_ENTERIDLE` comes once the menu is idle, so small corners may flash). |
+| 1 | Corner radius | 4 epx (5 px at 125%) | 8 epx (Geometry page); Chrome 12; Telegram its own | XAML `OverlayCornerRadius`; Chrome and Telegram paint it | `DwmSetWindowAttribute(menu window, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND)`. The menu window handle comes in `WM_ENTERIDLE` `lParam` when `wParam` is `MSGF_MENU` (learn.microsoft.com/windows/win32/dlgbox/wm-enteridle), or from `EnumThreadWindows`. About 30 lines, feature `Win32_Graphics_Dwm`, no crate, no runtime cost. **Not verified** that DWM honours it on a `#32768` window, nor that it applies before the first frame (`WM_ENTERIDLE` comes once the menu is idle, so small corners may flash). |
 | 2 | Font | Segoe UI 9 pt = 12 epx (system menu font) | Segoe UI Variable 14 epx (Body 14/20) | XAML `ControlContentThemeFontSize`. Chrome keeps the system menu font, same as ours | Classic items cannot change font: it is the user's system-wide menu font. Only owner-drawn items pick their own font ("Using Menus", owner-drawn section: the item data "might contain ... a handle to the logical font"). Segoe UI Variable is installed (`C:\Windows\Fonts\SegUIVar.ttf`, registry font list). |
 | 3 | Item height | 26 px pitch at 125% = about 21 epx | about 33 epx with mouse (padding 4/5 + 20 line + margins 2/2), about 41 with touch | XAML item padding and margin | Owner-drawn: we set `itemHeight` in `WM_MEASUREITEM`. Classic: no setting (not verified that none exists; item bitmaps can make rows taller, a hack). |
 | 4 | Hover and pressed | Not in our pictures | Rounded 4 epx rect, inset 4 epx, `#09000000` / `#0FFFFFFF` | XAML visual states | Owner-drawn: draw it on `ODS_SELECTED`. Classic: whatever the theme draws (to check on screen). |
 | 5 | Material | Opaque `f9f9f9` / `2b2b2b` | Acrylic (`AcrylicBackgroundFillColorDefaultBackdrop`) | XAML `SystemBackdrop` | `DWMWA_SYSTEMBACKDROP_TYPE = DWMSBT_TRANSIENTWINDOW` (build 22621+) shows only where the window paints nothing opaque. A classic or owner-drawn menu paints its own background, so: own popup window or XAML only (inferred from the DWM docs, not verified). |
 | 6 | Border | 1 px `e5e5e5` / `3e3e3e` (lighter than the dark fill) | 1 px `#0F000000` / `#33000000` (darker than the dark fill) | XAML presenter border | `DWMWA_BORDER_COLOR` on the menu window may recolour it; **not verified** that DWM draws the border of a menu window. Small. |
-| 7 | Shadow | Unknown: cut away by `capture.rs` | Flyout shadow (size not looked up) | XAML; Chrome and Telegram paint their own | First see it on screen (below). |
+| 7 | Shadow | Unknown: cut away by the capture | Flyout shadow (size not looked up) | XAML; Chrome and Telegram paint their own | First see it on screen (below). |
 | 8 | Text colour | `000000` / `ffffff` | `1a1a1a` effective (`#E4000000` on `f9f9f9`) / `ffffff` | XAML tokens | Owner-drawn: any colour. Tiny. |
 | 9 | Text smoothing | ClearType colour fringes | Not checked (XAML popups often grey-scale; not verified) | Renderer | Owner-drawn GDI: `lfQuality` picks it. Tiny. |
 | 10 | Check mark | System glyph, about 8 x 6 epx, label at 36 epx | `E73E`, 12 epx, Segoe Fluent Icons | XAML `FontIcon` | Owner-drawn: draw `E73E` with Segoe Fluent Icons (`SegoeIcons.ttf` is installed). |
 | 11 | Submenu arrow | System chevron about 4 x 8 epx, 16 epx from the edge | `E974`, 12 epx | XAML `FontIcon` | Owner-drawn: draw `E974`. Windows may still draw its own arrow on an owner-drawn popup item (widely reported, not verified on this build); to check. |
 | 12 | Separator | Light: 1 px `d7d7d7`, inset 11 px. Dark: 1 px `3e3e3e` edge to edge, touching the border | 1 px `#0F000000` / `#15FFFFFF` | XAML | Owner-drawn separator item (`MFT_OWNERDRAW` with `MFT_SEPARATOR`, not verified that it is drawn by us). |
-| 13 | Disabled line | `9f9f9f` on `f9f9f9` (2.5:1), `6d6d6d` on `2c2c2c` (2.7:1), WCAG formula | Light gives the same `9f9f9f`; dark `797979` | XAML `TextFillColorDisabled` | Not a look gap: Windows itself greys it this much. Whether the status line should be a disabled item is wording (Phase 5). |
+| 13 | Disabled line | `9f9f9f` on `f9f9f9` (2.5:1), `6d6d6d` on `2c2c2c` (2.7:1), WCAG formula | Light gives the same `9f9f9f`; dark `797979` | XAML `TextFillColorDisabled` | Not a look gap: Windows itself greys it this much. Whether the status line should be a disabled item is wording. |
 | 14 | Icons in items | None | Optional `Icon` per item | XAML | Owner-drawn can draw them. Which items get icons is a product call; out of scope. |
 | 15 | High contrast | System colours, automatic | XAML high-contrast dictionary (`SystemColor*` brushes in `MenuFlyout_themeresources.xaml`) | Built in | Owner-drawn must use `GetSysColor` (`COLOR_MENU`, `COLOR_MENUTEXT`, `COLOR_HIGHLIGHT`, `COLOR_GRAYTEXT`) when high contrast is on. About 20 lines. |
 | 16 | Keyboard and screen readers | Built in | Built in | | Owner-drawn: mnemonics need `WM_MENUCHAR` ("Using Menus": "your application must process the WM_MENUCHAR message"); screen readers need `MSAAMENUINFO` as the first field of the item data (learn.microsoft.com/windows/win32/api/oleacc/ns-oleacc-msaamenuinfo). Own popup: we would build all of it, including a UI Automation provider. |
 
 What most likely reads as "old": items 2 and 3 (small font, cramped rows) and item 1 (4 versus 8 px), with 5
-(flat versus acrylic) as a smaller part. This is a judgment from the numbers; Haik's side-by-side look decides.
+(flat versus acrylic) as a smaller part. This is a judgment from the numbers; the side-by-side look below settles it.
 
 ## Options
 
-Sizes and line counts marked "est." are estimates, not measured. "Tray checks" means the tray card's three checks:
+Sizes and line counts marked "est." are estimates, not measured. "Tray checks" means the tray's three checks:
 `TaskbarCreated` re-add, theme switch without restart, Medium token.
 
 | Option | Fixes (numbers from the table above) | Code | Exe size and dependencies | Startup and memory | Main risk | Tray checks |
 | --- | --- | --- | --- | --- | --- | --- |
 | A. Classic menu plus `DWMWCP_ROUND` (and maybe `DWMWA_BORDER_COLOR`) on the menu window | 1, maybe 6 | About 30 lines | About +1 KB est.; `dwmapi` is a system DLL; feature `Win32_Graphics_Dwm`; no crate | None | DWM may ignore it on a menu window; small corners may flash first | All kept: tray window and theme path unchanged, no elevation |
-| B. Owner-drawn items in the classic menu, plus A | 1 to 4, 6, 8 to 12; keeps 13 to 16 with extra work | 300 to 500 lines est.: measure, draw, `WM_MENUCHAR`, `MSAAMENUINFO`, high-contrast colours | +10 to 30 KB est.; GDI and `dwmapi` only; no crate, no runtime | Fonts made per menu open; no measurable cost expected (not measured) | Windows drawing its own arrow over ours; high contrast cannot be tested on this laptop (T11 was dropped) | All kept: the menu is built on each open, so colours follow the theme at the next open; `TaskbarCreated` handling does not change; no elevation |
+| B. Owner-drawn items in the classic menu, plus A | 1 to 4, 6, 8 to 12; keeps 13 to 16 with extra work | 300 to 500 lines est.: measure, draw, `WM_MENUCHAR`, `MSAAMENUINFO`, high-contrast colours | +10 to 30 KB est.; GDI and `dwmapi` only; no crate, no runtime | Fonts made per menu open; no measurable cost expected (not measured) | Windows drawing its own arrow over ours; high contrast cannot be tested on the test laptop | All kept: the menu is built on each open, so colours follow the theme at the next open; `TaskbarCreated` handling does not change; no elevation |
 | C. Our own popup window (Direct2D and DirectWrite, DWM corners, acrylic backdrop) | All, including 5 | 1,500 to 3,000 lines est.: focus, light dismiss, keyboard, submenus, placement at any taskbar edge, per-monitor DPI, UI Automation provider, animation | +50 to 150 KB est.; system DLLs only | A Direct2D device per open, a few MB (not measured) | Accessibility and focus bugs that Windows' menu loop already solves | Kept if built right; all is ours to get right |
 | D1. WinUI 3 `MenuFlyout` in a XAML island (`windows-reactor`, or our own `DesktopWindowXamlSource`) | All: it is the same control the shell and, most likely, Copilot use | Small for the menu itself, but `windows-reactor`'s menu has no check or radio items yet, and its tray menu code is internal (`pub(super)`), so we would adopt its app model or write our own island | Needs `Microsoft.WindowsAppRuntime.2` 2.6.4+ installed (here: 119.5 MB, 301 files on disk) or self-contained (in the runtime here, `Microsoft.ui.xaml.dll` alone is 14.5 MB and `Microsoft.UI.Xaml.Controls.dll` 7.1 MB; MB = 1024 x 1024 bytes) | Microsoft, self-contained unpackaged: "Slower to load, and uses more memory since code pages aren't shared with other apps" (learn.microsoft.com/windows/apps/package-and-deploy/deploy-overview, updated 2026-10-02). Not measured here | A runtime the installer must add, kept serviced, for x64 and ARM64; `windows-reactor` is 0.100.0 | `TaskbarCreated`: `windows-reactor` re-adds on shell restart (its `notifyicon` comment). Theme: it reads `SystemUsesLightTheme` and refreshes. Medium: fine. Not tested by us |
 | D2. System XAML island (`Windows.UI.Xaml`, in Windows) | Unclear: shell parts get the Windows 11 look from WinUI 2 (`Microsoft.UI.Xaml.CBS`); without it the in-box styles may be the older look (not verified) | Like D1 | No runtime to install | XAML in process (not measured) | WinUI 2 for unpackaged apps needs package identity (not verified) | Not checked |
@@ -209,7 +212,7 @@ without a restart, and nothing needs elevation. What B gives up: the acrylic bac
 try that tells us whether DWM will round a menu window at 8 px; B then builds on it.
 
 One more design point that the pictures should settle: Windows' own tray menus are drawn by the taskbar, and
-`windows-reactor` themes its tray menu from `SystemUsesLightTheme` (the taskbar mode). Our spike follows
+`windows-reactor` themes its tray menu from `SystemUsesLightTheme` (the taskbar mode). Our test program followed
 `AppsUseLightTheme` (app mode, through `AllowDark`). With "Windows mode dark, app mode light" (a common mix), our menu
 would be light next to dark taskbar menus. With owner-drawn items we choose the colours, so either rule is one line.
 
@@ -218,11 +221,11 @@ would be light next to dark taskbar menus. With owner-drawn items we choose the 
 - Wakeshot needs a real window (for example a settings page), so the WinUI runtime cost is paid anyway.
 - `windows-reactor` reaches a stable release, its tray menu supports check and radio items, and our installer can add
   the Windows App Runtime without a prompt.
-- Haik's side-by-side shows that the flat background (no acrylic) is the gap that still matters after B.
+- A side-by-side look shows that the flat background (no acrylic) is the gap that still matters after B.
 
 ## Side by side on screen
 
-Card `docs/tasks/p1-tray-menu-look.md`, 2026-11-03 15:47 to 16:12, on this laptop: only the laptop screen (1920x1200
+2026-11-03 15:47 to 16:12, on the test laptop: only the laptop screen (1920x1200
 at 125%), on battery. Every app's menu was opened with a synthetic right-click on its tray icon (left-click for quick
 settings) and closed with Esc; no item of another app was clicked. The Explorer menus come from a scratch folder with
 one dummy file; the classic one from Shift+right-click. Our menu and the other tray menus were shot on a plain
@@ -232,7 +235,7 @@ Private bits are greyed: the Wi-Fi name, a Chrome extension name, and quick sett
 Pictures in `docs/research/img/`, each in `dark`, `light` and (where listed) `custom` (Windows mode dark, app mode
 light):
 
-- Ours: `tray-look-<theme>-ours-classic.png` (as Phase 0 left it), `tray-look-<theme>-ours-owner.png` (the pick, with
+- Ours: `tray-look-<theme>-ours-classic.png` (the first menu), `tray-look-<theme>-ours-owner.png` (the pick, with
   the submenu open by keyboard), `...-ours-owner-without-dwm.png`, `...-ours-owner-forced-hc.png`.
 - Reference: `tray-look-<theme>-explorer-new.png` and `...-explorer-classic.png` (the best single pair: Windows' own
   new menu and Windows' own classic menu). These two keep only the pixels that changed when the menu opened, so in
@@ -241,17 +244,17 @@ light):
 - Tray menus: `tray-look-<theme>-network-menu.png`, `...-quick-settings.png`, `...-security.png`, `...-chrome.png`,
   `...-copilot.png`, `...-telegram.png`.
 - 100% and 150% without a screen: `tray-look-render-96dpi-<light|dark|hc>.png` and `...-144dpi-...` (items only, drawn
-  by `tray-spike.exe --render` with the same code; no frame).
+  by the test program's render mode with the same code; no frame).
 
 ### Measured (dark, 125%; epx = px / 1.25)
 
-Measured with a stdlib script on the raw pictures (`img.py` `menu` and `edges` in the card's scratchpad): corner
+Measured with a throwaway stdlib script on the raw pictures: corner
 radius from how far the edge is indented on the top rows, border and fill from pixels, item pitch from the tops of
 the text lines, shadow from the difference to the known backdrop. "About" values were read from the picture by eye.
 
 | Menu | What draws it | Corner | Border (dark) | Item pitch | Text | Shadow |
 | --- | --- | --- | --- | --- | --- | --- |
-| Ours, classic (Phase 0) | Win32 menu | 4 epx | `3e3e3e`, lighter than the fill | 26 px = 21 epx | Segoe UI 9 pt (12 epx) | faint (3 levels below) |
+| Ours, classic (the first menu) | Win32 menu | 4 epx | `3e3e3e`, lighter than the fill | 26 px = 21 epx | Segoe UI 9 pt (12 epx) | faint (3 levels below) |
 | Ours, classic + `DWMWCP_ROUND` (option A) | Win32 menu | 8 epx | `3e3e3e` | 21 epx | 12 epx | DWM shadow (7 levels below, 12 px to the left) |
 | **Ours, owner-drawn + `DWMWCP_ROUND` (pick B)** | Win32 menu loop, our drawing | 8 epx | `414141` (DWM's) | 41 px = 33 epx | Segoe UI Variable Text 14 epx | DWM shadow (18 levels below, 12 px left) |
 | Ours, owner-drawn, no DWM call | same | square | `a0a0a0`, light grey | 33 epx | 14 epx | small, below only |
@@ -278,7 +281,7 @@ was dark (it reads `SystemUsesLightTheme`), the classic `AllowDark` menu was lig
 the Windows mode, which is product decision 3; and `AllowDark` follows the app mode, now tested apart (pictures
 `tray-look-custom-*`).
 
-### How the pick behaves (spike, on screen)
+### How the pick behaves (on screen)
 
 - `DwmSetWindowAttribute(DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND)` works on the `#32768` menu window, for the
   classic and the owner-drawn menu alike.
@@ -299,55 +302,23 @@ the Windows mode, which is product decision 3; and `AllowDark` follows the app m
   awake", the `&` removed) and the states (checked, unavailable, has popup); separators have the separator role.
 - Theme switch without restart: after Settings switched to Light, the next menu was light; the tray icon changed too.
 - `TaskbarCreated`: after the icon was removed by a test message, posting the registered `TaskbarCreated` message
-  re-added it (`NIM_ADD` TRUE). Simulated: no real Explorer restart in this card. Token: Medium in every run.
-- DPI: on screen only 125% was possible (the 150% DELL was not connected, and the scale is Haik's setting). At 125%:
-  items 41 px, font 18 px, glyphs 15 px. The render at 96 dpi gives 33, 14 and 12 px, the WinUI values; at 144 dpi 50,
-  21 and 18 px. The frame corners at 100% were not seen on screen.
+  re-added it (`NIM_ADD` TRUE). Simulated: no real Explorer restart in this test. Token: Medium in every run.
+- DPI: on screen only 125% was possible (the 150% DELL was not connected, and the scale is the user's own setting). At
+  125%: items 41 px, font 18 px, glyphs 15 px. The render at 96 dpi gives 33, 14 and 12 px, the WinUI values; at 144 dpi
+  50, 21 and 18 px. The frame corners at 100% were not seen on screen.
 - High contrast: the forced branch draws with `GetSysColor` (`COLOR_WINDOW`, `COLOR_BTNTEXT`, `COLOR_HIGHLIGHT`,
   `COLOR_HIGHLIGHTTEXT`, `COLOR_GRAYTEXT`, `COLOR_WINDOWTEXT`, the MenuFlyout high contrast mapping); pictures
-  `...-ours-owner-forced-hc.png` and the `hc` renders. A real high contrast switch was not tested (Haik's theme stays).
-- Cost: after about 40 menu opens the spike had 17.2 MB working set and 2.7 MB private (Phase 0 classic: 16 to 19 MB
-  and 2.0 to 3.3 MB). The spike exe grew from 519,168 to 676,864 bytes (x64; ARM64 648,192), but that includes
-  spike-only code (render, backdrop, capture messages); the menu code alone was not measured. The first build at 15:45
+  `...-ours-owner-forced-hc.png` and the `hc` renders. A real high contrast switch was not tested (the user's own theme
+  stays).
+- Cost: after about 40 menu opens the test program had 17.2 MB working set and 2.7 MB private (the first classic menu:
+  16 to 19 MB and 2.0 to 3.3 MB). Its exe grew from 519,168 to 676,864 bytes (x64; ARM64 648,192), but that includes
+  test-only code (render, backdrop, capture messages); the menu code alone was not measured. The first build at 15:45
   was 580,608 bytes; why later builds are bigger was not checked.
 
 Pick stays **B** (owner-drawn items plus `DWMWCP_ROUND` at the first paint), with the same "change it when" triggers.
 
-## To check on screen
+## Not checked on screen
 
-Done on 2026-11-03 by `p1-tray-menu-look` (results in "Side by side on screen" above), except: Chrome's menu appears
-only while Chrome runs in the background with a tray icon (it did here); 100% scale on screen; a real high contrast
-switch; a real Explorer restart.
-
-For the worker of `p1-tray-menu-look`. Our measuring scripts (stdlib Python, no installs) are `png.py`, `measure.py`,
-`rows.py`, `detail.py` in this card's scratchpad
-(`C:\Users\haika\AppData\Local\Temp\claude\f7c2c08a8f04f07b\7c8299f5-9b89-452b-a899-d64d015f5d2d\scratchpad`); copy
-them, the scratchpad may be cleaned.
-
-1. **Pictures with the shadow.** `capture.rs` greys everything outside the menu rect, so no shadow is in any picture.
-   To keep Haik's screen private and still see the shadow: grab the area (menu rect plus 24 px) just before the menu
-   opens and again while it is open, keep only pixels that changed, grey the rest.
-2. **For every menu (ours and the six):** corner radius, border colour, shadow size, item pitch, cap height of the
-   text, label left edge, check mark and arrow size, separator colour and inset, in light and dark. For the hover
-   colour, press Down once after the menu opens (keyboard selection, no click), then take the picture.
-3. **Which app is "Copilot"** for Haik: here only `M365Copilot.exe` (Microsoft 365 Copilot) has a tray icon. Check
-   whether its tray menu is the WinUI `MenuFlyout` (8 px corners, acrylic) or a classic menu (it imports
-   `TrackPopupMenu` too).
-4. **"Wi-Fi quick settings":** picture both the left-click flyout and the right-click menu of the network icon.
-5. **Explorer:** picture the new right-click menu and the "Show more options" menu. The second should match ours
-   (same classic menu); that pair shows Haik the gap in one look.
-6. **Theme rule:** with Windows mode dark and app mode light (a switch through Settings, put back exactly, as the
-   tray card allows), picture the network icon's right-click menu and ours. If the Windows menu is dark and ours is
-   light, the tray menu should follow the taskbar mode.
-7. **Spike change to try first (A):** after `TrackPopupMenuEx` shows the menu, call `DwmSetWindowAttribute` with
-   `DWMWA_WINDOW_CORNER_PREFERENCE` = `DWMWCP_ROUND` on each `#32768` window of the thread (from `WM_ENTERIDLE`
-   with `MSGF_MENU`, or `capture::menu_windows`). Measure the radius: 8 epx is 10 px at 125%. Note any flash of
-   small corners. Also try `DWMWA_BORDER_COLOR`.
-8. **Then B:** owner-draw the items: Segoe UI Variable 14 epx, about 33 epx pitch, 4 epx inset rounded hover, `E73E`
-   check and `E974` arrow in Segoe Fluent Icons, WinUI colours from the table above, `MENUINFO.hbrBack` for the
-   background. Check that Windows does not draw its own arrow over ours, that mnemonics work through `WM_MENUCHAR`,
-   and that `AccessibleObjectFromWindow` on the menu window returns our item names (proves `MSAAMENUINFO` works,
-   without Narrator).
-9. **Re-run the tray checks** after the change: `TaskbarCreated` re-add, theme switch without restart, Medium token.
-10. **High contrast** cannot be tested here (turning it off may not bring back Haik's `Custom.theme`, T11). Say so in
-    the result; do not switch it.
+Checked on screen on 2026-11-03 ("Side by side on screen" above), except: 100% scale on screen, a real high contrast
+switch, a real Explorer restart. Chrome's menu appears only while Chrome runs in the background with a tray icon (it
+did on the test laptop).

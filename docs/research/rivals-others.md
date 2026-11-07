@@ -278,7 +278,7 @@ Unverified: from model knowledge in a chat on 2026-11-03, not checked against do
    (AxGord plugin, Claude Code #21432).
 7. Read the last line of the session transcript to catch aborted turns that never set the status back (AxGord).
 8. Consider holding through a 5-hour usage-limit stop until the reset, with a hard cap (AxGord, Insomnia #57
-   comment). Product call for Haik.
+   comment). A product call.
 9. Check a pid still belongs to the expected exe before trusting it (pid reuse; AxGord).
 10. Cooldown of about 30 s after a trigger app exits so a restart does not flap the state (Caffeinator).
 11. App rules match the exe name and also the full path the user browsed to (Insomnia #3).
@@ -286,8 +286,8 @@ Unverified: from model knowledge in a chat on 2026-11-03, not checked against do
 13. A "hold for 2h" item in the tray, plus "add 1 hour" while a hold runs (Insomnia #2, Amphetamine extend,
     krishhgg Insomnia).
 14. Lid mode safety on top of the 20% floor: release on unplug if the lid is closed and battery is low. A user-mode
-    temperature reading does exist (PDH thermal zone, `research.md:478-487`), but Wakeshot has no heat guard and no
-    lid-closed time limit (decisions 2 and 3, 2026-11-03).
+    temperature reading does exist (PDH thermal zone, `research.md`), but Wakeshot has no heat guard and no
+    lid-closed time limit (decisions 2 and 3).
 15. Sounds only when they mean something: a short chime on lid close only while Wakeshot is overriding the lid
     (AxGord). Silent otherwise.
 16. A "Restore my power settings" menu item as a manual escape hatch (WakeKeeper).

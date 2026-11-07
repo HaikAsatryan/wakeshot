@@ -1,8 +1,8 @@
 # Distribution facts: installer, updates, winget, signing, CI, scoop
 
-Checked 2026-11-03 for card `p0-distribution-facts`. Each fact has a source and a mark:
+Checked 2026-11-03. Each fact has a source and a mark:
 
-- **verified**: seen in source code, official docs, a real manifest, or tested on this laptop.
+- **verified**: seen in source code, official docs, a real manifest, or tested on the test laptop.
 - **reported**: from a third party (issue, blog). Not checked by us.
 - **not verified**: a guess or unclear. Says what would settle it.
 
@@ -74,31 +74,31 @@ and docs.rs.
   `published_at`, drops pre-releases unless asked, and downloads assets by `browser_download_url`. Doc comment:
   "Without [a token], rate limited to 60 req/hr per IP." Verified in `src/lib-rust/src/sources/github.rs`.
 - Publish with `vpk upload github --repoUrl ... --token ... [--publish] [--pre] [--tag ...]`. Verified: `vpk upload
-  github -h` on this laptop.
+  github -h` on the test laptop.
 - The default channel on Windows is `win` (`--channel`). Verified: `vpk pack -H`.
 
 ### vpk on the installed .NET 10 SDK
 
-- Verified on this laptop: the only SDK is 10.0.403 (runtime 10.0.14). `dotnet tool install -g vpk` installed
+- Verified on the test laptop: the only SDK is 10.0.403 (runtime 10.0.14). `dotnet tool install -g vpk` installed
   `vpk` 1.2.161 and `vpk --help` runs. The tool package ships `net8.0`, `net9.0` and `net10.0` builds, so it runs
   natively on .NET 10 with no roll-forward. The Rust guide still says ".NET Core SDK 8"; that is a minimum, not a
   limit.
-- Side effect seen: the first `dotnet` command on this laptop printed "Installed an ASP.NET Core HTTPS development
+- Side effect seen: the first `dotnet` command on the test laptop printed "Installed an ASP.NET Core HTTPS development
   certificate" (the .NET first-run step, in the user store, not trusted). Harmless.
 
 ### Signing hooks in vpk
 
 `vpk pack` has `--signParams` (signtool args), `--signTemplate` (custom command, `{{file}}` substituted),
-`--signExclude`, `--signParallel`, `--azureTrustedSignFile`. Verified: `vpk pack -H` on this laptop.
+`--signExclude`, `--signParallel`, `--azureTrustedSignFile`. Verified: `vpk pack -H` on the test laptop.
 
-### Trial on this laptop (2026-11-03, all verified)
+### Trial on the test laptop (2026-11-03, all verified)
 
 A throwaway Rust crate (`velopack = "=1.2.161"`, Rust 1.99.1) that logs every hook to a file outside the install
 folder. Packed with `vpk pack -u WakeshotTrial -v 0.1.0 -r win-x64 -p <dir> -e vtrial.exe --packTitle "Wakeshot
 Trial" --packAuthors "Trial Author" --channel win-x64 --shortcuts None`. No power settings touched; everything
 removed at the end (folder, registry key, temp folder all gone).
 
-- **Sizes.** The release exe grew from about 130 KB (plain hello-world, toolchain card) to 1.49 MB with the
+- **Sizes.** The release exe grew from about 130 KB (plain hello-world) to 1.49 MB with the
   `velopack` crate. The package also carries Velopack's `Update.exe` (5.2 MB) and a root launcher stub (467 KB).
   Full `.nupkg` 3.2 MB, `Setup.exe` **10.7 MB**, portable zip 3.2 MB. A 0.1.0 to 0.2.0 delta with one changed file
   was 2.2 KB. `vpk pack` took 1 to 6 s.
@@ -164,7 +164,7 @@ Installers:
 ### Rules and checks
 
 - **Unsigned is allowed.** The repository policies (Microsoft Learn, updated 2026-08-30) have no signing rule.
-  `Flowersauce.FSClicker` 1.4.0 is merged and its Setup.exe is unsigned: downloaded on this laptop, SHA256 matched
+  `Flowersauce.FSClicker` 1.4.0 is merged and its Setup.exe is unsigned: downloaded on the test laptop, SHA256 matched
   the manifest, `Get-AuthenticodeSignature` returned `NotSigned`. Verified.
 - Validation runs the installer silently as a standard (non-elevated) user, then scans with Defender and several AV
   engines, checks PUA, checks URL SmartScreen reputation, and looks for the installed executable. Verified:
@@ -177,7 +177,8 @@ Installers:
 - Known bug: WinGet 1.29.360 broke Velopack installs (sharing violation on the temp folder); fixed in 1.29.380
   (2026-09-18). Verified: winget-cli issue #6527.
 - Tools that open the version-bump PR from CI: Komac (v2.17.1, 2026-10-15, active), `wingetcreate` (v1.12.13.0),
-  `vedantmgoyal9/winget-releaser` (last release v2 in 2025-01). Verified: GitHub API. Which one to use: Phase 6.
+  `vedantmgoyal9/winget-releaser` (last release v2 in 2025-01). Verified: GitHub API. Wakeshot's `release.yml` uses
+  `wingetcreate`.
 - Whether a winget install avoids the SmartScreen prompt for an unsigned installer: reported yes by one project
   (PaperRoute-Tracker #216), not verified. What settles it: install our package by winget on a clean Windows Sandbox.
 
@@ -203,7 +204,7 @@ Installers:
 ### Publisher name
 
 "The code signing certificate is issued to SignPath Foundation" and "SignPath Foundation is the publisher of the OSS
-project." So Windows shows **SignPath Foundation**, not Haik's name. Verified: signpath.org/terms.
+project." So Windows shows **SignPath Foundation**, not the author's name. Verified: signpath.org/terms.
 
 ### Application and wait
 
@@ -251,7 +252,7 @@ Verified: docs.github.com (runners reference, limits, Actions billing), read 202
 - Storage: Free plan lists 500 MB artifact storage and 10 GB cache per repo. Whether public repos are exempt: not
   stated, not verified. It does not matter much: release files live in GitHub Releases, and CI artifacts are small and
   short-lived.
-- We can cross-compile ARM64 on an x64 runner (the toolchain card did it locally) and use `windows-11-arm` only to run
+- We can cross-compile ARM64 on an x64 runner (a local ARM64 cross-build works) and use `windows-11-arm` only to run
   the ARM64 tests.
 
 ## 5. scoop

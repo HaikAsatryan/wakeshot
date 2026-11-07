@@ -1,9 +1,10 @@
 # Copilot in VS Code: how to tell it is working
 
-Research for Wakeshot, 2026-11-06 (card `p4-copilot-vscode-research`). Same marks as `other-agent-signals.md`:
-**verified** = seen in source code or official docs (path given), **unverified** = guessed, remembered or not checked.
-Nothing was run: no chat was sent, VS Code was not started by me, no setting was changed. On the laptop only file
-names, sizes and times were listed, plus the process list (image, pid, parent, `--type` flags only).
+Research for Wakeshot, 2026-11-06. Same marks as `other-agent-signals.md`: **verified** = seen in source code or
+official docs (path given), **unverified** = guessed, remembered or not checked. The research ran nothing: no chat
+was sent, VS Code was not started for it, no setting was changed. On the laptop only file names, sizes and times were
+listed, plus the process list (image, pid, parent, `--type` flags only). The sections from "Built" on report the
+build and the live tests.
 
 ## Summary
 
@@ -15,9 +16,9 @@ names, sizes and times were listed, plus the process list (image, pid, parent, `
 | Claude, Codex (agent host) | Claude Agent SDK under `Code.exe`; `codex.exe app-server` | The Claude and Codex sources, if these engines write their usual files | `~\.claude`, `~\.codex` | Low, not verified |
 | Cloud agent | GitHub cloud | None local | n/a | n/a |
 
-Answer for the card: **yes, partly.** The default Local harness leaves a reliable state field on disk, but with a delay
-of about a minute and with no process id, so liveness is weaker than for the CLIs. The opt-in or experiment-driven
-Copilot harness writes the same files as Copilot CLI and needs only a liveness fix in the CLI source.
+Can Wakeshot tell from outside? **Yes, partly.** The default Local harness leaves a reliable state field on disk, but
+with a delay of about a minute and with no process id, so liveness is weaker than for the CLIs. The opt-in or
+experiment-driven Copilot harness writes the same files as Copilot CLI and needs only a liveness fix in the CLI source.
 
 Who blocks sleep: the Copilot extension takes an Electron `prevent-app-suspension` blocker for each model call and lets
 it go 2 minutes after the last call ends. On Windows that is `PowerRequestExecutionRequired`, which does not block idle
@@ -26,7 +27,7 @@ sleep on Modern Standby. The agent host harnesses take nothing. Nothing touches 
 ## Sources
 
 - `microsoft/vscode` tag `1.145.1` (release published 2026-11-06 00:11 UTC), source tarball from GitHub, read as data
-  in the card's build folder. License MIT (`LICENSE.txt`), verified. Paths below are relative to the repo root.
+  in a scratch folder. License MIT (`LICENSE.txt`), verified. Paths below are relative to the repo root.
 - The laptop runs the same build: `Code.exe` 1.145.1, `product.json` commit `6bab64e2d12b`, date 2026-11-05.
   Verified.
 - The Copilot extension now lives in that repo as `extensions/copilot` (version 0.73.0 in its `package.json`, MIT)
@@ -66,7 +67,7 @@ sleep on Modern Standby. The agent host harnesses take nothing. Nothing touches 
   window with no folder uses `<User>\globalStorage\emptyWindowChatSessions\<session id>.jsonl` (default profile).
   Verified: `src/vs/workbench/contrib/chat/common/model/chatSessionStore.ts:68-79,731-742`. Before 1.109 the file was
   a flat `<session id>.json`; a hidden setting `chat.useLogSessionStorage: false` still selects it (line 740, not
-  registered anywhere, so default on). Seen on this laptop: one `chatSessions\099c11b9-...jsonl` (1936 bytes,
+  registered anywhere, so default on). Seen on the test laptop: one `chatSessions\099c11b9-...jsonl` (1936 bytes,
   2026-11-02) under workspace `55992610...`. Not opened.
 - **Only chat-panel and chat-editor sessions** (`initialLocation === Chat`, not imported) are stored this way. External
   sessions (Background, Copilot harness, cloud, Claude, Codex) store only metadata in the index, never a `.jsonl`.
@@ -150,13 +151,13 @@ Rule designed from the source, not tested on real files:
 - The agent host reads `session-state\<id>\events.jsonl` and `plan.md` for its sessions (`copilotAgent.ts:4903,4914`),
   so the runtime writes the CLI's event log there. Verified that the paths are used; the event schema is the runtime's
   and was not re-read here (see "GitHub Copilot CLI" in `other-agent-signals.md`).
-- **Lock files seen on this laptop** (names only): `.copilot\session-state\92ed0e2b-...\inuse.9260.lock` (5 bytes) and
-  `inuse.9260.hold` (0 bytes), from 2026-11-03 09:10, pid 9260 no longer running, and no `events.jsonl` in that
-  folder; plus `session-state\.session-operation-locks\<id>.lock` (0 bytes) for nine sessions, one of them the id of
-  an agent host session folder `%APPDATA%\Code\agentSessionData\681372ab-...`. So the CLI research's guess
+- **Lock files seen on the test laptop** (names only): `.copilot\session-state\92ed0e2b-...\inuse.9260.lock` (5 bytes)
+  and `inuse.9260.hold` (0 bytes), from 2026-11-03 09:10, pid 9260 no longer running, and no `events.jsonl` in that
+  folder; plus `session-state\.session-operation-locks\<id>.lock` (0 bytes) for nine sessions, one of them the id of an
+  agent host session folder `%APPDATA%\Code\agentSessionData\681372ab-...`. So the CLI research's guess
   `inuse.<pid>.lock` is right, there is also an `inuse.<pid>.hold`, and a folder can hold a lock with no events (an
-  unused or pre-warmed session; pre-warming: `src/vs/platform/agentHost/AGENTS.md`, "Session pre-warming"). Which of
-  the two files is held open: unverified.
+  unused or pre-warmed session; pre-warming: `src/vs/platform/agentHost/AGENTS.md`, "Session pre-warming"). Which of the
+  two files is held open: unverified.
 - **Process.** Agent host sessions run in `copilot-runtime.exe`; Background sessions run the SDK inside the extension
   host (`Code.exe`; whether the SDK starts a child process: unverified). Neither is `copilot.exe`.
 - Waiting: the CLI rule uses `permission.requested`. In the agent host VS Code answers permissions through its client
@@ -201,11 +202,11 @@ Rule designed from the source, not tested on real files:
   (`src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts:2295-2318`). Events: `SessionStart`,
   `SessionEnd`, `UserPromptSubmit`, `UserPromptTransformed`, `PreToolUse`, `PostToolUse`, `PreCompact`,
   `SubagentStart`, `SubagentStop`, `Stop`, `ErrorOccurred` (`chat/common/promptSyntax/hookTypes.ts:12-24`). No
-  permission or notification event, so hooks cannot show waiting. Verified. Not usable anyway: product rule "No hooks"
-  (`docs/product.md:33`).
+  permission or notification event, so hooks cannot show waiting. Verified. Not usable anyway: the product rule on hooks
+  (`docs/product.md`, "What keeps the PC awake").
 - **Agent Host Protocol endpoint.** The agent host serves a WebSocket on a named pipe to same-user processes and
   publishes `<user data>\agent-host\local-endpoint\entries\<sha256>.json` with `pid`, `endpoint` and a
-  `connectionToken` (`src/vs/platform/agentHost/LOCAL_ENDPOINT.md`). One entry exists on this laptop (332 bytes, not
+  `connectionToken` (`src/vs/platform/agentHost/LOCAL_ENDPOINT.md`). One entry exists on the test laptop (332 bytes, not
   opened). It would give live session state for agent host sessions only, and needs the bearer token. Not
   recommended; treat the entry files like Claude's `.key` files.
 - The extension's own transcript (`<workspace storage>\GitHub.copilot-chat\transcripts\<session id>.jsonl`, CLI-like
@@ -279,7 +280,7 @@ Files that hold prompt or code text, so a source never stores or logs their cont
 - `~\.copilot\session-state\<id>\events.jsonl`, `plan.md`, `workspace.yaml`: the CLI rule applies; lock and hold
   files are listed, never opened.
 
-## For the source card
+## Source sketch
 
 - **Files to watch:** `<User>\workspaceStorage\*\chatSessions\*.jsonl` and `<User>\globalStorage\
   emptyWindowChatSessions\*.jsonl`; whole reads of changed files only. Liveness files: the matching `state.vscdb`
@@ -289,7 +290,7 @@ Files that hold prompt or code text, so a source never stores or logs their cont
   stays). `activity` per rule 4. `timers`: none. `open_tasks`: 0 (background terminals are not visible).
   `label`: "Copilot in VS Code" (it also covers other chat participants; "VS Code chat" is the honest name).
   `format`: `Unreadable` / `UnknownValue` per rules 3 and 5.
-- **Contract needs** (the contracts change only through a card the orchestrator runs alone):
+- **Contract needs** (before the build; "Built" below says what landed):
   - A read mode that gives whole files of a folder tree but only files changed recently (mtime filter), because
     `Folder` reads every file at start and `Tail` breaks on compaction.
   - For rule 7, a liveness the parser can state without I/O, such as "pid from `code.lock`, alive, image `Code.exe`,
@@ -297,8 +298,9 @@ Files that hold prompt or code text, so a source never stores or logs their cont
     Default without it: rule 6 only, and accept that a crash leftover holds until VS Code exits or reopens that chat.
 - **Liveness default:** rule 6. Change it when the live test shows Restart Manager does not report `state.vscdb`, or
   when rule 7's contract change lands.
-- **Copilot CLI source** (`p4-copilot-source`): accept `copilot-runtime.exe` and `Code.exe` as owners, and expect a
-  lock with no `events.jsonl` (an unused session). Its card owns that change.
+- **Copilot CLI source**: accept `copilot-runtime.exe` and `Code.exe` as owners, and expect a lock with no
+  `events.jsonl` (an unused session). Done in the Copilot CLI source (`other-agent-signals.md`, "Copilot CLI live
+  test (2026-11-06)").
 
 ### Fixture sketch
 
@@ -333,15 +335,16 @@ Line 2 is Working, line 3 Waiting, line 4 Working again, line 6 Idle. A compacte
 8. Whether Claude in the chat panel writes a `~\.claude\sessions\<pid>.json`, and Codex a rollout plus writer lock.
 9. Copilot Free: whether the Copilot harness works on Free.
 
-## Built (`p4-vscode-source`, 2026-11-06)
+## Built (2026-11-06)
 
-`crates/wakeshot-core/src/sources/vscode.rs`, tests in `crates/wakeshot-core/tests/vscode_source.rs`, fixtures (from
-the schema) in `crates/wakeshot-core/tests/fixtures/vscode/`. Not registered in the tray yet and not tested on a real
-chat: the live card does both. What differs from the rules above, and what was checked again in the 1.145.1 source:
+`crates/wakeshot-core/src/sources/vscode.rs`, tests in `crates/wakeshot-core/tests/vscode_source.rs`, fixtures (from the
+schema) in `crates/wakeshot-core/tests/fixtures/vscode/`. At build time not tested on a real chat; tested live below,
+and out of v1 since ("Local chats out of v1"). What differs from the rules above, and what was checked again in the
+1.145.1 source:
 
 - **Rules built:** 1 (Stable and Insiders, `VSCODE_APPDATA`), 2, 3, 4, 5 and 7. Rule 6 is not used: rule 7 needs no
-  Restart Manager and drops a crash leftover once VS Code starts anew. Rules 8 and 9: rule 8 is the Copilot CLI live
-  card's; rule 9 holds because the name filter passes only `<id>.jsonl`.
+  Restart Manager and drops a crash leftover once VS Code starts anew. Rules 8 and 9: rule 8 belongs to the Copilot CLI
+  source; rule 9 holds because the name filter passes only `<id>.jsonl`.
 - **Insiders**, rule 1's guess, is now verified: its folder is `Code - Insiders` (VS Code docs,
   `docs/configure/profiles.md` in `microsoft/vscode-docs`) and its image `Code - Insiders.exe`
   (`test/sanity/src/context.ts:1005,1242`). Its chats live by its own image.
@@ -368,29 +371,29 @@ chat: the live card does both. What differs from the rules above, and what was c
 - **Not verified:** serde_json stops at 128 levels of JSON nesting, so a chat whose saved tool data nests deeper would
   be unreadable; whether real chats nest that deep was not checked.
 
-## Phase 4 live test (2026-11-06)
+## Live test (2026-11-06)
 
-Card `p4-live-vscode`. VS Code 1.145.1 (commit `6bab64e2d12b`), built-in Copilot extension 0.73.0, Copilot Free
+VS Code 1.145.1 (commit `6bab64e2d12b`), built-in Copilot extension 0.73.0, Copilot Free
 (model `copilot/auto`), the test laptop, 15:58 to 16:20 local time (UTC+4). Readers at Medium: `agent-watch --source
 vscode,copilot` (through the pseudo console driver) and the dry-run tray, both built from the tree of that day. A
 structure-only monitor (kinds, paths, send times, `modelState`; no text) timed the writes. Five one-line prompts.
 
-**How it ran.** Haik's own VS Code was running, elevated (title "[Administrator]", started 11:05 from a shell that has
-since ended). A Medium `code` cannot join an elevated instance: VS Code shows "Another instance of Code is already
-running as administrator" (`src/vs/code/electron-main/main.ts:396-400`). So the test windows were opened in his
+**How it ran.** The user's own VS Code was running, elevated (title "[Administrator]", started 11:05 from a shell that
+has since ended). A Medium `code` cannot join an elevated instance: VS Code shows "Another instance of Code is already
+running as administrator" (`src/vs/code/electron-main/main.ts:396-400`). So the test windows were opened in that
 instance from an elevated shell (`code -n <test folder>`), and the chats ran at High; real users mostly run VS Code at
-Medium (not tested). Prompts went in with `code chat -m <mode> "<prompt>"` from the test folder: VS Code sends it to
-the window of the current folder (`windowsMainService.ts:520-538`), runs a trust check, starts a new chat, then sends
-(`electron-browser/chat.contribution.ts`, `prompt()`). The test folder sat inside the repo folder he had open, so it
-was trusted. The screen was locked from 15:57:50 to 16:08:20, so no window lost focus during prompts 1 to 4.
+Medium (not tested). Prompts went in with `code chat -m <mode> "<prompt>"` from the test folder: VS Code sends it to the
+window of the current folder (`windowsMainService.ts:520-538`), runs a trust check, starts a new chat, then sends
+(`electron-browser/chat.contribution.ts`, `prompt()`). The test folder sat inside the repo folder the user had open, so
+it was trusted. The screen was locked from 15:57:50 to 16:08:20, so no window lost focus during prompts 1 to 4.
 
 | Step | What happened |
 |---|---|
-| Prompts 1, 2 (agent mode, `sleep 60`) | Both went to the **Copilot harness**: `~\.copilot\session-state\<id>\` made 0.8 s after the send, with `inuse.2728.lock` (5 bytes), `inuse.2728.hold` (0 bytes), `.workspace-fork.lock`, `workspace.yaml`, `events.jsonl`; 2728 is `copilot-runtime.exe`, the agent host's child, started with VS Code at 11:05. The turns ran 61 s and answered. The Copilot CLI source posted them working 1.4 s after the folder appeared, but with `any copilot.exe alive=Gone`, so they would not hold (rule 8 is not built; sent to `p4-live-copilot`) |
+| Prompts 1, 2 (agent mode, `sleep 60`) | Both went to the **Copilot harness**: `~\.copilot\session-state\<id>\` made 0.8 s after the send, with `inuse.2728.lock` (5 bytes), `inuse.2728.hold` (0 bytes), `.workspace-fork.lock`, `workspace.yaml`, `events.jsonl`; 2728 is `copilot-runtime.exe`, the agent host's child, started with VS Code at 11:05. The turns ran 61 s and answered. The Copilot CLI source posted them working 1.4 s after the folder appeared, but with `any copilot.exe alive=Gone`, so they would not hold (rule 8 was not built yet; the Copilot CLI live test fixed it) |
 | Harness switch | A workspace setting `chat.defaultToCopilotHarness: false` written while the window was open did not change the next chat: New Chat keeps the current chat's harness (`clearChatSessionPreservingType`; `constants.ts`, `currentSession`). In a window opened after the setting, the next chat was Local. So here the computed default is the Copilot harness (likely the `experiment: startup` rollout; not verified which) |
 | Prompt 3 (agent mode, `sleep 60`), Local | File first written 44 s after the send, one Initial line, `modelState` 4 (NeedsInput). The terminal call says "Auto approved by rule `sleep (default)`", but no shell started and the chat waited for a click (what it showed is not saved in the file and was not seen; the renderer log shows a `toolRiskAssessment` at the call; one candidate is the one-time auto approve warning, `TerminalAutoApproveWarningAccepted` in application storage, not verified). `agent-watch` posted `waiting(remote=false)`, `since Code.exe alive=Yes`, 25 ms after the write |
 | Prompt 4 (ask mode, one word), Local | Sent 16:07:53.0, done 16:07:55.9, first written 16:08:29.8, already done: Pending never reached the disk. `idle` posted 13 ms before the monitor saw the file |
-| Prompt 5 (`code chat -n`, empty window) | Copilot harness again (`session-state\<id>`, 6 s turn); no `emptyWindowChatSessions` folder exists on this PC |
+| Prompt 5 (`code chat -n`, empty window) | Copilot harness again (`session-state\<id>`, 6 s turn); no `emptyWindowChatSessions` folder exists on the test laptop |
 | Dry-run tray (Medium, only VS Code can hold) | "VS Code chat is watched in the folder APPDATA names"; the waiting and the idle chat gave no hold, as the rules say (waiting holds only when remote). CPU 0.95 s in 352 s (debug build, all five sources, four on empty folders) |
 
 **Answers to "Open questions only a live test answers":**
@@ -398,14 +401,14 @@ was trusted. The screen was locked from 15:57:50 to 16:08:20, so no window lost 
 1. Delay: each window saves on its own 60 s beat (16:03:29.7, then 16:08:29.8, nothing in between since nothing
    changed), plus a save on blur. First write 44 s after a send, and 34 s after a turn ended, with the screen locked.
    A turn that ends before the next beat never shows Pending on disk, so Wakeshot never holds for it (harmless: it
-   was over). In front, behind, minimized as separate cases: not tested (Haik used the laptop meanwhile).
+   was over). In front, behind, minimized as separate cases: not tested (the laptop was in use meanwhile).
 2. NeedsInput is written at the first beat after the wait starts (seen live). Back to 0 after the approval: not
    tested live (needs a click; no computer use).
 3. Restart Manager on `state.vscdb`: not needed, the source does not use rule 6; not tested.
 4. Window closed or reloaded mid-request: not tested live. A close while a Local chat runs or waits asks "A session is
    in progress. Are you sure you want to close the window?" (`chatLifecycle.ts`; `isSessionInProgressStatus` takes
    InProgress and NeedsInput), so it needs a click.
-5. Crash: not run (only Haik's VS Code could be ended; a new `--user-data-dir` has no sign-in).
+5. Crash: not run (only the user's own VS Code could be ended; a new `--user-data-dir` has no sign-in).
 6. Copilot harness: the lock and hold are `inuse.<pid>.lock` and `inuse.<pid>.hold` with the pid of
    `copilot-runtime.exe`, one runtime for all sessions of the VS Code instance; which file is held open and whether
    `permission.requested` is written: not tested.
@@ -418,34 +421,34 @@ was trusted. The screen was locked from 15:57:50 to 16:08:20, so no window lost 
 - A read at the moment VS Code made a file got 0 bytes; the source asked for its one retry, and the read 14 ms later
   parsed (rule 3 works).
 - Watch cost: in 39 minutes the VS Code source posted three times, each on a real chat change, although VS Code
-  writes other files under `workspaceStorage` all the time (contracts round 3, "Found outside scope" 3).
+  writes other files under `workspaceStorage` all the time.
 - Every saved line read with no format problem. The real Initial line has ten top-level keys, among them `version`
   3, `requests`, `inputState`, `customTitle`, `responderUsername`, `hasPendingEdits`; a request carries `modelId`,
   `modeInfo`, `copilotCredits` (0.26 for prompt 3) and `timeSpentWaiting`. No change to the parser was needed.
 - Compaction (1024 lines): not reached; these chats had one line each.
 - Each `code chat` brings its window to the front, and a file opened from Explorer goes to the last active VS Code
-  window: one of Haik's files opened in the test window. A live test beside a person must expect that.
+  window: one of the user's files opened in the test window. A live test beside a person must expect that.
 - Redacted copies: `crates/wakeshot-core/tests/fixtures/vscode/live/`.
 
 ## Stop, approve and window close live test (2026-11-06)
 
-Card `p4-live-vscode-stop`, for Haik's "No guessing" rule (`docs/product.md`): is the end of each case seen exactly?
+For the "No guessing" rule (`docs/product.md`): is the end of each case seen exactly?
 VS Code 1.145.1, built-in Copilot extension 0.73.0, Copilot Free, the test laptop, 19:27 to 21:03 local time (UTC+4).
 
-**How it ran.** My own window inside Haik's elevated VS Code (a Medium `code` cannot join it): `code
+**How it ran.** A test window inside the user's elevated VS Code (a Medium `code` cannot join it): `code
 --extensionDevelopmentPath=<scratch extension> <test folder>`, an Extension Development Host window, so nothing was
 installed and the extension ran only there. It ran, from step files, the same commands the buttons run (read in the
-installed bundle `workbench.desktop.main.js`): `workbench.action.chat.cancel` is the Stop button (menu
-`ChatExecute`), calling `chatService.cancelCurrentRequestForSession`; `workbench.action.chat.acceptTool` presses the
-confirmation's primary button (Allow, one call); `workbench.action.chat.skipTool` is Skip;
-`workbench.action.closeWindow` is the window's close. Chats were opened with `workbench.action.chat.newLocalChat` and
-`workbench.action.chat.openNewSessionSidebar.agent-host-copilotcli`, prompts sent with `workbench.action.chat.open`
-and a query. No key, click or UI automation from my side. Readers: `agent-watch --source copilot,vscode` at Medium
-and a structure-only monitor (chat file kinds and `modelState`, Copilot event types, in-use file names, process
-images). Times below run from the command to the `agent-watch` post. 19 one-line prompts. The close of a window
-with a Local chat in progress asks "A session is in progress. Are you sure you want to close the window?"; Haik
-clicked Yes there (the dialog skips only under `--extensionTestsPath`, a mode that kills the whole VS Code process
-when its test ends, so not used).
+installed bundle `workbench.desktop.main.js`): `workbench.action.chat.cancel` is the Stop button (menu `ChatExecute`),
+calling `chatService.cancelCurrentRequestForSession`; `workbench.action.chat.acceptTool` presses the confirmation's
+primary button (Allow, one call); `workbench.action.chat.skipTool` is Skip; `workbench.action.closeWindow` is the
+window's close. Chats were opened with `workbench.action.chat.newLocalChat` and
+`workbench.action.chat.openNewSessionSidebar.agent-host-copilotcli`, prompts sent with `workbench.action.chat.open` and
+a query. No key, click or UI automation from the test side. Readers: `agent-watch --source copilot,vscode` at Medium and
+a structure-only monitor (chat file kinds and `modelState`, Copilot event types, in-use file names, process images).
+Times below run from the command to the `agent-watch` post. 19 one-line prompts. The close of a window with a Local chat
+in progress asks "A session is in progress. Are you sure you want to close the window?"; a person clicked Yes there (the
+dialog skips only under `--extensionTestsPath`, a mode that kills the whole VS Code process when its test ends, so not
+used).
 
 | Case | Copilot harness | Local |
 |---|---|---|
@@ -465,9 +468,9 @@ when its test ends, so not used).
   with nothing on disk saying so. So Wakeshot ends the hold while that command still runs: the same gap as the
   background terminals above, and not a guess (the agent's turn did end). A later tool call in the same terminal
   stops the old command (exit 1). The harness ran `sleep 60` to its end; longer harness commands were not tried.
-- **Local terminal calls ask every time on this PC.** VS Code's default auto approve rules (`sleep` among them) apply
-  only after their one-time warning is accepted (`chat.tools.terminal.autoApprove.warningAccepted`, set only by the
-  "enable" choice and its dialog). The primary Allow approves the one call and stores nothing. In the harness VS
+- **Local terminal calls ask every time on the test laptop.** VS Code's default auto approve rules (`sleep` among them)
+  apply only after their one-time warning is accepted (`chat.tools.terminal.autoApprove.warningAccepted`, set only by
+  the "enable" choice and its dialog). The primary Allow approves the one call and stores nothing. In the harness VS
   Code approved `sleep` itself 5 to 12 ms after the runtime asked, and `ping` waited.
 - **No save at a Stop.** The Local file is not written when Stop is pressed; the Cancelled state waits for the next
   60 s save (or a blur: one Pending reached the disk at a blur).
@@ -475,9 +478,9 @@ when its test ends, so not used).
   `copilot-runtime.exe` and no turn; one was released when the first harness chat began, the other 20 minutes
   later. They read idle and hold nothing.
 - **Event times are UTC** in the harness `events.jsonl`, as in the CLI's.
-- **A minimized window can keep the foreground.** My window, minimized right after it opened, stayed the foreground
-  window until Haik clicked elsewhere, so a key typed meanwhile would have gone to it. A live test beside a person
-  should expect that.
+- **A minimized window can keep the foreground.** The test window, minimized right after it opened, stayed the
+  foreground window until a person clicked elsewhere, so a key typed meanwhile would have gone to it. A live test beside
+  a person should expect that.
 - Redacted copies: `crates/wakeshot-core/tests/fixtures/vscode/live/` (`stop-three-then-approve.jsonl`,
   `deny-after-wait.jsonl`, `idle-silence-end.jsonl`, `close-while-working.jsonl` and
   `harness/stop-approve-deny-close.jsonl`).
@@ -492,12 +495,11 @@ first written at the chat's first save (20:25:18.626, the log 5 ms before), so i
 reload heals the request to Cancelled on disk (`chatModel.ts:3432-3435`) was not seen: the reopened chat wrote
 nothing in 4.5 minutes nor at its window's close. Rule 7 still drops the leftover once VS Code starts anew. The same
 is expected for a Reload Window or a folder change mid-turn (same dispose path; not run). The leftover test chat was
-deleted after the fixture was taken, so no later dry-run tray on this PC holds on it.
+deleted after the fixture was taken, so no later dry-run tray on the test laptop holds on it.
 
 ## Local chats out of v1 (2026-11-06)
 
-Haik, 21:28, on the default the Stop live test proposed: "your default answer is good" (card
-`p4-vscode-local-off`). Wakeshot v1 does not read VS Code's own Local chat files: the tray no longer starts
+Wakeshot v1 does not read VS Code's own Local chat files: the tray no longer starts
 `VsCodeSource` and watches no folder under the VS Code user folder, so the window close case above cannot hold the
 PC. Copilot harness chats in VS Code stay supported: they are Copilot CLI sessions of `copilot-runtime.exe`, held by
 the Copilot source (rule 8). The source, its fixtures and its tests stay for a later version; revisit when VS Code
