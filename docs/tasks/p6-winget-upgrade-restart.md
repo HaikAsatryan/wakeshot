@@ -138,3 +138,5 @@ stays as it is.
 ### Open items
 
 - The fix card, if the orchestrator schedules it. Two "not tested" points above go into its e2e step.
+
+Correction (05:06, orchestrator): the fix above cannot work. Velopack's `run_hook` ends every hook with `force_stop_package`, which kills every process from the install folder, so a tray the install hook starts dies when the hook exits (`p6-winget-upgrade-restart-fix` Result, read at tag 1.2.161 and on `develop`). The README limit stays.
