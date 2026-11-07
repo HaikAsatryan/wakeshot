@@ -1,0 +1,16 @@
+{
+  "note": "Measured 2026-11-07 on the build that ships (ProductVersion 0.1.0, the x64 pack of p6-logs-diagnostics, the same exe bytes as Haik's install), with Claude Code, Codex CLI, Copilot CLI and OpenCode all present on the PC. Method and every raw value in docs/research.md, 'Speed numbers of the shipping build (2026-11-07)'. The video shows idleRamMb and idleCpuMsPer10Min. idleCpuMsPer10Min: CPU time of a release dry run of that exe in 10 idle minutes (Claude Code's folder empty, the other agents' homes real), rounded to whole ms. idleRamMb: private memory of Haik's installed tray of the same exe, median of 60 samples 10 s apart in 10 minutes, rounded to 0.1 MB; read while it held for one working Claude Code session, since the dry run checks no update and shows no menu and so reads about 1.4 MB less. startDelayS is Codex CLI's (task_started to Holding starts, median of 5) from the run of 2026-11-07 00:06 on the build before (p4-cursor-off), not measured again.",
+  "measured": true,
+  "build": "0.1.0",
+  "date": "2026-11-07",
+  "idleRamMb": 4.0,
+  "idleCpuMsPer10Min": 141,
+  "startDelayS": 0.116,
+  "raw": {
+    "idle": {"minutes": 10, "samples": 60, "holds": 0, "from": "2026-11-07T04:45:51+04:00", "process": "release dry run, CLAUDE_CONFIG_DIR on an empty folder, the other agents' homes real", "trayPrivateMedianMb": 2.63, "trayPrivateMaxMb": 2.73, "trayWorkingSetMedianMb": 17.5, "trayWorkingSetMaxMb": 17.56, "trayCpuMs": 140.625, "trayCpuPercentOfOneCore": 0.0234, "trayCycleMs": 93.7},
+    "installedMemory": {"minutes": 10, "samples": 60, "from": "2026-11-07T04:58:58+04:00", "process": "Haik's installed tray, holding for one working Claude Code session the whole window, its update check done", "trayPrivateMedianMb": 3.98, "trayPrivateMaxMb": 3.98, "trayWorkingSetMedianMb": 20.46, "trayWorkingSetMaxMb": 20.55, "trayCpuMs": 109.375, "trayCpuNote": "while holding and beside cargo builds, not an idle figure"},
+    "startDelayMs": {"agent": "Codex CLI", "build": "p4-cursor-off", "runs": [284, 116, 47, 10, 306], "median": 116, "max": 306},
+    "endDelayMs": {"agent": "Codex CLI", "build": "p4-cursor-off", "runs": [9, 10, 11, 11, 12], "median": 11, "max": 12},
+    "bytes": {"Setup.exe": 12532026, "wakeshot-tray.exe": 3179520, "wakeshot.exe": 873472}
+  }
+}

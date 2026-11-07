@@ -1,0 +1,153 @@
+name: CI
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request makes the older run worthless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Never set RUSTFLAGS or CARGO_ENCODED_RUSTFLAGS here or in a step: either one replaces the flags in
+# .cargo/config.toml and drops the static CRT. Pass lint levels after `--` instead.
+env:
+  # Incremental data bloats the cached target folder and does not speed up a one-shot build.
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  windows:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      # An ARM64-only failure must not hide the x64 result, and the other way round.
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The image's own stable does not satisfy the pin; this reads rust-toolchain.toml.
+      - name: Install the pinned toolchain
+        run: rustup toolchain install --no-self-update
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-
+
+      # Formatting does not depend on the CPU, so one runner is enough.
+      - name: Format
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        run: cargo fmt --all --check
+
+      # An explicit target keeps the output folder fixed for the steps below and proves which CPU each build is for.
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked --target ${{ matrix.target }} -- -D warnings
+
+      # With --all-targets the bins' dev-dependencies turn on `test-support` in both libs for the whole run, so code
+      # that only the fakes use passes. This run checks the libs as they ship.
+      - name: Clippy as shipped
+        run: cargo clippy --workspace --locked --target ${{ matrix.target }} -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --locked --target ${{ matrix.target }}
+
+      # No --all-targets here: the exes must be built without `test-support`, which only dev-dependencies turn on.
+      - name: Release build
+        run: cargo build --release --workspace --locked --target ${{ matrix.target }}
+
+      # Catches a lost static CRT (for example a RUSTFLAGS added later): the exes must run on a PC without the
+      # Visual C++ runtime. The pwsh wrapper checks only the last exit code, so each failure throws.
+      - name: Check the exes need no Visual C++ runtime
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $all = @(& $vswhere -latest -products * -find 'VC\Tools\MSVC\**\dumpbin.exe')
+          # The hits are sorted by folder, so the first may be built for another CPU; prefer the runner's own host.
+          $hostDir = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'HostARM64' } else { 'Hostx64' }
+          $dumpbin = $all | Where-Object { $_ -like "*\$hostDir\*" } | Select-Object -First 1
+          if (-not $dumpbin) { $dumpbin = $all | Select-Object -First 1 }
+          if (-not $dumpbin) { throw 'dumpbin.exe not found' }
+          foreach ($exe in 'wakeshot.exe', 'wakeshot-tray.exe') {
+            $out = & $dumpbin /nologo /dependents "target/${{ matrix.target }}/release/$exe"
+            if ($LASTEXITCODE -ne 0) { throw "dumpbin failed on $exe" }
+            $out
+            if (-not ($out -match 'Image has the following dependencies')) { throw "no import list for $exe" }
+            $crt = $out -match '(?i)vcruntime|msvcp|ucrtbase|api-ms-win-crt-'
+            if ($crt) { throw "$exe imports the Visual C++ runtime: $($crt.Trim() -join ', ')" }
+          }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wakeshot-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/wakeshot.exe
+            target/${{ matrix.target }}/release/wakeshot-tray.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  # Building the core alone on Linux shows it holds no OS code, and its dependency tree for every target shows no
+  # Windows code is hidden behind cfg(windows).
+  core-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned toolchain
+        run: rustup toolchain install --no-self-update
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-
+
+      - name: Test the core
+        run: cargo test -p wakeshot-core --locked --no-fail-fast
+
+      - name: The core depends on no windows crate, on any target
+        run: |
+          tree=$(cargo tree -p wakeshot-core -e normal --target all --prefix none --locked)
+          echo "$tree"
+          if echo "$tree" | grep -E '^windows'; then
+            echo "::error::wakeshot-core depends on a windows crate"
+            exit 1
+          fi
+
+  # The media's port of the art (media/src/art/heldLight.ts) draws the README loop and the video. It must draw every
+  # pixel art.rs writes, so an art change that is not ported fails here instead of living on in a GIF.
+  art-port:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The check imports only node: modules and the .ts port, which Node runs as is: no npm install, nothing to cache.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          package-manager-cache: false
+
+      - name: The media port draws what art.rs draws
+        run: node media/scripts/check-art.mjs

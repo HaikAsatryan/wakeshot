@@ -1,0 +1,219 @@
+//! What the core asks the outside to do, and how it went (architecture section 3). Each command's result comes back
+//! as `Event::Done(Outcome)`, so the core picks every fallback.
+
+use crate::files::{Config, HoldFile, StateFile};
+use crate::holds::HoldId;
+use crate::settings::{Guid, JournalEntry, SettingKey};
+use crate::view::{Cue, Notice, TrayView};
+
+/// A failed Windows call, as the core sees it: which call and its code, enough to log and to pick a fallback.
+///
+/// Made from `wakeshot_windows::WinError`. The core may branch on `code` only where the design names one, and on
+/// `call` only with it: access denied, 5 or 1260, from `PowerSettingAccessCheckEx`, `PowerWriteACValueIndex` or
+/// `PowerWriteDCValueIndex` blocks settings for the run (section 8), so the Windows layer names those calls exactly
+/// so.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Failure {
+    pub call: &'static str,
+    pub code: u32,
+}
+
+/// Why a restore runs, for the log and for the core to match the outcome to its reason.
+///
+/// `Leftover`: a journal left at start by a dead tray; the IO side runs it only when the journal's owner is Gone or
+/// is this tray, so Unknown never starts a restore (architecture section 5, "Liveness"). `ShortTimeouts`: the sleep
+/// route's 1-minute timeouts go back, because the user is there (lid open, an unlock, input), a hold starts, or the
+/// countdown stopped.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum RestoreWhy {
+    WorkEnded,
+    UserAsked,
+    PlanSwitch,
+    Floor,
+    Quit,
+    SessionEnd,
+    ConsoleLeft,
+    Leftover,
+    ShortTimeouts,
+}
+
+/// Why the countdown to sleep runs, because the last check differs: `Floor` also needs the PC still on battery and
+/// under the floor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CountdownReason {
+    WorkEnded,
+    Floor,
+}
+
+/// Which file a write or delete was for, so the core can tell which outcome is which. `RestoreRequest` answers
+/// `FinishRestoreRequest`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum FileKind {
+    State,
+    Config,
+    Hold(HoldId),
+    RestoreRequest,
+}
+
+/// One thing for the outside to do. The loop runs the cheap ones itself and queues the rest on the IO thread
+/// (architecture section 4, "Tray threads").
+///
+/// Each runner may rely on getting commands in the order the core returned them.
+///
+/// - `Requests`: `system` means SYSTEM plus EXECUTION; `display` only for Keep screen on.
+/// - `Retake`: answers as `Outcome::Requests`.
+/// - `Apply`: a hold's `writes` is the three hold keys at 0 less the ones the user released, never less a key already
+///   at its target; the sleep route's is the four short keys at `SHORT_TIMEOUT_S` less the released ones. A timeout
+///   target other than Never is a ceiling: a live value at or under it, and not Never, is the user's own and is kept.
+///   The apply restores this plan's journal entries for other keys in the same run (architecture section 5, Apply).
+/// - `Restore`: `plan: None` takes every entry, `Some` only that plan's.
+/// - `ResetLost`: the journal is lost (product "User settings safety" 7): on the plan in use, each key at a value
+///   Wakeshot writes (a hold's 0, the sleep route's 1 minute) goes to the plan's Windows default, and the bad file is
+///   set aside (`ownership::reset`). It first loads the journal once more: a file with known entries read after all,
+///   and nothing is reset. A missing file, or one with no known entry, means someone else restored it, unless
+///   `damaged`: then a corrupt file was set aside just before, and the values it named are still in force. Answers as
+///   `Outcome::ResetLost`.
+/// - `SleepCheck`: the countdown to sleep is due. The hibernate thread runs the last check of `Hibernate` (lid, idle,
+///   floor), plays `Cue::GoingToSleep` and reads the lid once more, but does not hibernate; it answers
+///   `Outcome::SleepCheck`, and on `Ok` the core writes the short timeouts (decision 23). An unknown lid does
+///   not stop it: the core's own lid reading says closed, and the short timeouts go back at the next lid open.
+/// - `Hibernate`: the fallback when the PC did not sleep within 5 minutes of the short timeouts. The hibernate thread
+///   checks again right before the call (section 5), so it gets what that check needs: the reason, the battery floor,
+///   and the last resume (idle counts from it). The hibernate thread plays `Cue::GoingToSleep` after its last check,
+///   then reads the lid once more; the core never sends `Play(GoingToSleep)`.
+/// - `WriteConfig`: the runner never writes over a newer `config.json` (section 6).
+/// - `WriteHold`: Keep awake from the menu; the hold file carries the tray's own pid and start.
+/// - `FinishRestoreRequest`: after `Done(Restored { why: UserAsked })`, write this `state.json` at once, then delete
+///   `restore-request.json`, so `wakeshot restore` never prints the state from before the restore. Answers as
+///   `Written { file: FileKind::RestoreRequest }`.
+/// - `Log`: a line about a decision only the core knows (hold start and end with labels, a release, a countdown, a
+///   step back, a format problem at most once a minute per source); never prompts or file content. The runner writes
+///   it at info level, area `core`, and answers nothing.
+/// - `ApplyUpdate`: only when no hold counts, no hold file names a live process and no key is owned (decision 42).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Command {
+    Requests {
+        system: bool,
+        display: bool,
+    },
+    Retake,
+    ReadPlan,
+    Apply {
+        plan: Guid,
+        writes: Vec<(SettingKey, u32)>,
+    },
+    Restore {
+        plan: Option<Guid>,
+        why: RestoreWhy,
+    },
+    ResetLost {
+        damaged: bool,
+    },
+    Lock,
+    SleepCheck {
+        reason: CountdownReason,
+        floor_pct: u8,
+        last_resume_mono_ms: Option<u64>,
+    },
+    Hibernate {
+        reason: CountdownReason,
+        floor_pct: u8,
+        last_resume_mono_ms: Option<u64>,
+    },
+    Tray(TrayView),
+    Notify(Notice),
+    Play(Cue),
+    WriteState(StateFile),
+    WriteConfig(Config),
+    WriteHold {
+        id: HoldId,
+        hold: HoldFile,
+    },
+    DeleteHold(HoldId),
+    FinishRestoreRequest(StateFile),
+    Log(String),
+    OpenLog,
+    ApplyUpdate,
+    Quit,
+}
+
+/// Why an apply wrote nothing, or not all it meant to (architecture section 5, "Apply").
+///
+/// The core may rely on: `PlanChanged` at step 1 means nothing written; at step 6 it means written to a plan now
+/// inactive and journaled, left to the plan switch. `SafetyNet` means nothing written. `Write` (a write, the read-back,
+/// the second plan read or `PowerSetActiveScheme` failed) means the restore routine already ran on this plan's entries
+/// (Apply step 6); the entries it left are in the outcome's `journal`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ApplyError {
+    PlanChanged,
+    SafetyNet(Failure),
+    Write(Failure),
+}
+
+/// Why the hibernate thread did not hibernate, or a `SleepCheck` did not pass, after its last check.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum HibernateSkip {
+    LidOpen,
+    LidUnknown,
+    InputSeen,
+    OnAc,
+    AboveFloor,
+}
+
+/// How a `Hibernate` command ended. `Resumed` comes after the PC woke from it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HibernateEnd {
+    Skipped(HibernateSkip),
+    NotAllowed,
+    Failed(Failure),
+    Resumed,
+}
+
+/// How a sound ended. `Skipped`: the user's sound scheme is "No sounds", so nothing played.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SoundEnd {
+    Played,
+    Skipped,
+}
+
+/// The result of one command, posted back as `Event::Done`.
+///
+/// In `Applied` and `Restored`, `journal` is every entry left after the command, so the core's mirror is a copy of
+/// it, never its own guess. A failed `Restored` kept the journal; the core retries on the tick while a restore is
+/// still wanted. `ResetLost`: `reset` names each key set to the plan's Windows default; `result` is the first failed
+/// call (the set-aside of the bad file is logged only); `journal` holds the known entries when the file read after
+/// all, and then nothing was reset. `Update(Ok)`: Velopack's updater now waits (at most 60 s) for this process to
+/// exit, so the core issues `Quit`; `Update(Err)`: nothing changed, and the core waits for the next `UpdateReady`.
+/// That comes at most once per version per run, so the failed version is not tried again until a newer one is found
+/// or the tray starts again.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Outcome {
+    Requests(Result<(), Failure>),
+    Applied {
+        plan: Guid,
+        written: Vec<SettingKey>,
+        result: Result<(), ApplyError>,
+        journal: Vec<JournalEntry>,
+    },
+    Restored {
+        plan: Option<Guid>,
+        why: RestoreWhy,
+        result: Result<(), Failure>,
+        journal: Vec<JournalEntry>,
+    },
+    ResetLost {
+        reset: Vec<SettingKey>,
+        result: Result<(), Failure>,
+        journal: Vec<JournalEntry>,
+    },
+    Locked(Result<(), Failure>),
+    SleepCheck(Result<(), HibernateSkip>),
+    Hibernate(HibernateEnd),
+    Sound(Result<SoundEnd, Failure>),
+    Notified(Result<(), Failure>),
+    Written {
+        file: FileKind,
+        result: Result<(), Failure>,
+    },
+    Update(Result<(), Failure>),
+}

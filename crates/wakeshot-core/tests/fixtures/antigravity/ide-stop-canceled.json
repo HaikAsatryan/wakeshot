@@ -1,0 +1,16 @@
+{
+  "conversationId": "5D0C7B2E-9A41-4F3B-B8E6-2C7F1A9D4E10",
+  "workspacePaths": [
+    "C:\\Users\\dev\\project",
+    "C:\\Users\\dev\\shared-lib"
+  ],
+  "transcriptPath": "C:\\Users\\dev\\.gemini\\antigravity\\brain\\5d0c7b2e-9a41-4f3b-b8e6-2c7f1a9d4e10\\.system_generated\\logs\\transcript.jsonl",
+  "artifactDirectoryPath": "C:\\Users\\dev\\.gemini\\antigravity\\brain\\5d0c7b2e-9a41-4f3b-b8e6-2c7f1a9d4e10",
+  "modelName": "auto",
+  "lastUserInput": "Rename the config loader and update its callers",
+  "agentName": "",
+  "executionNum": 4,
+  "terminationReason": "USER_CANCELED",
+  "error": "",
+  "fullyIdle": true
+}

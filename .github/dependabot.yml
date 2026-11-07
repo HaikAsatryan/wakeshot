@@ -1,0 +1,24 @@
+# One pull request a month per ecosystem, with every pending bump in it, so updates come in few reviews.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    # "/" covers the workflows in .github/workflows.
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      cargo:
+        patterns: ["*"]
+    ignore:
+      # Pinned exactly: the crate must match the vpk that release.yml installs (PINNED_VPK); they move together.
+      - dependency-name: "velopack"
+      # Pinned exactly: this version is the stub without Unicode tables, which keeps ICU out of the tray.
+      - dependency-name: "idna_adapter"

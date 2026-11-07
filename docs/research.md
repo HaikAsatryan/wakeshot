@@ -1,0 +1,6395 @@
+# Research
+
+Facts behind Wakeshot's design, and how each was checked. Every fact carries one of three marks:
+
+- tested on the test laptop (Windows 11 Pro, build 26300, Modern Standby), with the date and the command, test or log
+  that showed it;
+- read in a source (Microsoft docs, a project's code at a tag, a vendor page), with the source and the date it was
+  read;
+- "not verified" or "not tested": read somewhere, inferred or remembered, but not checked here.
+
+The sections are grouped by topic; inside a topic they keep their earlier order, roughly the order in which they were
+checked. Longer reports and their pictures are in `docs/research/`.
+
+Contents:
+
+- [The problem](#the-problem)
+- [Windows power](#windows-power)
+- [Core rules and property tests](#core-rules-and-property-tests)
+- [Agents](#agents)
+- [Tray, menu, notices and sounds](#tray-menu-notices-and-sounds)
+- [Files, processes and the log](#files-processes-and-the-log)
+- [Install, updates and release](#install-updates-and-release)
+- [End to end and manual tests](#end-to-end-and-manual-tests)
+- [Build, CI and toolchain](#build-ci-and-toolchain)
+- [Rivals and launch](#rivals-and-launch)
+- [Brand and media](#brand-and-media)
+- [Speed](#speed)
+
+## The problem
+
+A laptop sleeps in the middle of long work: an AI agent run, a build, a download. People either change power
+settings by hand (and forget to change them back) or use a keep-awake tool that stays on all the time.
+
+### Claude Code today
+
+- **Windows CLI holds nothing.** In the installed `claude.exe` 2.1.316 the sleep inhibitor only returns spawn args on
+  macOS (`caffeinate -i -t 300`) and `null` everywhere else. Checked in the binary. Open issue: anthropics/claude-code#96679.
+- **macOS CLI** spawns `caffeinate -i -t 300`, restarts it every 240 s while work runs, and releases 30 s after work
+  ends. Checked in the binary (constants 300, 240000, 30000). Users complain it sometimes holds while idle (#21432).
+- **Desktop app** has "Keep computer awake while Claude works". On Windows it takes only an EXECUTION power request,
+  so Modern Standby laptops still sleep mid-task (#103669, open). Not verified by us.
+- **Docs** (code.claude.com, desktop scheduled tasks): "Closing the laptop lid still puts it to sleep." Remote Control
+  has a desktop setting "Keep this computer awake for Remote Control"; #100743 says it holds only in 5 minute windows.
+
+### Windows power facts
+
+- **Modern Standby.** This laptop has only "Standby (S0 Low Power Idle) Network Connected", no S3. Checked with
+  `powercfg /a`. Most laptops from the last years are the same.
+- **Request types.** `PowerRequestSystemRequired` blocks idle sleep. `PowerRequestExecutionRequired` alone does not
+  block idle sleep on Modern Standby. Source: the PowerSetRequest docs (re-read 2026-11-03): SystemRequired "The
+  system continues to run instead of entering sleep after a period of user inactivity"; ExecutionRequired "On
+  Traditional Sleep (S3) systems, an active PowerRequestExecutionRequired request implies
+  PowerRequestSystemRequired", so not on Modern Standby. Not tested by us.
+- **Battery.** PowerSetRequest docs, Remarks (re-read 2026-11-03): "On Modern Standby systems on DC power, system and
+  execution required power requests are terminated 5 minutes after the system sleep timeout has expired." Tested on
+  the test laptop: it holds (slept 380 s after the last input with a 60 s battery timeout and the requests held; "Power
+  settings without admin: writes, change detection and the battery rule" below). So a tool must also change the sleep
+  timer on battery. Battery sleep Never stopped the rule in a 16 minute test, lid open (same section).
+- **Lid close.** It counts as the user asking for sleep. No power request can block it. The only way is to set the lid
+  action to "Do nothing". PowerSetRequest docs (re-read 2026-11-03): "power requests are terminated upon
+  user-initiated system sleep entry (power button, lid close or selecting Sleep from the Start menu)", except Away
+  mode on S3. SetThreadExecutionState docs: it "cannot be used to prevent the user from putting the computer to
+  sleep". Tested here for Start > Sleep with a request held: the request was not honored after resume ("Lid, sleep,
+  hibernate and resume", morning results, "Resume"). Not tested here with a request held: lid close with action Sleep,
+  power button.
+- **Electron.** `powerSaveBlocker` "prevent-app-suspension" maps to `PowerRequestExecutionRequired` only, so Electron
+  apps that use it do not block idle sleep on Modern Standby. Checked in Chromium
+  `services/device/wake_lock/power_save_blocker/power_save_blocker_win.cc`. "prevent-display-sleep" adds
+  `PowerRequestSystemRequired`, but keeps the screen on.
+- **Power setting IDs.**
+  - Lid action: subgroup `4f971e89-eebd-4455-a8de-9e59040e7347`, setting `5ca83367-6e45-459f-a27b-476b1d01c936`.
+    Values: 0 Do nothing, 1 Sleep, 2 Hibernate, 3 Shut down. It is a hidden setting: read it with `powercfg /qh`.
+  - Sleep after: subgroup `238c9fa8-0aad-41ed-83f4-97be242c8f20`, setting `29f6c1db-86da-48c5-9fdb-f2b67b1f44da`.
+    Seconds, 0 = never.
+- **No admin needed.** A normal user can write both settings on the active plan with `PowerWriteACValueIndex` /
+  `PowerWriteDCValueIndex` and apply them with `PowerSetActiveScheme`. Tested with an unelevated Medium token: see
+  "Power settings without admin: writes, change detection and the battery rule" below. `PowerSettingAccessCheckEx`
+  reports a plain access denial too, not only a policy.
+- `powercfg /requests` needs an admin prompt.
+
+### How to know Claude Code is working
+
+- **Status files.** Claude Code writes `~/.claude/sessions/<pid>.json` per running session. Seen fields: `pid`,
+  `procStart` (Windows FILETIME as a string), `status` (`busy`, `idle`, `waiting`, `shell`), `cwd`,
+  `kind`, `entrypoint` (`cli`, `claude-vscode`, `sdk-cli`), `statusUpdatedAt`, `bridgeSessionId` (Remote Control
+  session id; `null` after a disconnect, seen live). Checked on the test laptop. The format is undocumented and can
+  change in any release.
+  - A file can be left behind by a crash: count it only if the pid is alive and its start time equals `procStart`.
+  - Never read the `<pid>.<hash>.key` files next to them. They hold a peer token.
+  - Not verified: whether desktop app sessions write these files (app not installed).
+  - Live tests 2026-11-03 (Claude Code 2.1.316, test sessions driven by a throwaway test program, not kept in the
+    repo; details and the results table in `docs/research/claude-code-signals.md`):
+    - Terminal sessions: `shell` while a background shell or shell Monitor runs and the turn is over; `busy` stays on
+      while background subagents run. `waiting` comes with `permission prompt`, `input needed` or `dialog open` (a
+      slash command dialog, not a real block).
+    - SDK path (VS Code, `claude -p` stream-json): no `shell`. A background shell shows `idle`; only the transcript
+      shows it. A background subagent keeps `busy`.
+    - Timers leave the status `idle`. The transcript shows them: `CronCreate` (`nextFireAt`, a float in ms) or
+      `ScheduleWakeup` (`scheduledFor`, rounded up to a whole minute, no job id), then `scheduled_task_fire` lines. An
+      Esc cancel of a wakeup writes nothing. `/clear` changes `sessionId` but jobs keep firing; the new transcript
+      starts with a `session_cron_carry` line listing them.
+    - Durable cron jobs are off in this build ("durable persistence is not available"), so no
+      `scheduled_tasks.json`.
+    - A hard kill leaves the `.json`; the pid plus start time check drops it at once, and the next Claude Code start
+      deletes it. Remote Control off writes `bridgeSessionId: null`.
+  - Live shapes and the resume test 2026-11-03 (Claude Code 2.1.317; details, marks and rule changes in
+    `docs/research/claude-code-signals.md`, "Live shapes (2026-11-03)"; redacted raw lines in
+    `crates/wakeshot-core/tests/fixtures/claude/live/`):
+    - `claude --resume` in a new process: new pid, same `sessionId`, the same transcript grows, and no line marks the
+      resume. `CronCreate` jobs come back and fire (a `*/5` job at resume plus 285 s, not its old `nextFireAt`);
+      `ScheduleWakeup` wakeups do not. Same after a clean exit and a hard kill. Seen live.
+    - The SDK path resumed after a hard kill writes a `<task-notification>` with `<status>stopped</status>` for a
+      background task left open. A subagent's notification can come as an `attachment` `queued_command` instead of a
+      user line. Monitor event notifications have no `<status>`. Seen live, one case each.
+    - On the SDK path, closing stdin does not end the process while a background shell runs. Seen live once.
+- **Hooks.** `UserPromptSubmit`, `PreToolUse`, `Stop`, `SessionEnd` in `~/.claude/settings.json`. Exact, but means
+  editing the user's settings. Insomnia does this.
+- **Transcripts.** `~/.claude/projects/**/*.jsonl` grow while a session works.
+
+### Reading elevated Claude Code sessions from an unelevated process
+
+Checked 2026-11-03 (Claude Code 2.1.316) with a throwaway test program (not kept in the repo) in a probe mode and a
+wait-for-exit mode. Its logs, user SID masked, are not kept either.
+
+- **How the levels were checked.** Reader: the probe started by Explorer from a `.cmd` (opened with `explorer.exe`, no
+  parent spoofing). Its own token (`GetTokenInformation`): Medium `S-1-16-8192`, elevation type Limited; `whoami
+  /groups` in the same `.cmd`: Medium Mandatory Level. Targets: the token of each `claude.exe`, read with
+  `OpenProcessToken`: High `S-1-16-12288`, elevation type Full. Targets were two real CLI sessions, 20636 and 32332
+  (read only), the agent's own test sessions over stream-json (one clean exit, one hard kill), and an elevated `pwsh` as
+  a stand-in for an elevated `wakeshot run`. Both sides had the same logon SID (`S-1-5-5-0-930782`).
+- **Medium reader, High `claude.exe`: everything the design needs works.**
+  - Status files read fine. Files written by the High process carry only inherited ACEs (SYSTEM, Administrators,
+    haika: full) and no mandatory label (`icacls`). Same for transcripts.
+  - `OpenProcess` with `PROCESS_QUERY_LIMITED_INFORMATION`, with `SYNCHRONIZE`, and with both: ok.
+    `PROCESS_QUERY_INFORMATION`, `PROCESS_VM_READ` and `READ_CONTROL`: access denied (`0x80070005`). So ask for
+    exactly `QUERY_LIMITED_INFORMATION | SYNCHRONIZE`: one extra right fails the whole open.
+  - On that handle: `GetProcessTimes` creation time equals `procStart` for every session; `QueryFullProcessImageNameW`
+    gives `C:\Users\haika\.local\bin\claude.exe`; `GetExitCodeProcess` gives `STILL_ACTIVE`.
+  - Wait on the handle: a 1 s `WaitForSingleObject` times out while the session runs. Clean exit of a High test
+    session (its stdin closed): the Medium wait signaled 0.4 s after the driver stopped, exit code 0. Hard kill
+    (`Stop-Process -Force` on the High `claude.exe`): signaled 24 ms after, exit code `0xFFFFFFFF`.
+  - `OpenProcessToken(TOKEN_QUERY)` on the High process also works from Medium (shows High, Full).
+  - The system process list (`NtQuerySystemInformation(SystemProcessInformation)`) works at Medium and its create
+    time equals `procStart`. No handle needed. One call took about 5 to 9 ms here (log timestamps).
+  - Transcript `projects\<folder>\<sessionId>.jsonl` read fine (a 2 MB transcript).
+  - Change notifications: `ReadDirectoryChangesW` on `~/.claude/sessions` (opened with `FILE_LIST_DIRECTORY`) works at
+    Medium and reports writes by the High process: `<pid>.json` added, modified, removed. A status write with
+    `updatedAt` 03:44:36.544 was reported at 03:44:36.549; the removal at exit 8 ms after the driver stopped. The
+    `.key` file shows up too (added, modified, renamed from a temp name, removed); its name was not logged.
+  - The elevated `pwsh` stand-in gave the same results, so an elevated `wakeshot run` can be watched the same way.
+- **Why the open works** (inference from the security descriptor, not checked in the docs). Read from the High side:
+  `O:BA D:(A;;0x1fffff;;;BA)(A;;0x1fffff;;;SY)(A;;0x121411;;;<logon SID>) S:(ML;;NWNR;;;HI)`. The logon SID ACE grants
+  `0x121411` (SYNCHRONIZE, READ_CONTROL, QUERY_LIMITED_INFORMATION, QUERY_INFORMATION, VM_READ, TERMINATE). The High
+  label with no-read-up seems to remove the read rights (QUERY_INFORMATION, VM_READ, READ_CONTROL) for a lower
+  caller, which matches the denied set exactly.
+- **Gone vs no access.** After the hard kill the `<pid>.json` stayed. At Medium every `OpenProcess` on that pid
+  failed with `0x80070057` (invalid parameter: no such process) and the pid was not in the system process list. A
+  denial is `0x80070005`, so a reader can tell "gone" from "no access". The next Claude Code start deleted the file.
+- **Medium reader, Medium `claude.exe`** (the normal case for other users): all six rights open and every check
+  works. Security descriptor `O:<user SID> D:(A;;0x1fffff;;;<user SID>)(A;;0x1fffff;;;SY)(A;;0x121411;;;<logon SID>)
+  S:(ML;;NWNR;;;ME)`. `ReadDirectoryChangesW` reported the new file and each status write (the `busy` write came
+  0.26 s after the prompt was handed to the driver); the wait signaled 0.6 s after the driver stopped. A High reader (an elevated tool) also sees a Medium session fully.
+- **Not verified.** Elevation with another account's password (a standard user typing an admin's credentials): the
+  elevated process then runs as another user with another logon SID, and the open would likely fail with
+  `0x80070005`. Also not checked: sessions in another Windows session (RDP, fast user switching), the Desktop app.
+- **Workaround if the open is ever denied.** Use the system process list: create time equals `procStart` means
+  alive; pid missing or another create time means dead. Cost: about 5 to 9 ms per call, and no handle to wait on, so
+  an exit is seen only at the next poll (the safety tick), not at once.
+
+## Windows power
+
+### Power settings without admin: writes, change detection and the battery rule
+
+Checked on 2026-11-03 (night) on the Windows laptop with a throwaway test program, the power settings spike (not kept
+in the repo). The laptop was on AC the whole time. The Claude Code session runs elevated (High integrity), so every
+write test ran through the spike's `limited` mode: a child of Explorer with an unelevated Medium integrity token, which
+the spike logs at start. The spike's raw logs, named below, are not kept.
+
+- **Writes as a normal user.** With the Medium token, `PowerWriteACValueIndex` and `PowerWriteDCValueIndex` on the
+  active built-in Balanced plan return 0 for the lid action and sleep after, AC and DC; `PowerSetActiveScheme`
+  returns 0. `powercfg` in the same run showed the new values, and the restore put the old ones back
+  (`write-test-limited-20261103-021636.log`).
+- **`PowerSettingAccessCheckEx`.** Returns 0 (`ERROR_SUCCESS`) for read and write of the lid action, sleep after,
+  energy saver threshold and display off, AC and DC. Also 0 for `ACCESS_ACTIVE_SCHEME`, `ACCESS_CREATE_SCHEME` and
+  `ACCESS_ACTIVE_OVERLAY_SCHEME` with a null GUID. For a write of CONSOLELOCK (require sign-in) it returns 5
+  (`ERROR_ACCESS_DENIED`) with the Medium token and 0 elevated. So it reports a plain access denial, not only a
+  policy. `ACCESS_SCHEME` with a null GUID returns 87. No group policy here, so 1260
+  (`ERROR_ACCESS_DISABLED_BY_POLICY`) was not seen. Checked with `read` and `limited read`.
+- **Stored at once, applied only on `PowerSetActiveScheme`.** Right after a write call the registry and a read show
+  the new value, but the setting notification (the live value) changes only after `PowerSetActiveScheme`,
+  `powercfg /setactive`, or `powercfg /change` (which applies by itself). `powercfg /setacvalueindex` alone stores
+  without applying.
+- **Detection latency.** From the start of the call (or of the `powercfg` start, about 25 ms of which is process
+  start). `PowerSetActiveScheme` itself takes 37 to 76 ms. From `write-test` and `copy-test`:
+
+  | Change | Setting notification | Registry notification | Poll every 250 ms |
+  |---|---|---|---|
+  | API write, no SetActive | none | 0 to 1 ms | 5 to 15 ms |
+  | `PowerSetActiveScheme` after that write | 10 to 13 ms | none | none |
+  | `powercfg /setacvalueindex`, no `/setactive` | none | 28 ms | 267 ms |
+  | then `powercfg /setactive` | 29 ms | none | none |
+  | `powercfg /change standby-timeout-ac` | 34 ms | 62 ms | 208 ms |
+  | DC value changed while on AC | none | 27 ms | 159 ms |
+  | Plan switch | 4 ms (active plan GUID) | 57 to 78 ms | 57 to 78 ms |
+
+- **What each detector sees.**
+  - Registry: `RegNotifyChangeKeyValue` on `HKLM\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes`, subtree,
+    opened with `KEY_NOTIFY | KEY_READ` by the Medium token. Fires for every stored change on any plan, AC and DC, a
+    plan switch (`ActivePowerScheme`), and a plan create, rename or delete. It says only "something changed", so the
+    code must read again. The key path is not a documented API.
+  - Setting notification: `PowerSettingRegisterNotification` with `DEVICE_NOTIFY_CALLBACK`. Fires once at
+    registration with the current value (as the docs say), then only when the live value of the active plan changes
+    for the current power source. A DC change on AC, or a write without SetActive, gives nothing.
+  - Poll: sees everything at the poll interval. A read of five values takes under 1 ms.
+- **The lid value in the notification is not the index.** The setting notification for the lid action gave 2 while
+  the stored index was 1 (Sleep), and 0 for Do nothing. 2 matches `PowerActionSleep` in the `POWER_ACTION` enum
+  (winnt.h); that link is an inference, Hibernate and Shut down were not tried. Read the index with
+  `PowerRead*ValueIndex`, not from the payload.
+- **Our writes and the user's look the same.** No detector says who wrote. Our API writes and `powercfg` writes give
+  the same events. The only way to tell is to compare the new value with the one we wrote.
+- **Plan copy.** With the Medium token `PowerDuplicateScheme` (2 ms), `PowerWriteFriendlyName`,
+  `PowerSetActiveScheme` to the copy and back, and `PowerDeleteScheme` all return 0. The copy has every value of the
+  source (lid, sleep, energy saver threshold, CONSOLELOCK, display off). Deleting the copy while it is active returns
+  50 (`ERROR_NOT_SUPPORTED`) and keeps it. After switching back and deleting: gone from `PowerEnumerate`, its registry
+  key is gone, `powercfg /list` shows only Balanced (`copy-test-limited-20261103-021755.log`).
+  - Power mode: the overlay stayed `ded574b5-...` (registry `ActiveOverlayAcPowerScheme`,
+    `PowerGetActualOverlayScheme`, `PowerGetEffectiveOverlayScheme`) and the effective power mode stayed
+    MaxPerformance before, during and after; no effective power mode event fired at either switch. The two overlay
+    getters are undocumented powrprof exports.
+  - Settings shows and enables Power mode while a copy is active, and Lenovo Vantage's Power page does not change
+    ("What Windows Settings writes" below). Not done: whether the copy stays active after a restart (not needed:
+    Wakeshot changes the active plan in place, so nothing depends on it).
+- **Reads without admin** (Medium token).
+  - Energy saver threshold: subgroup `de830923-a562-41af-a086-e3a2c6bad2da`, setting
+    `e69653ca-cf7f-4f05-aa73-cb833fa90ad4`, a per-plan percent. Balanced here: AC 0, DC 30. Its setting notification
+    gives the value for the current power source (0 on AC). Settings stores Never as 0 and "On Battery" as 100 (below).
+  - Require sign-in: CONSOLELOCK (subgroup `fea3413e-7e05-4911-9a71-700331f1c294`, setting
+    `0e796bdb-100d-47d6-a2d5-f7d2daa51f51`) AC 1, DC 1. `HKCU\Control Panel\Desktop\DelayLockInterval` = 0. Which of
+    them the Settings sign-in choice changes: not tested, Windows Hello greys the choice out here (below).
+  - Idle: `GetLastInputInfo` works. The overnight `ES_SYSTEM_REQUIRED` hold does not reset it: idle grew from 1182 s
+    to 1430 s between runs.
+  - Active plan change: the setting notification for `GUID_ACTIVE_POWERSCHEME` fires 4 ms after the
+    `PowerSetActiveScheme` call starts, with the new plan GUID.
+  - Effective power mode (`PowerRegisterForEffectivePowerModeNotifications`, version 2): MaxPerformance on AC here.
+- **Screen off starts Modern Standby here.** Kernel-Power 506 "entering Modern Standby, Reason: Idle Timeout" came
+  at 02:01:26, about 5 minutes after the last input, which is the AC display timeout (300 s); sleep after is 3 h and
+  an `ES_SYSTEM_REQUIRED` hold was active. Shells kept running after it. Checked with `Get-WinEvent` and
+  `GetLastInputInfo`; the link to the display timeout is an inference from the timing.
+- **Battery rule: it holds on the test laptop.** Microsoft's text is in "Windows power facts" above. Tested in a
+  manual block, 2026-11-03 11:21 to 11:37 (`hold-20261103-112124.log`): on battery (98%), Medium token, a plan copy with
+  battery sleep after 60 s, SYSTEM and EXECUTION requests set at 11:21:24.7, no input after (idle 0 at start). The 5 s
+  ticks ran with no gap. The screen dimmed at 165 s and turned off at 180 s (Kernel-Power 506 "Idle Timeout"), and the
+  ticks went on. At 379.6 s after the last input (`PBT_APMSUSPEND`, 11:27:44.1) the system slept while the requests
+  were still set. The next tick came at 11:37:10 after the power button (507): wall step 571 s, unbiased step 4.9 s.
+  The rule predicts 60 s + 5 minutes = 360 s; seen about 20 s later. An elevated `powercfg /requests` log (every
+  30 s) shows only the spike's two requests from 11:21:29 to 11:27:30, no other app's request in the block, and no
+  sample from 11:27:30 to 11:37:26 (the logger slept too). The log's "GAP at t 945 s" line names the gap by its end; it
+  started at 379.6 s. A 600 s timeout was tried later in the lid spike's block I, with the same result ("Lid, sleep,
+  hibernate and resume", morning results, "Battery rule").
+- **Battery sleep Never stops the battery rule** (a manual check, 2026-11-03 13:13 to 13:29,
+  `hold-20261103-131303.log`). On battery (94% to 93%), Medium token through
+  Explorer, lid open, a plan copy with battery sleep after 0 (Never), SYSTEM and EXECUTION requests set at 13:13:04.1,
+  idle 29 s at the start and no input after. The display turned off at 13:16:04 (Kernel-Power 506 "Idle Timeout")
+  and the 5 s ticks went on (largest step 5105 ms, wall and unbiased alike) until the end at 13:29:05, idle 990 s:
+  past the 916 s where block I (a 600 s timeout) suspended. `gaps: none`. Restored: Balanced active, copy
+  deleted, sleep after AC 10800 and DC 600, lid 1/1. Only Never was tried; a raised finite value was not. The log's
+  start lines read the 0 as a 0 s timeout ("requests end about 300 s after the last input"); 0 means Never.
+- **What Windows Settings writes** (2026-11-03 12:29 to 12:33, an agent step with UI Automation on Settings, Windows
+  build 26300, on AC, plan copy `42ffeeaa-...` of Balanced active, `watch-20261103-122958.log`). Each test value was
+  set, read 5 s later with `powercfg /qh <guid>` on the copy and on Balanced, then put back and read again:
+  - Sleep after, on battery (15 minutes): DC 900 on the copy and on Balanced. Lid on battery (Do Nothing): DC 0 on the
+    copy and on Balanced. So for these two Settings writes the active plan and also the inactive Balanced. Why, and
+    whether it writes other plans too: not checked. The watch saw two registry events for each such change.
+  - Energy saver threshold: only the active plan (the copy). Never is stored as DC 0, "On Battery" (the list's last
+    item) as DC 100. AC stays 0. The list has Never, 10% to 50% and On Battery. "Always use energy saver" is a
+    separate toggle; not touched.
+  - Power mode, "Plugged in" to Balanced: `ActiveOverlayAcPowerScheme` becomes
+    `00000000-0000-0000-0000-000000000000` and the effective power mode event says Balanced (2); back to Best
+    Performance: `ded574b5-...` and MaxPerformance (4). The page has separate "Plugged in" and "On battery" choices;
+    "On battery" shows Balanced while `ActiveOverlayDcPowerScheme` is absent. "On battery" was not touched.
+  - Power mode is shown and enabled while a copy of Balanced is active (both choices).
+  - Sign-in options, "If you've been away": shows "Every Time", greyed out, with "Windows Hello is preventing some
+    options from being shown" (UI Automation: `SystemSettings_Users_DelayLock_ComboBox`, IsEnabled False). So on this
+    laptop it cannot be changed in Settings, and which value it maps to was not tested. CONSOLELOCK 1/1 and
+    `DelayLockInterval` 0 at every read.
+  - With "Every Time", the session locks when the screen turns off on AC: LogonUI started at 12:33:48, the same second
+    as Kernel-Power 506 "Idle Timeout".
+  - Lenovo Vantage (10.2608.62.0) with a copy active (12:43 to 12:45, a second copy `fa098892-...`): Device settings
+    > Power read the same with and without the copy (whole UI Automation tree compared as text, no line differs):
+    Smart standby Off (Auto, greyed), Battery charge threshold Off (75% to 80%, default), Always on USB On, "even when
+    device is shut off" Off, no warning. This build has no thermal or performance page (Device settings has Power,
+    Display, Sound, Input, Device details). Its pages are web content: UI Automation `FindAll` did not reach the
+    items, a `TreeWalker` walk did. A feedback survey covered the page once; its Close button dismissed it.
+  - Not done: a restart with a copy active (not needed, as above).
+- **Lenovo software here.** Lenovo Vantage `E046963F.LenovoCompanion` 10.2608.62.0. Running services: Lenovo Smart
+  Standby, Lenovo Intelligent Thermal Solution, Lenovo PM Service, Critical Service for Lenovo Vantage. Checked with
+  `Get-AppxPackage` and `Get-Service`. What Smart Standby does to standby: not checked.
+- **`wevtutil /f:text`** prints local time with a `Z` suffix on the test laptop (the same events show local time in
+  `Get-WinEvent`).
+
+### Lid, sleep, hibernate and resume
+
+Checked on 2026-11-03 (night) on the Windows laptop with a throwaway test program, the lid spike (not kept in the
+repo). On AC, lid open, docked to a DELL U2723QE. An elevated agent session held `ES_SYSTEM_REQUIRED` all night, so
+nothing that needs a real sleep, an idle sleep or a lid close ran at night; those ran by hand the next morning (10:30 to
+12:19, "Morning results" at the end of this section). Tests ran with an unelevated Medium token (the spike's `limited`
+mode, or a process started by Explorer) unless marked. The spike's raw logs, named below, are not kept.
+
+- **Capabilities.** `GetPwrCapabilities` (Medium token): LidPresent, AoAc and AoAcConnectivitySupported true; S3
+  false; S4 and HiberFilePresent true; Hiberboot (fast startup) true; WakeAlarmPresent false; RtcWake S4;
+  ThermalControl true. `IsPwrHibernateAllowed` true, `IsPwrSuspendAllowed` false. Registry
+  `HKLM\SYSTEM\CurrentControlSet\Control\Power`: `HibernateEnabled` absent, `HibernateEnabledDefault` 1.
+  `powercfg /a` runs without admin: S0 Low Power Idle Network Connected, Hibernate, Fast Startup.
+- **Hibernate works here, and Windows uses it by itself.** System log: Kernel-Power 187 at 2026-11-01 23:46:42 (caller
+  `winlogon.exe`, SystemAction 3 = hibernate), then 42 "Sleep Reason: Application API", 107, and Kernel-Boot boot type
+  0x1 at 23:47:58: a hibernate and resume. (The morning's own hibernates logged boot type 0x2. 0x1 is often read as
+  fast startup, so this one may have been a shutdown with fast startup; the meaning of the values is not verified.)
+  On 2026-11-02 08:48 Kernel-Power 42 "Hibernate from Sleep - Standby
+  Battery Budget Exceeded": Windows hibernated a sleeping laptop on its own. 506/507 "Austerity Battery Drain Budget
+  Exceeded" also appear (2026-11-02 02:29 and 13:59). Microsoft's Modern Standby wake sources page (read
+  2026-11-03): "Starting in Windows 11, version 24H2, ... If excessive battery drain is detected, most wake sources
+  will be disabled. In this state, the device can be woken from Modern Standby by pressing the power button or
+  opening the lid."
+- **"Hibernate after"** (`9d7815a6-...`) on Balanced: AC 0, DC 2147483647. What the DC value means: not verified.
+- **Entering Modern Standby.** Lid close with action Sleep: 506 "Reason: Lid" (2026-11-02 22:57). Idle: 506 "Idle
+  Timeout" at 02:01:26. At 02:44 the session was locked (`WTSQuerySessionInformation` SessionFlags) with the display
+  off and 47 minutes idle; CONSOLELOCK is 1/1 and `DelayLockInterval` 0. The morning runs logged it: Windows locks
+  within 1 s of the display-off standby entry (morning results).
+- **SetSuspendState.** Doc text (re-read 2026-11-03): "The calling process must have the SE_SHUTDOWN_NAME
+  privilege"; `bForce` "has no effect". The page says nothing about Modern Standby. Not called tonight. A process
+  started by Explorer (Medium token) enables SeShutdownPrivilege (`AdjustTokenPrivileges` ok, last error 0;
+  `read-explorer.log`). Under `limited` (parent process spoofing) `OpenProcessToken(TOKEN_ADJUST_PRIVILEGES)`
+  fails with 5, so `limited` cannot test `SetSuspendState`; that failure is an artifact of the launch. Both
+  `SetSuspendState(FALSE)` and `(TRUE)` hibernate the test laptop (morning results).
+- **Hibernate off.** Not tested: turning hibernate off on the test laptop was ruled out. `IsPwrHibernateAllowed` is the
+  documented single call.
+- **Lid notification.** `PowerSettingRegisterNotification(GUID_LIDSWITCH_STATE_CHANGE, DEVICE_NOTIFY_CALLBACK)` works
+  with the Medium token, no window. The first callback came within 1 ms of the call with the current state (1, open).
+  The same holds for `GUID_CONSOLE_DISPLAY_STATE`, `GUID_SESSION_DISPLAY_STATUS`, power source, battery percent and
+  active plan. Doc (Power Setting GUIDs page, read 2026-11-03): lid 0 closed, 1 opened; "The callback won't be called
+  until a lid device is found and its current state is known". It also says interactive user-mode apps should use
+  `GUID_SESSION_DISPLAY_STATUS`. Timing at a real close, the sound and the lock: morning results.
+- **Sound at lid close: Microsoft's rule.** Wake sources page, Audio table: playback during screen off is enabled for
+  "Idle to Standby" and not for "Explicit entry to Standby (Power button press, closing the lid or through Start
+  menu)". A close with action Do nothing is no standby entry at all: no 506 at the close in D, E or I (morning
+  results).
+- **Input with the lid closed.** Same page: from Windows 11 24H2, input suppression keeps the display off when the lid
+  is closed, unless an external display is connected.
+- **Counting screens without admin.** `QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS)` with the Medium token returned two
+  active paths: `INTERNAL` (0x80000000) "N160JCA-GT1" and `DISPLAYPORT_EXTERNAL` (10) "DELL U2723QE";
+  `SM_CMONITORS` 2. WMI `root\wmi WmiMonitorConnectionParams` also works unelevated and agrees
+  (`VideoOutputTechnology` 2147483648 and 10), but through PowerShell it takes about 1 s; the API takes under 1 ms.
+  Kinds used by the spike: internal = INTERNAL, LVDS (6), DISPLAYPORT_EMBEDDED (11), UDI_EMBEDDED (13); Miracast and
+  indirect (15 to 17) are not a docked screen. What the count shows with the lid closed: morning results.
+- **Temperature without admin.** PDH counters `\Thermal Zone Information(*)\Temperature`, `High Precision
+  Temperature`, `% Passive Limit` and `Throttle Reasons` read with the Medium token. One zone, `\_TZ.THM0`. Temperature
+  is whole Kelvin; the high precision value is tenths of Kelvin but always ends in 2 (3382 = 338.2 K), so 1 K steps
+  in practice. WMI `Win32_PerfFormattedData_Counters_ThermalZoneInformation` gives the same data.
+  `MSAcpi_ThermalZoneTemperature` (root\wmi) returns Access denied to a normal user.
+  - It is meaningful: it follows CPU load within seconds. Idle 41 to 47 C. With 8 busy threads: 47 C after 2 s, 54 C
+    after 4 s, 67 C after 60 s; 51 C 8 s after the load stopped (`heat-limited-20261103-024517.log`).
+  - Limits: Kernel-Power 125 says `_CRT` = `_HOT` = 386 K (112.85 C) and `_PSV` = 0 K (no passive trip point).
+    Throttle reasons stayed 0 and the passive limit 100% at 67 C. Closed on a desk in the morning runs: 35 to 60 C.
+    No bag test.
+- **Wake timers.** "Allow wake timers" (RTCWAKE `bd3b718a-...`) on the test laptop's Balanced plan: AC 0, DC 0
+  (Disable). Values: 0 Disable, 1 Enable, 2 Important Wake Timers Only (`powercfg /qh`).
+  - `SetWaitableTimer(..., fResume TRUE)` with the Medium token succeeds with last error 0, not `ERROR_NOT_SUPPORTED`
+    (the doc says that error means "the system does not support a restore"), even with RTCWAKE Disable. So the call
+    does not tell whether the timer can wake the PC. `SetWaitableTimerEx` with a reason context behaves the same.
+  - `powercfg /waketimers` needs admin. From the elevated session it listed the spike's timer ("Timer set by
+    [PROCESS] ...lid-sleep-spike.exe", with our reason text when set through `SetWaitableTimerEx`), and a Lenovo task
+    `LvfGuiRemoval` that asks to wake the PC at 17:17.
+  - Doc text (SetWaitableTimer, read 2026-11-03): "Windows 8 and newer ... If relative time is specified, the timer
+    does not include time spent in low-power states. For example, the timer does not continue counting down while
+    the computer is asleep." So a wake timer must use an absolute UTC due time. The spike does.
+  - The wake sources page says the always-on timer "wakes SoC but cannot turn on display". No Microsoft page found
+    on how a desktop app's wake timer behaves in Modern Standby (search 2026-11-03). Whether it wakes the test laptop,
+    on AC and on battery, and whether RTCWAKE matters: could not test, and not tested later: no part of the design
+    uses wake timers.
+- **`CallNtPowerInformation` without admin.**
+  - `SystemExecutionState` returned 0x1 (`ES_SYSTEM_REQUIRED`) while only an elevated agent session held a request. So a
+    normal user may see "someone holds a system request" without `powercfg /requests`. Morning: it reads 0x0 with no
+    request, and 0x1 for up to 30 s after some resumes because of Windows' own request (morning results).
+  - `LastSleepTime` and `LastWakeTime` are 0 since boot (2026-11-02 17:17), although the System log shows Modern
+    Standby sessions since then. They do not record Modern Standby.
+  - Interrupt time and unbiased interrupt time were equal (34028 s) after 9.5 hours with several Modern Standby
+    sessions. So `QueryUnbiasedInterruptTime` did not skip those sessions. The morning gaps explain it: unbiased time
+    skips the time the PC is suspended, not the screen-off part of Modern Standby where apps still run. The night
+    hold kept the PC from suspending (morning results).
+  - `SystemPowerInformation.TimeRemaining` (idle countdown) read 0 while the request was held.
+- **Plan copy with lid Do nothing.** Made, applied and removed with the Medium token. A run killed by PID left the copy
+  active with LIDACTION 0/0 until `restore` put Balanced back and deleted it. Ctrl+C runs the restore within 100 ms
+  (console handler). Closing a classic console window runs it too ("Medium launches through Explorer and console stop
+  events" below); closing a Windows Terminal tab was not tested.
+- **Lenovo Smart Standby** service is running (Auto); its description says only "Provides the functionalities of
+  Lenovo Smart Standby". What it changes: not checked.
+
+**Morning results** (2026-11-03, 10:30 to 12:19). Manual runs in five blocks: D lid close while docked, E lid close
+on battery with no external screen, F `SetSuspendState`, H sleep and resume, I lid closed on battery with a 600 s
+battery sleep timeout. Block C is the power settings spike's battery run. Medium token; every run restored the plan
+(`after` equals `before` in each log). A read-only `powercfg /requests` log every 30 s showed no other app's DISPLAY,
+SYSTEM or EXECUTION request in any block. System log entries read with `Get-WinEvent`. Logs: D
+`lid-20261103-103006.log`, F `suspend-20261103-103649.log` and `-103853.log`, H
+`resume-20261103-104117.log`, `-105721.log` and `-120914.log`, E `lid-20261103-111112.log`, I
+`lid-20261103-114033.log`. Some spike `RESULT` lines misread their own data; each is noted at its result below,
+and the readings here come from the events. For any later test tool: judge a suspend by `PBT_APMSUSPEND`, the
+S-state by the System log, and name a gap by its start.
+
+- **Lid callback at a real close.** It arrives at once; the spike reacted 370 to 561 ms later only because it acts on
+  its next loop step. A close with action Do nothing logs no 506 and does not turn the display off. In E (no external
+  screen) the display state stayed on until the DC display timeout. In D (DELL in) the internal path dropped and the
+  DELL stayed on.
+- **Lock.** With `--no-lock` (E) the session stayed unlocked for 176 s with the lid closed. `LockWorkStation` right at
+  the close (I) returned Ok in 0.5 ms and the session read locked 1 s later; one `QueryDisplayConfig` call during the
+  lock returned 31. Windows itself locks within 1 s of every display-off standby entry (506 Idle Timeout), with or
+  without a held request, on AC (H) and on battery (E). The test laptop's CONSOLELOCK is 1/1 and `DelayLockInterval` 0;
+  other values not tested.
+- **Display off on the lock screen.** 31 s after `LockWorkStation` in I, and 32 s after a key press on the lock screen
+  in H4. Which setting gives this: not verified.
+- **Sound.** `PlaySound("SystemNotification", SND_ALIAS | SND_ASYNC | SND_NODEFAULT | SND_SYSTEM)` returned true in D,
+  E and I. With `SND_ASYNC`, true only means the sound started. The tester heard: D "sound from laptop", E "the laptop
+  sound again (not windows one)", I nothing. In D the default device was the DELL, which has no built-in speakers
+  (Macworld review and a Dell community staff post, web, 2026-11-03), so our sound could not come from the laptop. The
+  DELL cable came out 33 s after the close in D and 4.3 s before it in E, and the sound scheme plays `Windows Hardware
+  Remove.wav` on device removal. Most likely reading (inference): what the tester heard in D and E was that device
+  sound, and our sound was heard in no block. Our alias plays `Windows Background.wav`, not the toast sound `Windows
+  Notify System Generic.wav`, so the E sound may also have been ours. The System Sounds level, the closed lid and the
+  lock were checked later: see "Lid-close sound" (System Sounds 100%, not muted; at two later closes neither the lock
+  nor the closed lid stopped a sound, and the tester heard it).
+- **Hold with the lid closed.** The held request kept the closed laptop running: D 163 s through undock, power unplug
+  and replug (only Kernel-Power 105, no 506, no gap); E 60 s; I 912 s. Trap 12 of `research/rivals-others.md` (power
+  switch with the lid closed) did not break the hold here.
+- **Battery rule.** In I (battery, lid closed, request held, a 600 s DC sleep) the PC suspended
+  (`PBT_APMSUSPEND`, gap 514 s) 916 s after the last input. The power spike's C run (copy with sleep.dc 60 s, lid open)
+  suspended about 380 s after the last input (that spike's `hold-20261103-112124.log`, read only). Both
+  are the DC sleep timeout plus 316 to 320 s, as the "5 minutes after the sleep timeout" rule quoted under "Windows
+  power facts" says. In I `SystemExecutionState` read 0x1 up to the last tick before the suspend (11:55:54.8), so it
+  gives no warning that the rule is about to end the request. Battery sleep Never stopped the rule in a 16 minute
+  test, lid open ("Power settings without admin: writes, change detection and the battery rule", "Battery sleep Never
+  stops the battery rule"). I's RESULT line "the lid was open when work ended, so no end method ran" misreads the run:
+  the work end (1200 s) was due inside the suspend (11:55:56 to 12:04:28), and the tool saw the lid open first.
+- **Screen off is not suspend.** Display off at the display timeout logs 506 Idle Timeout, but desktop apps keep
+  running; the spike's 1 s tick then fires about every 1.5 s. Apps pause only at `PBT_APMSUSPEND`. With no request it
+  came at the sleep timeout: 67 to 70 s after the last input on a 60 s copy (H control phases, AC, lid open). In E
+  (lid closed, battery) the spike released its request and put Balanced back (lid action Sleep) at 11:12:52 with the
+  lid still closed (`lid-20261103-111112.log:143-149`). The PC did not sleep: putting the lid action back does not
+  sleep a laptop whose lid is already closed. It ran for 263 s after the 506, until the lid opened at 455 s idle,
+  below the 600 s sleep timeout; the spike's "no standby" RESULT means only "no gap". So after a release, a closed
+  laptop most likely stays awake until the user's sleep timeout (inferred from H; the test laptop's AC value was 3 h
+  then; not tested with the lid closed).
+- **SetSuspendState.** `(FALSE)` (sleep) and `(TRUE)` (hibernate), Medium token, lid open, AC: both hibernated.
+  Kernel-Power 187 SystemAction 2 and 3, then 42 and 107 with TargetState and EffectiveState 5 (S4);
+  Power-Troubleshooter 1 HiberWriteDuration 7950 and 8156 ms (about 1.3 M pages), BiosInitDuration 8584 and 8566 ms,
+  HiberReadDuration 10196 and 9581 ms; Kernel-Boot 27 boot type 0x2;
+  Kernel-General 1 set the clock forward 59 and 64 s. The call returns true only after resume (74 and 78 s). After
+  resume: 506 "Sleep, Hibernate, or Shutdown", 507 Power Button 1 s later, session locked. The thermal zone read 73 to
+  87 C for about 30 s after each resume. F3 (screen off) did not run because F1 slept. Hibernate off: not tested, by
+  rule. Kernel-Power 40 "The driver \Driver\ACPI for device stopped the power transition" came about 0.1 s before the
+  42 in both runs (10:37:02.2 and 10:39:06.4, `Get-WinEvent`); both hibernates still completed. Meaning not checked.
+  The spike's RESULT lines say "the PC stopped (Slept)" for both: its gap kind cannot tell standby from hibernate.
+- **Start > Power > Sleep with a request held** (H run 2, H4): 506 "Screen Off Request" and `PBT_APMSUSPEND` 0.13 s
+  later. A held request does not block the user's own sleep.
+- **Resume.** H run 2: a request held through Start > Sleep was not honored after resume. At the next display off
+  (61 s after resume) the PC suspended within 17 ms, gap 319 s; `SystemExecutionState` read 0x0 in every hold tick
+  (0x1 before the sleep). H4, re-take (clear, then set again) right after resume: display off, then 3 minutes with no
+  suspend until the release; `SystemExecutionState` 0x1. The control phases slept both times, so both runs are valid.
+  One run each, both on AC. Only clear then set on the same handle was tested; taking a new request before dropping
+  the old one was not. In H run 2's hold phase the requests log still listed the spike's SYSTEM and EXECUTION requests
+  at 10:58:45 and 10:59:15 (the elevated `powercfg /requests` log), while `SystemExecutionState` read 0x0
+  and the PC suspended at 10:59:25.9. So `powercfg /requests` lists a request that Windows no longer honors.
+  `SystemExecutionState` showed this loss, but gave no warning before the battery rule ("Battery rule" above). Design
+  effect: re-take always and raise the battery timer; do not rely on detecting the loss. H run 1 had
+  no sleep (the manual sleep did not register); it shows that a request held from before any sleep kept the PC running
+  through three display-off standby entries. Its RESULT line "hold-phase gaps 0 (request honored)" is a tool misread:
+  no hold phase ran (all 744 ticks are `[before-sleep]`).
+- **Clock.** In every gap unbiased interrupt time skipped the suspended time: wall 40 to 514 s against unbiased 0.15
+  to 1.35 s for Modern Standby suspends (the power spike's C gap: 571 s against 4.9 s), 7.4 and 7.8 s for the
+  hibernates. While the screen was off and apps still
+  ran, unbiased time and wall time moved together. Idle time from `GetLastInputInfo` counts suspended time: at the
+  first tick after the I suspend it read 1430 s (514 s of it suspended), after C 945 s (571 s suspended). So never
+  compare it with unbiased time.
+- **SystemExecutionState.** 0x0 with no request (step 0 read at 10:22 after the keep-awake stopped,
+  `read-limited-20261103-102214.log`; F; D and E after the release). 0x1 for up to 30 s right after
+  some resumes with no request held; the requests log showed `[DRIVER] Legacy Kernel Caller` under SYSTEM at
+  12:15:09, right after such a resume.
+- **Screen count with the lid closed.** Docked (D): the internal path dropped at the close (int 0, ext 1). After the
+  cable came out with the lid closed, ext stayed 1 until the lid opened, so the count was stale. Not docked (E): int
+  stayed 1 with the lid closed. Lid open (E): unplugging dropped ext to 0 within 1 s.
+- **Heat** (whole runs): D 40 to 52 C, E 39 to 60 C, I 35 to 53 C. One tick right after a resume read 7.1 C, a bad
+  first read.
+
+### Restore routine: a plan switch mid-run and a stop at any call
+
+Checked 2026-11-03 with the core's tests against `ownership::fake::FakePlans` (a model of
+Windows, not Windows itself).
+
+- **Restore step 5 as written can drop a value still in force.** Step 5 says entries on an inactive plan need no
+  apply. If "inactive" is judged by step 2's plan read, a switch to that plan after step 2 and before step 4 writes its
+  `original` brings our stored value into force; the write then changes only the stored value, the entry is dropped,
+  and our value stays in force with no entry. Shown by
+  `restore::tests::plan_switch_before_the_write_applies_the_plan_now_active`: the routine judges "inactive" by step 5's
+  second read instead and calls `set_active` on the plan now active. It rests on two points the design already marks
+  as not tested: a switch applies the new plan's stored values, and a write is applied only by `PowerSetActiveScheme`.
+- **The stop-point walk holds on the fake.** `restore::tests::a_stop_at_any_call_keeps_every_held_value_journaled`
+  stops at each call of a run over two plans and three keys, from two starting states (all ours, 19 calls; mixed
+  marks plus an entry with an unknown key, 17 calls). After each stop, every value still ours (stored, or in force on the active
+  plan) has a known entry, and RunOnce is set while one exists; the next run puts every value back. A stop between
+  the file delete and the RunOnce clear leaves the RunOnce value (and a stop before the guard's stop event, the guard)
+  with no journal, as the design's stop-point walk expects. So "RunOnce is gone after the next restore" holds only for
+  stops before the delete.
+- **Mutants.** In a scratch copy of the workspace, each failed at least one test: a failed plan list read as an empty
+  list; `original` written before the mark; marked entries dropped when `set_active` fails; an entry dropped after a
+  failed read (the clean-up then runs); RunOnce and the guard released after any failure.
+- **`cargo` in agent shells.** In the agent session's PowerShell and Git Bash, `cargo` was not on `PATH`;
+  `%USERPROFILE%\.cargo\bin\cargo.exe` exists and works when called by path.
+
+### Short AC drops on the dock
+
+Checked 2026-11-03.
+
+- **The dock's short AC drops last longer than 5 s.** All Kernel-Power 105 events in the System log
+  (`Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-Kernel-Power'; Id = 105 }`,
+  28 events from 2026-11-02 00:35 to 2026-11-03 18:38, read 2026-11-03 20:10), paired `AcOnline` false then true:
+  two short drops, 5.3 s (01:50:47.050 to 01:50:52.369) and 6.3 s (12:27:54.032 to 12:28:00.285). Every other
+  battery period lasted 86 s or more. So the 5 s settle in `policy::lid` (product, "Never lower security") does not
+  cover the drops seen. Not verified: whether Wakeshot's `GUID_ACDC_POWER_SOURCE` callbacks come at the same times
+  as these events, and what caused the drops.
+
+### Journal file and mutex
+
+Checked 2026-11-03 by the tests in `power::journal::tests` (Windows 11 Pro
+10.0.26300, NTFS, files in `%TEMP%`, test keys under `HKCU\Software\Wakeshot-test`, test runner elevated, High),
+unless a line names another source.
+
+- **A folder in place of `journal.json` is a failed read, not a missing file.** `store::read_whole` on it failed in
+  `CreateFileW` with 5 (`ERROR_ACCESS_DENIED`), so `FileNet::load_journal` gives `Failed` and the restore routine
+  fails the run rather than taking the journal as gone (`load_tells_missing_corrupt_failed`, printed). A folder open
+  needs `FILE_FLAG_BACKUP_SEMANTICS`, which `read_whole` does not pass; that this 5 is the same under a Medium token:
+  not tested.
+- **`std::fs::rename` replaces a target a reader has open.** `journal.json` renamed over an older
+  `journal.json.corrupt` that another handle held open with read, write and delete sharing: `Ok`, and the target then
+  held the new bytes (`set_aside_keeps_bytes`). This matches the std source ("Files, the registry and named
+  mutexes": `MoveFileExW`, then on 5 a rename by handle with POSIX semantics). A rename with no source gave 2
+  (`ERROR_FILE_NOT_FOUND`).
+- **The journal mutex excludes a second caller of the entry point.** A first `restore_locked` (inner form with the
+  wait as an argument) held `Local\Wakeshot.Test...Journal` inside the routine; a second caller on another thread with
+  a 100 ms wait gave up after 112 ms with `WaitForSingleObject` 258 and ran no step of the routine; once the first
+  finished, a third caller with a 0 ms wait took it (`lock_excludes_second_caller`).
+- **An abandoned journal mutex is taken through the entry point.** A thread took the test mutex and ended without a
+  release; the next `restore_locked` got it (`WAIT_ABANDONED`), ran the routine and logged the abandon; the run after
+  that took it plainly (`lock_abandoned_counts_as_taken`). The same Windows behavior through `store` alone is in
+  "Files, the registry and named mutexes".
+- **Not tested: an elevated and a Medium process on one `Local\` mutex.** Every test here ran High. A mutex created
+  by an elevated process (a `wakeshot restore` from an admin terminal) may refuse a Medium tray's open while that
+  process holds a handle; the tray's apply then fails at its safety net step for that one try.
+
+### Plan copies, the plan list and setting GUIDs
+
+Checked 2026-11-03. The real run was 20:27:02 to 20:27:06, on AC with the
+dock, from an elevated (High) agent shell, with `cargo test --locked -p wakeshot-windows -- --ignored
+--test-threads=1 --nocapture power::plan::` (four `real_` tests in `crates/wakeshot-windows/src/power/plan.rs`).
+
+- **A write to an inactive plan copy changes only that copy** (architecture section 9).
+  `real_write_to_inactive_copy_changes_only_the_copy`: a `PowerDuplicateScheme` copy of the active Balanced plan,
+  named "Wakeshot test <pid>", never made active. `PowerWriteACValueIndex` lid 1 to 0, `PowerWriteDCValueIndex` lid
+  1 to 0 and sleep after 600 to 0, each on the copy, each returned 0. Our read and `powercfg /qh <copy>` showed each
+  new value on the copy. Balanced stayed active (`PowerGetActiveScheme`) and its five values (lid AC 1, DC 1, sleep
+  AC 10800, DC 600, energy saver DC 30) were the same before and after, by our read and by `powercfg /qh` in the
+  test and from a shell after it. This covers stored values. That such a write leaves the values in force alone
+  follows from "Stored at once, applied only on `PowerSetActiveScheme`" above; not measured here. Still not tested:
+  that activating a plan later applies its stored values (the second point under architecture "Plan switch").
+- **The plan list ends with 259 here.** `PowerEnumerate` with `ACCESS_SCHEME` and a 16-byte buffer: index 0 gave
+  Balanced, index 1 returned 259 (`ERROR_NO_MORE_ITEMS`); with a copy present the list had two plans and ended at
+  index 2; after the copy's delete, one plan again. Each successful call left the size at 16. A read-only script
+  earlier the same day (16:07, `PowerEnumerate` through PowerShell `Add-Type`) also got 259 at the end. Microsoft's
+  page (updated 2024-02-22, read 2026-11-03) names no end code, only `ERROR_SUCCESS`, `ERROR_MORE_DATA` and "a nonzero
+  value if the call failed", and says what `BufferSize` holds only for `ERROR_MORE_DATA`, not after success. So a loop
+  that stops on any error alike makes a failed call look like a shorter list.
+- **`PowerSettingAccessCheckEx` with `KEY_WRITE`** returned 0 for lid AC, lid DC (setting
+  `5ca83367-...`) and sleep after DC (`29f6c1db-...`). Elevated only; the Medium result for the same keys is in
+  "Power settings without admin: writes, change detection and the battery rule" above.
+- **A copy's delete leaves nothing.** Each of the three copies (`50df20c5-...`, `15920ad3-...`, `09f0c480-...`) was
+  gone from `PowerEnumerate` right after `PowerDeleteScheme`, gone from `powercfg /list`, and its key under
+  `HKLM\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes` did not exist (`Test-Path`).
+- **Memory the calls return.** Microsoft Learn: `PowerGetActiveScheme` (updated 2025-07-01) "Use the LocalFree
+  function to free this memory"; `PowerDuplicateScheme` (updated 2025-11-25) "If the pointer contains NULL, the
+  function allocates memory for a new GUID ... The caller can free this memory using LocalFree", and lists 183
+  `ERROR_ALREADY_EXISTS` when the destination names an existing plan; `PowerDeleteScheme` (updated 2024-02-22) names
+  no code for the active plan (the spike saw 50, "Plan copy" above). All read 2026-11-03.
+- **GUID names in the `windows` crate 0.62.2** (`Win32::System::SystemServices`, read in the local registry source):
+  the lid action is `GUID_LIDCLOSE_ACTION` (`5ca83367-...`), sleep after is `GUID_STANDBY_TIMEOUT`, their subgroups
+  `GUID_SYSTEM_BUTTON_SUBGROUP` and `GUID_SLEEP_SUBGROUP`, the energy saver threshold
+  `GUID_ENERGY_SAVER_BATTERY_THRESHOLD` in `GUID_ENERGY_SAVER_SUBGROUP`. Each equals the literal `power::plan`
+  checks (`setting_guids_match_the_checked_literals`).
+- **`powercfg /q` with the aliases LIDACTION and ESBATTTHRESHOLD prints no value here** (only the plan line);
+  `powercfg /qh` with the subgroup and setting GUIDs prints both indexes. Why: not checked (likely hidden settings,
+  not verified).
+- **`cargo clippy -p wakeshot-windows -- -D warnings` also fails on warnings in `wakeshot-core`.** At 20:26 a half-done
+  `wakeshot-core/src/state.rs` had unfulfilled `#[expect(dead_code)]` attributes: `cargo test -p
+  wakeshot-windows` printed them as warnings and passed, while the clippy run stopped with "could not compile
+  `wakeshot-core` (lib) due to 25 previous errors". So `-D warnings` reaches every workspace crate the build lints,
+  not only the `-p` package (cargo's clippy wrapper is a workspace wrapper; that reason is from memory, not
+  verified in the cargo docs). So a per-package clippy check can fail on a half-done file in another crate.
+
+### Power request counts and handles
+
+Checked 2026-11-03.
+
+- **A set adds to a count.** `PowerSetRequest` "increments the count of power requests of the specified type", and
+  `PowerClearRequest` decrements it (Microsoft docs, `PowerSetRequest` page, read 2026-11-03). So `PowerRequests`
+  sets each type at most once and a re-take clears before it sets; a second set would need a second clear before the
+  PC may sleep. The same page: a DISPLAY request needs a SYSTEM request beside it to keep the PC from sleeping, and
+  on Modern Standby on DC, SYSTEM and EXECUTION requests end 5 minutes after the sleep timeout.
+- **Closing the handle.** `PowerCreateRequest`'s page says to use `CloseHandle` "to free the handle and clean up the
+  object"; on failure it returns `INVALID_HANDLE_VALUE` with the error in `GetLastError` (read 2026-11-03). Whether a
+  close alone ends outstanding requests: not verified, so the drop clears every type first. Whether the call copies
+  the reason text: not documented, not verified; the text is kept as long as the handle.
+- **Real calls work here.** `power::requests::tests::request_sets_and_clears` (create, set SYSTEM and EXECUTION,
+  re-take, clear, close) returned `Ok` for every call, elevated, on the test laptop, in well under a second. Judged by
+  the calls' results only, never by `powercfg /requests` (architecture section 5).
+
+### Power notifications: unregister, threads and payloads
+
+Checked 2026-11-03. Microsoft pages read that day (date is each page's `updated_at`); the runs
+were on the test laptop, elevated (High), on AC through the dock, lid open.
+
+- **Nothing documents a callback after unregister.** `PowerSettingUnregisterNotification` (2025-07-01) and
+  `PowerUnregisterSuspendResumeNotification` (2024-02-22) give only the parameter and "ERROR_SUCCESS (zero) if the
+  call was successful". `DEVICE_NOTIFY_CALLBACK_ROUTINE` (2024-02-22) says nothing about threads or unregister. So
+  `power::system` routes each callback through a table by id: a late callback finds no entry and posts nothing.
+- **Unregister waited for a running callback.** A probe test (removed after the run) registered for the lid with a
+  receiver that slept 300 ms: `PowerSettingUnregisterNotification`, called while it slept, returned after 300.4 ms;
+  with no sleep, 19 us. One run, lid setting only; the suspend and resume unregister was not tried. Not documented,
+  so nothing relies on it, but it is why a drop must not hold a lock the callback takes.
+- **The first callback comes on another thread, after register returns.** Same probe: register returned in 14 to
+  114 us with no callback yet; the first callback came 53 to 373 us after the register call began, on a thread other
+  than the registering one. Two registrations in one run. Not documented; the code also works when the callback comes
+  inside the call.
+- **Whether Windows copies `DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS`** at register or reads it later: not documented, not
+  verified. The parameters are leaked (16 bytes per registration).
+- **First values.** `real_registration_gives_first_values` got lid open, `Event::Power` equal to
+  `GetSystemPowerStatus` (on AC, a battery percent), and the active plan equal to `PowerGetActiveScheme`, all well
+  inside 2 s (the whole test took under 0.1 s). `real_lid_once_returns_open_here`: `Some(false)`, open.
+- **`GUID_ACTIVE_POWERSCHEME` is not on the Power Setting GUIDs page** (2025-07-16); the page lists
+  `GUID_POWERSCHEME_PERSONALITY` instead. The GUID is in the `windows` crate (`SystemServices`, from winnt.h), and its
+  16-byte GUID payload is what the power settings spike saw.
+- **Payload values** (Power Setting GUIDs page): lid 0 closed, 1 opened; power source 0 AC, 1 battery, 2 short-term
+  (UPS); battery percent a DWORD 0 to 100. `POWERBROADCAST_SETTING` (2024-02-22): `DataLength` is the size of `Data`.
+- **`PBT_APMRESUMESUSPEND` follows `PBT_APMRESUMEAUTOMATIC`** "if the system detects any user activity after"
+  it, and `PBT_APMRESUMEAUTOMATIC` "is delivered every time the system resumes" (its page, 2025-07-16). So only the
+  second gives `Event::Resumed`.
+- **`SYSTEM_POWER_STATUS`** (2024-02-22): `ACLineStatus` 0 offline, 1 online, 255 unknown; `BatteryFlag` 128 no
+  system battery, 255 unknown; `BatteryLifePercent` 0 to 100 or 255 unknown. `power_status` counts 255 as AC, so an
+  unknown source never lets the battery floor hibernate.
+- **`GetLastInputInfo`** (2025-07-01): the failure return names no `GetLastError`; the input tick "is not guaranteed
+  to be incremental", and `SendInput` "supplies its own tick count". So `input_idle_ms` reads a tick just after now
+  as 0 idle (fresh input) instead of 49.7 days. It is per session.
+
+### Session messages, end of session and the console session
+
+Checked 2026-11-03. Reads only: no lock, sign-out, sleep or setting change.
+
+- **Session messages** (Microsoft docs, read 2026-11-03). `WM_WTSSESSION_CHANGE`: wParam is the code
+  (`WTS_CONSOLE_CONNECT` 1, `_DISCONNECT` 2, `WTS_REMOTE_CONNECT` 3, `_DISCONNECT` 4, `WTS_SESSION_LOGON` 5, `_LOGOFF`
+  6, `_LOCK` 7, `_UNLOCK` 8, `_REMOTE_CONTROL` 9, `_CREATE` and `_TERMINATE` reserved, `_DESKTOP_READY` 0xF), lParam
+  the session id. `WTSRegisterSessionNotification` with `NOTIFY_FOR_THIS_SESSION` gets only this session's
+  notifications; every register needs an unregister, made before the window is destroyed; a call made before the
+  Remote Desktop services have started may fail with `RPC_S_INVALID_BINDING` (they are ready once
+  `Global\TermSrvReadyEvent` is set). Whether a tray started at sign-in can ever hit that error: not verified.
+- **Console notices.** Microsoft, `WM_WTSSESSION_CHANGE` (updated 2025-10-22): `WTS_CONSOLE_CONNECT` "The session
+  identified by lParam was connected to the console terminal or RemoteFX session", `WTS_CONSOLE_DISCONNECT` the same
+  for disconnected; sent only to windows registered with `WTSRegisterSessionNotification`. That fast user switching
+  and Remote Desktop send them to the session that leaves: not verified (no test).
+- **End of session** (Microsoft docs, `WM_ENDSESSION`, read 2026-11-03). wParam TRUE: the session ends any time after
+  the handlers return; FALSE: it does not end. lParam is a bit mask: `ENDSESSION_CLOSEAPP` 0x1 (the Restart Manager
+  closes the app: a file in use must be replaced, servicing, or resources exhausted), `ENDSESSION_CRITICAL`
+  0x40000000, `ENDSESSION_LOGOFF` 0x80000000; 0 means shutdown or restart. `session::decode` maps them all the same,
+  since in each the tray is about to end.
+- **Console session id** (Microsoft docs, `WTSGetActiveConsoleSessionId`, read 2026-11-03): 0xFFFFFFFF while no
+  session is attached to the console, "for example, if the physical console session is in the process of being
+  attached or detached". So `on_console()` reads `false` at such a moment. Whether a tray started at sign-in can see
+  it: not verified.
+- **Lock state flags** (Microsoft docs, `WTSINFOEX_LEVEL1_W`, read 2026-11-03): `SessionFlags` is a `LONG`;
+  `WTS_SESSIONSTATE_LOCK` 0, `_UNLOCK` 1, `_UNKNOWN` 0xFFFFFFFF; the lock and unlock values are swapped on Windows 7
+  and Server 2008 R2 only.
+- **`LockWorkStation`** (Microsoft docs, read 2026-11-03): asynchronous; nonzero means the lock has started, not that
+  the session is locked. It works only from a process on the interactive desktop.
+- **Real reads here** (elevated agent shell, desktop session). At 20:44:20 `on_console()` gave `Ok(true)` and
+  `locked_now()` gave `Some(false)`. At 20:45:29.8 Windows entered Modern Standby with reason "Idle Timeout" (System
+  log, Kernel-Power 506, with 566 "SessionUnlock" at the same time) and `LogonUI.exe` started at 20:45:29: Windows
+  locked the session at screen off, as in the lid spike ("Lock"). Nothing in the test locks. At 20:45:33
+  `locked_now()` gave `Some(true)` and `on_console()` still `Ok(true)`; at 20:45:40 `locked_now()` again gave
+  `Some(true)`. So the lock read follows the real state both ways. The `Some(false)` read ran on the code before a
+  clippy-only change (the union field is now read before the `Level == 1` test instead of inside a closure), so on the
+  final code only `Some(true)` was seen in this run.
+- **Registration on a hidden window.** `session::tests::register_on_hidden_window`: a never-shown top-level window of
+  the system `STATIC` class; register, drop, register again and `unregister()` all returned without error.
+
+### Power executor stops and journal set-asides
+
+Checked 2026-11-03 by the tests in `power::executor::tests` and
+`io_queue::tests` (Windows 11 Pro 10.0.26300, test build, which unwinds on panic; temp folders and `Names::test`
+mutexes; test runner elevated, High).
+
+- **A stop inside `restore_locked` releases the journal mutex.** In `startup_stop_points`, `FakePlans` panicked at
+  every call of the startup restore of three starting states, also while `restore_locked` held its test journal
+  mutex. After each stop another thread took that mutex with a 0 ms wait. The other thread matters: a Windows mutex
+  counts per owning thread, so the same thread would take it again even if it were never released. A release build
+  aborts on panic instead, and the next taker then gets `WAIT_ABANDONED` ("Journal file and mutex").
+- **A set-aside over an older `.seen` keeps the newer bytes.** `corrupt_journal_gives_event_once` set two corrupt
+  journals aside through `FileNet::dry_run` and marked each seen; `journal.json.corrupt.seen` then held the second
+  file's bytes, as "Journal file and mutex" found for `std::fs::rename` over an existing target.
+- **Not tested here: the executor on real plans.** Every test here ran on `FakePlans`; the harness and the
+  real-laptop tests drive it over a plan copy.
+
+### Hibernate calls and the shutdown privilege
+
+Checked 2026-11-03: Microsoft's pages read that day, and the real tests in
+`power::hibernate::tests` (Windows 11 Pro 10.0.26300, the test laptop, lid open, AC; test runner elevated, High).
+Nothing called `SetSuspendState`.
+
+- **`SetSuspendState` page** (updated 2024-02-22): nonzero on success, zero on failure with `GetLastError`; "The
+  calling process must have the SE_SHUTDOWN_NAME privilege"; `bForce` "has no effect"; `bWakeupEventsDisabled` TRUE
+  "disables all wake events". The page does not say the call returns only after resume; that comes from the morning
+  runs ("Lid, sleep, hibernate and resume"). Whether it can return TRUE without a hibernate (a driver veto, say): not
+  verified.
+- **`IsPwrHibernateAllowed` page** (updated 2024-02-22): TRUE "if the computer supports hibernation (power state S4)
+  and the file Hiberfil.sys is present". The page also says the function "may be altered or unavailable in subsequent
+  versions" and that apps for Vista and later "should use GetPwrCapabilities instead"; its Remarks say the value is
+  in `SystemS4`.
+- **Read here:** `IsPwrHibernateAllowed` true; `GetPwrCapabilities` `SystemS4` true, `HiberFilePresent` true
+  (`hibernate_allowed_reads`, printed with `--nocapture`). Same values as the lid spike.
+- **`AdjustTokenPrivileges` page** (updated 2025-07-01): a success can still carry `ERROR_NOT_ALL_ASSIGNED` (1300),
+  "the token does not have one or more of the privileges"; `TOKEN_QUERY` is needed only with a previous state, so
+  the enable opens the token with `TOKEN_ADJUST_PRIVILEGES` alone.
+- **SeShutdownPrivilege off and on in the test process** (`privilege_enables`): turned off, read back off with
+  `GetTokenInformation(TokenPrivileges)`; then the enable returned `Ok` and the read showed it enabled. Elevated
+  token only; the Medium token case is the lid spike's (`AdjustTokenPrivileges` ok, last error 0), not re-run here.
+
+### Recovery guard: stop event, Explorer parent and exe modes
+
+Checked 2026-11-03 on the test laptop (Windows 11 Pro 10.0.26300, test runner
+elevated, High), by the tests in `crates/wakeshot-windows/src/recovery.rs` and `crates/wakeshot-tray/tests/recovery.rs`
+(`cargo test --locked -p wakeshot-windows recovery::`, `cargo test --locked -p wakeshot-tray`, with `--nocapture`),
+unless a line names another source.
+
+- **A guard under Explorer opens a stop event an elevated process made with default security.** A one-off test
+  (removed after the run) made a named manual-reset event with `CreateEventW(NULL, ...)` in the High test process,
+  then started this test exe through `process::spawn_outside_tree` (`outside_tree: true`, so Explorer's token, Medium
+  per "Process opens, the system process list and exit waits"; the child's own level was not read in this run). The
+  child opened the event with
+  `SYNCHRONIZE` only, was still waiting 2 s later, and left when the test set it (exit 10). So `StopEvent` uses the
+  default security. Why the default DACL of an elevated token admits the Medium child: not verified.
+  `tray_guard_stop_sets_event` repeats the same path on every run with the shipped `StopEvent` and `TrayGuard`.
+- **A `SYNCHRONIZE`-only event handle cannot set the event, and the event goes with its last handle.** `SetEvent`
+  on the guard's handle failed with 5; after the last handle closed, `OpenEventW` failed with 2; a second
+  `CreateEventExW` of a live name returned a handle and `GetLastError` 183 (`ERROR_ALREADY_EXISTS`), which `create`
+  reports as `None` (`stop_event_create_open_set`).
+- **libtest takes `--` as the end of its options.** A child started as `<test exe> --exact --ignored
+  --test-threads=1 --quiet -- <role test> --guard <pid> <start> <event>` ran only the role test and got the guard
+  arguments through untouched (the `TrayGuard` tests: the role child exited with the codes it computes from them).
+- **The real guard's parent is Explorer.** `TrayGuard` started `wakeshot-tray.exe --guard ...` (debug build) from the
+  elevated test process; `Get-CimInstance Win32_Process` gave its `ParentProcessId`, and `Get-Process` named it
+  `explorer`, pid 12528 (`real_guard_parent_is_explorer`, run once with `--ignored`). How Task Manager groups it:
+  not verified.
+- **A guard under Explorer writes its log into a data folder an elevated process made.** In
+  `tray_guard_runs_the_real_guard_until_stopped` the High test made the temp data folder; the guard `TrayGuard`
+  started (`outside_tree: true`) created `logs\wakeshot.log` in it and wrote its start and "stopped" lines, which the
+  test read back. The folder was under `%TEMP%`; the real `%LocalAppData%\Wakeshot`: not tested.
+- **How fast the exe modes end.** The guard exe left 10 to 13 ms after its tray was ended through its handle or its
+  stop event was set (two runs, debug build). `--restore` with no journal took 26 ms from spawn to exit; the first
+  run of a freshly built exe took 0.95 s (why: not verified).
+- **`std::env::set_var` is sound on Windows in a threaded program.** Its doc in the pinned toolchain's
+  `library/std/src/env.rs` (1.99.1) says it "is also always sound to call on Windows, in single-threaded and
+  multi-threaded programs". The tray's exe tests set `WAKESHOT_DATA_DIR` that way, under a lock, for the guards
+  `TrayGuard` starts with the test's own environment.
+- **Not tested here:** the guard's fallback wait when its tray cannot be opened (a denied open needs a token without
+  SeDebugPrivilege, "Process opens, the system process list and exit waits"); that `WaitForMultipleObjects` returns the
+  lowest index when the tray and the event are both signaled (Microsoft's documented rule, which the guard relies on to
+  check the journal first).
+
+### Stops at any call on a real plan copy
+
+Checked 2026-11-03 on AC with the dock, from an elevated (High) agent shell,
+by the four `real_stop_points_*` tests in `crates/wakeshot-windows/src/power/stop_points.rs` (final run 21:46:48 to
+21:47:46, `cargo test --locked -p wakeshot-windows real_stop_points -- --ignored --test-threads=1 --nocapture`).
+
+- **The real parts keep every held value journaled at every stop.** The core's apply, restore and ownership check ran
+  through `apply_locked`, `restore_locked` and `check_locked` over `CopyAsActive` on a "Wakeshot test <pid>" copy of
+  Balanced and `FileNet::tray` in a temp folder, with RunOnce under a `ScratchKey` and a `RecordingGuard`. A wrapper
+  stopped each run at call k (a panic before the call), for every k of 10 starts, then the next start's restore ran
+  with a fresh `FileNet` and guard; then the same stop with that restore failing at each of its calls in turn, and a
+  retry. 3142 cases, all passed: no key at the target, stored or in force on the copy, was without a known entry
+  holding the user's value; RunOnce and the guard stayed while a known entry did; after the next restore every key
+  on the copy had the user's value (lid 1 and 1, battery sleep 14400) stored and in force, and sleep AC and the energy
+  saver were unchanged. Calls per run (N): fresh apply 19, apply over E1 alone 12, over E1, E2, E3 16, with lid AC
+  released 14; restore after an apply 15, E1 alone 9, E1, E2, E3 and a deleted plan's entry 14 (all plans) and 12
+  (one plan); check with one user change 5, with the last entry changed 6.
+- **Where the next restore finds no journal, it does nothing, and what the stopped run left stays.** Two cases: a stop
+  between the clean-up's journal delete and its RunOnce clear (the RunOnce value stays; a stop at the guard's stop
+  leaves the guard), and a fresh apply stopped after `set_run_once` or `ensure_guard` but before its first journal
+  save (the value and the guard stay with no journal). Both are the harmless kind the design accepts: RunOnce and the
+  guard find no journal and do nothing.
+- **An unknown key's entry never blocks the clean-up.** With one in the file (on the copy, key `sleepAc`), the
+  clean-up saves the file with only that entry instead of deleting it, so the next restore always finds a file and
+  releases RunOnce and the guard: no window where RunOnce outlives the journal. The entry, read back and parsed, had the
+  same five fields after every stop, failure and restore.
+- **The walk catches an order break in `FileNet`.** In a scratch copy, `FileNet::delete_journal` and
+  `FileNet::clear_run_once` swapped by name (RunOnce cleared before the journal delete): all four tests failed. With
+  only the stop walk on, the first failure was "restore all plans after an apply, stop at call 13 (clear_run_once)":
+  a known entry without RunOnce. The unknown-key walk lost the file with the unknown entry.
+- **Time.** 57 s for the 3142 cases, debug build, the test laptop: about 18 ms a case, each with a dozen plan writes to
+  the copy, two or three write-through journal saves and RunOnce writes under the test key.
+- **Model, not verified.** A user's change in Settings is modelled as the value stored and the whole plan in force at
+  once (as `CopyAsActive` notes say a test must model it). That Settings applies every stored value of the plan at
+  once is inferred, not tested.
+
+### Real checks of the power layer on the test laptop
+
+Checked 2026-11-04 00:32 to 00:52 on the test laptop (Windows 11 Pro 10.0.26300), with the x64 debug build of
+`power_check` and `wakeshot-tray` (tree of 00:36), from an elevated (High) agent shell. The laptop was on battery (93%)
+and undocked, lid open; the screen was off from 00:42:37 (idle timer) until a touchpad touch at 00:48:56. An agent
+session's own SYSTEM request (a pwsh helper) was held all through. The test laptop's own values before (00:32:57) and
+after (00:52:26), by `powercfg /qh` and our read: Balanced active and the only plan, lid AC 1 and DC 1, sleep AC 18000
+and DC 18000, energy saver DC 30; no journal, no `WakeshotRestore` value.
+
+- **The power layer's real tests pass.** `cargo test --locked -p wakeshot-windows -- --ignored
+  --test-threads=1 --skip real_lock_locks power:: process:: session:: recovery::`: 16 passed (plan 4, stop points 4,
+  system 2, process 2 plus a helper role, recovery helper role, session 2), and `-p wakeshot-tray --test recovery --
+  --ignored`: 2 passed. `real_lock_locks` was not run (it locks the screen; a manual check).
+- **A Medium process started through Explorer creates a `Global\` mutex.**
+  `explorer.exe <file>.cmd` from the elevated shell ran the file at Medium (cmd <- `explorer.exe
+  /factory,{75dff2b7-...} -Embedding` <- svchost); `power_check medium-probe` read "integrity Medium (0x2000),
+  elevation type Limited" and created and took `Global\Wakeshot.Probe.<pid>`. A denied open across users
+  (architecture section 4): not tested (no second account). The factory Explorer instance ended by itself within
+  minutes.
+- **The journal lock works across integrity levels, both ways.** A pwsh script made the same call as
+  `NamedMutex::open` (`CreateMutexExW`, default security, flags 0, `SYNCHRONIZE | MUTEX_MODIFY_STATE`; take by
+  `WaitForSingleObject`) on probe names in `Local\`. High holder, Medium opener: the open gave a handle with error 183,
+  `take(0)` gave 258 while held and 0 after the holder's release. Medium holder, High opener: the same. A High creator
+  gives the object owner BA and full access (0x1f0001) to SYSTEM, BA and the logon session SID (`S-1-5-5-0-...`); a
+  Medium creator gives owner the user and full access to SYSTEM, the user and the same logon SID. Both tokens carry
+  that logon SID, so each side opens the other's mutex. So an elevated `wakeshot restore` holding the lock makes the
+  Medium tray wait, not fail with 5. Not run with the Rust
+  exes and not under the real name `Local\Wakeshot.Journal`; the object type, namespace, call and access are the same.
+- **The real guard restores after a crash of a Medium tray.** `power_check fake-tray` at Medium in
+  `%LocalAppData%\Wakeshot`: copy written (lid AC 0, lid DC 0, sleep DC 0), journal with three entries, RunOnce value,
+  guard `wakeshot-tray.exe --guard ...` with the shell Explorer as parent. `taskkill /PID <tray> /F`: the guard logged
+  "tray pid ... is gone" 270 ms after the kill, wrote the three originals back, deleted the journal and removed the
+  RunOnce value within 10 ms more, and exited; journal and guard process gone within 300 ms of the kill (polled every
+  100 ms). The copy read its original values by `powercfg /qh`. `power_check cleanup` then deleted the copy.
+- **Activating a plan applies its stored values; a write to an inactive plan does not change the values in force.**
+  Read with `CallNtPowerInformation` `SystemPowerPolicyAc` (0) and `SystemPowerPolicyDc` (1) (`SYSTEM_POWER_POLICY`,
+  232 bytes; `LidClose.Action` at offset 28, `IdleTimeout` at 60). Balanced: lid action 2 (Sleep) on AC and DC, DC idle
+  Sleep after 18000 s. A copy given lid AC 0, lid DC 0 and sleep DC 0 by `powercfg /set*valueindex` while inactive: the
+  same 0.5 s later. `powercfg /setactive <copy>`: lid 0 on AC and DC, DC idle after 2147483647 s (Never). Balanced
+  again: back to 2 and 18000 s. This covers both points architecture section 5 "Plan switch" lists as not tested.
+  `SystemPowerPolicyCurrent` (8) read lid 3 and idle 0 for Balanced on battery, unlike the DC policy; why: not
+  verified, so it is not used as a measure.
+- **50 apply and restore cycles on an active copy.** `power_check cycles 50`, 1000 ms pauses, 108 s:
+  100 `PowerSetActiveScheme` calls, min 33.2, median 51.5, max 121.8 ms; 11 cycles had one call over 100 ms. Each
+  apply took effect: the DC policy in force flipped between lid 2 with 18000 s and lid 0 with Never, 103 times.
+  Display brightness (`WmiMonitorBrightness`, sampled about every 220 ms, 519 samples): 100 in every sample, before,
+  during and after each cycle. System and Application logs for the run: no error or warning. A flicker someone could
+  see: not verified (nobody watched; the screen was off for cycles 1 to 24, on at the lock screen from cycle 25). Other
+  apps' setting callbacks: no app logged an error; nothing more checked. On AC: not run.
+- **Each `PowerSetActiveScheme` call writes one System log event.** `Microsoft-Windows-UserModePowerService` event 12
+  (Information), "Process <exe> (process ID:<pid>) reset policy scheme from {<old>} to {<new>}": 102 in the cycles
+  run, one per call. So the tray adds about two per hold (one at its apply, one at its restore; inferred from
+  architecture section 5, not counted on a tray).
+- **A change in Settings can be dated.** Settings writes show as the same event 12 with
+  `C:\Windows\ImmersiveControlPanel\SystemSettings.exe` as the process, and the setting's key under
+  `HKLM\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\<plan>\<subgroup>\<setting>` gets a new last write
+  time (`RegQueryInfoKeyW`). Here: both sleep values went from 10800 and 14400 to 18000 at 00:31:08, before these
+  checks started.
+- **Wake reason in the System log.** Kernel-Power 507 "exiting Modern Standby" carries the reason ("Input
+  Touchpad"), and 566 the session reason ("InputPoUserPresent"); 506 "entering Modern Standby" said "Idle Timeout"
+  for the screen-off timer. Useful for manual battery runs.
+
+### Idle sleep with the lid closed
+
+Checked 2026-11-04 10:30 to 10:37 in a manual run on the test laptop. Battery 98%, dock unplugged, no external screen
+(506 `ExternalMonitorConnectedState=false`). A copy of Balanced was active with lid action Do nothing and sleep after 60
+s, AC and DC; the copy kept the test laptop's own DC dim (165 s) and display off (180 s). A recorder (Medium, started
+from Explorer) held SYSTEM and EXECUTION requests until 120 s after the lid closed, and logged both message routes and a
+5 s tick. Sources: the recorder log; `powercfg /requests` every 30 s (only the recorder's requests, 10:30:22 to
+10:31:52; none after); the System log through `Get-WinEvent`. The logs are not kept.
+
+| Time | What | Source |
+|---|---|---|
+| 10:30:08.3 | requests set | recorder |
+| 10:30:08.8 | copy active; policy in force: lid action 0, idle 60 s, AC and DC | UserModePowerService 12, recorder |
+| about 10:30:14.4 | last input | recorder idle reads |
+| 10:30:19.317 | lid closed, both routes in the same ms | recorder |
+| 10:31:15 | idle 60 s: the sleep timeout passed while the requests held | recorder |
+| 10:32:19.482 | requests released, 120.2 s after the close, idle about 125 s | recorder |
+| 10:32:59.839 | display dimmed, about 165 s after the last input | recorder, window route |
+| 10:33:14.842 | 506 entering Modern Standby, "Idle Timeout", `LidOpenState=false`; display off at .848 | System, recorder |
+| 10:33:14.881 | `PBT_APMSUSPEND` | recorder, callback route |
+| 10:33:14.899 | 566 session to sleep; the screen-off part lasted 59.6 ms | System |
+| 10:36:59.311 | 507 exiting Modern Standby, "Lid", `SleepEntered=true`, sleep 224.4 s, DRIPS 209.4 s | System |
+| 10:37:01.911 | `PBT_APMRESUMEAUTOMATIC`, then `PBT_APMRESUMESUSPEND` 4 ms later | recorder, callback route |
+| 10:37:01.990 | lid open, display on, then `WTS_SESSION_LOCK` | recorder, window route |
+| 10:37:03.173 | `WTS_SESSION_UNLOCK` (the tester signed in) | recorder |
+
+- **It sleeps by itself.** With the lid closed and action Do nothing, on battery, no external screen and sleep after
+  60 s, Windows entered Modern Standby and slept with no app call: 506 "Idle Timeout", `PBT_APMSUSPEND` 55.4 s after
+  the requests ended. A real sleep, not hibernate: 507 `SleepEntered=true`, DRIPS 93% of the 224 s; no Kernel-Power
+  42, 107 or 1, no boot. **Verified** (one run).
+- **Release to sleep: 55.4 s** (10:32:19.482 to 10:33:14.881). It did not come at the release, although the 60 s
+  timeout had passed 64 s before. It came at the DC display timeout: display off 180.3 to 180.7 s after the last
+  input, 506 and `PBT_APMSUSPEND` within 40 ms of it. One run cannot tell two readings apart: (a) once the sleep
+  timeout has passed, Windows sleeps when the display turns off on its own timer; (b) Windows restarts the 60 s timer
+  at the release (that would fire at 10:33:19.5, 4.6 s after the seen sleep). (a) fits better: the dim and the off
+  followed the display timers from the last input, and the sleep followed the off at once. **Not measured:** a release
+  after the display already turned off (work longer than the display timeout, the common case); a display timeout
+  longer than the sleep timeout, or Never.
+- **What a desktop app sees.**
+  - Callback route (`PowerRegisterSuspendResumeNotification` with `DEVICE_NOTIFY_CALLBACK`, as `power::system`):
+    `PBT_APMSUSPEND` at the sleep; `PBT_APMRESUMEAUTOMATIC` and `PBT_APMRESUMESUSPEND` at the wake, 2.6 s after
+    507. The lid callback gave closed and open. **Verified.**
+  - Window route (a hidden top-level window in the tray's style, `RegisterPowerSettingNotification` for its
+    settings): `PBT_POWERSETTINGCHANGE` for lid, console display and session display (dimmed, off, on), but no
+    `PBT_APMSUSPEND`, `PBT_APMRESUMEAUTOMATIC` or `PBT_APMRESUMESUSPEND` at all. **Verified.** A Microsoft Q&A answer
+    ("Cannot receive WM_POWERBROADCAST message on Win10 2004", read 2026-11-04) says that on Modern Standby a window
+    must call `RegisterSuspendResumeNotification` to get them; the recorder did not, so this fits. Not tested with
+    that call.
+  - Display off alone is no sign of sleep: apps run in the screen-off part (research, "Lid, sleep, hibernate and
+    resume"); here it lasted 59.6 ms only because the sleep timeout had passed.
+  - First tick after the wake: wall step 229.4 s, unbiased step 2.4 s; idle read 407 s (it counts the sleep);
+    `SystemExecutionState` 0x1 with no request of ours (Windows' own after a resume, as before), 0x0 5 s later.
+- **Lock and sign-in.** The session was locked at the wake: `WTS_SESSION_LOCK` reached the window at 10:37:01.990, but
+  only after the resume, so the log does not show when the lock happened (most likely at the 506: Windows locks within 1
+  s of a display-off standby entry, research "Lid, sleep, hibernate and resume"; inference). The tester: "yes it asked
+  to sign in, screen came on by itself": opening the lid woke the laptop, with no key or power button, and the lock
+  screen asked for a sign-in.
+- **`powercfg` at Medium.** `/duplicatescheme`, `/changename`, `/setacvalueindex`, `/setdcvalueindex`, `/setactive`
+  and `/delete` all returned 0 from a Medium token started by Explorer; UserModePowerService 12 logs each plan switch
+  with `powercfg.exe` and its pid. **Verified.** The test laptop's own Balanced plan after the run equals the
+  reading before it on all 1738 lines of `powercfg /qh`.
+- **What it means for the sleep route.** Tell "the laptop slept" by `PBT_APMSUSPEND` from the callback route
+  (`power::system` already posts it as `Event::Suspending`), and confirm it on the next tick by a wall step far above
+  the unbiased step. Not by a window's `WM_POWERBROADCAST` without `RegisterSuspendResumeNotification`, and not by
+  display off. "It did not sleep" can only be a deadline with no `Event::Suspending`; from this run the sleep waits for
+  the display timeout, so a deadline of release plus the 60 s timeout is too short when the display is still on
+  (inference from one run).
+
+### Windows defaults of the three keys
+
+2026-11-04, on the test laptop (Balanced active, Modern Standby). For the reset of a lost journal, which puts a key
+at Wakeshot's value back to "Windows' default for that plan". Reads only on the test laptop's own plan; one write test
+on a throwaway plan copy that was never active.
+
+- **The API takes the plan's kind, not the plan.** `PowerReadACDefaultIndex` and `PowerReadDCDefaultIndex` take
+  `SchemePersonalityGuid`: "The identifier of the scheme personality for this power setting. A power setting can have
+  different default values depending on the power scheme personality" (Microsoft, `PowerReadDCDefaultIndex`, read
+  2026-11-04). **Verified** (docs).
+- **A plan's kind is a hidden setting.** `powercfg /qh SCHEME_CURRENT SUB_NONE 245d8541-3943-4422-b025-13a784f679b7`
+  ("Power plan type", alias `PERSONALITY`, in `NO_SUBGROUP_GUID`): possible values 0 Power saver, 1 High performance,
+  2 Balanced; Balanced reads 2 on AC and DC. Each possible value's `SettingValue` in
+  `HKLM\SYSTEM\CurrentControlSet\Control\Power\PowerSettings\245d8541-...\<index>` begins with the bytes of that
+  personality's GUID (index 0: `08 13 84 a1`, `GUID_MAX_POWER_SAVINGS` a1841308; 1: 8c5e7fda,
+  `GUID_MIN_POWER_SAVINGS`; 2: 381b4222, `GUID_TYPICAL_POWER_SAVINGS`, the Balanced plan's own GUID). A copy made with
+  `PowerDuplicateScheme` of Balanced reads 2 too (test `real_reset_on_a_copy_puts_the_balanced_defaults`). **Verified**
+  (`powercfg`, `reg query`, the test). `power::plan` maps the index to the GUID with these three; any other index is an
+  error, never a guess.
+- **The registry's default table is old.** `...\PowerSettings\<sub>\<setting>\DefaultPowerSchemeValues\<personality>`
+  holds, for Balanced: lid AC 1, lid DC 1 (Sleep), sleep AC 1800, sleep DC 900; High performance: lid 1 and 1, sleep
+  0 and 0; Power saver: lid 1 and 1, sleep 900 and 600. But `PowerReadDCDefaultIndex` of Balanced's battery sleep gives
+  **180**, and no key for that setting under `HKLM\...\Control\Power` holds an `ACSettingIndex` or `DCSettingIndex` of
+  180 (searched with PowerShell, read only; where Windows keeps the new value: not found). Microsoft's support page
+  "Power settings in Windows 11" (read 2026-11-04), "New default settings for modern standby devices": "On battery,
+  make my device sleep after" adjusted from 4 to 3 minutes (plugged in: 10 to 5); S3 devices: battery sleep 15 to 10.
+  So the API gives Windows' current default and the registry table does not. **Verified** (test
+  `real_defaults_of_the_active_plan_read`: lid AC 1, lid DC 1, sleep DC 180). Not tested: an S3 PC, a plan of another
+  kind.
+- **A plan that does not exist** fails the kind read with 2 (`ERROR_FILE_NOT_FOUND`), so its reset leaves every key.
+  **Verified** (same test).
+- **The reset on a copy.** Copy of Balanced, lid AC and battery sleep set to 0 on the copy, the reset through
+  `CopyAsActive` with a fake journal that does not read: lid AC 0 to 1, lid DC 1 kept (not Wakeshot's value), sleep DC 0
+  to 180; `powercfg /qh` of the copy agrees; Windows never switched plans; the test laptop's own Balanced read the same
+  before and after (lid 1 and 1, sleep 18000 and 18000) and the copy was gone after. **Verified** (one run, 2026-11-04).
+- **What it means for a user.** A lost journal's reset of battery sleep gives 3 minutes on the test laptop, not the 15
+  an older table names; a user whose own value was Never (an accepted cost, `product.md` safety rule 7) gets 3 minutes
+  and the notice. Whether Settings' "Restore default settings for this plan" gives the same values: not tested (it
+  would write the test laptop's own plan).
+- **The short keys** (2026-11-04). The lost-journal reset also puts back the sleep route's 1-minute keys. Balanced's
+  defaults by the API: sleep AC 300, screen off AC 300 and on battery 180 (with
+  sleep DC 180 and lid 1 and 1, as above). The registry table again holds older values: sleep AC 1800, screen off AC
+  600 and on battery 300. The API's sleep values match Microsoft's page above (plugged in 5 minutes, battery 3).
+  **Verified** twice, read only: about 13:15 (test `real_defaults_of_the_active_plan_read`, now all six keys), and
+  about 14:03 (`PowerReadACDefaultIndex` and
+  `PowerReadDCDefaultIndex` with the Balanced personality from a PowerShell script, and the `DefaultPowerSchemeValues`
+  registry values; `powercfg /qh` and `/list` the same before and after). So a reset screen timeout gives 5 minutes
+  plugged in and 3 on battery on the test laptop. Not checked: whether Microsoft's page names the screen defaults.
+
+### The screen timeout setting
+
+2026-11-04, on the test laptop, read only.
+
+- **Its GUIDs.** "Turn off my screen after" is `VIDEOIDLE` `3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e` in subgroup
+  `SUB_VIDEO` `7516b95f-f776-4464-8c53-06167f40cc99`; sleep after is `STANDBYIDLE` `29f6c1db-...` in `SUB_SLEEP`.
+  **Verified** (`powercfg /aliases`). The `windows` crate 0.62.2 names them `GUID_VIDEO_POWERDOWN_TIMEOUT` and
+  `GUID_VIDEO_SUBGROUP` with the same values (read in the crate source); `power::plan` uses those, and its test
+  `setting_guids_match_the_checked_literals` pins the literals.
+- **Not tested here.** A real write of the screen timeout (only `DryRunPower` and the fake ran then), and
+  when Windows starts the screen and sleep timers after a write while input has been idle 5 minutes: at once against
+  the last input, or 60 s from the write. Either way the sleep should come about a minute after the write (inferred
+  from the idle sleep run with the lid closed, one run); the fallback hibernate covers the rest. A manual lid test is
+  where it gets measured.
+
+## Core rules and property tests
+
+### Apply: entry takeover and stop walks
+
+Checked 2026-11-03 with the core's tests against `ownership::fake::FakePlans` (a model of
+Windows, not Windows itself).
+
+- **Two Win32 codes.** `ERROR_FILE_CORRUPT` is 1392 and `ERROR_INVALID_DATA` is 13: read in the `windows` 0.62.2
+  source in the local cargo registry (`src/Windows/Win32/Foundation/mod.rs`; `windows-sys` 0.61.2 says the same).
+  The apply and the check use them for two failures Windows gives no code for: a journal that does not parse, and a
+  read-back that returns another value.
+- **Apply step 3's takeover text, read literally, puts back an old value.** "A key that already has an entry for
+  this plan keeps its `original` and its `restored` mark". For an entry the user changed while a restore waited (the
+  check skips marked entries, so no `UserChanged` came), keeping that `original` makes the next restore write the
+  value from before the user's change. The apply takes an entry over only while it is ours (live equals `written`, or
+  marked with live equal to `original`, restore step 3's two "ours" cases); any other entry becomes a new one with the
+  live value as `original`. Shown by `apply::tests::an_entry_no_longer_ours_gets_the_live_value_as_original`.
+- **A stop walk over all three taken-over entries hides a dropped E1.** With a mutant that clears the mark on
+  takeover, a stop between step 3's save and the write leaves E1 unmarked with `original` stored and ours in force;
+  the next restore drops it. Beside E2 or E3 on the same plan the restore still calls `set_active` for them, which
+  brings E1's stored `original` into force, so the walk passed. Walking each entry alone caught it
+  (`apply::tests::takeover_then_a_stop_at_any_call_drops_no_held_value`). So a stop-point test needs one starting
+  state with E1 as the only entry on its plan.
+- **The stop walk holds on the fake for the apply.** A stop at each call of an apply from six starting states
+  (fresh; E1, E2 and E3 together with an unknown-key entry; each of the three alone; a released key's entry with an
+  unknown-key entry), then a fault-free restore: at the stop every held value has a known entry with RunOnce set and the guard running, and the restore
+  puts every value back.
+- **The mutant "call `set_active` with the step 1 id" cannot fail a test.** The call runs only when the second read
+  equals the command's plan, which step 1 also checked, so both ids are equal there (an equivalent mutant). The
+  variant that makes the call with the step 1 id whatever the second read returns failed two tests.
+- **A scratch copy for mutants needs `docs\` too.** `holds/file.rs` tests read `docs/hold-files.md` through
+  `include_str!`, so a copy without `docs\` does not compile.
+
+### proptest persistence, `#[expect]` and the safety tick in tests
+
+Checked 2026-11-03.
+
+- **proptest writes no regression file when `failure_persistence` is `None`.** proptest 1.12.0 source in the cargo
+  registry (`src/test_runner/runner.rs`, near line 637): a failing case is saved only inside
+  `if let Some(ref mut failure_persistence) = self.config.failure_persistence`. `scenarios/holds.rs` sets `None`, so
+  a failure there leaves no file in `proptest-regressions/`. Not tested with a real failure.
+- **`#[expect(dead_code)]` works field by field, and fails the build once the field is read.** rustc 1.99.1:
+  `state.rs` then put one on each field not yet read; `cargo clippy -p wakeshot-core` with and without
+  `--all-targets`, both targets, `-D warnings`: clean. In a scratch copy, one read of such a field (`owner`) gave
+  `error: this lint expectation is unfulfilled` (`-D unfulfilled-lint-expectations` implied by `-D warnings`), so the
+  attribute must go when the field is first read.
+- **Checked ends must lie off the 30 s safety tick in `Sim` tests.** A mutant that drops every core deadline
+  survived all hold scenarios while each checked end (30 minutes, 1 hour, 90 s) was a multiple of 30 s from the
+  start: the safety tick alone hit it to the millisecond. With the ends moved 7 s off that grid, six tests caught it.
+
+### A PowerShell quirk and the settings scenarios
+
+Checked 2026-11-03.
+
+- **PowerShell drops a bare `--` passed to a `.ps1` script.** `& cargo.ps1 clippy ... -- -D warnings` reached cargo
+  without the `--` (cargo: `unexpected argument '-D' found`); the same call with `'--'` quoted ran clippy. A helper
+  script that forwards `@args` to cargo needs the quoted form.
+- **The settings scenarios catch planted mutants.** Twelve mutants planted by hand in a scratch copy, each run
+  against `cargo test --locked -p wakeshot-core scenarios::` and reverted: all twelve failed at least one test. A mutant
+  that clears the released keys at a plan switch (the effect of keying them by plan) failed two tests; one that lets the
+  retry take the active plan's entries failed one; one that applies after `Session(Ending)` failed three, the property
+  among them.
+- **`settings_events_in_any_order` runs 10,000 cases in about 10 s.** `PROPTEST_CASES=10000`, debug build, the test
+  laptop: 9.9 s, no failure.
+
+### Lid rules: the plan read lag and planted mutants
+
+Checked 2026-11-03 by the scenarios in `scenarios::lid` and hand-planted
+mutants in a scratch copy of the workspace.
+
+- **The plan copy lags an apply, so the lid rules need what is in force.** The core keeps the last plan read; after an
+  apply it shows the user's values (lid 1, Sleep) until the next read, up to 10 s later, while the journal copy says
+  Wakeshot wrote 0. `policy::lid::ours` on those values finds no entry whose `written` equals the live value, so a lid
+  close in the first seconds of a hold would get no lock. The core passes the policy a view where each journal
+  entry on the active plan sets its key to `written`, and an apply not answered yet counts as written. A mutant that
+  drops the view failed 14 of the lid scenarios, among them `lid_closed_in_the_first_seconds_of_a_hold_locks`.
+- **The lid scenarios catch planted mutants.** 19 mutants in two batches (`cargo test --locked -p wakeshot-core`,
+  the second batch `-- scenarios::`), each reverted: all 19 failed at least one test. Among them: a lock at a lid
+  close on the user's own Do nothing, no lock at AC to battery with the lid closed, a hibernate without the resume
+  clamp, `Play(GoingToSleep)` with `Hibernate`.
+- **`lid_events_in_any_order` runs 10,000 cases in about 27 s.** `PROPTEST_CASES=10000`, debug build, the test laptop:
+  27.4 s, no failure.
+- **Not verified: what `LockWorkStation` returns for a session that is already locked.** Microsoft's page could not be
+  fetched from the agent shell (the fetch tool refused `learn.microsoft.com`). The core sends `Lock` into a locked
+  session too, so a lost `Unlocked` never skips a lock, and a failure while locked is only logged, so either answer is
+  safe.
+
+### Ownership properties: false user changes and fault coverage
+
+Checked 2026-11-03 with `ownership::props` against `ownership::fake::FakePlans` (a model of
+Windows, not Windows itself).
+
+- **A failed apply whose restore routine fails too leaves a false user change.** A failure in Apply step 5 or 6 runs
+  the restore routine on the plan. When that routine fails as well (its journal load, a plan read, its mark save or
+  its drop save), an entry the apply saved in step 3 but never wrote stays in the file, unmarked, with live equal to
+  `original`. The next ownership check sees "differs from `written`" and reports it as the user's change. A read-back
+  that differs (the user changing the value in that moment, or anything else that resets it) counts as the first
+  failure. No held value is lost. Shown by the ignored test
+  `ownership::props::a_failed_apply_whose_restore_fails_reports_no_false_user_change` (the user changes `lidAc` just
+  before its read-back, then the routine's journal delete fails: the check reports `lidAc` and `lidDc`, and `lidDc`
+  was never written), and by the user-change property in a run with a fault and a user action in every routine,
+  once its excuse for this case was taken out (shrunk to 4 operations). **Verified** (test, on the fake).
+- **The restore routine overwrites a user change between its steps 3 and 4.** A change after step 3 reads an entry as
+  `written` and before step 4 writes `original` (the mark save sits between) is replaced by `original`. With the
+  test harness, a change at the restore's call 4 or 5 ended at `original`; at call 3 (before the read) or call 6
+  (after the write) the user's value stayed. Architecture section 5 named only the apply's window (steps 2 to 5).
+  **Verified** (test, on the fake).
+- **`Applied.journal` is empty when the apply's own restore routine cannot load the journal.** After a failed write
+  the apply reports what that routine reports, which is empty when its load fails, while the file still holds the
+  entries the apply saved in step 3 (a run's trace: `Write(..), wrote [lidAc], 0 entries`, two entries in the file).
+  **Verified** (test, on the fake).
+- **At 256 cases, a fault on one exact call is often missed.** With fault points spread evenly over 32 calls, the
+  mutant "a takeover clears the mark" (it needs E1 alone, then a stop or a failure between Apply step 3's save and
+  E1's write) survived a full run; with points biased to the first 18 calls it was caught in 2 of 3 runs, and a
+  property whose every case starts that way caught it in 3 of 3. **Verified** (runs).
+- **Not verified: Windows refuses to delete the active plan.** The test world deletes only an inactive plan.
+
+### Core properties in the simulated world
+
+Checked 2026-11-03 on the test laptop, each with how it was checked.
+
+- **proptest prints the shrunk input with `{:#?}`.** proptest 1.12.0, `src/test_runner/errors.rs` line 119:
+  `write!(f, "minimal failing input: {:#?}", what)`. So a case type with its own `Debug` (one line per world step)
+  prints as written, each line indented by the pretty printer.
+- **Cost of one core step in the world.** The coverage tally (256 cases of the general mix, debug build): 15,759
+  core steps and 25,670 log entries in 0.58 s, about 37 us per core step, IO runs included.
+- **How often the general mix builds a property's chain** (tally, 256 cases, after the first rebalance): 11 changes
+  that leave a closed laptop on battery, unlocked, on our Do nothing (the AC to battery lock); 70 user changes inside
+  an episode; 2 restore retries while the core applies. With the first weights, sticky states (another session on
+  the console, a session end, a step back) covered most steps. The AC to battery lock mutant survived the general mix
+  at 256 cases and was killed in 3 of 3 runs once the lid properties also drew from a lid-weighted mix.
+- **A plan switch right after a battery sleep change, shown with the world.** A hold on Balanced; the user sets
+  Balanced's battery sleep, then switches plan before the next read. The read posts `Plan(other)` before
+  `UserChanged(Balanced, SleepDc)`; the core's switch apply carried all three keys, the release came after, and our
+  battery sleep Never stayed in force on the other plan for the rest of the episode. Fixed later: the strict property
+  `a_released_key_is_never_ours_in_force_again_in_its_episode` passes.
+- **A lid close before the first plan read, shown with the world.** With a crashed tray's journal in `Started` (the
+  start-up restore failed), a lid close before the first `Plan(Ok)` got no lock: `Core::in_force` gave `None` with no
+  plan read. Fixed later: the strict property `a_closed_laptop_is_locked_also_before_the_first_plan_read` passes.
+- **pwsh splat of a one-flag array.** `$a = if ($all) { @("--all-targets") } else { @() }` then `& cargo clippy @a`
+  failed with "unexpected argument '-' found"; written out literally, the flag worked. Why the splat broke it: not
+  verified (most likely the `if` unrolled the array to a string). Pass such flags literally.
+
+### Lid and lock fixes: tests first, strict properties and mutants
+
+Checked 2026-11-03 and 2026-11-04. Pure core code; nothing here touched the laptop.
+
+- **Tests written first fail first.** 15 new scenarios against the unchanged core: 12 failed, 3 passed by design (a
+  failed lock with nothing to retry, a pin of behavior already right, and a second path the lid rule already
+  covered). After the fix all pass; one more scenario came from a surviving mutant.
+- **The strict property forms hold now.** `a_released_key_is_never_ours_in_force_again_in_its_episode` and
+  `a_closed_laptop_is_locked_also_before_the_first_plan_read`, ignored before the fix, pass with the default case
+  count and in three release runs of `PROPTEST_CASES=10000`, the last two on the final code (2026-11-04, about 16 to
+  19 s each for the test run).
+- **Mutants by hand, 21 of 21 killed** (scratch copy of the workspace, own build folder, each reverted): four named in
+  advance and 17 for the lock watch, the lock step back, the floor rule, the guess before the first plan read, the
+  release that asks for a new apply, and the restore after a failed write. One, "the core applies during the lock
+  step back", survived the first run and is killed by a test added for it.
+- **The 5 s lock check rests on one reading, not verified beyond it:** in the lid spike the session read locked 1 s
+  after `LockWorkStation` ("Lock" above). How long `WTS_SESSION_LOCK` takes on a slow or busy PC: not verified.
+
+### Lid rules: the plan copy, no silent lock and a denied hibernate
+
+2026-11-04, fixes to the core's lid rules after a power safety review. Pure core code; nothing here touched the laptop
+or its power settings.
+
+- **Tests written first fail first.** 12 new scenarios against the unchanged core: 8 failed, 4 passed by design (two
+  pin code that was right already, two guard the new plan copy rule). Three more came from the mutant plan.
+- **Only the lid side reads plan values.** A grep of `crates/wakeshot-core/src` for `state.plan` (2026-11-04): the
+  settings side (`core/settings.rs`) reads only `.active`; `core/update.rs`, `core/view.rs`, `core/holds.rs` and
+  `present.rs` do not read the plan copy. So putting a restored `original` back in the copy changes only the lid,
+  lock and countdown rules.
+- **Decision 0 rules out a silent lock.** Every `Lock` must come with a notice or a sound in its step
+  (`docs/architecture.md`, decisions table, row 0); the property `every_lock_step_back_and_user_change_is_explained`
+  and the lid proptest check it. So the lock after a hibernate that did not happen carries the lid-close chime.
+- **Long property runs** (`PROPTEST_CASES=10000`, release, `scenarios::props`, the lid proptest,
+  `scenarios::settings`) on the final core code: `a_released_key_is_never_ours_in_force_again_in_its_episode` failed
+  in three of seven runs, each a plan switch with failed restores and no lid command in the trace (the property
+  clears its "restore failed" flag at a restore of another plan that worked, while the core still retries); every
+  other property passed in each of the four runs of the whole set.
+- **Mutants by hand, 27 of 27 killed** (scratch copy of the workspace with `docs/`, since `holds/file.rs` tests read
+  `docs/hold-files.md`; own build folder; each reverted): four planned ones, and 23 on the changed lines.
+- **Not verified:** what a closed laptop does after a hibernate that is not allowed, with the user's own settings back
+  and no request held. The product text infers it runs until the user's own sleep timeout (not tested with the lid
+  closed); the lock every 5 minutes rests on that inference. Also not verified: what `SetSuspendState(FALSE)` does on a
+  Modern Standby PC with hibernation off, the case a sleep fallback would be for.
+
+### Settings rules: call names, a newer config and the `Applied` shape
+
+2026-11-04, fixes to the core's settings rules after a power safety review, and the config version rule. Pure core
+code; nothing here touched the laptop or its power settings.
+
+- **The power layer names the settings calls exactly.** `crates/wakeshot-windows/src/power/plan.rs` (read 2026-11-04)
+  builds each failure with `win("PowerSettingAccessCheckEx", ..)`, `win("PowerWriteACValueIndex", ..)` and
+  `win("PowerWriteDCValueIndex", ..)`, so the core can tell a policy block from a 5 elsewhere by `Failure::call`. A
+  journal mutex open error is passed on as is (`power/journal.rs`, `store.rs`, as a review read them; not re-read here).
+  Whether an elevated `wakeshot restore`'s mutex refuses a Medium open: **not verified**.
+- **The core cannot see a newer `config.json`.** `app/startup.rs::read_config` gives `Config::default()` for
+  `Read::Newer` with `first_run: false`, and `watch/data.rs::config` posts no event for it (read 2026-11-04), so
+  `Event::Started` and `ConfigChanged` look the same as for a version 1 file with Automatic on. The CLI's
+  `wakeshot automatic` already refuses to write over a newer file (`wakeshot-cli/src/automatic.rs`). So the write
+  check belongs to the tray's `WriteConfig` runner (`app/io_thread.rs`), which writes with no check today.
+- **`Applied` is built outside the core.** `power/journal.rs` builds `Applied { .. }` with a struct literal and matches
+  `ApplyError` with no wildcard (`log_applied`), so a new field or variant would break `crates/wakeshot-windows`. So the
+  fix keeps the user-changed entry for the next ownership check rather than adding `Applied.user_changed`.
+- **Tests written first fail first.** On the old code 9 new or changed tests failed (1 scenario, 6 apply tests, 1
+  check test, and the strict `ownership::props` test no longer ignored). Two minimal cases from the earlier lid fixes,
+  kept as named tests, failed on the old model rule and pass on the new one.
+- **Long property runs** (`PROPTEST_CASES=10000`, release, 2026-11-04 02:15 to 02:23): `scenarios::props` passed in
+  10 of 10 runs (19 tests each, 16 to 20 s); `ownership::props` in 3 of 3; `scenarios::settings` with the lid
+  proptest in 1 of 1.
+- **Mutants by hand, 11 of 11 killed** (scratch copy of the workspace with `docs/`, own build folder, each reverted).
+  One survived the first round (any code from a settings call counted for the run); the new scenario now also
+  feeds a settings call's non-denied code and a `PowerWriteDCValueIndex` 31, and kills it. The two lock step back
+  mutants (requests kept; no restore) are killed by the named World cases, not by the random mix at 256 cases: two lock
+  failures around a lid close are rare in it.
+- **Windows callers unchanged.** `cargo check -p wakeshot-windows --all-targets` exit 0, and its `power::` and `app::`
+  tests (182 passed, 10 ignored real-laptop tests) pass with the changed apply and check routines.
+
+### The release property's two failures
+
+2026-11-04 14:13 to 14:45, release test binary, one test thread, `PROPTEST_CASES=4096` with
+`PROPTEST_RNG_SEED` set per run (proptest 1.12.0 reads it), full output kept per seed.
+
+- **`a_released_key_is_never_ours_in_force_again_in_its_episode` failed in 12 of 40 fixed seeds at 4096 cases** on
+  the code before the fix (seed 1 gave the earlier failure text exactly). So about 2 % of plain 256-case runs fail
+  (inferred from that rate, not counted). **Verified** (the 40 runs). Not the old "restore failed" flag cause: no
+  failed restore in the seed 1 trace.
+- **Cause 1, in the core: the sleep route's apply raced the user's change.** A short apply sent before the core
+  heard of the release (a plan switch's read posts `Plan` before its check's `UserChanged`; or, with the IO behind,
+  the user changes battery sleep over the hold's Never before the floor restore runs, and the short apply sent behind
+  it takes the user's value as its original) wrote the released key, and nothing took it back: `take_back` covered
+  only a hold's apply. Now a short key released while the short timeouts are on, with an apply out or the key in the
+  journal, sends the short apply again without it, which restores that plan's entry for it, or a restore when no
+  short key is left. Also in a work-end countdown, which has no episode. **Verified** (named tests and two scenarios
+  fail on the old code and pass now).
+- **Cause 2, in the test world: a reset's default was labeled ours.** When a lost journal's reset runs after a hold's
+  apply wrote entries and its own load fails, it writes the defaults and sets the file aside (rule 7, by design). It
+  writes before the set-aside, so the fake labeled battery sleep's default `Override` while the sim already counted
+  it as the user's own; `restored_at_the_end` failed on the same case ("still held at the end"). The sim now marks a
+  reset key `Default` (`FakeState::mark_reset`). **Verified** (seeds 29 and 33; named test).
+- **After both fixes: seeds 1 to 100 at 4096 cases, 100 passed; the whole core test binary at 4096 cases, 3 of 3
+  passed** (random seeds, 4 threads, about 26 s each). **Verified** (the runs).
+
+### Two rare core gaps next to the release property fix
+
+2026-11-04 14:47 to 15:20, scenarios over the core: `sim::World` for gap A, hand-fed `Sim` for the rest; each fails
+on the code before the fix and passes now.
+
+- **Gap A is real: a lost journal's reset whose own load fails right after a running hold's apply wrote puts the
+  hold's values to the defaults, and nothing applied them again.** World: journal unread at start, a hold whose apply
+  answers late, the reset at 120 s with its load failing: lid Sleep and battery sleep 180 s in force while the agent
+  still works, and still 60 s later. Now the reset's answer with no entries asks for the hold's apply and the short
+  timeouts again; an apply still out runs after the reset, so none goes out twice. **Verified** (the scenarios).
+- **Gap B is real, and the tick's restore retry has the same shape:** a restore of every plan sent while the
+  countdown's 1-minute timeouts are on takes them too, and nothing wrote them again: no idle sleep, the fallback
+  hibernate 5 minutes after the write. Both need a failed restore whose retries keep failing through the 5 minutes of
+  the countdown. Now a restore that worked (not the user's own), with the short timeouts wanted and no short apply out,
+  writes them again. **Verified** (the scenarios).
+- **The core tests at 4096 random cases failed in 3 of 6 runs on three other properties**, each shrunk case failing
+  the same with this fix taken out; they are the three rare failures fixed next. The release property alone,
+  seeds 1 to 100 at 4096: 100 passed. **Verified** (the runs).
+
+### Three rare core property failures
+
+2026-11-04 15:24 to 15:56. Each shrunk case from the reset gaps runs, written as a test from its words, fails with
+the exact recorded message on the code before the fix, and its trace was read against the core.
+
+- **Both lid lock failures were the props model, not the core.** The model kept its restore retry after a restore of
+  one plan that worked, while the core ends the retry when it applies and no entry is left on another plan
+  (`done_restored`, architecture "A failed `Restore`": the hold's apply takes over the active plan's entries). With the
+  mirror then empty, the model counted the journal unknown at a lid close on the user's own Sleep, owed the window
+  lock, and blamed the core when a later hold applied Do nothing with the lid already closed. The core's journal was
+  known (the restore read it) and it owed no lock. The model now ends the retry as the design says. **Verified** (both
+  cases pass with the model fix, and fail again with it taken out).
+- **The hibernate failure was the core.** Input came while the sleep check was out; its reading came before the
+  check's answer, which the hibernate thread took before the input. The pass then wrote the 1-minute timeouts right
+  after input, or, where they cannot be written (the session ending), made the fallback due at once, so `Hibernate`
+  went out 10 s after input. Now a pass that comes when the last input reading, clamped at an unlock or a resume, is
+  under 5 minutes counts as a skip for input. **Verified** (named test and one scenario fail without the fix).
+- **After the fixes: the whole core test binary at 4096 cases, 10 of 10 runs passed; at 256 cases (CI's count), 50 of
+  50 passed** (release, one test thread, a random `PROPTEST_RNG_SEED` per run, logged). **Verified** (the runs).
+
+### Battery floor grace: the 30 s wait on battery
+
+2026-11-05: the 30 s wait on battery before a floor step back. Core sim, scenarios and props only; no real laptop.
+
+- **No `wakeshot-windows` test asserts a floor step back at an AC loss.** A search of `crates/wakeshot-windows/src/app`
+  for `StepBack`, `BatteryFloor` and `Floor` finds only notice names, hibernate tests with `CountdownReason::Floor`
+  and a `RestoreWhy::Floor` label; the Windows side uses only `policy::floor::below`, which did not change.
+  **Verified** (search).
+- **Two `Play` commands in one pass sound at the same time.** `WasapiPlayer::play` starts one thread per cue and
+  returns, with no queue (`crates/wakeshot-windows/src/sound/player.rs`), so a source lock's lid chime and a step
+  back's floor chime in one settle pass would overlap. **Verified** (code read). How shared-mode WASAPI then mixes
+  the two streams: **not verified**. This is why a source lock that goes with a step back plays no lid chime.
+- **The 10 s plan reads hid a missing grace deadline.** With the hold's apply and the unplug at the same moment, a
+  plan read falls due exactly 30 s after the unplug, so a hand mutant that dropped the grace's deadline still stepped
+  back on time. The 30 s scenario now unplugs 3 s off the plan reads. **Verified** (mutant M2 survived, then killed).
+- **Hand mutants, 6 of 6 killed** (in place, each file restored from a copy and checked by search): no grace at all;
+  no grace deadline; the source lock after the step back; the lid chime always with the source lock; the grace off by
+  one millisecond; the grace counted from the first AC loss of a flap. **Verified** (runs).
+- **Long property run.** `PROPTEST_CASES=10000`, release, `scenarios::props` and `lid_events_in_any_order`: 36 tests
+  passed in 20 s. `coverage_tally` (256 cases): 13 step backs after an AC loss, 3 AC returns under the floor before
+  a step back while holding. **Verified** (runs).
+- **After a review, same day.** The grace now counts from the AC loss after AC
+  that lasted 30 s (`policy::floor::battery_run_start`); a lock that goes out while a floor step back lasts with the
+  lid closed keeps its retry after the restore lands, and a source lock still waiting then stays (`floor_guards`).
+  Hand mutants, 10 of 10 killed: no grace; no grace deadline, also with only `scenarios::props` run (the new
+  property `a_floor_step_back_comes_at_30_s_on_battery_with_the_request_off` kills it alone); the lid chime always
+  with the source lock; the grace off by one millisecond; every loss starting a new run (the old flap rule), also
+  with only the props; no retry for a lock sent in a floor step back; a waiting source lock dropped at the restore;
+  the guard ignoring the user's own battery Do nothing. **Verified** (runs).
+- **A false failure of `no_floor_step_back_before_30_s_on_battery` at 10000 cases.** A floor restore failed, AC came
+  back, the user took every hold key back, and the retry of that restore went out on AC at the tick, with its reason
+  `Floor`. The property counted it as a step back; it now skips a floor restore at a tick while a restore is still
+  wanted. The case is the named test `the_retry_of_a_failed_floor_restore_on_ac_is_no_step_back`, which fails on the old
+  property. Latent since the first version of the property, not a core fault. Then three runs at 10000 cases, release:
+  37 tests passed each time, 21 to 23 s. **Verified** (runs).
+
+### Core tests on Linux: Windows path strings
+
+2026-11-06. How checked: the CI job log of `core-linux` on 98c8795 (job 127874604221,
+read with `gh api .../actions/jobs/<id>/logs`), the Rust `Path` docs, and the tests read line by line. No Linux run
+here (see the last point).
+
+- **On Linux `\` is a plain character in a path.** `Path::new(r"C:\Users\x").join(".codex")` is
+  `C:\Users\x/.codex`, and `C:\Users\x` is one relative component whose `parent()` is `Some("")`, then `None`.
+  **Verified** in the CI log (left `"C:\\Users\\x/.codex"`) and the `Path::parent` docs.
+- **So a test path is safe on both systems when each level has its own `join`.** A made-up root such as
+  `X:\home\.codex` is fine as one opaque piece, as long as the source and the test both join below it. A string
+  with `\` between levels (`join(r"2026\11\06")`, an expected `PathBuf::from(r"C:\Users\x\.codex")`) is one level on
+  Linux. **Verified**: in `codex_source.rs` that put every rollout 2 levels under `sessions` instead of 4, the
+  source ignored them, and the 15 tests that expect a rollout to change a session were exactly the 15 that failed in
+  CI (names compared one by one with the log).
+- **WSL `Ubuntu-26.04` on the test laptop has no C toolchain**: no `cc`, `gcc` or `clang`, no
+  `/usr/lib/x86_64-linux-gnu/crt1.o` or `libc.so` (libc6-dev), no `ensurepip`. Rust there needs a linker too, so a
+  no-sudo setup needs a self-contained one (for example Zig as `cc`). Checked with `which` and `ls` in WSL. The
+  agent's permission check refused the download and install, so no Linux run was done: **not verified** that a
+  Zig-linked toolchain works there.
+
+## Agents
+
+### Agent reach on the test laptop
+
+Checked on 2026-11-03 at about 09:37 to 09:45 from an elevated agent session, reads only. The scripts (`probe.ps1`,
+`volume-read.ps1`) are not kept.
+
+- **Screenshots work while the session is unlocked.** `Graphics.CopyFromScreen` in pwsh 7 saved the 3840x2160
+  primary screen to a PNG, and the agent read it back as an image (it showed the agent's own chat). `LogonUI` was not
+  running, so the session was unlocked. Not checked: a capture while locked or with the screen off (expected useless),
+  and whether a capture shows toasts.
+- **UI Automation loads.** `Add-Type -AssemblyName UIAutomationClient` worked in pwsh 7.6.9, and the root element
+  found the taskbar (`Shell_TrayWnd`). Not tried: driving Settings, Lenovo Vantage or a tray menu with it.
+- **Volume reads through Core Audio.** `IAudioEndpointVolume` on the default playback device: 24%, not muted. A write
+  was not tried. A second read with read-only Core Audio scripts found that the default device then was the DELL U2723QE
+  (DisplayPort audio, 24%), and the laptop Speakers (Realtek) were at 67%, not muted. So volume steps must name the
+  device by endpoint ID. The IDs (read 2026-11-03 10:21 with `IMMDeviceEnumerator::GetDevice` and the
+  `MMDevices\Audio\Render` registry names): Speakers `{0.0.0.00000000}.{fb152119-7d6e-4352-a9bf-882ae54afa03}` (67.3%),
+  DELL `{0.0.0.00000000}.{ca5b6419-0bd3-4065-b7b7-0b7fc5450811}` (24.0%, default for all three roles while connected).
+- **Power mode GUID.** Microsoft Learn, "Customize the Windows performance power slider" (read 2026-11-03): overlay
+  `ded574b5-45a0-4f42-8737-46345c09c238` is "Best Performance", `961cc777-2547-4f9d-8174-7d86181b8a7a` "Better
+  Battery", `3af9B8d9-7c97-431d-ad78-34a8bfea439f` "Better Performance". The same page says the slider appears only
+  when Balanced or a plan derived from Balanced is active. The test laptop's AC overlay is `ded574b5-...`, so its Power
+  mode is Best performance (the label in Settings was not looked at).
+- **State at 09:37.** Theme Dark (`AppsUseLightTheme` 0, `SystemUsesLightTheme` 0). On AC, battery 100%.
+  `powercfg /requests`: only SYSTEM, an agent session's own keep-awake script (`pwsh`, PID 11284, command
+  line `keep-awake.ps1`). The tray test program's (a throwaway test program, not kept)
+  `HKCU\Control Panel\NotifyIconSettings\17618738229921704208` (its release exe) has no `IsPromoted` value.
+  `HKCU\AppEvents\Schemes\Apps\.Default\SystemNotification\.Current` names `C:\WINDOWS\media\Windows Background.wav`,
+  so the test programs' alias sound is that file. Lenovo Vantage is installed (`E046963F.LenovoCompanion`
+  10.2608.62.0, app id `E046963F.LenovoCompanion_k1h2ywk1493x8!App`).
+- **The tray test program takes no power request.** Its source has no `PowerSetRequest`, `PowerCreateRequest` or
+  `SetThreadExecutionState` (grep), so it can sit idle in the tray during power tests. Its logs append, so a second
+  run does not erase the first.
+- **Opening the morning shell from an agent.** `morning-shell.log` lines at 03:41, 03:56, 04:26 and 04:34 come from
+  agents that ran `explorer.exe ...morning-shell.cmd`: Medium, not admin, in a new Windows Terminal window since 04:26.
+  So an agent can open it for the tester.
+- **Not tried, by rule or choice:** a theme switch (registry or Settings), synthetic mouse or keyboard input, an
+  Explorer restart (the rule: agents end only processes they started), and any power setting change. (The theme
+  switch and synthetic input were tried later the same day: see "Tray menus, synthetic input and the theme switch".)
+- **UI Automation drives Settings** (2026-11-03 12:28 to 12:33, agent steps of the power settings checks, from the
+  elevated session; scripts not kept). `ms-settings:powersleep` and
+  `ms-settings:signinoptions` open the pages; "Show more settings" buttons expand with ExpandCollapse; a combo box
+  changes with Expand, SelectionItem.Select on the named list item, Collapse. The AC and DC combo boxes share a name
+  ("Make my device sleep after"), so find them by AutomationId (`..._AC2_ComboBox`, `..._DC2_ComboBox`).
+- **Tray menus, synthetic input and the theme switch** (2026-11-03 12:53 to 13:04, agent steps of the tray checks, from
+  the elevated session; scripts not kept). pwsh 7's managed UI Automation shows a Win32 popup
+  menu (`#32768`) as an empty Pane, and registering `UIAutomationClientSideProviders` fails (type not found). MSAA
+  works: `AccessibleObjectFromWindow(menu, OBJID_CLIENT)` lists every item with name, role and state, and
+  `accDoDefaultAction` runs an item or opens a submenu. In PowerShell the `IAccessible` object must be returned with
+  `return , $o`, or the pipeline unrolls its children. `mouse_event` (absolute move, right button) inside the icon
+  rect and `keybd_event` (Esc, Win+N) reach the Medium taskbar and spike. Esc goes to the foreground window, so send
+  it only after checking that the foreground belongs to the target. Settings > Colors "Choose your mode" changes
+  with Expand, SelectionItem.Select, Collapse on AutomationId `SystemSettings_Personalize_Color_ColorMode_ComboBox`.
+  The notification centre (foreground `ShellExperienceHost`) gave no UIA element from this session.
+- **AC can drop for a few seconds while docked.** Kernel-Power 105 (power source change) at 12:27:54 and 12:28:00 on
+  2026-11-03, while the laptop sat on the DELL USB-C cable with no one touching it; a screen holder that checks
+  `PowerLineStatus` every 5 s saw it as battery and ended. The cause was not checked. One more came in the
+  night (setup then not checked): AC off at 01:50:47.1 and back at 01:50:52.4 (Kernel-Power 105 `AcOnline` false,
+  then true; `Get-WinEvent`, read 2026-11-03).
+
+### Cron syntax, Restart Manager types and child process rules
+
+Checked 2026-11-03 between 16:40 and 16:50. Reads only.
+
+- **Claude Code cron syntax.** Docs "Run prompts on a schedule" (`code.claude.com/docs/en/scheduled-tasks`, read
+  2026-11-03): `CronCreate` takes a standard 5-field expression `minute hour day-of-month month day-of-week`; every
+  field takes `*`, single values, steps (`*/15`), ranges (`1-5`) and lists (`1,15,30`); day of week `0` or `7` is
+  Sunday; `L`, `W`, `?` and names such as `MON` or `JAN` are "not supported". When both day fields are constrained, a
+  date matches if either matches (vixie-cron). "All times are interpreted in your local timezone." Jitter as in
+  `research/claude-code-signals.md`, plus: recurring tasks run late by up to half the gap to the next run, at most 30
+  minutes; `*/5 * * * *` runs 15 s early; one-shots on `:00` or `:30` up to 90 s early. A task restored by `--resume`
+  "doesn't fire for the runs it missed"; a self-paced `/loop` is not restored. Whether a range takes a step
+  (`1-30/5`): not stated.
+- **Cron and date crates.** `cargo info` (crates.io index, 2026-11-03): `croner` 4.0.2 has features `chrono` (default)
+  and `jiff`; `jiff` 0.2.39 default features are `std`, `tz-system` (pulls `windows-link`), `tz-fat`,
+  `tzdb-bundle-platform`, `tzdb-zoneinfo`, `tzdb-concatenated`, `perf-inline`. Exe size cost of either: not measured.
+- **`windows` 0.62.2 features for Restart Manager and time zones.** Read in the crate source in the cargo registry:
+  features `Win32_System_RestartManager` and `Win32_System_Time` exist. `RmStartSession`, `RmRegisterResources`,
+  `RmGetList`, `RmEndSession` are in the first; `RM_UNIQUE_PROCESS` has `dwProcessId` and `ProcessStartTime` (a
+  `FILETIME`), so a lock file holder comes back as pid plus start time. `GetDynamicTimeZoneInformation`,
+  `SystemTimeToTzSpecificLocalTimeEx` and `TzSpecificLocalTimeToSystemTimeEx` are in the second. Whether Restart
+  Manager lists Codex as the holder of its thread lock file: not verified here (a live test question).
+- **Rust `Command` on Windows does not use `PATHEXT`.** std docs, `Command::new` (read 2026-11-03): the program is
+  searched in the child's `PATH` if set, the current exe's folder, the system folder, the Windows folder, then the
+  parent's `PATH`; "the `.exe` extension may be omitted. Files with other extensions must include the extension".
+  So `Command::new("npm")` does not find `npm.cmd`. The docs warn that `cmd.exe` and `.bat` files decode arguments
+  their own way.
+- **Ctrl+C ignore is inherited.** Microsoft, `SetConsoleCtrlHandler` (page updated 2021-12-30): with a NULL handler
+  and TRUE, "the calling process [ignores] CTRL+C input ... This attribute of ignoring or processing CTRL+C is
+  inherited by child processes". Handler routines are per process ("does not affect the list of handler functions
+  for other processes"). So a wrapper that must leave Ctrl+C to its child installs a handler that returns TRUE
+  instead of the NULL form. Not tested here.
+
+### Reading agent files: sharing, name trimming and file ids
+
+Checked 2026-11-03 by the tests in `watch::read::tests` (Windows 11 Pro
+10.0.26300, NTFS, files in `%TEMP%`; test runner elevated, High) unless a line names another source. No check here
+depends on elevation: share modes and byte range locks apply to every token.
+
+- **A reader with full sharing blocks no writer.** While a handle with read, write and delete sharing was open, a
+  second handle wrote the file in place, `std::fs::rename` replaced it, and `std::fs::remove_file` deleted it; each
+  returned `Ok` (`whole_read_shares_with_a_writer_that_writes_renames_and_deletes`). A writer that shared no read
+  made the read fail at once with 32 (`ERROR_SHARING_VIOLATION`), not wait
+  (`whole_read_fails_at_once_while_a_writer_shares_no_read`).
+- **std's defaults on Windows.** Read in the toolchain's std source (Rust 1.99.1, `library/std/src/sys/fs/windows.rs`):
+  `OpenOptions::new()` sets `share_mode` to `FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE`;
+  `DirEntry::file_type` and `DirEntry::metadata` come from the `WIN32_FIND_DATAW` of the listing (no open);
+  `fs::metadata` opens the path with access 0 and `FILE_FLAG_BACKUP_SEMANTICS`, falling back to `FindFirstFileExW` on
+  32 or 5. `FileType::is_dir` and `is_file` are false for a reparse point whose tag has the name surrogate bit
+  (`0x20000000`: symlinks and junctions), so a walk that follows only `is_dir` never enters a folder link.
+- **Win32 name trimming.** With a file `x.key` in a scratch folder, `cmd /d /c type` of `x.key.`, `x.key ` (trailing
+  space), `x.key. . ` and `x.key\..\x.key` each printed its content, and .NET `File.ReadAllText` of `x.key::$DATA`
+  did too (cmd refused that name). So a name filter that sees `x.key.` or `x.key::$DATA` but not `x.key` can still
+  open `x.key`; `read_whole` refuses names that end in a dot or a space or hold a `:`
+  (`name_guard_refuses_a_key_file_even_with_a_crafted_path`, with the key file held open with no sharing, so any open
+  of it would fail with 32 instead of the guard's `InvalidInput`).
+- **A rename over a file changes its file id.** `GetFileInformationByHandleEx(FileIdInfo)` gave a new id for the file
+  `std::fs::rename` put under the old name, and the same id after an in-place truncate
+  (`tail_restarts_when_the_file_is_replaced`, `tail_restarts_when_the_file_gets_shorter`). The tail compares ids, not
+  creation times, because NTFS tunneling can give a new file under a recently freed name the old creation time (from
+  memory of Microsoft's docs: not verified). FAT, which has no stable ids: not tested.
+- **A listing does not disturb a lock.** With one file opened with no sharing and another locked whole by
+  `LockFileEx(LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY)`, `names` listed both; afterwards a second handle's
+  `LockFileEx` failed with 33 (`ERROR_LOCK_VIOLATION`), an open of the no-sharing file failed with 32, and the holder's
+  `UnlockFileEx` returned `Ok` (`names_lists_locked_files_without_disturbing_the_lock`).
+- **Folder times for "newest first".** `File::set_modified` on a folder opened with `FILE_WRITE_ATTRIBUTES` and
+  `FILE_FLAG_BACKUP_SEMANTICS` set the time the listing then reported (`find_takes_exactly_one_level_with_decoys`,
+  `find_takes_exactly_three_levels_with_decoys`). When Codex's date folders and Claude's project folders get a new
+  write time in practice (an entry added or removed, not a file in it growing): not verified.
+
+### Claude Code status files against live writes
+
+Checked 2026-11-03.
+
+- **Every status file write of the 2.1.317 live sessions reads as the parser's rules say.** The 13 cases in
+  `crates/wakeshot-core/tests/fixtures/claude/live/*.status.jsonl` hold 150 writes and 17 deletes of
+  `sessions/<pid>.json`: 20 with no `status` yet, 52 `busy`, 67 `idle`, 6 `shell`, 5 `waiting` / `dialog open`
+  (counted with `ConvertFrom-Json`). Test `every_live_status_write_reads` feeds each one to `ClaudeSource`: every
+  write gives `FormatHealth::Ok`, the pid and `procStart` of the file, and the activity the mapping gives;
+  every delete drops the session. No `permission prompt`, `input needed` or Remote Control off write is in that set;
+  those shapes come from the 2.1.316 live tests' log (not kept), rebuilt as whole files in
+  `tests/fixtures/claude/status/`.
+- **serde fills a struct from a JSON array.** A one-off test (serde 1.0.229, serde_json 1.0.154; added and removed)
+  read `[4242, "busy"]` into a derived struct with two `Option<Value>` fields as `pid: 4242, status: "busy"`, and
+  `[4242]` failed with "invalid length 1, expected struct P with 2 elements". So the status parser checks that the
+  first value opens with `{`; without it, an array with one value per read key would pass as a status file.
+- **`procStart` comes before `startedAt`, by 0.4 s to 21 s.** In the same live fixtures, the first write of each of
+  the 17 sessions (16 pids; 8784 ran twice): `startedAt` minus `procStart` (FILETIME / 10,000 minus
+  11,644,473,600,000 for Unix ms) was 8.1 to 20.9 s for the 10 fresh terminal sessions and 0.4 to 0.9 s for the 7
+  resumed or SDK ones. The fresh terminal ones
+  waited on the folder trust dialog, which comes before the status file (signals doc, "Other facts seen live"); that
+  the gap is that dialog: not verified. So the process start, not `startedAt`, is the earliest time a line can come
+  from this process (the resume rule relies on it).
+- **`CLAUDE_CONFIG_DIR` moves the whole Claude folder.** Claude Code docs, `code.claude.com/docs/en/env-vars` (read
+  2026-11-03): "Override the configuration directory (default: `~/.claude`). All settings, session history, and
+  plugins are stored under this path", suggested for running several accounts side by side. That `sessions\` and
+  `projects\` follow it: not verified (no live test). `ClaudeSource` reads only `<home>\.claude\sessions`.
+- **Not verified:** whether the System process (pid 4) reports a creation time of 0; the parser refuses a
+  `procStart` of 0 and a pid of 0 either way, so no file can tie a session to a process that never ends by those
+  values.
+
+### Claude Code cron: parser, search and fire times
+
+Checked 2026-11-03 between 21:20 and 21:55. Reads only: Claude Code's binary and
+Windows zone data; no setting, zone or clock changed.
+
+- **Claude Code's own cron code.** Read in `C:\Users\haika\.local\bin\claude.exe` (2.1.317, 338,187,936 bytes) by a
+  byte search for `recurringFrac` (bundled code near offset 292,466,000): field parser `F`, parser `d5`, search
+  `FYt`, next fire `Zkn` (recurring) and `W7o` (one-shot); `wRt` calls `Zkn` from `lastFiredAt ?? createdAt` or
+  `W7o` from `createdAt`. Built-in constants `jJ`: `recurringFrac` 0.5, `recurringCapMs` 1,800,000, `oneShotMaxMs`
+  90,000, `oneShotFloorMs` 0, `oneShotMinuteMod` 30, `recurringMaxAgeMs` 604,800,000, `cacheLeadMs` 15,000.
+  **Verified** (code read).
+- **Parser.** Five fields after a JS `trim` and a split on JS white space; each field a comma list matching
+  `^\*(?:\/(\d+))?$`, `^(\d+)-(\d+)(?:\/(\d+))?$` or `^\d+$`. Step 0 and a range with a > b are errors (no wrap);
+  day of week takes 7, as 0, in single values and ranges; a step on a range (`1-30/5`, open in "Cron syntax, Restart
+  Manager types and child process rules") works. For the both-day-fields rule a field counts as restricted when its
+  value set is not full, so `1-31` counts as `*` and `*/2` as restricted; vixie cron looks at a literal `*` instead.
+  **Verified** (code, and the differential check below).
+- **Search (`FYt`).** Starts at the next UTC minute after `from`; walks with JS `Date` setters on local time (next
+  month, next day, next hour, next minute); at most 527,040 steps (366 days of minutes), no time bound. Recurring jobs
+  skip the second pass of a repeated local time (its test: `setMinutes(getMinutes())` moves the time); one-shots take
+  it and walk a matching day minute by minute. A local time skipped by a change never matches. **Verified** (code,
+  differential check).
+- **Next fire.** Recurring (`Zkn`): `i` = the next run after `from`, `n` = the gap from `i` to the run after it. When
+  the raw text matches `^\*\/\d+ \* \* \* \*$` and `15,000 < n`, `n >= 300,000`, `n - 15,000 < 300,000` (only a 5
+  minute gap), the fire is `from + n - 15,000`: 285 s after the last fire or the creation, wherever that falls on the
+  clock. So "`*/5` runs 15 s early" holds only when `from` is on a 5 minute mark. Otherwise the fire is `i + min(frac
+  * 0.5 * n, 30 min)`, with `frac = parseInt(id.slice(0, 8), 16) / 2^32` (0 when NaN). One-shot (`W7o`): the run, or
+  when its local minute is divisible by 30, `max(run - frac * 90,000, createdAt)`. The tick fires when `Date.now()`
+  (whole ms) reaches the float time, and after a fire computes the next one from that tick's `Date.now()`. **Verified**
+  (code; the live fixtures 03, 06, 09, 10, 11 and the 2.1.316 live tests 3, 5, 14 match to the ms: tests in
+  `sources/cron/tests.rs`).
+- **The constants can change without a release.** The scheduler takes them from `getJitterConfig`, which reads the
+  remote flag `tengu_kairos_cron_config` (`AY(name, jJ, 60000)`) and keeps `jJ` only when the flag value fails its
+  schema: `recurringFrac` 0 to 1; `recurringCapMs`, `oneShotMaxMs`, `oneShotFloorMs` 0 to 30 min; `oneShotMinuteMod` 1
+  to 60; `recurringMaxAgeMs` 0 to 30 days; `cacheLeadMs` 0 to 60 s. So a recurring job is never more than 30 minutes
+  late, whatever the flag holds. What the flag holds today: not verified (the live fires match `jJ`). **Verified**
+  (code).
+- **After a resume (inference).** The live `*/5` jobs fired first at resume start plus 285 s, and the daily and
+  one-shot jobs kept their times. That fits a restored job whose `from` is the resume time. The restore code was not
+  read: not verified.
+- **Differential check.** Those functions copied byte for byte out of `claude.exe` into a scratch `claude.js`, run in
+  Node 26.13 with `TZ` set to 10 zones (Los Angeles, Sydney, Lord Howe, Santiago, Yerevan, London, Havana, Kathmandu,
+  Casablanca, Sao Paulo), against `sources/cron.rs` built into a scratch program with the same offsets (each zone's
+  changes to the minute, taken from Node). Per zone 20,000 random parse texts and 20,000 random searches (half within
+  2 days of a change; each checks the recurring next run, the recurring fire and the one-shot fire): 0 mismatches in
+  400,000. Claude Code runs on Bun (JavaScriptCore), not Node (V8); that both engines resolve skipped and repeated
+  local times the same way (ECMAScript `UTC(t)`): not verified. The scratch files were deleted.
+- **Windows zone data.** `GetTimeZoneInformationForYear(2026)` for "Pacific Standard Time" (found with
+  `EnumDynamicTimeZoneInformation`): the rules give 2026-03-08 02:00 and 2026-11-01 02:00 local, so 10:00 UTC and
+  09:00 UTC. `SystemTimeToTzSpecificLocalTimeEx` gives -480 one ms before and -420 at the spring change, and -420 then
+  -480 at the fall change; 2006 still uses the old rule (first Sunday of April). **Verified** (tests
+  `localtime::tests`, 2026-11-03). The test laptop's zone: "Caucasus Standard Time", +240, no daylight saving.
+- **Cost of the zone calls.** PowerShell P/Invoke loops of 20,000 calls: `GetDynamicTimeZoneInformation` 0.3 us;
+  `SystemTimeToTzSpecificLocalTimeEx` 0.24 to 0.86 us within one year, about 23 us when each call names another year
+  (Windows seems to keep one year's rules: inferred). A daily job's next fire through `SystemZone::current()` took 3.8
+  ms in a debug build. **Verified** (measured 2026-11-03).
+- **Not verified.** What `GetDynamicTimeZoneInformation` returns with "Adjust for daylight saving time automatically"
+  off (expected: `TIME_ZONE_ID_UNKNOWN` and no change dates); whether a running Claude Code follows a PC zone change;
+  where Windows zone data and the IANA data Bun uses differ for a zone.
+
+### Claude Code transcripts: cron carry, resume restore and notifications
+
+Checked 2026-11-03. Claude Code 2.1.317's own code was read in
+`C:\Users\haika\.local\bin\claude.exe` (read only, a byte search for the strings named; the short names are this
+build's minified ones). The live checks use `crates/wakeshot-core/tests/fixtures/claude/live/`.
+
+- **The carry line can hold more than the live one showed.** The builder `OZn` (with `Tdn`) writes
+  `{type: "session_cron_carry", tasks, otherArmed?, wakeup?, ended?}`. `tasks` and `otherArmed` together are the
+  process's armed session jobs, each `{id, cron, prompt, createdAt, recurring, plugin?}` (schema `$cr`); `tasks` holds
+  the ones made or carried in the conversation's kept lines. `wakeup` is the pending dynamic-loop wakeup
+  `{prompt, scheduledFor, reason?, keepalive?}` (schema `Hcr`); `ended` lists ids of jobs that ended. Jobs owned by
+  a subagent (`agentId`) are left out. The live `/clear` (fixture 06) showed only `tasks: []` and `otherArmed`.
+- **A resume restores jobs from the transcript (`zi`).** For each `CronCreate` call whose result is not an error, not
+  durable and not deleted: a recurring job is restored with `lastFiredAt` set to the restore time (`Date.now()`),
+  unless it is `recurringMaxAgeMs` (7 days) old; a one-shot only if its time (`W7o` from `createdAt`) has not passed.
+  That is why the live `*/5` jobs fired at resume plus 285 s. Wakeups are re-armed (`Vi`) only for a session with a
+  job folder (`SN()`: `jobDir` or `CLAUDE_JOB_DIR`, so `bg` sessions); for terminal and SDK sessions they are not,
+  as seen live. The `bg` case: not verified live.
+- **The restore comes about 1 s after the process start.** In fixtures 09 and 10 the first fire after the resume
+  came 1104 and 1151 ms after `procStart` plus 285 s; every other live fire came 54 to 951 ms after the due time the
+  source gave (printed once from test `every_live_fire_was_due_and_every_live_line_reads`). A due time counted from
+  `procStart` is so about 1 s early, well inside the core's 2 minute margin.
+- **The scheduler tick (`de`).** A job's next fire is cached at first sight with `wRt` (`lastFiredAt ?? createdAt`)
+  and, after a recurring fire, recomputed with `Zkn(cron, now)`. A recurring job past `recurringMaxAgeMs` that is not
+  `permanent` (`Ze`) is deleted after that fire.
+- **`ScheduleWakeup`.** `stop: true` cancels every pending loop wakeup (`Uzs`) and returns `scheduledFor: 0,
+  stopped: true, cancelledWakeups: N`. A call that arms nothing (a loop 7 days old) returns `scheduledFor: 0` without
+  `stopped`. Each wakeup is a store job with `kind: "loop"`, a random id and a `cron` of the minute and hour of
+  `scheduledFor` (`M`), fired by the one-shot rule, so it fires up to 90 s early on :00 and :30 and not after
+  `scheduledFor` (plus the 1 s tick, or the end of a busy turn). No code was seen that drops an earlier pending
+  wakeup when a new one is armed.
+- **Task notifications (`Ai`).** Header fields come in the order `task-id`, `tool-use-id`, `task-type`,
+  `output-file`, `status`, `summary`, one per line, then the body. Tasks a dead process left get one notification
+  each, or past a count one batch notification with several `<task-id>` lines and one `<status>` (`stopped` or
+  `failed`). Status values written in the code: `completed`, `failed`, `killed`, `stopped`. Claude Code's own text
+  about such a task: "It may have been stopped (via the UI, Monitor timeout, or agent teardown: these leave no
+  transcript marker)". That a Monitor timeout writes no notification: not verified live.
+- **The live transcripts read cleanly.** All 14 give no format problem (test `no_live_transcript_line_is_a_problem`).
+  The 6 `CronList` answers in them name next fires within 2 ms of the source's due times (test
+  `every_live_cron_list_agrees`).
+- **A carried job's next fire follows from its creation alone.** A recurring fire comes `min(frac * 0.5 * gap,
+  30 min)` after its cron run, so the first fire after a time t is on the chain of fires that starts 30 minutes
+  before t. Fixture 06 `.2` read alone gives 14:22:28.955 UTC; the job fired 282 ms later. A `*/5` job's chain hangs
+  on its real fire times, so for it the guess is off by up to one 285 s step (not tested live).
+
+### Claude Code task stops, Monitor timeouts and fire lines
+
+Checked 2026-11-04. Read in Claude Code 2.1.317's bundled code (`C:\Users\haika\.local\bin\claude.exe`, read only, a
+byte search with context; minified names from that build only). None of it was run live here.
+
+- **`TaskStop`** (aliases `KillShell`, `KillBash`) takes `task_id`, else `shell_id`, and returns `{message, task_id,
+  task_type, command}` (`command` optional); a failed check is a tool error. Its stop path (`ILe`) marks a shell
+  `notified` and sends only an SDK stream event, so no `<task-notification>` reaches the transcript. Claude Code's own
+  resume reader (`hrn`) takes a `TaskStop`/`KillShell`/`KillBash` result with string `task_id` and `task_type` as the
+  stop. Verified in code.
+- **Monitor timeout**: the shell Monitor arms `setTimeout(timeoutMs)` after its task starts and before it returns
+  `{taskId, timeoutMs: persistent ? 0 : timeoutMs, persistent}`. At the timeout it queues one event notification (body
+  `<event>...</event>`, no `<status>`) and kills the task. Verified in code. The timeout fires a few ms before the
+  result line's time plus `timeoutMs`, so that sum is never early.
+- **Stop from the UI** (`tUr`): queues `<status>killed</status>` with `passive: true` and priority `next`. When it is
+  written to the transcript: not verified.
+- **Notification header**: `Dwe` is a first line `[SYSTEM NOTIFICATION - NOT USER INPUT]`, three more lines and a blank
+  line; `RJr` is a variant with the same first line, and one path wraps `Dwe` in `<system-reminder>`. Claude Code's own
+  reader (`qi`, `Xi`) strips `Dwe` and splits joined notices by `joinedNoticeLengths` (UTF-16 lengths), each after a
+  blank line; without the lengths it reads the rest as one notice. Verified in code; never seen in a transcript.
+- **Fire line** (`Dnr`): `{type, subtype, content, isMeta, timestamp, uuid, taskId, cron, prompt}` plus `taskKind`,
+  `cronKind`, `noOpStreak`, `streakStartedAt`, `foldedUuids` when set. Nothing marks a job's last fire at 7 days.
+  Verified in code.
+- **Latest fire under any flag value**: `ClaudeScheduler::latest_recurring_ms` (frac 1, cap 30 minutes, lead 0, and
+  `from + 5 min` for a `*/5` job). The unit test `a_computed_recurring_time_covers_every_flag_value` checks five crons
+  against 60 flag settings (frac 0 to 1, cap 0 to 30 minutes, lead 0 to 60 s): every real fire falls in the core's
+  window of one of the two reported times.
+
+### Claude Code's UI stop notice in the transcript
+
+Checked 2026-11-04. Read in Claude Code 2.1.317's bundled code (`C:\Users\haika\.local\bin\claude.exe`, read only, a
+byte search with context; minified names and byte offsets from that build only). Not run live here.
+
+- **The UI stop queues its notice through the logged enqueue.** The stop path (`ILe`, near offset 302,206,558) calls
+  `tUr` for a shell or shell Monitor (`Td(w)`) owned by the main agent when the stop has a `source` (a stop from the
+  user or the connected app) and `Ube()` is on. `Ube()` is `k("tengu_rosy_donut", true)` (offset 293,636,218): a
+  remote flag, on by default. `tUr` (offset 301,313,178) builds `Ai({taskId, toolUseId, outputFile, status: "killed",
+  summary})` and calls `dl` with `passive: true`, priority `next`. In that build `dl` is
+  `(...e) => Pg().enqueuePendingNotification(...e)` (offset 293,970,042), and the queue's
+  `enqueuePendingNotification` is `vr` (export list near offset 293,967,544). Verified in code.
+- **`vr` writes the line when it queues.** After its admission check (`rr`, which refuses only peer messages) it pushes
+  the item and calls `s("enqueue", $fe(pi))` unless the item is `unlogged`; `tUr` does not set `unlogged`. `passive`
+  changes only delivery. `$fe` gives the value text for a string value that is not a prompt under screening. `s`
+  (inside `I3o`, offset 293,948,812) builds `{type: "queue-operation", operation, timestamp, sessionId, content}` and
+  hands it to the default recorder (`Pgo`), which records it unless the session is diskless. Verified in code.
+- **Two ways the line may not come at once** (not verified): `$r` lets a hook set in `lSn` take the enqueue over and run
+  it later; what sets that hook was not traced. With `tengu_rosy_donut` off, `tUr` is not called. How soon the
+  recorder's write reaches the disk was not timed.
+- **The same line shape is live for other ends.** Every task notification in the live fixtures has its `enqueue` line
+  first, with the whole notice as `content`: `01-bg-shell` line 5 (`completed`, user line 7), `02-monitor` lines 6, 12,
+  29 (`failed`, `failed`, `completed`) and the events at 21 and 25 (no `<status>`), `08-sdk-bg-shell` line 6,
+  `12-sdk-close-during-shell` line 6, `13-sdk-resume-kill` line 16 (`stopped`). Verified (fixtures, read by
+  `the_live_open_tasks` and `the_live_monitors_hold_until_their_timeout`). In `07-subagent` a notice had an `enqueue`
+  (21), then a `remove` (27) and an `attachment` (28).
+- **Every `<status>` notice found is queued after its task ended**: the UI stop (`tUr`, after the kill), the subagent
+  stop (`eLo`), the failed-task helpers (`Y`, near offset 304,059,851; `iqe`, near 319,923,901). The check-in notice
+  for a quiet shell (near offset 298,210,086) and Monitor events (`Aq`) have no `<status>`. Code-read, not a full
+  search of every caller.
+
+### Claude Code live end to end: task stops, the config folder and timing
+
+2026-11-04 01:27 to 01:53, Claude Code 2.1.317, Haiku test sessions in scratch folders, the real watch thread in the
+harness `crates/wakeshot-windows/examples/agent-watch.rs` on the dry-run data folder. Full table:
+`docs/research/claude-code-signals.md`, "End to end (2026-11-04)".
+
+- **Every Claude case of the live tests table matched the rules** (1 to 12, 14, resume, `/clear` during a loop, the
+  SDK path): seen live, from the harness lines and the `--raw` line kinds. Resume: a `*/5` job came back at
+  `procStart` plus 285 s, its fired wakeup did not; `procStart` is the right divider.
+- **`TaskStop`, a Monitor timeout and a stop from the UI end tasks as rule 3 says** (seen live on the SDK path).
+  `TaskStop` writes no notification. A Monitor timeout writes one `<event>` notice with no `<status>`. A stop from
+  the terminal tasks panel, or an SDK `stop_task` control request, writes a `queue-operation` `enqueue` with
+  `<status>killed</status>` at the stop, before any user line.
+- **`CLAUDE_CONFIG_DIR` moves `sessions\`** (live: a session started with it wrote under that folder only; code:
+  `CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude")`). `projects\` moves with it by the code (`join($e(),
+  "projects")`); not seen live, the test session stopped at onboarding. `sources::claude::claude_folder` picks the
+  folder the same way; the tray must use it. A value set only in one shell is not visible to the tray.
+- **Timing**: a status change was read 7 to 189 ms after its `statusUpdatedAt` (median 29 ms, 170 writes) and posted
+  at once. A transcript line with no status write is read at the next sessions folder change or the 30 s tick (seen:
+  6.8 s, 12 s, 22 s).
+- **Hold files**: `wakeshot --dry-run run -- ping` showed `Run alive=Yes` 115 ms after start and went at the child's
+  end; a script hold file with a dead pid showed `Gone` in 24 ms, its reason never printed. With the whole data
+  folder missing when the watch thread started, the first hold showed only at the next tick (19.6 s): the thread
+  retries a missing root only on the tick (a missing `holds\` alone is picked up at once). The tray makes its data
+  folder before the thread starts, so only a harness sees this (not verified in the tray).
+- **`wakeshot run` and the console, in a pseudo console** (ConPTY, the host Windows Terminal uses; not a classic
+  conhost window): Ctrl+C reached the child (`ping` ended with `0xC000013A`), `wakeshot` returned the same code and
+  removed its hold 0.34 s after the key. Ctrl+Break (`GenerateConsoleCtrlEvent`): `ping` printed its statistics and
+  went on, `wakeshot` stayed and kept the hold until the child ended, then exited 0 and removed it. Closing the
+  pseudo console while it waited: `wakeshot` and `ping` ended and the hold file was gone 12 ms later. The CLI log has
+  no exit line for that run, so `wakeshot` likely ended right after it removed the file (inferred, not verified); had
+  it ended first, the hold would show `Gone`. Not run: a key press by a person, a classic conhost window.
+- **Harness Ctrl+C**: stopped the thread cleanly (`stop` returned `true`, exit 0).
+
+### Restart Manager: who holds a lock file
+
+2026-11-06, the `lockowner.rs` tests on the test laptop (Windows 11 Pro 10.0.26300), run
+from an elevated agent shell.
+
+- **Restart Manager names the process that holds a file the way Codex 0.167.0 holds its thread lock files**
+  (`OpenOptions` read, write, create, no truncate, then `File::try_lock`, an exclusive lock): one `RmStartSession`,
+  `RmRegisterResources` with that one file, `RmGetList` gave exactly that process, for this process and for a child
+  process; once the file is closed, an empty list. **Verified** (tests
+  `a_file_this_process_holds_names_this_process_and_stays_locked`,
+  `another_process_holding_the_file_is_named_with_its_start`).
+- **Its start time is the one Windows gives elsewhere.** `RM_UNIQUE_PROCESS.ProcessStartTime` equals the
+  `GetProcessTimes` creation time (`process::current`, `process::start_of`) and the start in the system process list
+  (`SystemLiveness::list`), so a holder can be checked by pid and start and matched with its image. **Verified**
+  (same tests).
+- **Asking does not disturb the holder.** After the call the file is still locked (a second handle's `try_lock` gives
+  `WouldBlock`) and the holder still writes to it. **Verified** (first test). How Restart Manager finds the holders
+  inside: not checked.
+- **A missing file has no holders.** `RmRegisterResources` takes a path that does not exist, and `RmGetList` then
+  gives an empty list, not an error. **Verified** (test `a_file_nobody_holds_or_that_is_missing_has_no_holders`).
+- **No privilege is needed.** The child's file gives the same holder under an impersonated token of the same user with
+  every privilege removed (`CreateRestrictedToken`, `DISABLE_MAX_PRIVILEGE`), so `SeDebugPrivilege` is not what
+  answers. **Verified** for privileges; under a Medium (unelevated) token: not verified.
+- **Sessions do not pile up.** 200 calls in a row, each ending its session, all answered. **Verified** (test
+  `many_calls_leave_no_session_behind`). The size of Restart Manager's session limit: not verified.
+- Whether it sees a real `codex.exe` holding its lock: not verified here.
+
+### Copilot in VS Code
+
+2026-11-06. Details, paths and line numbers: `docs/research/copilot-vscode-signals.md`.
+Source: `microsoft/vscode` tag 1.145.1 read as data; the laptop runs the same build (commit `6bab64e2d1`).
+
+- **Copilot Chat moved into the VS Code repo.** `microsoft/vscode-copilot-chat` is archived (last release v0.43.0,
+  2026-04-07); the extension is `extensions/copilot` (0.73.0) and ships built in. Checked with `gh api` and the
+  install folder.
+- **The default "Local" harness saves each chat as an operation log**,
+  `%APPDATA%\Code\User\workspaceStorage\<id>\chatSessions\<session id>.jsonl`, with each request's raw `modelState`
+  (`0` Pending, `4` NeedsInput, `1`/`2`/`3` done). Written about every 60 s, on window blur and on close, not on each
+  change; compaction after 1024 lines rewrites the file in place. **Verified** in the source; never seen live.
+- **The "Copilot" harness (agent host) and Background sessions write the Copilot CLI's files** in `~\.copilot\
+  session-state\`. The agent host runs `copilot-runtime.exe --stdio`, not `copilot.exe`. **Verified** in the source
+  and in the process list (the runtime was running with no chat in progress).
+- **Copilot CLI lock names seen on the laptop** (names only): `session-state\<id>\inuse.9260.lock` (5 bytes) and
+  `inuse.9260.hold` (0 bytes) with no `events.jsonl` next to them, pid 9260 not running. Which file is held open: not
+  verified.
+- **VS Code does not keep a Modern Standby PC awake for Copilot.** The extension takes Electron's
+  `prevent-app-suspension` per model call (released 2 minutes after the last one), and Chromium `main` maps that to
+  `PowerRequestExecutionRequired` only (`power_save_blocker_win.cc:106-110`, read 2026-11-06). **Verified** in the
+  source; not tested.
+- **`%APPDATA%\Code\code.lock` holds the VS Code main pid** as text, deleted at a clean exit. **Verified** in the
+  source (`src/vs/code/electron-main/main.ts:143,154`) and seen on the laptop (5 bytes).
+- **Copilot Free includes agent mode** in VS Code (GitHub Docs "Copilot plans", read 2026-11-06).
+
+### Cursor hooks from a local plugin
+
+2026-11-06. How checked: Cursor CLI `2026.11.05-86047df` (`agent-cli-package.zip` for
+Windows x64) and Cursor editor `3.29.9` (Linux `.deb`, commit `306d153d51d7`; app JS shared with Windows) downloaded
+and unpacked as data in a scratch folder, read with a text search over the minified JS, then deleted.
+Nothing run or installed. Docs `cursor.com/docs/agent/hooks`, `/docs/plugins`, `/docs/reference/plugins`, read the
+same day. Design: `agent-hooks.md`.
+
+- **The CLI loads local plugins** from `<home>\.cursor\plugins\local\<name>\`, skipping dot names and links that
+  point outside the folder (`index.js`, `loadUserLocalPlugins`). **Verified** in code; `<home>` is `userHomeDir` or
+  `HOME`, which value the CLI passes: not verified.
+- **The editor fires plugin `beforeSubmitPrompt` and `stop`**: `hasHookForStep` counts plugin hooks
+  (`workbench.desktop.main.js`). **Verified** in code.
+- **The CLI's interactive loop does not fire plugin-only `beforeSubmitPrompt` or `stop`**: it calls them only when
+  the user's or the project's `hooks.json` has that event (`3026.index.js`). `sessionStart` and `sessionEnd` count
+  plugins. **Verified** in code; not run.
+- **Missing command: exit 127; any exit but 2 fails open; empty stdout is a failed hook; default timeout 60 s**
+  (CLI `index.js`; the editor's `extensionHostProcess.js` has the same exit 127 code). **Verified** in code.
+- **Results merge per field; `continue` is false if any hook says false** (CLI `index.js`, the merge function), so a
+  hook that prints `{}` changes nothing. **Verified** in code.
+- **The CLI hands the payload through a temp file** `%TEMP%\cursor-hooks-<random>\payload.json` read by PowerShell
+  with UTF-8 set, written with `wx` and deleted after the run (`finally`; the deletion read again by a security
+  review); its other form puts the payload, prompt and `user_email` included, in the
+  PowerShell command line (`619.index.js`, `executeCommandScript`). **Verified** in code. The editor's form: not
+  verified; it must be read before a Cursor build, since a command line lands in process audit logs.
+- **Only a single-quoted command path works in both PowerShell forms** (`& <command>` and `$input | <command>`).
+  Read in code; not run.
+
+### Loading SQLite, `ImageSince` matches and folder listing times
+
+2026-11-06. Run elevated (High), as every agent session on the test laptop.
+
+- **No `Cargo` change for `sqlite.rs`.** In `windows` 0.62.2, `LoadLibraryExW`, `GetProcAddress` and
+  `LOAD_LIBRARY_SEARCH_SYSTEM32` are in `Win32::System::LibraryLoader` (feature `Win32_System_LibraryLoader`) and
+  `FreeLibrary` is in `Win32::Foundation`; `wakeshot-windows` has both features on. Checked: the crate source in the
+  cargo registry (`src/Windows/Win32/System/LibraryLoader/mod.rs` lines 233, 259, 434; `Foundation/mod.rs` line 17).
+  The process list behind `ImageSince` (`NtQuerySystemInformation`) and the exit wait rights were already in use.
+- **`ImageSince` finds a real process by image name and start** through `SystemLiveness::list`: the test process,
+  with its image name in upper case, counts for a row time at its start, and not for one 60 s before it (test
+  `image_since_finds_a_real_process_by_its_image_and_start`). At Medium: not run.
+- **An `ImageSince` match's exit is posted at once**: a child ended, `Sources` with `Gone` came 4 ms later, with no
+  tick (thread test `an_image_since_session_is_posted_gone_at_once_when_its_process_exits`, one run).
+- **A held-back query run comes on time**: two `-wal` writes right after a run gave one more run, 1001 ms after the
+  first, with no tick (thread test `a_query_held_back_by_the_limit_runs_without_a_tick`, one run).
+- **A folder listing gives a file's size and write time without opening it**: a file held open with no sharing was
+  listed, skipped as old, and never opened (an open would have failed and shown as a retry and a log line; test
+  `recent_reads_only_recent_files_at_start_and_never_opens_an_old_one`).
+- **Not verified:** that NTFS keeps a listing's write time current for a file another process holds open for
+  writing (it is said to update the folder entry only at close or later). `FindNewest` and `Recent` decide by the
+  listing's times, so a stale time could delay a switch or a read until the folder entry updates; `Recent` also keeps a
+  hash of the bytes, so a read that finds the same bytes feeds nothing. The live tests of Codex and VS Code see it
+  with real writers.
+
+### Live harness: agents installed, logins, a pseudo console driver
+
+2026-11-06. Everything ran at Medium (a `.cmd` opened with `explorer.exe`; each log has `whoami /groups` "Medium
+Mandatory Level").
+
+- **Codex CLI reuses the desktop app's login.** `codex login status` (npm `@openai/codex` 0.167.0): "Logged in using
+  ChatGPT"; `codex exec` then answered. Both use `~/.codex`, which the app made; `auth.json` was never opened.
+  **Verified** (run).
+- **Copilot CLI uses `gh`'s login with no token passed.** GitHub docs list `gh auth token` as the last fallback after
+  `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN` and the keychain; a `copilot -p` run answered and its process
+  tree held `gh.exe`. `gh` is logged in as `HaikAsatryan` with a `gho_` token, a type the docs accept. **Verified**
+  (run, docs).
+- **VS Code's `copilot` on PATH is a launcher** (`copilot-shim\copilot.exe`, "vscode-copilot-launcher"): it runs a
+  `copilot` it finds on PATH, else offers to install the Copilot MSI. With the npm CLI installed, `copilot --version`
+  through it printed 1.0.106. **Verified** (strings, run).
+- **VS Code is signed in to Copilot Free**: its Copilot Chat log says "Logged in as HaikAsatryan" and "copilot token
+  sku: free_limited_copilot" (status lines only, found by a word search). **Verified** (log).
+- **`code chat "<prompt>"` starts an agent mode turn** from the command line: it asks for workspace trust, opens a new
+  chat with mode `agent` by default and calls `acceptInput` with the prompt (`chat.contribution.ts` lines 107-137,
+  `chatActions.ts` 383-398, tag 1.145.1). **Verified** in code; not run (it would use the tester's open VS Code window).
+- **One-shot modes write the same files as the TUI**: `codex exec` a `sessions\YYYY\MM\DD\rollout-*.jsonl`,
+  `copilot -p` a `session-state\<id>\events.jsonl`, `opencode run` rows in the same `opencode.db`. **Verified** by
+  file names and sizes after each run; contents not read.
+- **OpenCode 2.2.5 finds a local Ollama by itself** (`plugin/provider/ollama.ts`, polled every 30 s) and shows its
+  models with no login; a project `opencode.jsonc` with `"model"` and `"permissions"` (`action`, `resource`,
+  `effect`) picks the model and makes every tool ask. Its TUI interrupts a turn on two Esc presses about 0.3 s apart
+  (one did nothing); Esc twice at a permission prompt declines the call. `/exit` ends the TUI; its background service
+  stays until `opencode service stop`. **Verified** (run).
+- **Ollama 0.40.15 runs on the Radeon 890M** through ROCm (gfx1150) and sets a 32768 default context from 37.7 GiB of
+  shared memory; `qwen3.5:2b` thinks for minutes inside OpenCode (6000 hidden tokens, no tool call), so the harness
+  uses `qwen3:4b-instruct` (no thinking): an approval prompt 24 s after Enter, a full turn in 30 s. Ollama holds no
+  power request while idle (`powercfg /requests`). **Verified** (log, run).
+- **The Antigravity IDE 2.6.0 installer is per user**: Inno Setup 6.4, outer manifest `asInvoker`, setup header
+  "Antigravity IDE (User)" with `{userpf}\Antigravity IDE`, read as data with Python's `lzma`; its log said
+  "Administrative install mode: No". After a silent install it starts the IDE, which downloads `~\.gemini\bin\agy.exe`
+  and runs it as `--hub`. **Verified** (header, log, run).
+- **A folder listing showed a stale size for a file another process was appending to**: `Get-ChildItem` gave the
+  driver's open `log.txt` 0 bytes and its creation time, 6 s after the driver had written lines that a read then
+  returned. One sighting, not measured further. Bears on the listing time point marked "Not verified" in
+  "Loading SQLite, `ImageSince` matches and folder listing times".
+- **Pseudo console facts for drivers**: ConPTY asks its terminal for win32-input-mode (`CSI ?9001h`) and focus events
+  (`CSI ?1004h`) at start; a driver that ignores both gets plain VT keys through. TUIs probed the kitty keyboard
+  protocol (`CSI ?u`), XTVERSION, pixel sizes and OSC colors; with no kitty reply, OpenCode, Codex and Copilot still
+  took plain Enter (`\r`) and Esc (`\x1b`). **Verified** (driver logs).
+- **Copilot CLI's in-use lock is named after the inner `copilot.exe`**: a TUI started through VS Code's shim left
+  `session-state\<id>\inuse.14796.lock` after a crash, and 14796 was the inner `copilot.exe` (shim `copilot.exe` >
+  `cmd.exe` > `node.exe` > `copilot.exe`), not the shim. A crashed Codex TUI left `thread-writer-locks\<id>.lock`
+  with no rollout (no prompt was sent). `agent-watch --source copilot` and `--source codex` showed both as idle and
+  `Gone`. **Verified** (driver tree, file names, harness run).
+
+### VS Code chat logs: line ends, model state and data folders
+
+2026-11-06. How checked: files of `microsoft/vscode` tag 1.145.1 fetched one by one with `gh api` and read as data in a
+scratch folder; `gh search code` in `microsoft/vscode` and `microsoft/vscode-docs`.
+Nothing was run and no real chat file was opened. Details: `docs/research/copilot-vscode-signals.md`, "Built".
+
+- **Every log entry ends with `\n`** (`objectMutationLog.ts:339,419,448`), so a read during a write sees an unfinished
+  last line, never a broken line in the middle. **Verified** in the source; real write timing not seen.
+- **`modelState` is set whole**, never by its parts (`chatSessionOperationLog.ts:159`, a primitive); a Set to
+  undefined is written with no `v`. **Verified** in the source.
+- **A retry from an error card keeps the request's first `timestamp`** while the request goes back to Pending
+  (`chatModel.ts:1945-1961`, `chatServiceImpl.ts:1471,2029`). So a send time alone can miss a retried request in a
+  later VS Code run; the source counts such a request while any `Code.exe` runs. **Verified** in the source; how often
+  users retry an old error: not verified.
+- **VS Code Insiders**: data folder `Code - Insiders` (`vscode-docs`, `docs/configure/profiles.md`), image
+  `Code - Insiders.exe` (`test/sanity/src/context.ts:1005,1242`). **Verified** in docs and code; no Insiders install
+  seen.
+- **Portable mode is invisible to other programs**: VS Code sets `VSCODE_PORTABLE` in its own process from a `data`
+  folder next to the install (`src/bootstrap-node.ts:205-244`). **Verified** in the source.
+- **Data folder order**: `VSCODE_PORTABLE`, then `VSCODE_APPDATA`, then `--user-data-dir`, then `APPDATA` (else
+  `%USERPROFILE%\AppData\Roaming`), each joined with the product's folder; an empty value is unset
+  (`src/vs/platform/environment/node/userDataPath.ts:43-105`). **Verified** in the source.
+- **serde_json's nesting limit** (128 levels) would make a log with deeper JSON unreadable. Whether real chat data
+  nests that deep: not verified.
+
+### OpenCode's SQLite database read only, in WAL mode
+
+2026-11-06. Source read as data: SQLite 3.54.1's amalgamation (`sqlite3/sqlite3.c` in the crate `libsqlite3-sys`
+0.39.1, a scratch copy), `@opencode/cli` 2.2.5. Tests: `wakeshot-windows` `sqlite::tests`, on temp WAL databases a
+`winsqlite3` writer makes, with the test laptop's `winsqlite3.dll` 3.53.4.
+
+- **A reader opens the `-wal` with `CREATE`**: `sqlite3WalOpen` passes `READWRITE | CREATE | WAL` to the VFS
+  `xOpen` and marks the WAL read only only when the open came back read only (`sqlite3.c:68629-68632`). The `-shm`
+  is opened later, at the first read, by `winOpenSharedMemory` through `winHandleOpen` directly, not through `xOpen`
+  (`sqlite3.c:52559-52660`). **Verified** in the 3.54.1 source; 3.53.4's code not read.
+- **A VFS shim stops both files**: a shim whose `xOpen` drops `READWRITE` and `CREATE` (adds `READONLY`) for the
+  main database and the `-wal` makes a read of a closed WAL database fail with no `-wal` or `-shm` made, while a plain
+  `SQLITE_OPEN_READONLY` open of the same file made both and left them. **Verified** by test
+  (`a_read_runs_only_while_the_agent_has_the_database_open_and_creates_no_file`).
+- **A read-only `-wal` cannot checkpoint**: `sqlite3WalCheckpoint` returns `SQLITE_READONLY` when the WAL is read
+  only (`sqlite3.c:71284`), and `sqlite3WalClose` deletes the `-wal` and `-shm` only after a checkpoint that succeeded
+  (`sqlite3.c:69461-69520`). **Verified** in the 3.54.1 source; not tested. This alone did not keep the reader from
+  deleting (a review found it): see the empty-database line below.
+- **Read-only WAL reads need 3.22.0**: sqlite.org/wal.html, "Read-Only Databases": "This constraint was relaxed
+  beginning with SQLite version 3.22.0 (2018-01-22)". **Verified** in the docs (fetched 2026-11-06).
+- **The exports**: `winsqlite3.dll` 3.53.4 here exports `sqlite3_vfs_find`, `sqlite3_vfs_register`,
+  `sqlite3_libversion_number` and the nine statement calls the reader uses; its default VFS is version 3 or later.
+  **Verified** by test (`the_dll_loads_with_its_shim_and_a_missing_one_gives_no_sqlite`). On ARM64: builds, not run.
+- **A read never waits for a writer**: while a writer held `BEGIN IMMEDIATE` with an uncommitted insert, the read gave
+  the last committed rows, not `SQLITE_BUSY` (a wait on a lock held for the whole read would have run out the 100 ms
+  busy timeout and ended busy), and the commit then worked. **Verified** by test.
+- **A finished read does not hold back a checkpoint**: after 50 writes and a read, the writer's
+  `wal_checkpoint(TRUNCATE)` gave `0, 0, 0` and the `-wal` was 0 bytes. With one statement left mid-read it gave busy
+  `1` and 114 frames left, so the test sees a held reader. **Verified** by test (the second by a change made on
+  purpose and taken back).
+- **A read-only connection fails a write**: `DELETE` and `CREATE TABLE` on it end in a step error and change
+  nothing. **Verified** by test.
+- **OpenCode ids and times**: `ses_` or `sch_` plus 26 letters and digits (`schema/src/identifier.ts`,
+  `session-id.ts`, `schedule.ts:8-12`); event times from `Clock.currentTimeMillis` (`core/src/bus.ts:524`), so
+  `time_busy` and the schedule times are wall ms. **Verified** in the 2.2.5 source.
+
+Fixes after a review, 2026-11-06:
+
+- **An empty database file loses its `-wal` to a reader**: `pagerOpenWalIfPresent` deletes the `-wal` through the
+  connection's VFS when the db has 0 pages (`sqlite3.c:62352+`). With the shim's `xDelete` refusing, a read of a
+  0-byte db with a `-wal` and `-shm` fails as `prepare` and the `-wal` stays; with the default `xDelete` the read
+  removed it. **Verified** in the 3.54.1 source and by test (`an_empty_database_keeps_its_wal`, the second by a
+  change made on purpose and taken back).
+- **No checkpoint on close**: `SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE` (1006) sets `SQLITE_NoCkptOnClose`, and the pager
+  then passes no buffer to `sqlite3WalClose`, which skips the exclusive lock and the checkpoint
+  (`sqlite3.c:63202`). `winsqlite3.dll` 3.53.4 exports `sqlite3_db_config` (a C variadic call) and reads the setting
+  back as 1. **Verified** in the source and by test (`the_reader_skips_the_checkpoint_on_close`); the lock not
+  being taken: not measured.
+- **Across processes**: with a writer in a child process, a read gave its committed row and changed neither the db
+  nor the `-wal` (bytes and write time). After the child was killed, both files stayed; two reads still gave the
+  committed rows from the `-wal` and again changed only the `-shm` (no other file in the folder). After a clean close
+  by the child, both files were gone and a read made none. **Verified** by test
+  (`a_reader_beside_a_writer_in_another_process_and_after_it_died_writes_only_the_shm`,
+  `an_agent_in_another_process_that_closes_takes_its_files_and_a_read_then_makes_none`).
+- **SQLite takes a string literal as a table name** where only a name fits (`SELECT * FROM 'account'`), so the
+  table test reads literals after `FROM`, `JOIN` and `IN` as names. **Verified** by test with `winsqlite3` 3.53.4
+  (`sqlite_takes_a_literal_where_only_a_table_name_fits`). The other scan holes are the review's, checked by it with
+  `scan-holes.ps1`.
+
+### Codex CLI live test
+
+2026-11-06, Codex CLI 0.167.0 (npm), model `gpt-6-luna` at `low` effort, 7
+one-line prompts, every session at Medium in a pseudo console. Detail: `research/other-agent-signals.md`, "Codex live
+test (2026-11-06)".
+
+- **The lock file's holder is the session's own `codex.exe`**: Restart Manager gave the pid and start time of the
+  TUI's (or `codex exec`'s) `codex.exe`, the same the process list gives. **Verified** live (two TUIs, one `exec`;
+  a PowerShell `RmGetList` script and the watch thread at Medium agreed).
+- **A crash leaves the lock file with no holder, and the next start deletes it**: killed by pid mid-turn, posted
+  `Gone` 115 ms later; a TUI start and an `exec` start each deleted the stale lock first. **Verified** live. So the
+  Restart Manager rule does not outlive its session; the fallback (any `codex.exe`, when Restart Manager fails) still
+  can, since the desktop app keeps `codex.exe` running. **Verified** (the app's two `codex.exe` ran all through).
+- **Rollout appends give change notices at once**: a .NET `FileSystemWatcher` with the watch thread's filter saw each
+  append to the open rollout within milliseconds, while a folder listing kept the file's creation time as its last
+  write time. **Verified** live. Before the fix the source's turns reached a post only at the 30 s tick (1.3 to 29 s
+  late, and a 12 s turn never); after it 0.3 s (start) and 17 ms (end). **Verified** live.
+- **A backtrack writes `..._<rollout id>.jsonl` and remakes the lock file**: twice in 0.8 s; the source ends on the
+  new file. **Verified** live.
+- **An approval wait writes nothing; Esc writes `turn_aborted` (`interrupted`)**: **verified** live. A unified exec
+  command goes on as a background terminal after Esc; the rollout says idle meanwhile (seen once; not checked further).
+- **The CLI's TUI did not start the app-server daemon** in these runs, although `daemon_auto_start` is on (`codex
+  features list`). Why the live harness setup saw two more `codex.exe` once is **not verified**. Whether the desktop
+  app's own threads write the same files is **not tested live** (the app cannot be driven from the command line).
+
+### Command lines, DLL search, hard links and the `-shm` loop
+
+2026-11-06, Windows 11 build 26300, the test runner elevated (High) unless
+said. Each fact is a test in the repo.
+
+- **`NtQueryInformationProcess(ProcessCommandLineInformation)` works with `PROCESS_QUERY_LIMITED_INFORMATION`
+  alone**: a handle with only that right read a child's whole command line
+  (`process::tests::the_command_line_reads_with_query_limited_rights_alone`). **Verified** for a child of the same
+  token. A Medium caller on a High process: **not verified** (the hook reads its own parent, which has its token).
+- **The command line holds a raw here-string as typed**, quotes and non-ASCII (Armenian, Russian) included, and the
+  search finds the payload's key in it (`command_line_contains_searches_that_very_process`, the arguments put on the
+  line with `raw_arg`). **Verified**.
+- **`SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32)` keeps a DLL in the working folder out**: a copy of
+  `version.dll` under a new name in the working folder loaded by name without it and failed with it
+  (`harden_dll_search_keeps_a_dll_in_the_working_folder_out`, each case in a fresh child). **Verified**.
+- **`CreateFileW` with `CREATE_NEW` on a name that is a hard link fails with `ERROR_FILE_EXISTS` and writes nothing**;
+  with `CREATE_ALWAYS` the link's target got the new bytes
+  (`store::tests::a_planted_hard_link_at_a_temp_name_is_never_written_through`, the old flag put back on purpose for
+  one run). **Verified** on NTFS in `%TEMP%`.
+- **The `-shm` loop a review found, with real folder notices**: a fake read that rewrites the
+  `-shm` each time, as SQLite does on a crash leftover, ran 3 times in 3 s under the old notice rule and once under
+  the new one (`watch::thread::tests::a_query_that_rewrites_the_shm_runs_once_not_in_a_loop`). **Verified**.
+- **`current_above_medium` is false under Explorer's token**: the nested run under Explorer (`Medium (S-1-16-8192)`,
+  elevation type Limited) reported `above Medium false`; the elevated runner true
+  (`real_spawn_outside_tree_works_with_explorers_token`, run with `--ignored`). **Verified**.
+- **`Cargo.lock` lists each package's dependencies but no `windows` features**: the `wakeshot-cli` entry names
+  `embed-resource`, `proptest`, `wakeshot-core`, `wakeshot-windows`, `windows` (read); with the feature
+  `Wdk_System_Threading` added every `--locked` build passed. So a feature needs no lock change, and a new crate line
+  in `wakeshot-cli` (for example `serde_json`) would need one. **Verified**.
+
+### Cursor hook payload form
+
+2026-11-06, the first live test of the hook design, asked for by a security review. How checked: the installed Cursor
+editor `3.27.12` (`%LocalAppData%\Programs\cursor`, `package.json`) and Cursor CLI `2026.11.05-86047df`
+(`%LocalAppData%\cursor-agent\versions\`) read as data with a text search over the minified JS. Nothing run, no plugin
+added.
+
+- **The editor runs plugin hooks from its renderer, and on Windows always through a temp file.**
+  `_executeCommandHookScript` in `out\vs\workbench\workbench.desktop.main.js` and in `workbench.glass.main.js` sets
+  the mode to the constant `"windows_temp_file"` when the backend OS is Windows (`"stdin"` otherwise), and passes the
+  payload as its own argument to `shellExecService.executeHookDirect(command, cwd, isWindows, env, timeoutMs,
+  payload)`, never inside the command. No setting or experiment flag on this path. **Verified** in code.
+- **The extension host writes that payload to a file and pipes it.** `$executeHookDirect` in
+  `out\vs\workbench\api\node\extensionHostProcess.js`: on Windows with a payload it writes
+  `%TEMP%\cursor-hook-payload-<pid>-<ms>-<hex>.json` (`writeFile`, UTF-8, no `wx` flag), runs `powershell -NoProfile
+  -NonInteractive -ExecutionPolicy Bypass -c "<UTF-8 setup>; Get-Content -LiteralPath '<file>' -Raw -Encoding UTF8 |
+  & { $input | <command> }"` and deletes the file in `finally`. The command line holds the file's path, not the
+  payload. **Verified** in code. The hook's parent is that PowerShell, and its parent the extension host
+  (`Cursor.exe`): read in code, not run.
+- **The agent host daemon defaults to the command line, but never for plugin hooks.** In
+  `extensions\cursor-agent-host\dist\agent-host-daemon\dist\bin\daemon.cjs`, `CliHooksExecutor` gives
+  `"argv_heredoc"` (`@'<json>'@ | & <command>` through `powershell -c`, so on the command line) unless
+  `options.commandHookPayloadTransport` is `"stdin"`. It is built in one place only, `createHeadlessDiskHookExecutor`,
+  with no options, and that loads only the project's `<workspace>\.cursor\hooks.json`, and only with a
+  `.workspace-trusted` marker. The file has no `pluginHooks:` and no `.updateConfig(` call, so plugin hooks never
+  reach it; tool-step hooks there hop to the editor (`surface-hook.ts`). **Verified** in code. Note: the class
+  already reads `config.pluginHooks`, so a later version could feed plugin hooks to it; the hook's runtime check
+  (the parent's command line holds `"conversation_id"`) catches that, since the here-string holds the raw JSON.
+- **The three agent extensions build no hook command.** `cursor-agent-exec`, `cursor-local-agent-runtime` and
+  `cursor-agent-host` (`dist\main.js`) hold only the list of mode names (`stdin`, `argv_base64`, `argv_heredoc`,
+  `windows_temp_file`, `prompt`). **Verified** in code.
+- **The CLI sets the option to the temp file in every local path read.** `S6(t)` returns `"stdin"` for `true`, else
+  `"legacy"` (`index.js`); the interactive loop (`3026.index.js`), `4110.index.js` and `697.index.js` pass
+  `S6(true)`; bridge mode (`2855.index.js`) passes `useCommandHookStdinTransport: true` from its one caller; the
+  exec daemon (`8123.index.js`) takes the caller's value. `connect-pool-worker.js` calls its bridge mode without the
+  flag, so the command line there; that bundle names Linux desktop processes (`xvfb`, `xfce4-panel`) and reads a
+  worker token from a file descriptor, so it looks like Cursor's cloud sandbox worker, not a user's PC: **not
+  verified**. **Verified** in code for the rest.
+- **So the privacy Gate holds for 3.27.12 and CLI 2026.11.05-86047df**: every local path that runs a plugin hook
+  hands the payload through a temp file. The Cursor plugin may ship. The check is repeated for each Cursor version
+  Wakeshot claims (`agent-hooks.md`, "How the build checks it").
+
+### Hook install: open files, junctions, staging folders and links
+
+2026-11-06, Windows 11 build 26300, the test runner elevated (High). Each from a test in
+`crates/wakeshot-windows/src/agent_hooks.rs` on temp folders; no real `.cursor` folder was read or written.
+
+- **A file held open by a reader that shares no delete** (`FILE_SHARE_READ` only): `DeleteFileW` fails with 32
+  (sharing violation), and `MoveFileExW` of the folder that holds it fails with 5 (access denied). **Verified**:
+  `uninstall_leaves_a_file_held_open_and_says_so`.
+- **std does not report a junction as a folder**: `fs::symlink_metadata` on a `mklink /J` junction gives
+  `is_dir() == false` (`is_file()` too by std's code, which counts a name-surrogate reparse point as a link: **not
+  verified** here). So a check built on `is_dir` alone already refuses a junction; the
+  module still tests the reparse attribute, which also covers reparse points std counts as folders (cloud files:
+  **not verified**). **Verified**: with the attribute test removed, no write or delete went through a junction in
+  `a_link_anywhere_on_the_path_stops_every_write_and_delete`; with `fs::metadata` (which follows links) it did.
+- **`CreateDirectoryW` on a name that exists** fails with 183 (`ERROR_ALREADY_EXISTS`), so the staging folder's
+  "fail if it exists" holds. **Verified**: `the_add_never_fills_a_staging_folder_someone_else_made`.
+- **`MoveFileExW` without `MOVEFILE_REPLACE_EXISTING` onto a folder that exists** fails with 183. **Verified**:
+  `uninstall_renames_a_folder_it_cannot_empty`.
+- **A file link at a fixed name** (`symlink_file`, which this elevated runner may make): opened with
+  `FILE_FLAG_OPEN_REPARSE_POINT`, its metadata shows the reparse attribute, so it counts as changed and the file it
+  names is never read, written or deleted. **Verified** in the same link test. A **hard link** at a fixed name whose
+  bytes match the marker counts as Wakeshot's: the rewrite replaces the name (`write_atomic`) and the uninstall
+  deletes the name, and the file the other name shares keeps its bytes. **Verified** in the same test.
+- **The Medium rule with real tokens**: this test exe started through `process::spawn_outside_tree` from the High
+  runner ran with `current_above_medium() == Ok(false)` and added the folder; the High runner added nothing.
+  **Verified**: `a_medium_start_writes_and_an_elevated_one_does_not` (ignored by default, needs Explorer; run once).
+  Since v1 adds no hook folder at a start, the same test is `a_medium_start_removes_and_an_elevated_one_does_not`.
+
+### VS Code chat live test
+
+2026-11-06. How checked: VS Code 1.145.1 with Copilot Free on the test laptop, prompts sent
+with `code chat`, files read by `agent-watch --source vscode,copilot` and the dry-run tray at Medium and by a monitor
+that printed only kinds, paths, send times and `modelState`. VS Code source read as data (`gh api`, tag 1.145.1).
+Details: `docs/research/copilot-vscode-signals.md`, "Live test (2026-11-06)".
+
+- **New chats here default to the Copilot harness**, in folder and empty windows: `~\.copilot\session-state\<id>\`
+  with `inuse.<pid>.lock` and `.hold`, pid = `copilot-runtime.exe`. **Verified** live (three prompts). A Local chat
+  came only in a window opened after a workspace `chat.defaultToCopilotHarness: false`; New Chat keeps the current
+  chat's harness. Why the default is the Copilot harness for this user (the rollout or a remembered pick): **not
+  verified**.
+- **A Local chat file is saved on a 60 s beat per window**, and not at all while nothing changes. **Verified** live:
+  first save 44 s after a send, 34 s after an end (screen locked, so no save on blur). A 3 s turn never showed
+  Pending on disk.
+- **NeedsInput (`modelState` 4) is saved** at the first beat of a wait; the source posts `waiting` 25 ms after the
+  save. **Verified** live. 4 back to 0 after a click: **not tested**.
+- **Medium readers see an elevated VS Code**: its files read and `ImageSince` gives `alive=Yes` for its `Code.exe`.
+  **Verified** live. A Medium `code` cannot join an elevated instance ("already running as administrator",
+  `main.ts:396-400`). **Verified** in the source.
+- **A read at file creation got 0 bytes** and the one retry parsed 14 ms later. **Verified** live.
+- **Closing a window while a Local chat runs or waits asks for a click** ("A session is in progress...",
+  `chatLifecycle.ts`). **Verified** in the source; not run.
+- Not tested live: approval then go on, Stop, a close or reload mid-request, a crash, compaction, the Local
+  empty-window folder, a VS Code running at Medium.
+
+### Copilot CLI live test
+
+2026-11-06, Copilot CLI 1.0.106 (npm), Copilot Free through `gh`'s login,
+Copilot Fusion (it picked `gpt-6-luna`), every session at Medium in a pseudo console. Detail:
+`research/other-agent-signals.md`, "Copilot CLI live test (2026-11-06)".
+
+- **The held in-use file is `inuse.<pid>.hold`, not `inuse.<pid>.lock`**: the process that has a session open makes
+  both, named after its own pid; Restart Manager names it as the holder of the `.hold` and no one for the `.lock`.
+  **Verified** live (two TUIs, a PowerShell `RmGetList` script elevated and at Medium). The source named the `.lock`,
+  so every live session read `Gone`; fixed in `sources/copilot.rs`.
+- **A clean exit deletes both files; a crash leaves both, and the next Copilot start deletes them**: **verified** live.
+  Killed by pid mid-turn, the session posted `Gone` 61 ms later.
+- **VS Code's Copilot harness writes the same files, held by `copilot-runtime.exe`**: sessions started through VS
+  Code chat in another test had `inuse.2728.*` with 2728 VS Code's (elevated) `copilot-runtime.exe` as the holder,
+  named by Restart Manager from Medium with its start time. **Verified** live (names, holders and event kinds only).
+  The watch now counts the holder whose pid the name gives, whatever its image (`watch/agents.rs`).
+- **VS Code's shim stays as a parent**: shim `copilot.exe` > `cmd.exe` > `node.exe` > `copilot.exe` (the CLI); the
+  files name the inner one; killing it ends the tree within 66 ms. **Verified** live.
+- **`events.jsonl` is written only from the first prompt on, then each event at once**: the first write carries
+  `session.start` from the start; later lines were read 0.13 to 0.25 s after their `timestamp`. **Verified** live.
+- **`tool.execution_start` comes before `permission.requested`; `ask_user` is a tool start with `toolName`
+  `ask_user`; Ctrl+C (not Esc) interrupts a running command and writes `abort` (`user_initiated`)**: **verified**
+  live.
+- **`/every` needs `--experimental`; a fire is a `user.message` with `source` `schedule-<id>`**: `/every 2m` made
+  `id` 1 with `intervalMs` 120000 and `recurring` true, did not run at creation, fired 2 min 0.12 s later as
+  `schedule-1`. **Verified** live.
+- **`COPILOT_HOME` moves the whole home**: a `copilot -p` with it on an empty folder made `session-state\` and the rest
+  there, and `gh`'s login still worked. **Verified** live (one run, through npm's `copilot.cmd`).
+- **The app holds for it**: a dry-run tray (fixed build, Medium) logged "Holding starts: Copilot" and `PowerSetRequest
+  SYSTEM` 0.25 s after `user.message`, "Holding ends" 0.24 s after the last `assistant.turn_end`. **Verified** live.
+  When `session-state\` did not exist at the tray's start, the first session was seen only at the 30 s tick (26.7 s
+  late): the timing matches the tick, the cause is **inferred** (a missing folder is listed only at the tick).
+- Not tested live: log rotation, sub-agents, `/after`, cron and self-paced schedules, `--resume`, VS Code Background
+  sessions (`Code.exe` holder), two clients on one session.
+
+### Cursor hook commands: quoting, environment, labels and big input
+
+2026-11-06, Windows 11 build 26300, the test runner elevated (High). Each fact is a test in
+the repo or a run named here.
+
+- **Node writes a `"` inside an argument as `\"`**: Node 26.13.0 (`C:\Program Files\nodejs`) spawning
+  `powershell.exe -c <here-string with JSON>` the way Cursor's executors do gave a command line with
+  `{\"conversation_id\":\"x\",...}` (the child printed `[Environment]::CommandLine`; the script is not
+  kept). So the runtime check's needle is the bare `conversation_id`. **Verified**.
+- **A child of `spawn_outside_tree` gets the caller's environment**: an elevated hook under a fake `Cursor.exe` (a copy
+  of `cmd.exe`) handed off to its Medium copy under Explorer, and the copy wrote into the `WAKESHOT_DATA_DIR` the test
+  set, not the real data folder (`tests/hook.rs`, `a_hook_under_cursor_writes_the_chats_file_and_its_stop_deletes_it`,
+  run with `--ignored`; `%LocalAppData%\Wakeshot\agents` still absent after). **Verified**.
+- **A Medium process cannot create a file in a folder with a High mandatory label** (`icacls /setintegritylevel
+  (OI)(CI)H`), also through a junction: the Medium copy's write failed with `CreateFileW` 5 and the folder kept its
+  file (`the_medium_copy_writes_where_it_may_and_nothing_through_a_junction`, `--ignored`). The elevated hook's
+  `stop` copy also left a High-labeled file of its turn in place; whether the read or the delete was refused: **not
+  verified**.
+- **The hook reads a 65 MiB input to its end**: the writer's `write_all` succeeded for every event
+  (`every_input_answers_an_empty_object_with_exit_0_and_is_read_to_its_end`). **Verified**.
+- **`serde_json` names the place after a bad value**: a number for `conversation_id` on line 2 reports line 3 (the
+  reader had moved past the newline). Logged as is; **verified** (`a_parse_problem_keeps_its_place_and_no_text`).
+
+### Antigravity hook payload form
+
+2026-11-06, the first live test of the hook design for `agy`. How checked: the installed
+`%LocalAppData%\agy\bin\agy.exe` and `%USERPROFILE%\.gemini\bin\agy.exe` (both 1.5.2, `agy.version.json`; the same
+SHA-256 `3F6F64A3...0030B61E`, so the CLI and the IDE's hub run one binary) read as data: function names and entry
+points from the Go `pclntab`, the calls and RIP-relative string loads of single functions with a Python scan and
+`llvm-objdump` (Build Tools), and text search. The IDE 2.6.0 install (`%LocalAppData%\Programs\Antigravity IDE`) by
+text search of its JS. Nothing run, no plugin added, nothing under `.gemini` read but `bin\`.
+
+- **The hook command runs as `cmd /c <command>`, with the payload on stdin.**
+  `jsonhook.executeCommandModeHook` (package `cortex/customization/hooks/jsonhook`) calls `expandHome`,
+  `context.WithTimeout`, then `os/exec.CommandContext` with the strings `cmd` and `/c` and the command; it appends
+  `ANTIGRAVITY_CONVERSATION_ID=%s` to `syscall.Environ()`; then `marshalHookArgs` makes the payload, which goes into
+  a `bytes.Reader` (the itab whose method is `bytes.(*Reader).Read`, so `Cmd.Stdin`), stderr into a `bytes.Buffer`,
+  and `jexec.(*Cmd).Output` runs it (`jexec` only adds the environment, then calls `os/exec`). Errors: `command
+  failed: %w, stderr: %s`, logged as `JSON hook command stderr: %s`. The embedded hooks doc says the same ("run via `sh
+  -c` on Unix, `cmd /c` on Windows", input on stdin, working folder the one holding `hooks.json`). **Verified** in
+  code. So the payload never reaches a command line, and the hook's parent is `cmd.exe`, whose parent is `agy.exe`:
+  read in code, not run.
+- **Go quotes the command for `cmd`.** `os/exec` joins the arguments with its `CommandLineToArgvW` rules (Go docs;
+  not re-read today), so a command with spaces reaches `cmd` as `/c "<command>"`, and `cmd` strips the outer quotes
+  when the text inside is not one file name (`cmd /?`; not re-read today). A quote inside the command would become
+  `\"`, which `cmd` does not read as an escape: so only a bare path without spaces or quotes is safe. Checked with
+  the test laptop's `cmd.exe` (build 26300) by a raw command line: `cmd /d /c "<pwsh path> -NoProfile -Command echo ok"`
+  printed `ok`; `cmd /d /c "\"<pwsh path>\" -NoProfile -Command echo ok"` failed with `'\"C:\...\pwsh.exe\"' is not
+  recognized`. The test `a_hook_under_agy_and_cmd_writes_the_chats_file_and_a_full_stop_deletes_it` (CLI, ignored,
+  run with `--ignored`: passed) ran the hook the same way, a `cmd.exe` copy named `agy.exe` starting `cmd /c "<exe>
+  hook antigravity <event>"` with the input on stdin; the same chain now runs in
+  `a_hook_under_an_agy_outside_the_clis_folder_runs_and_writes_nothing`. **Verified** for `cmd`'s side; Go's own
+  quoting from its docs, **not re-read**; `agy` itself not run. `expandHome` expands only a leading `~/` (it compares the first two bytes),
+  so a `~` inside a path is left as it is: **verified** in code.
+- **The IDE runs no hook itself.** In `resources\app\out\main.js`, `jetskiAgent\main.js` and
+  `vs\workbench\workbench.desktop.main.js`, `hooks.json` appears only in a settings view that reads and writes
+  `<geminiDir>\hooks.json` (the user's global file); `extensions\agy\bridge.js` and `vscode\extension.js` hold only
+  the protobuf schemas of the hook messages. No JS runs a hook command. **Verified** by text search.
+- **`fullyIdle` is always in a `Stop` payload.** `marshalHookArgs` calls `protojson.MarshalOptions.marshal` twice (the
+  common fields, then the event's), each time with the byte at offset `0x1b` of the options set to 1: that is
+  `EmitUnpopulated` in protobuf-go's field order (`Multiline`, `Indent`, `AllowPartial`, `UseProtoNames`,
+  `UseEnumNumbers`, `EmitUnpopulated`; the order from memory of the protobuf-go source, **not re-read**). The
+  descriptor of `exa.hooks_pb.StopHookArgs` gives `fully_idle` as field 4, type bool, no `proto3_optional`, no oneof.
+  So `false` is written too. Then the two objects are flattened into one and internal fields are deleted
+  (`utils.GetInternalFieldsJSONNames`). **Verified** in code, except the field order.
+- **What the payload holds.** `exa.hooks_pb.HookArgsCommon`: `conversation_id`, `workspace_paths`, `transcript_path`,
+  `artifact_directory_path`, `execution_id`, `model_name`, `is_battle_mode`, `last_user_input`, `agent_name`,
+  `parent_conversation_id`, `caller_context`, `root_conversation_id` (several with field options, likely the internal
+  ones deleted: **not verified**). `PreInvocationHookArgs`: `invocation_num`, `initial_num_steps`. `StopHookArgs`:
+  `execution_num`, `termination_reason`, `error`, `fully_idle`, `final_model_output`. No event name and no version
+  field. JSON names are camelCase (`conversationId`, `fullyIdle`). **Verified** in the descriptors.
+- **A disabled plugin is kept elsewhere now.** `customizations.RestorePluginManifests` logs "Plugin enablement seeding:
+  restored %s for a plugin recorded as disabled" and renames `plugin.json.disabled` back to `plugin.json`, and a JSON
+  type with `enabledPlugins` exists: so the old rename of the manifest is migrated away, and the switch no longer
+  changes the plugin's own folder. Where `enabledPlugins` lives, and whether a dropped plugin starts enabled: **not
+  verified**.
+- **Dot-named plugin folders are likely listed.** `customizations.isValidPluginDirName` refuses only an empty name,
+  `.`, `..` and a name holding `/` or `\` (disassembly: two compares, then `strings.IndexAny` with `/\`), and
+  `customizations.dirNames`, which `pluginDirNames` and `GlobalPluginDirNames` (`<config>\plugins`) call, has no
+  compare with `.`. So `.wakeshot-new-*` and `.wakeshot-removed` would be listed like any plugin folder, unlike
+  Cursor's CLI. **Verified** in code that no dot check is there; whether the hook loader uses this listing and
+  loads a folder without `plugin.json`: **not verified** (live test 7).
+- **Antigravity makes `config\plugins` itself**: on the test laptop `%USERPROFILE%\.gemini\config\plugins` exists,
+  empty, created 2026-11-06 13:48:32, 4 s after the IDE's `.gemini\bin\agy.exe` (folder times read, nothing in it read).
+- **So the privacy Gate holds for `agy` 1.5.2 (CLI, the IDE 2.6.0's hub)**: the Antigravity plugin may ship. The check
+  is repeated for each Antigravity version Wakeshot claims. The Antigravity App (2.29.0) is not installed here and was
+  not read: **not verified** for it.
+
+### OpenCode live test
+
+2026-11-06; detail in `docs/research/opencode-signals.md`, "Live test (2026-11-06)". OpenCode 2.2.5 (npm) on Ollama
+`qwen3:4b-instruct`, everything at Medium, on a scratch
+`XDG_DATA_HOME`.
+
+- **OpenCode leaves `opencode.db-wal` and `-shm` after a clean `opencode service stop`** as after a crash. Verified:
+  file list after each stop; the tester's real folder had both from a stop at 14:06.
+- **A commit gives no change notice.** The `-wal` keeps one size (11,684,352 bytes from the first start) and its
+  listed write time stays stale while open. Verified: a `FileSystemWatcher` with Wakeshot's filter logged nothing in
+  46 s with two commits; `agent-watch` saw turns only at the 30 s tick.
+- **The `-shm`'s first 48 bytes change with each commit and never with a read.** Verified: unit and cross-process tests
+  in `sqlite.rs` (a writer's commits, three reads, a killed writer's files rebuilt twice give the same bytes) and the
+  live poll. The meaning (`iChange` "incremented with each transaction"): sqlite.org/walformat.html, read 2026-11-06.
+- **Reads during `opencode service stop` fail at prepare with `SQLITE_IOERR` for about 20 ms.** Verified: a scratch
+  build of the probe that printed the code, 24 failures at two stops in a 1 ms read loop, none from the shim's refused
+  delete; Wakeshot now treats it as busy.
+- **Timing with the 2 s header poll**: working posted 0.07 to 1.9 s after `time_busy`, idle 0.85 to 2.0 s after
+  `time_idle`, the dry-run tray's hold lines within the same times. Verified: probe timeline against `agent-watch` and
+  the tray log.
+- **Cost**: release `agent-watch` with no OpenCode running, 172 ms of CPU in 120 s; a process list (413 processes,
+  8,539 threads) costs about 14 ms, so the poll never lists. Verified: `TotalProcessorTime` over 120 s.
+- **OpenCode is not blocked by the reads**: its own log (944 lines) has no busy, locked or I/O error. **Read only**: a
+  handle check of `agent-watch` at Medium saw only read rights on the db and `-wal`. Verified as described in the
+  research file.
+- **A schedule made through `opencode api POST /api/experimental/schedule` fires on time while the service runs**;
+  the model did not get the schedule tools with `experimental.schedules` on (why: not verified).
+
+### Antigravity live test
+
+2026-11-06. Antigravity CLI 1.5.2 (IDE 2.6.0 installed), Free plan, Gemini 3.8 Flash low;
+Wakeshot's plugin from the product's add code, a debug hook exe on a scratch data folder, readers at Medium
+(`agent-watch`, a dry-run tray). How checked: a pseudo console driver, a kernel process trace (names, pids, times),
+a scratch capture plugin for the inputs. Details: `research/antigravity-signals.md`, "Live test (2026-11-06)".
+
+- **A dropped plugin folder loads in the CLI, enabled, with no install step**, also into a running TUI at its next
+  model call. **Dot-named folders load too**: `.wakeshot-new-<pid>` is listed as a plugin, and `.wakeshot-removed`
+  ran its hooks in a real turn. Verified live.
+- **The hook runs under `cmd.exe` under `agy.exe`, input on stdin**, `ANTIGRAVITY_CONVERSATION_ID` set, working folder
+  the plugin's; plugins' hooks run one after the other. Each Wakeshot hook run: `cmd` median 42 ms (36 to 111), the
+  debug exe inside it median 31 ms (21 runs). The release exe: not measured. Verified live.
+- **Esc runs no `Stop`**, nor does `/exit` or a crash: the chat's file stays `working` until the next prompt's `Stop`
+  or the end of that `agy.exe` (an exit or a crash ends the hold at once through the process). Verified live (CLI).
+- **`fullyIdle` is not reliable for "a background command still runs"**: `false` twice, `true` twice while a
+  background command ran; each time the command ended, the agent woke itself and that turn held. Verified live;
+  why it differs: not verified.
+- **Through the app**: the dry-run tray held 0.1 s after Enter and ended at the `Stop`, also for the first file in a
+  hook folder made while it ran. Verified live.
+- **IDE**: its hub is `.gemini\bin\agy.exe --hub`, a child of the extension host, only in a trusted window; an IDE
+  chat did not run (first-run screen, left for the tester to finish). Not tested live.
+
+### Cursor live test
+
+2026-11-06. Editor 3.27.12 and CLI 2026.11.05-86047df for the tester's user. How checked: a
+capture-only local plugin beside Wakeshot's saved each hook input redacted at capture time (keys, ids, status words;
+no prompt, e-mail or path) and the hook shell's command line; a process trace; a file poller on the hook's folder;
+`agent-watch --source cursor`. Editor prompts were the tester's, in test windows; CLI runs at Medium (`agent -p`, and
+interactive through `agent-drive`). Details and times: `agent-hooks.md`, "Live test (2026-11-06)".
+
+- **The editor hands the payload through a temp file**: its PowerShell command line held no `conversation_id` on any
+  of 13 runs read. The CLI's hook shell is `powershell.exe -ExecutionPolicy Bypass -NonInteractive -File
+  %TEMP%\ps-script-<uuid>.ps1` (no `-NoProfile`), no key either. Verified live.
+- **The Stop button fires `stop` with `status` `aborted`** and the prompt's `generation_id`; Esc does not cancel a
+  turn (the tester). Verified live.
+- **A chat left running behind Ctrl+N, or its tab closed with Ctrl+F4, runs on and fires its own `stop`**
+  (`completed`, 1.5 s after its transcript's last write). Ctrl+F4 also fires `sessionEnd` at once with `reason`
+  `user_close`, `final_status` `generating` and the running turn's id. An empty chat's `sessionEnd` has `final_status`
+  `none` and an empty `generation_id`. Closing the window fires no `sessionEnd`. Verified live, one run each.
+- **The process that runs plugin hooks is the window's extension host**, `Cursor.exe --type=utility
+  --utility-sub-type=node.mojom.NodeService`, a child of the main `Cursor.exe`; it ended 20 ms after its window
+  closed. Verified live.
+- **The CLI fires only `sessionEnd` from a plugin**, in `-p` and in interactive mode (`final_status` `completed`).
+  Verified live. Interactive input under the driver: `enter` after a 2 s pause submits; `kenter` did not.
+- **Hook cost per prompt**: Cursor's exact line rebuilt and run at Medium, 10 runs each: Windows PowerShell 5.1 alone
+  median 841 ms, with the hook exe (debug build) 858 ms, a missing exe 883 ms (exit 127, empty stdout). Measured.
+- **A missing hook exe fails open with no message**: a capture hook naming a path that does not exist exited 127 on
+  12 editor runs; all 6 prompts went through and the tester saw nothing. Verified live.
+- Not verified: an `error` turn, a chat deleted while it runs (code: `triggerStopHook` returns when the chat's data is
+  gone), the "Cursor Agents" window, the CLI with a user `hooks.json` that opens its gate.
+
+### VS Code Stop, approve and close live test
+
+2026-11-06. How checked: VS Code 1.145.1 with Copilot Free on the test laptop, in an Extension Development Host
+window inside the tester's elevated VS Code; a scratch extension (not installed) ran
+the commands the buttons run (`workbench.action.chat.cancel`, `acceptTool`, `skipTool`, `closeWindow`, names and bodies
+read in the installed `workbench.desktop.main.js`); `agent-watch --source copilot,vscode` at Medium and a
+structure-only monitor timed each step. Details: `docs/research/copilot-vscode-signals.md`, "Stop, approve and window
+close live test (2026-11-06)".
+
+- **Copilot harness Stop writes `abort`** (`reason` `user_initiated`) and `assistant.turn_end` within 60 ms, and ends
+  the command. **Verified** live, 3 runs; idle posted 0.10 to 0.19 s after the Stop.
+- **Local Stop is saved as Cancelled** (`modelState` 2 with `completedAt`) at the window's next save, not at the
+  Stop. **Verified** live, 3 runs, 39.5 to 51.6 s after the Stop.
+- **Approve and Skip end exactly** in both kinds (harness `permission.requested` and `.completed`; Local NeedsInput,
+  then Pending or done at the next save). **Verified** live after waits of about 1 minute.
+- **Closing a window does not stop a Copilot harness turn**: no dialog, the agent host runs it to its end and writes
+  `assistant.turn_end`. **Verified** live.
+- **A Local chat closed while it works stays Pending on disk**: the window close (after Yes in "A session is in
+  progress...") wrote nothing to the chat log, nor did opening that chat again; Wakeshot keeps it working until every
+  VS Code started before the send has ended. **Verified** live (one run); no exact signal found, so this case is a
+  blocker under "No guessing".
+- **A Local turn ends while a long command still runs**: the terminal tool stops waiting after 5 minutes with no
+  output (`chat.tools.terminal.idleSilenceTimeoutMs`) and, here, after about 2 minutes with output (the model's
+  `timeout`, most likely; **not verified** which). **Verified** live: the turn was saved done while `sleep` or `ping`
+  went on.
+- **Local terminal calls ask for Allow every time** until the auto approve warning is accepted once
+  (`chat.tools.terminal.autoApprove.warningAccepted`). **Verified** in the bundle and live.
+
+### Antigravity exact end
+
+2026-11-06. Antigravity CLI 1.5.2 at Medium under the harness driver; a scratch
+capture plugin on all six hook events (no prompt, args or path kept), a kernel process trace, `agy`'s own log read with
+its prompt lines cut out, then the built rule through a dry-run tray. Details: `research/antigravity-signals.md`,
+"Exact end (2026-11-06)".
+
+- **Esc and Ctrl+C fire no hook** (no `PostInvocation`, `PostToolUse` or `Stop`), in a model call, a tool run, an
+  approval wait and a streamed answer: 22 of 22 interrupts. **Verified** live.
+- **`agy` logs "Cancelling conversation <chat id> (killBackgroundTasks=false)" at each of them**, about 50 ms after the
+  key, flushed at once, in that process's own `%USERPROFILE%\.gemini\antigravity-cli\log\cli-<start time>.log`, whose
+  line 1 names its pid and line 2 its version (1.5.2); never at a normal end. The id is the hook's full
+  `conversationId`. 27 of 27 interrupts over both parts. **Verified** live; not documented.
+- **That log also holds every prompt in plain text** ("HandleUserInput called with text: ..."). **Verified** live.
+- **A folder watch sees no change while a process appends to a file it keeps open**: .NET `FileSystemWatcher` with
+  Wakeshot's filter on a scratch file a writer kept open and appended to each second: "Created" at the open,
+  "Changed" only at the close. **Verified** on the test laptop (Windows 11, NTFS).
+- **`fullyIdle` does not tell whether a background command runs**: `false` in 5 runs, `true` in 2 while one ran. A
+  background command's end is seen by its `PostToolUse` only at a natural end; a kill from `/tasks` or by the agent
+  runs no hook. **Verified** live.
+- **Through the app** (built rule, debug build, dry-run tray): Esc or Ctrl+C ended the hold at the next safety tick,
+  7.6 to 20.4 s after the cancel line (4 runs); Esc then `/exit` ended it at the process's end. **Verified** live.
+
+### VS Code Local chats and Antigravity out of v1
+
+2026-11-06, a product call of that evening. How checked: tests in
+`crates/wakeshot-windows` that run real files in a scratch profile through the watch's own `Agents` and the core's
+`Sim`, and a mutation check (VS Code's source and Antigravity put back: the tests fail). Details:
+`research/copilot-vscode-signals.md` and `research/antigravity-signals.md`, the last section of each.
+
+- **The v1 tray starts five sources**: Claude Code, Codex CLI, Copilot CLI, OpenCode, Cursor. **Verified** by test
+  (`the_tray_starts_the_v1_sources_only`).
+- **A Local VS Code chat left working holds nothing through the tray**, though the same file and a `Code.exe` started
+  before its send hold through `VsCodeSource`. **Verified** by test.
+- **A Copilot harness chat in VS Code still holds through the tray** and ends at its Stop (`abort`, then
+  `assistant.turn_end`), read from the live harness log. **Verified** by test.
+- **A start adds no Antigravity folder and leaves an old one alone; the uninstall still removes it.** **Verified** by
+  test. Why Antigravity left: its rule trusts `agy` 1.5.2 only, and `agy` releases almost daily (a count from
+  its repo: `CHANGELOG.md` changed on about 25 days since 2026-10-02; **not verified** here).
+
+### Cursor out of v1: the start removes the hook folder an earlier build added (2026-11-06)
+
+A product call of 2026-11-06 23:21. Why: a Cursor chat deleted while it
+runs sends no `stop`, only the `sessionEnd` that Ctrl+F4 also sends (section "Install check" above).
+
+- **The installed v1 tray removed Wakeshot's real Cursor plugin folder at its start, with Cursor running.** Tray started
+  through Explorer at Medium at 23:50:58.8; its log said "Cursor: .cursor\plugins\local\wakeshot removed" at
+  23:50:59.114. After: `.cursor\plugins\local\` empty, no `wakeshot-removed` folder, `agent-hooks.json` `{"version":1}`,
+  no notice. The tester's Cursor (pid 49860, since 14:29) ran the whole time and held no file of the folder open.
+  **Verified** by the tray log and a directory listing. Whether a Cursor window that is already open keeps running the
+  hook from memory until its next start or Reload Window: **not verified** (no new chat file appeared in
+  `agents\cursor\` in the 100 s watched after the start; whether a Cursor prompt was sent then is not known).
+- **The v1 tray watches four sources** (Claude Code, Codex CLI, Copilot CLI, OpenCode): its start lines name no
+  Cursor source. Claude Code and Codex turns still hold and let go through it (Codex: 0.30 s after `task_started`,
+  0.01 s after `task_complete`). **Verified** live, same Log.
+- **`shutil.copy2` keeps a file's old write time, so cargo can keep a build of the code it replaced.** After a
+  mutation check restored two files with `copy2`, the next test run used the mutated build (its result matched the
+  mutation), and passed once the files were edited again. **Seen once**; the cause (cargo's fingerprint compares
+  write times) is inferred, **not verified**. Restore with a plain write, or touch the files after.
+
+### Claude Desktop app, read without input (2026-11-07)
+
+Read 03:47 to 04:10. Claude Desktop 4.23118.0 (Windows x64, per user). Read: folder names,
+JSON shapes, the app's logs, `powercfg /requests`, and the app's own code in `resources\app.asar` (unpacked to a
+scratch folder, nothing run). Details: `research/claude-code-signals.md`, "Claude Desktop (2026-11-07)".
+
+- **Code tab sessions are Claude Code sessions**: the app downloads its own Claude Code (2.1.317 here) to
+  `%APPDATA%\Claude\claude-code\` and starts it through the Agent SDK with `CLAUDE_CODE_ENTRYPOINT=claude-desktop`,
+  without `CLAUDECODE`, `CLAUDE_CODE_CHILD_SESSION` or a `CLAUDE_CONFIG_DIR` of its own. So they should write
+  `~/.claude/sessions/<pid>.json` and the usual transcript. **Verified (code)**; a live session was not run.
+- **Cowork** runs Claude Code in the app's Linux VM with `CLAUDE_CONFIG_DIR=/sessions/<id>/mnt/.claude`: nothing on
+  the Windows side. The VM is "not supported" on the test laptop (`cowork_vm_node.log`). **Verified (code, log)**.
+- **Plain chats** leave no local file or process, and the app's code has no keep-awake claim for them. **Verified
+  (code)**.
+- **The app's own keep-awake** is one Electron `prevent-app-suspension` blocker. `powercfg /requests` at 04:05 showed
+  the app's `claude.exe` under EXECUTION only, while `main.log` said `[keep-awake] started (claims=remote_tools)`.
+  **Verified (live)**. Its settings are in `%APPDATA%\Claude\claude_desktop_config.json` `preferences`:
+  `keepAwakeEnabled` (default false), `ccKeepAwakeWhileWorking` (default true), `ccKeepAwakeOnBattery` (default
+  true). **Verified (code, disk)**. It also holds by itself for 5 minutes at each credential rotation of its remote
+  device link (03:04 and 04:00 here). **Verified (log)**.
+- **Desktop scheduled tasks** now keep their schedule in
+  `%APPDATA%\Claude\claude-code-sessions\<account>\<org>\scheduled-tasks.json` (`cronExpression` or `fireAt`,
+  `enabled`, ...). Each run is a fresh session, a fixed few minutes late (docs; the rule is not documented).
+  **Verified (code, disk, docs)**.
+
+## Tray, menu, notices and sounds
+
+### Tray, menu and notifications
+
+Checked on 2026-11-03 on the Windows laptop with a throwaway test program, the tray spike (not kept in the repo).
+Windows 11 26H2, build 26300.9711. Two displays: the primary 3840x2160 at 150% holds the taskbar and tray, a second
+1920x1200 at 125%. Theme during the checks: apps dark, taskbar dark. The spike's raw logs are not kept. Screenshots:
+`docs/research/img/tray-*.png`. How our menu compares with current Windows 11 menus, and the pick for the menu look:
+`docs/research/tray-menu-look.md`.
+
+- **Crates.** `windows` 0.62.2, `embed-resource` 3.0.12, `png` 0.18.1 (spike screenshots only). Current per
+  `cargo search` and `cargo info`. `embed-resource` found the SDK `rc.exe` by itself for both targets.
+- **Manifest needed.** `LoadIconMetric` is exported only by Common Controls 6 (WinSxS
+  `6.0.26100.9711`), not by `System32\comctl32.dll` 5.82. Checked with `dumpbin /exports`. So the exe needs a manifest
+  that asks for Common-Controls 6. The spike embeds one as `RT_MANIFEST` 1 through the `.rc` file; the log confirms
+  per-monitor v2 DPI awareness came from it.
+- **Add and update.** From a hidden top-level window: `NIM_ADD`, `NIM_SETVERSION` (version 4) and `NIM_MODIFY` (new
+  icon and two-line tooltip) all return TRUE. With version 4, a right-click arrives as `WM_CONTEXTMENU` in
+  `LOWORD(lParam)` with the point in `wParam`, after `WM_RBUTTONDOWN` and `WM_RBUTTONUP`. Checked in the logs.
+- **First add lands in the overflow.** On the first `NIM_ADD` from a new exe path, Windows writes
+  `HKCU\Control Panel\NotifyIconSettings\<id>` with `ExecutablePath`, `UID`, `InitialTooltip`, `IconSnapshot` and no
+  `IsPromoted`. Icons the user pinned have `IsPromoted=1` (OneDrive, Telegram here). `Shell_NotifyIconGetRect` then
+  returns the rect of the `^` button: `tray-icon-first-add-overflow.png` shows only the chevron. A real right-click
+  during a run came from above the taskbar, so from the flyout. Checked with the registry, the screenshot and the log.
+- **Explorer applies `IsPromoted` live.** 2026-11-03 10:20, from an elevated agent session: with the
+  spike running (Medium token) and its icon in the overflow, writing `IsPromoted` = 1
+  (DWORD) on its own `NotifyIconSettings\<id>` key moved the icon onto the taskbar within 3 s, with no Explorer
+  restart and no input. Checked with taskbar screenshots before and after (`tray-taskbar-before-promote.png`,
+  `tray-taskbar-after-promote.png`). `Shell_NotifyIconGetRect` gave the same
+  RECT both times: the chevron moved one slot left and the icon took its place, so the rect alone cannot tell hidden
+  from pinned. Whether Windows also does this for an unpinned icon that the user had moved back to the overflow: not
+  checked.
+- **`NIF_GUID` and the exe path.** An icon with a fixed `NIF_GUID` was added from the build folder, then from a copy
+  in another folder: `NIM_ADD` returned TRUE both times. Windows kept one settings entry for the GUID and pointed it at
+  the second path. So on this build a moved exe does not break a GUID icon. Not checked: whether a pinned state
+  survives the move.
+- **Dark menus.** uxtheme ordinals 135 (`SetPreferredAppMode`), 136 (`FlushMenuThemes`), 104
+  (`RefreshImmersiveColorPolicyState`) and 132 (`ShouldAppsUseDarkMode`) all resolve by ordinal on 26300.
+  `SetPreferredAppMode` returned the previous mode each time (0, then 1, 3, 2), which matches the 1903+ meaning, not
+  the 1809 `AllowDarkModeForApp`. Ordinals and the mode enum from `ysc3839/win32-darkmode` `DarkMode.h`.
+  - `AllowDark` set before the first menu: the menu follows the app theme (dark here). Tested apart on 2026-11-03 in
+    Custom mode (Windows mode dark, app mode light): the `AllowDark` menu was light, while Windows' own tray menus were
+    dark (`docs/research/tray-menu-look.md`, "Which mode the tray menus follow").
+  - `ForceLight` or `ForceDark` plus `FlushMenuThemes` switch the next menu of the running process at once.
+  - Submenu arrow, check mark, radio bullet, disabled line, separators and Windows 11 rounded corners render correctly
+    in both. Screenshots `tray-menu-forcelight*.png`, `tray-menu-forcedark*.png`, `tray-menu-allowdark-system-dark.png`,
+    and `tray-menu-live-dark-*.png` from a real right-click.
+  - The disabled status line is grey and low contrast in both themes.
+- **Menu details.** `SetForegroundWindow` before `TrackPopupMenuEx` returned TRUE after every right-click on the icon.
+  For menus opened by code it returned FALSE at 01:33, 01:35, 11:37 and 12:04 and TRUE at 13:01 and 13:02: Windows'
+  foreground rules decide, not who opened the menu. Menu windows (`#32768`) belong to the thread that calls
+  `TrackPopupMenuEx`. Posting `WM_CHAR 'k'` to the menu window opened the `&Keep awake` submenu. Checked in the logs
+  and screenshots. Microsoft's `TrackPopupMenuEx` Remarks (read 2026-11-03): for a notification icon's menu the window
+  must be the foreground window before the call; "Otherwise, the menu will not disappear when the user clicks outside
+  of the menu" (the old KB135788 problem). So a menu opened by code (a hotkey, a notice click) may not close on an
+  outside click when `SetForegroundWindow` fails; not tested.
+- **Theme and contrast reads.** `AppsUseLightTheme=0` and `SystemUsesLightTheme=0` under
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`; `ShouldAppsUseDarkMode()` agreed.
+  `SPI_GETHIGHCONTRAST`: off. Checked in the log.
+- **DPI.** `GetDpiForSystem` 144. `LoadIconMetric(LIM_SMALL)` returned a 24 px icon, the `SM_CXSMICON` for 144 dpi, so
+  the resource frame was used without scaling. `GetSystemMetricsForDpi(SM_CXSMICON, 120)` is 20 for the second
+  display. Not verified: that Windows 11 shows tray icons only on the primary taskbar.
+- **Balloon.** `NIM_MODIFY` with `NIF_INFO` from the unregistered exe returns TRUE; `NIN_BALLOONSHOW` comes at once and
+  `NIN_BALLOONTIMEOUT` about 6.5 s later. So Windows shows it, with no registration. Checked in the log.
+  `NIN_BALLOONTIMEOUT` came twice in the same millisecond in both runs (`log-auto.txt` 15696 ms,
+  `log-interactive.txt` 9522219 ms; grep 2026-11-03), so balloon events must not be counted. Windows files a balloon
+  under `NotifyIconGeneratedAumid_<NotifyIconSettings id>`: a later read found that handler in the notification
+  database with 0 stored rows, and a `Notifications\Settings` key of that name (registry and database reads). So
+  balloons are not stored, and a balloon's on/off switch most likely follows the icon's settings entry (inferred from
+  the name; not tested).
+- **Toast.** `ToastNotificationManager::CreateToastNotifierWithId(aumid).Show()` after `RoInitialize`:
+  - Unregistered app id: `Show()` succeeds and `History.GetHistoryWithId(aumid)` counts 1, so Windows stored it (the
+    notification database holds it), but the notification centre does not show it (Win+N, below). No `Dismissed`
+    event within 10 s, and the 12:58 screenshots below show no banner.
+  - App id registered per user, no admin: values `DisplayName` and `IconUri` (path to a PNG) under
+    `HKCU\Software\Classes\AppUserModelId\<aumid>`. `Show()` succeeds, history counts 1, and `Dismissed` fires with
+    reason `TimedOut` after 6.5 s, which means a banner showed and timed out.
+  - `ToastNotifier.Setting` throws `0x80070490` (element not found) in both cases in that run; in the later Medium
+    run it returned `Enabled` (see below).
+  - Windows adds `HKCU\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\<aumid>` after the first toast.
+  - Microsoft Learn ("Send a local toast notification from other types of unpackaged apps", found by search; the page
+    URL now returns 404) shows the same values under HKLM plus a `CustomActivator` COM class for clicks. Click
+    handling was not tested.
+- **Sound.** `PlaySoundW("SystemNotification", SND_ALIAS | SND_ASYNC | SND_NODEFAULT | SND_SYSTEM)` and
+  `PlaySoundW("CHIME", module, SND_RESOURCE | ...)` with a 13 KB embedded WAVE both return TRUE. The user's scheme maps
+  `SystemNotification` to `C:\WINDOWS\media\Windows Background.wav`; a user who picked "No sounds" gets silence with
+  the alias. `SND_SYSTEM` puts the sound under the "System Sounds" volume slider (docs, not checked by ear).
+- **Size.** x64 release with LTO, one codegen unit, `panic = "abort"`, `strip`: 504 KB at first, 519,168 bytes after
+  the token code (built 03:41); 420 KB without the PNG encoder (first build). About 198 KB of that is resources: four uncompressed
+  32-bit icons of 45 KB each, the WAV and the manifest. So the code (Win32 tray, menu, WinRT toast, registry) is about
+  220 KB. ARM64 release builds (486 KB, the 01:43 build from before the token code, PE machine `0xAA64`) and passes
+  clippy. Not run on ARM64: no device.
+- **Memory.** In-process `GetProcessMemoryInfo` and `Get-Process` from outside agree. Icon only, idle: working set
+  10.0 to 10.4 MB, private 1.6 to 1.7 MB in the logs (9.7 MB, 1.5 MB, 133 handles and threads dropping from 4 to 1
+  after about 30 s are from outside reads that were not saved). After opening menus: working set 16 to 19 MB, private
+  2.0 to 3.3 MB. After WinRT toasts: working set 25 to 28 MB, private 3.2 to 3.9 MB. The working set counts shared system DLL
+  pages; private bytes is the app's own cost.
+
+Live checks on 2026-11-03 10:27 (an Explorer restart by hand) and 12:53 to 13:04 (steps an agent drove), with the
+interactive spike running at Medium since 10:19 and its icon pinned by `IsPromoted`. Only the laptop screen was active
+at 12:53 (1920x1200 at 125%). Evidence: the spike's interactive log (not kept) and the screenshots named below.
+
+- **Explorer restart.** `TaskbarCreated` reached the hidden top-level window; the message-only window logged nothing.
+  `NIM_ADD` right after it returned TRUE, and `tray-icon-add2-dark-taskbar.png` shows the icon on the taskbar, not the
+  chevron: a pinned icon stays pinned across an Explorer restart.
+- **Live theme switch through Settings.** Settings > Personalization > Colors > "Choose your mode", Light then Dark,
+  driven by UI Automation. Each switch sent two `WM_SETTINGCHANGE` "ImmersiveColorSet" about 0.1 s apart. In the first
+  one the values were not all updated yet (`SystemUsesLightTheme` still 0 in the Light switch; `ShouldAppsUseDarkMode`
+  still old in both, but the spike reads it without calling `RefreshImmersiveColorPolicyState` first); in the second
+  they agreed. So act once the broadcasts settle (the spike waits 2.5 s). The icon switched to the glyph for the new
+  taskbar colour (`tray-icon-switch3-light-taskbar.png`, `...switch4-dark...`). With `SetPreferredAppMode(AllowDark)`,
+  `RefreshImmersiveColorPolicyState` and `FlushMenuThemes` once at start (and after each earlier settle, after its no-flush
+  capture) and a new menu built for each open, the next
+  menu already had the new theme without another `FlushMenuThemes` (`tray-menu-switch3-light-noflush.png` light,
+  `tray-menu-switch4-dark-noflush.png` dark; submenus too). Every other theme value (Themes, Personalize, DWM, Accent,
+  `Custom.theme` hash) was the same after Light and back to Dark.
+- **"ImmersiveColorSet" also comes without a theme change.** Two arrived at about 11:37 and 12:04 with both values
+  still 0, during or right after the manual battery steps; the `switch1` and `switch2` pictures are from those. Cause
+  not checked. A tray app must compare the values, not trust the broadcast.
+- **Tooltip.** Hovering the icon shows a native dark tooltip with both `szTip` lines (`tray-tooltip-dark.png`). It
+  showed the new text 3 s after a `NIM_MODIFY`. It also stayed on top of the open menu while the cursor rested on the
+  icon.
+- **Synthetic right-click.** A right-click sent with `mouse_event` inside the icon rect gave the same `WM_CONTEXTMENU`
+  as a real one, and `SetForegroundWindow` before the menu returned TRUE.
+- **Balloon on Windows 11** (`tray-balloon-dark.png`): shown as a toast banner. Header "Wakeshot tray spike" with the
+  tray icon (the exe's version info has that string as both `FileDescription` and `ProductName`, so which one Windows
+  reads is not known), a large blue "i" for `NIIF_INFO`, then title and text. `NIN_BALLOONTIMEOUT` 6.6 s later.
+- **Registered toast** (`tray-toast-registered-dark.png`): banner with the registered `DisplayName` and the `IconUri`
+  picture, `Dismissed` reason TimedOut after 6.5 s. The picture showed orange, while the spike draws RGB 2b7cd3
+  (blue). The PNG on disk is blue (43, 124, 211) and the spike writes straight RGBA, so Windows or a cached copy
+  swapped R and B; which one was not checked. The way to check a real toast icon on screen: show a registered toast
+  with an asymmetric test icon (pure red), compare on screen, and try a fresh `IconUri` path to rule out a cache.
+  **Unregistered toast:** no banner at 2 s or 4 s, no `Dismissed` event (`tray-toast-unregistered-none.png` keeps only the
+  taskbar and the spike tooltip; the area above it, where a banner would show, held other apps' content and is greyed).
+- **`ToastNotifier.Setting`** returned `Enabled` (0) for both app ids in this Medium process; in the 01:33 `--auto`
+  run, which was probably elevated, it threw `0x80070490`. The cause of the difference was not checked.
+- **Notification centre** (Win+N): a "Wakeshot tray spike" group with the registered toast and "+1 notifications";
+  no separate entry for the balloon or the unregistered toast. The notification database holds two toasts for the
+  registered id (01:33:39 and 12:58:07), so the "+1" is most likely the 01:33 toast, which survived that run's key
+  deletion.
+- **Windows writes `Notifications\Settings\<aumid>` only for the registered app id**; quit removed it and the
+  `AppUserModelId` key (`unregister` log: 0 for the registered id, 2 = not found for the unregistered one). Not
+  removed by quit: the balloon's `Notifications\Settings\NotifyIconGeneratedAumid_<NotifyIconSettings id>` key and the
+  stored toasts in the notification database (they expire after 3 days). So an uninstall must clear the toast
+  history, not only delete the keys.
+- **`LoadIconMetric` follows the system DPI, which is fixed at sign-in.** With the DELL (144 dpi) primary at sign-in
+  and only the 120 dpi laptop screen left later, the spike still got 24 px icons while the taskbar slot was 40x60
+  physical pixels; Windows scaled the icon. How sharp it looks was not judged. The hidden window got `WM_DISPLAYCHANGE`
+  nine times and never `WM_DPICHANGED`.
+- **The spike's log clock drifted 16 s.** The spike stamps each line with milliseconds since start (`Instant`). By
+  11:37 that clock ran 16 s ahead of the wall clock (picture file times and the notification database agree); at 10:27
+  it was still in step. So "start plus ms" times after 10:27 read up to about 16 s later than the real time (13:02:04
+  for the Light switch, really 13:01:48). Cause not checked (likely the sleep
+  during the manual battery steps, or a clock sync). A log must read wall time for every line.
+
+### Lid-close sound
+
+Checked 2026-11-03 from 14:37. Agent tests with the lid open, on battery, DELL not connected, Speakers (Realtek) the
+default for all roles at 67.3%. Code: a sound module added to the lid spike (not kept in the repo), modes `audio-read`
+and `sound-test`, `lid --listen`. Its logs, named below, are not kept.
+
+- **Loopback works as an agent check.** WASAPI loopback (`AUDCLNT_STREAMFLAGS_LOOPBACK`, shared mode, the endpoint's
+  mix format: float32, 2 ch, 48 kHz) on the Speakers saw every sound the tests played, with its length and peak, from
+  the elevated agent and from a Medium process (`sound-test-20261103-145607.log`,
+  `lid-limited-20261103-145749.log`). It shows what the audio engine sent to the endpoint, not what the speaker
+  made: a closed lid, a muted amplifier or a codec that wakes late are not seen by it. No packets arrive while nothing
+  plays (the "alive" lines stop counting), so silence and a stalled engine look the same to it.
+- **Peaks in loopback are higher than in the files.** `Windows Background.wav` peaks at -9.2 dBFS in the file
+  (`wavstat.py`, below) and at -1.2 dBFS in loopback; our chime peaks at -6 dBFS in the PCM and -0.4 dBFS in
+  loopback. Something in the endpoint path adds about 6 to 8 dB; the Realtek driver has Dolby settings
+  (`DolbySlidingBass` under its Class key), so a Dolby effect is the likely cause (not verified).
+- **System Sounds level.** The System Sounds session on the Speakers reads 100%, not muted
+  (`IAudioSessionControl2::IsSystemSoundsSession`, `ISimpleAudioVolume`; `audio-read-20261103-145551.log`). So
+  the mixer slider did not silence run I (assuming it was the same then; it was not read during I).
+- **`SND_SYSTEM` routing.** PlaySound doc (archived page dd743680, read 2026-11-03): with `SND_SYSTEM` "the sound is
+  assigned to the audio session for system notification sounds", under the System Sounds slider; it names no device.
+  Loopback: the alias sound reached the default device (Speakers), 1210 ms long. With the DELL as default (run D) it
+  goes to the DELL, which has no speakers. That explains D, not I.
+- **Start delay.** `PlaySound(SND_ASYNC)` returned in 5 to 8 ms, but the sound reached the endpoint 390 to 760 ms
+  later. Our chime: from the call to a running stream took 290 to 570 ms in three runs, almost all of it in
+  `IAudioClient::Initialize` (device pick 5 ms, stream ready at 482 ms in the timed run). Loading the audio stack
+  first (warm-up: enumerate, activate, mix format, 6 ms) did not help in that run (one run). So any sound starts
+  about 0.3 to 0.8 s after the call on the test laptop. In run I the lock came 2 ms after `PlaySound` returned, so it
+  came well before the sound reached the endpoint. Whether that matters: lid-close results below.
+- **Sound file levels** (`wavstat.py`, a small script that reads the PCM, not kept): `Windows Background.wav` (our
+  alias) 1.29 s, peak -9.2 dBFS, loudest 50 ms -17.1 dBFS; the toast sound `Windows Notify System Generic.wav`
+  -9.8 / -18.3; `Windows Hardware Remove.wav` -12.9 / -19.4. Our alias sound is not quieter than the device-remove
+  sound the tester most likely heard in D (with the lid closed, 33 s after the close). So the file is not the reason for
+  I.
+- **Device form factors** (registry `MMDevices\Audio\Render\<id>\Properties`, `{1da5d803-...},0`, and
+  `PKEY_AudioEndpoint_FormFactor` through Core Audio): both DELL U2723QE endpoints 9 (`DigitalAudioDisplayDevice`),
+  Speakers 1 (`Speakers`), "Realtek HD Audio 2nd output" 3 (`Headphones`). So "default is a screen's audio" is
+  readable without names.
+- **No lid setting in the audio driver.** No value or key with "lid" in its name under the audio Class key
+  `{4d36e96c-...}` (Realtek 6.0.10007.1, AMD HD Audio, AMD USB and Bluetooth audio); the two matches were
+  `ValidateCodecWrites` and `DolbySlidingBass`. Lenovo Vantage settings were not looked at. Whether the closed lid
+  muffles the speakers: only an ear can tell (lid-close results below).
+- **Lid-close results** (by hand, 15:16 to 15:20, Medium token through `sound-close-1.cmd` and `sound-close-2.cmd`;
+  logs `lid-20261103-151653.log` and `lid-20261103-151907.log`; plan copy restored in both, 13 `after`
+  lines equal the `before` lines). The tester's words: "Both close 1 and close 2 tests work", in close 1 "first was
+  windows sound then your custom", in close 2 the reverse.
+  - Close 1, laptop alone on battery, exactly as run I: `PlaySound` at the close, `LockWorkStation` 0.2 ms after it
+    returned. The alias reached the Speakers 504 ms after the call, 1202 ms long, peak -1.2 dBFS (the same as with
+    the lid open), and the tester heard it. Our chime 3.05 s after the close (session locked, lid shut): stream running
+    in 125 ms, all 750 ms taken by the engine, 503 ms in loopback, heard. So neither the lock nor the closed lid stops
+    or mutes a sound on the test laptop, and run I's silence did not repeat. Its cause stays unknown; most likely it was
+    not noticed (inference).
+  - Close 2, DELL connected on AC; Windows had made the DELL (`{...ca5b6419...}`, form factor 9, 26.0%) the default
+    for all roles. The chime picked the Speakers (`SpeakersInsteadOfDisplay`), ran 427 ms after the call, then the
+    lock came; 498 ms in loopback on the Speakers, all taken by the engine, heard. The alias control 3.4 s after the
+    close went to the DELL: 944 ms in the DELL's loopback, nothing on the Speakers. The Windows sound heard after the
+    chime was most likely the device-remove sound when the tester unplugged the DELL: power went DC at 15:19:37.9, the
+    DELL endpoint was invalidated at 15:19:39.7 (`0x88890004`), and the Speakers' loopback logged a 351 ms sound at
+    15:19:40.4, about 20 s after the lid opened (inference; the DELL has no speakers, see run D).
+  - The alias in the DELL's loopback peaked at -31.7 dBFS against -1.2 dBFS on the Speakers. -9.2 dBFS (file) at the
+    DELL's 26% volume is about -31 dB, so the DELL's loopback looks like it is after the volume and the Speakers' is
+    before it (inference, not verified).
+  - So: our chime on the picked device was in loopback and heard at both closes, with the lock on, once before the
+    lock and once after it.
+
+### Tooltip and balloon text limits
+
+Checked 2026-11-03.
+
+- **Tooltip and balloon sizes.** Microsoft Learn, `NOTIFYICONDATAW` (`learn.microsoft.com/en-us/windows/win32/api/
+  shellapi/ns-shellapi-notifyicondataw`, page dated 2024-11-20, read 2026-11-03): `WCHAR szTip[128]`; "For Windows
+  2000 and later, szTip can have a maximum of 128 characters, including the terminating null character". In the `W`
+  struct a character is one `WCHAR`, one UTF-16 unit, so `text::TOOLTIP_MAX_UTF16 = 127` matches. Same page:
+  `szInfo[256]` (256 with the null, "should be restricted to 200 characters in English") and `szInfoTitle[64]` (64
+  with the null, "should be restricted to 48 characters in English"). Not tested here: what Windows 11 shows for a
+  tooltip of exactly 127 units.
+
+### Tray loop dispatcher: re-entry, the session-end wait and deadlines
+
+Checked 2026-11-03.
+
+- **A call that re-enters through `&mut self` is undefined behavior in Rust.** The Rust Reference, "Behavior
+  considered undefined" (doc.rust-lang.org/reference, read 2026-11-03): a live `&mut T` "must point to memory that is
+  not read or written by any pointer not derived from the reference", and "When a reference (but not a `Box`!) is
+  passed to a function, it is live at least as long as that function call, again except if the `&T` contains an
+  `UnsafeCell<U>`." So a window that calls `LoopHandler::event(&mut self)` again from a nested pump breaks the rule
+  whatever the inner call does, while `&self` methods over `Cell` and `RefCell` (both hold an `UnsafeCell`) do not.
+  **Verified** (the Reference); not checked with Miri.
+- **The end-of-session `Ack` comes for every session end restore.** The IO thread sets it after any
+  `Restore { why: SessionEnd }`, and the core sends one at `Session(Ending)` (`core/settings.rs`). So at
+  `WM_ENDSESSION` the `Ack` is often set already; the dispatcher resets it before `session_ending()`, so its wait
+  covers the end's own restore. Read in the design on 2026-11-03, before the IO thread was built (not verified then);
+  `app/io_thread.rs` sets it that way (read 2026-11-07).
+- **The core gives one next deadline.** Right after a Keep awake pick it is the 1 s `state.json` wait (`Mono`); the
+  Keep awake end (`Wall`) shows only after the next `Tick`. Seen in `the_timer_never_asks_for_more_than_30_s`: the
+  timer asked 1,000 ms. Fine, since the loop reads `next_deadline` after every call. **Verified** (test).
+- **The end-of-session wait, measured** (tests on the test laptop, three runs, beside the other tests): an `Ack` set by
+  another thread after 200 ms ended the wait after at least 200 ms and under 2 s (the test's bounds; exact times not
+  printed); with no `Ack` the call took at least 4.00 s and at most 4.02 s (the whole test run's time). **Verified**
+  (test).
+- **Mutants**: 22 hand-planted mutants of `app/dispatch.rs`, run in a scratch copy of the workspace, all killed after
+  one test gained an assertion (the safety tick must win over a farther deadline; the 30 s clamp alone had hidden a
+  timer set from the deadline only). **Verified** (test).
+
+### Notice text limits, menu prefixes and the tooltip
+
+Checked 2026-11-03.
+
+- **Balloon text limits and the empty body.** Microsoft Learn, `NOTIFYICONDATAW`
+  (`learn.microsoft.com/en-us/windows/win32/api/shellapi/ns-shellapi-notifyicondataw`, updated 2024-11-20, read
+  2026-11-03): `szInfo` "can have a maximum of 256 characters, including the terminating null character, but should
+  be restricted to 200 characters in English"; `szInfoTitle` "a maximum of 64 characters, including the terminating
+  null character, but should be restricted to 48 characters in English". So `text::notice` cuts at 63 and 255 UTF-16
+  units, and its tests hold the fixed words to 48 and 200. Same page, `NIF_INFO`: "To remove a balloon notification,
+  specify NIF_INFO and provide an empty string through szInfo", so no notice has an empty body (`Updated` gets one).
+  `NIIF_NOSOUND`: "Do not play the associated sound".
+- **The `&` prefix rule.** Microsoft Learn, `DrawText`
+  (`learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-drawtext`, updated 2024-02-22, read 2026-11-03),
+  `DT_NOPREFIX`: "Normally, DrawText interprets the mnemonic-prefix character & as a directive to underscore the
+  character that follows, and the mnemonic-prefix characters && as a directive to print a single &." So
+  `text::status_line`, a menu `Label`, doubles `&` in hold reasons, and the menu painter must draw with this rule
+  (the `MenuItem` doc in `view.rs` asks for it).
+- **Two-line tooltip.** Not checked again here: the tray spike showed both lines of
+  `"Wakeshot spike\nHolding awake: Claude Code, 2 sessions"` in the native tooltip ("Tooltip" above;
+  `docs/research/img/tray-tooltip-dark.png`). `text::tooltip` uses the same `\n` form.
+- **"Other system tray icons".** The first-run notice names this section of Settings > Personalization > Taskbar, the
+  page `ms-settings:taskbar` opens. The label on Windows 11 build 26300: not verified here (no screen use in this
+  check).
+
+### Tray startup: the panic hook, mutex tests and an unknown lock state
+
+Checked 2026-11-03 with `app::startup::tests` (22 tests, all pass).
+
+- **Panic hook.** Rust std docs, `std::panic::set_hook` (read 2026-11-03): "The panic hook is invoked when a thread
+  panics, but before the panic runtime is invoked. As such, the hook will run with both the aborting and unwinding
+  runtimes." So `std::process::abort()` in the hook ends the process before any unwinding. Whether proptest needs
+  unwinding to shrink: not verified.
+
+- **The panic hook's exit code.** A child run of the test binary that installs the hook and panics ends with
+  0xC0000409 (`STATUS_STACK_BUFFER_OVERRUN`, the fast fail of `std::process::abort()`), not 101 (a test that panics
+  with the default hook), and its log holds one `ERROR panic:` line with the place and the message cut to 200
+  characters (`panic_hook_logs_then_aborts`). The whole test run took 0.18 s, so this console child had no 3 s WER
+  wait. After the run, no new entry in `ReportArchive` or `ReportQueue` (machine and user WER folders) and no
+  Application event 1000 or 1001 since the run (`Get-ChildItem`, `Get-WinEvent`). Why the Velopack hook's panic
+  above went through WER and this child did not: not verified (a GUI exe started by Velopack against a console test
+  exe started by the test runner).
+- **Mutex tests need a second thread.** The thread that holds a mutex takes it again at once (`store::NamedMutex`
+  doc), so the second tray and the second settings owner in the tests are other threads; then `take(0)` gives `None`
+  while the first holds it, and `Some` after it is dropped. A thread that ends while holding the tray mutex leaves
+  it abandoned, and the next take reports `abandoned()` (`a_tray_lock_left_by_an_ended_tray_counts_as_taken`).
+- **A failed journal read, for the tests.** A folder named `journal.json` makes `store::read_whole` fail, so
+  `FileNet::load_journal` gives `JournalRead::Failed` (code 5 in `power::journal::tests`; the code is not checked
+  here).
+  The startup retry tests swap the folder for the file between the two tries.
+- **An unknown lock state at start.** Read in the code, not tested: `core/lid.rs` `lock_and_chime` watches a lock
+  only when the core thinks the session is unlocked. So `None` from `session::locked_now()` counted as unlocked makes
+  a lid close on a session that was locked after all look like a failed lock (lock once more, then the step back
+  toward sleep); counted as locked, a lock that really failed would go unseen.
+
+### The loop window: post limit, timers and end of session
+
+Checked 2026-11-04 by the tests in `app::window::tests` (Windows 11 Pro
+10.0.26300, debug test build, elevated agent shell with a desktop session; every test window hidden, of a test class
+`Wakeshot.Loop.Test*`). Ten runs in a row, all passed.
+
+- **The posted-message limit.** A loop window whose thread did not pump took 9,999 `PostMessageW` calls; the
+  10,000th failed with 1816 (`ERROR_NOT_ENOUGH_QUOTA`), the same count in all ten runs. Microsoft documents 10,000
+  per queue; why one fewer here (one other message in the queue, or the limit counted as "fewer than"): not verified.
+- **`FindWindowW` when nothing matches.** It returned NULL and left the thread's last error at 0, for a class never
+  registered and for a registered class with no window left. It found the hidden (never shown) top-level window by
+  class name.
+- **`PostMessageW` to a destroyed window** fails with 1400 (`ERROR_INVALID_WINDOW_HANDLE`).
+- **`SetTimer` accuracy** (ten runs, under the load of other builds): asked 150 ms, fired after 138 to 166 ms; 300 ms
+  after 300 to 316 ms; 80 ms after 93 to 97 ms; a timer re-armed to 200 ms by `SetTimer` with the same id fired 190 to
+  204 ms after the re-arm. So a fire can come up to about 12 ms early.
+- **A sent `WM_ENDSESSION` waits for the window procedure.** `SendMessageTimeoutW` from another thread, with a handler
+  that slept 300 ms, came back after 300 to 302 ms, and never before the handler returned. `WM_QUERYENDSESSION`
+  answered 1. Whether Windows itself sends these to this hidden window at a real sign-out: not verified here (an
+  end-to-end check).
+- **A `WM_QUIT` from `PostThreadMessageW`** ends `GetMessageW` on the loop thread as the window's own would, so the
+  window treats one it did not post as Quit from the menu.
+
+### Tray UX: theme reads
+
+Checked 2026-11-04 on the test laptop (Windows 11 build 26300). Reads only; no setting was switched.
+
+- **The test laptop's theme.** `tray::theme::read()` gave `Theme { light: false, contrast: None }` (test
+  `reads_this_pc`, 00:21). PowerShell `Get-ItemProperty` of
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize` agrees: `SystemUsesLightTheme` 0,
+  `AppsUseLightTheme` 0.
+- **The mode Windows 11 installs with is light.** `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes` holds
+  `InstallTheme` = `C:\Windows\resources\Themes\aero.theme`, `InstallThemeLight` = the same file and
+  `InstallThemeDark` = `dark.theme`. `aero.theme` has `SystemMode=Light` and `AppMode=Light`; `dark.theme` has both
+  `Dark` (registry and file reads, 2026-11-04). So Wakeshot takes light when `SystemUsesLightTheme` or its key is
+  missing (`ERROR_FILE_NOT_FOUND` or `ERROR_PATH_NOT_FOUND`); any other read failure, a value of another type
+  included, is an error.
+- **What Explorer does with a missing value: not verified.** No Microsoft page says (web search 2026-11-04). A Wine
+  bug (55771, `test_ShouldSystemUseDarkMode`) reports the value present on Windows 11 21H2 and absent on older
+  Windows 10 builds; a Stack Overflow answer ("detect dark windows taskbar") treats a missing value as dark, the
+  pre-1903 Windows 10 taskbar. Neither checked here: deleting the value would change the test laptop's own settings.
+- **`HKU\.DEFAULT`** (the LocalSystem profile, sign-in screen) has no `Personalize` values on the test laptop.
+- **High contrast colours** come from `GetSysColor` only while `SPI_GETHIGHCONTRAST` has `HCF_HIGHCONTRASTON`:
+  `COLOR_WINDOW`, `COLOR_WINDOWTEXT`, `COLOR_HIGHLIGHT`, `COLOR_HIGHLIGHTTEXT`, `COLOR_GRAYTEXT`, `COLOR_BTNFACE`,
+  `COLOR_BTNTEXT`, `COLOR_HOTLIGHT`. Outside high contrast they are the classic theme's colours and are not used. A
+  real high contrast switch was not tested (the test laptop's theme stays as its owner set it).
+
+### Tray UX: menu painting
+
+Checked 2026-11-04 on the test laptop (Windows 11 build 26300). Offscreen drawing only: no window, no
+screen. Code: `crates/wakeshot-windows/src/tray/menu_paint.rs`.
+
+- **WinUI template, read again** (`gh api`, microsoft-ui-xaml
+  `controls/dev/CommonStyles/MenuFlyout_themeresources.xaml`, last commit 2026-05-30;
+  `RadioMenuFlyoutItem_themeresources.xaml`): an item icon is a 16 x 16 epx `Viewbox`; a mark or an icon each take
+  one 28 epx column (`MenuFlyoutItemPlaceholderThemeThickness`), both take 56 (`...DoublePlaceholder...`), and a menu
+  that has any toggle or icon item reserves the columns for every item (inferred from the visual state names
+  `CheckPlaceholder`, `IconPlaceholder`, `CheckAndIconPlaceholder`; the presenter code that picks them was not read).
+  Check `E73E` and radio bullet `E915` are
+  12 epx with 16 epx after them (15 in the radio sub-item template); chevron `E974` 12 epx, 24 epx after the text.
+  Marks at rest and the chevron use `TextFillColorSecondary` (light `#9E000000`, dark `#C5FFFFFF`); a hot mark turns
+  `TextFillColorPrimary`. High contrast: fill `Window`, text, marks and chevron `ButtonText`, hover `Highlight` with
+  `HighlightText`, disabled `GrayText`, separator and border `WindowText` (the border is 2 px there). No maximum width.
+- **Icons, Microsoft's rule** (learn.microsoft.com/windows/apps/design/controls/menus, updated 2026-10-14): icons for
+  the most used items, standard pictures and pictures that show the command; "Don't feel obligated to provide icons
+  for commands that don't have a standard visualization." The menu icon is 16 x 16 px.
+- **Fonts on the test laptop** (WPF `GlyphTypeface` reads, 2026-11-04): Segoe UI Variable (`SegUIVar.ttf` 2.03) has
+  Latin, Cyrillic (U+0410, U+0436, U+0491, U+04D9) and U+2014, but no Armenian (U+0531, U+0561, U+0570), Hebrew or
+  Arabic; Segoe UI has all of those; neither has U+4E2D. Segoe Fluent Icons (`SegoeIcons.ttf` 1.54) has every glyph used
+  here; Segoe MDL2 Assets has them too. In GDI, `GetGlyphIndicesW` with `GGI_MARK_NONEXISTING_GLYPHS` on Segoe UI
+  Variable Text marked all 13 Armenian letters of a test label missing, and Segoe UI none (test
+  `non_latin_labels_get_a_font_that_has_them`).
+- **What Windows adds to an owner-drawn item's width.** Wine's `dlls/win32u/menu.c` (`calc_menu_item_size`): "Tests
+  reveal that Windows ( Win95 through WinXP) adds twice the average width of a menufont character", the average being
+  `(width of a..zA..Z / 26 + 1) / 2`. With the menu font from `SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS)`
+  this gives 14 px at 96 dpi, 16 at 120 and 20 at 144 here (test `measure_asks_less_what_windows_adds`); the menu
+  look study measured 16 px at 120 dpi on screen (`docs/research/tray-menu-look.md`). 96 and 144 dpi not checked on
+  screen.
+- **Renders match the picked look.** `docs/research/img/ux/menu-render-<96|120|144>-<light|dark|contrast>.png`
+  (from the ignored test `renders_for_review` as BMP, made PNG by a stdlib Python script; `art::png` was not there
+  yet). Rows 33, 41 and 50 px, text 14, 18 and 21 px, marks and chevron 12, 15 and 18 px. The fill, hover and
+  separator colours are the same pixels as `tray-look-render-96dpi-dark.png` and `-light.png` (`2c2c2c`, `383838`,
+  `3d3d3d`; `f9f9f9`, `f0f0f0`, `eaeaea`), and the hover band is 27 rows at 96 dpi and 42 at 144 in both (pixel
+  counts with a stdlib script). The contrast renders use Night sky's system colours since 2026-11-05 (the first
+  ones used the test laptop's classic colours: `ffffff`, `0078d7`, `000000`).
+- **What changed from the spike, and why:**
+  - Icons on Automatic (eye `E890`), Keep awake (clock `E823` "Recent", since 2026-11-05), Restore (`E777`), Open
+    log (`E8A5`) and Quit (cross `E711`). Test `item_glyphs_are_in_both_icon_fonts` finds all eight menu glyphs in
+    Segoe Fluent Icons and Segoe MDL2 Assets on the test laptop, and `E917` "Clock" missing from MDL2. The renders were
+    redone then (BMP made PNG by a Node script); against the old ones only the Keep awake icon cell changed. The Keep
+    awake lengths and Keep screen on get none (Microsoft's rule above); the status line gets none. With a mark and an
+    icon column, the main menu's text starts at 71 epx instead of 43.
+  - Marks and the chevron in the secondary text colour, as WinUI draws them; the spike drew them in the text colour.
+  - The status line in the secondary text colour (about 6:1 in light, 9:1 in dark) instead of the disabled grey
+    (2.5 to 2.7:1, research "Dark menus"), and never highlighted; a disabled item is never highlighted either.
+  - A label with characters the text font lacks is measured and drawn with Segoe UI (then the Windows UI font of
+    each script group); the spike had one font.
+  - Text never runs past its column: an item asks for at most 480 epx of text, and a longer status line ends in an
+    ellipsis. The status line of two hold groups fits.
+  - The width asked is the width wanted less what Windows adds (above), so the menu is as wide as designed.
+  - Sizes are scaled from their epx sums per edge, so rounding never adds up across columns.
+- **Menu text in grey** (2026-11-05). Text and glyphs draw with `CLEARTYPE_QUALITY`, then each
+  pixel a text changed gets one blend by the mean of its three subpixel coverages. Largest R, G, B spread in the
+  light and dark renders: 158 and 147 before, 0 after (stdlib Python over every pixel; tests
+  `text_and_glyphs_draw_grayscale`, `high_contrast_text_has_no_fringes`). Ink of "Open" at 120 dpi (sum of
+  coverage): Explorer's XAML menu 155, our ClearType 152, folded 152, GDI's own grayscale (`ANTIALIASED_QUALITY`) 120,
+  visibly thin, so not used. Width: WinUI's `MenuFlyoutPresenter` sets `MinWidth` 96 and no `MaxWidth`, and
+  `FlyoutBase::UpdateTargetPosition` caps it only at the monitor or window; only the plain `FlyoutPresenter` has
+  `MaxWidth` 456 (`gh api`, microsoft-ui-xaml main: `MenuFlyout_themeresources.xaml` last commit 2026-05-30, its
+  `_perf2026` copy, `FlyoutPresenter_themeresources.xaml`, `FlyoutBase_partial.cpp`, `themes/generic.xaml`). Not
+  verified: what `CLEARTYPE_QUALITY` draws when the user turns font smoothing off.
+- **High contrast status line in `WindowText`** (2026-11-05). WinUI's HighContrast dictionary
+  (`gh api`, microsoft-ui-xaml main, commit `8463f45`, 2026-05-30): `Common_themeresources_any.xaml` sets
+  `TextFillColorSecondaryBrush` to `SystemColorWindowTextColor`, and `MenuFlyout_themeresources.xaml` sets the menu's
+  own secondary text, `MenuFlyoutItemKeyboardAcceleratorTextForeground`, to `SystemColorWindowTextColorBrush`, while
+  item text and `MenuFlyoutSubItemChevron` (which the check and radio marks also take at rest) are `ButtonText`. So
+  the status line and its glyph draw in `WindowText`; marks and chevron stay `ButtonText`. Microsoft's "Contrast
+  themes" page (2026-08-29) agrees: `WindowText` is for "any UI that can't be interacted with". The four themes, from
+  `C:\Windows\Resources\Ease of Access Themes`: Aquatic is `hcblack.theme` (the page's Aquatic swatches read
+  `#202020`, `#FFFFFF`, `#8EE3F0`, `#75E9FC`), Desert `hcwhite.theme` and Night sky `hc2.theme` (the only `ButtonText`
+  `#FFEE32`) per "Brand screen session", Dusk `hc1.theme` by elimination. Status line and commands: Aquatic both
+  `#FFFFFF`, Desert `#3D3D3D` and `#202020`, Dusk `#FFFFFF` and `#B6F6F0`, Night sky `#FFFFFF` and `#FFEE32`; the
+  status line on the fill 16.3, 10.4, 13.0 and 21:1 (test `contrast_status_line_is_window_text_in_every_theme`). The
+  contrast renders use Night sky, not the test laptop's classic colours, and `menu-render-themes-contrast.png` shows all
+  four at 120 dpi; the light, dark, long and glyph renders came out byte-equal. **Verified** offscreen; a real theme
+  switch was not tested.
+
+### Tray UX: icon art
+
+Checked 2026-11-04 (code `crates/wakeshot-windows/src/tray/art.rs`). Colours were read from the tray spike's pictures
+of the test laptop (build 26300) with small stdlib Python PNG scripts (not kept). The art drawn then was replaced on
+2026-11-05: the tray glyph, the app icon and the files `art.rs` writes today, with their checks, are in "Brand apply:
+the held light in art.rs" (`docs/brand.md`). The points below still hold.
+
+- **Taskbar colours.** Dark: 202021, and 1f1f20 to 222223 along the bar (`tray-taskbar-after-promote.png`,
+  `tray-icon-add2-dark-taskbar.png`); the bar is translucent, so it follows the wallpaper a little. The plate under an
+  icon the mouse rests on, dark: 2d2d2e (`tray-icon-switch4-dark-taskbar.png`). Light: d8dadc, from d4d7d8 to dadcde,
+  with a hover plate of ecedee (`tray-icon-switch3-light-taskbar.png`).
+- **Windows' own glyph colour.** On the dark taskbar: ffffff (887 pure white pixels in the chevron, wifi, volume and
+  battery glyphs of `tray-taskbar-after-promote.png`). No picture shows Windows' tray glyphs on a light taskbar. In the
+  light Quick Settings picture (`tray-look-light-quick-settings.png`) the darkest glyph pixels are 1a1a1a on f5f5f5,
+  1b1b1b on fcfcfc and 191919 on f1f1f1; each fits black at alpha e4 over its plate (worked out from the numbers;
+  Microsoft's token value not checked). Wakeshot uses solid 1a1a1a on light (the spike used 1c1c1c) and white on dark:
+  `GLYPH_ON_LIGHT`, `GLYPH_ON_DARK`.
+- **Contrast** (WCAG 2, test `glyph_contrast_on_taskbars` and a Python check): white on 202021 16.3:1, on 2d2d2e
+  13.8:1; 1a1a1a on d8dadc 12.4:1, on d4d7d8 12.0:1, on ecedee 14.9:1. The sample high contrast pair, yellow on black:
+  19.6:1. All at or above Microsoft's 3:1, and `glyph_contrast_on_taskbars` asks 3:1 for each.
+- **Windows' own glyph shapes at 150% (24 px slot).** Strokes about 1.5 px, antialiased, not snapped to pixels. Wifi
+  24 px wide and 17 tall, volume 18 tall, battery 30 wide (coverage grids printed by one of those scripts). So Windows'
+  own glyphs fill the slot's width.
+- **Microsoft's guidance used** (read 2026-11-04):
+  - "Construct your Windows app's icon" (learn.microsoft.com/windows/apps/design/iconography/app-icon-construction,
+    dated 2026-07-21): "Context menu, title bar, system tray: 16px, 20px, 24px, 32px, 40px, 48px, 64px" for 100% to
+    400%; Windows looks for an exact size, else "the next size above and scale down"; the bare minimum is 16, 24, 32,
+    48 and 256. `assets/wakeshot.ico` holds all 14 of the page's target sizes, 256 included ("Brand apply: the held
+    light in art.rs").
+  - "Design guidelines for Windows app icons" (app-icon-design, updated 2026-07-14): do not rely on colour alone; make
+    "at least half of your icon" pass 3:1 on light and dark; subtle gradients, default angle 120 degrees; literal
+    metaphors ("an envelope for mail"); no letters in the icon. The construction page allows a plate behind the icon.
+  - "Segoe Fluent Icons font" (dated 2026-10-13): glyphs look best at 16, 20, 24, 32, 40, 48 and 64.
+  - No Microsoft page on notification area glyph style or padding: `.../iconography/system-tray-icons` returns 404.
+    Fluent's icon keyline: 2 px padding on a 20 px icon, doubled at 48 px, and a 2 px stroke at 32 px (Fluent icon
+    designer Jason Custer, github.com/microsoft/fluentui-system-icons issue 44, 2020 and 2021).
+- **Padding rule taken:** size / 16, at least 1 px (1 px at 16 to 28, 2 at 32 to 40, 3 at 48 and 56, 4 at 64), the
+  border no glyph may cross. Between Fluent's keyline and Windows' tray glyphs, which use the whole slot width, so a
+  glyph never touches the hover plate's edge. Test `glyph_stays_inside_its_box`.
+- **Stroke:** whole pixels, size / 16 rounded (1 px at 16 and 20, 2 at 24 to 36, 3 at 40 and 48, 4 at 56 and 64), with
+  straight edges snapped to pixel edges, so a straight stroke covers whole pixels; a stroke off the grid half-covers
+  50% or more of its pixels. At 24 px a 2 px stroke is a little heavier than Windows' 1.5 px. States differ in shape:
+  test `states_differ_in_shape` asks that at least 25% of two states' ink sits in different pixels.
+- **ICO and PNG.** `ico` writes 32-bit BGRA frames with an AND mask (bit set where alpha is 0; those pixels carry no
+  colour); `png` writes a palette when an image has at most 256 colours. The 256 frame, the compression and the
+  checks of today's files (Python's `zlib`, Windows' own loads): "Brand apply: the held light in art.rs".
+- **Same bytes on x64 and ARM64:** the shapes use `+`, `-`, `*`, `/`, `sqrt` and `round` only, all exact in IEEE 754,
+  and Rust does not fuse a multiply and an add on its own. So the golden test compares exactly. Tests ran on x64 only;
+  ARM64 got clippy and builds, not a test run.
+
+### Tray UX: tray icon
+
+2026-11-04 (code `crates/wakeshot-windows/src/tray/icon.rs`, harness `crates/wakeshot-windows/examples/ux_icon.rs`).
+Facts from code and tests first (no test calls `Shell_NotifyIconW`; the tests use a fake shell), then the checks that
+ran on the real taskbar.
+
+- **Icon GUIDs** (made with PowerShell `[guid]::NewGuid()`, 01:37): Product `7db9403e-d4b9-4165-a99e-a69b8ea56744`,
+  DryRun `c0d07dcd-dfd4-4a9d-b139-ad1e2ce9f987`, Demo `1e8c66d4-0fa3-4a54-95a1-61bb89b171e9` (`IconKind::guid`).
+- **High contrast glyph colour: `COLOR_WINDOWTEXT`.** Microsoft's "Contrast themes" page
+  (learn.microsoft.com/windows/apps/design/accessibility/high-contrast-themes, dated 2026-08-29, read 2026-11-04)
+  says "Pages, panes, popups, and bars should generally use SystemColorWindowColor as the background baseline" and
+  pairs `SystemColorWindowColor` with `SystemColorWindowTextColor`. No Microsoft page names the colour Windows' own
+  taskbar uses in a contrast theme: not verified.
+- **`HICON` from the art reads back** (test `hicon_from_art_reads_back`, 2026-11-04): a 24 px glyph through a 32-bit
+  top-down DIB section (BGRA) and `CreateIconIndirect` gives a 24 by 24, 32 bpp colour bitmap from `GetIconInfo`;
+  `GetDIBits` returns the pixel as B, G, R with alpha 0xff kept, and 0 alpha where the art is clear.
+- **`GetSystemMetricsForDpi(SM_CXSMICON, dpi)`** on the test laptop gives 16, 20, 24 and 32 at 96, 120, 144 and 192
+  dpi, and `16 * dpi / 96` at every 25% step from 100% to 400% (test `glyph_size_per_dpi`).
+- **Not verified by the tests** (the taskbar runs below answer the last one): the high word of the callback `lParam` for
+  a GUID icon (the code sets `uID` 0, so an echo of `uID` and a 0 both pass); whether a `NIM_ADD` of a GUID left by a
+  run that ended without `NIM_DELETE` fails (the code deletes the GUID and adds once more when an add fails); whether
+  `Shell_TrayWnd`'s DPI is the tray slot's size and the shell shows the drawn icon 1:1.
+
+First taskbar run, 2026-11-04 02:16 to 02:18, with the session locked (so no pictures, clicks or theme switch). The
+DELL 3840x2160 at 150% was the primary and held the taskbar.
+
+- **The demo at Medium adds its GUID icon.** `ux_icon` started with `explorer.exe <launch .cmd>`: `whoami /groups`
+  in the `.cmd` gave "Medium Mandatory Level" (S-1-16-8192); the demo logged `Added { attempt: 1 }` (`NIM_ADD` and
+  `NIM_SETVERSION` 4 both TRUE) while the session was locked.
+- **A GUID icon's settings entry.** Windows wrote `HKCU\Control Panel\NotifyIconSettings\<id>` with only `IconGuid`
+  (the demo GUID), `ExecutablePath` and `IconSnapshot`: no `UID` and no `IsPromoted`. Read with `Get-ItemProperty`.
+- **Tray slot and taskbar DPI.** `Shell_NotifyIconGetRect` by GUID from a per-monitor v2 caller: 48x72 physical
+  pixels. `GetDpiForWindow(Shell_TrayWnd)` 144, so the demo drew 24 px (`SM_CXSMICON` at 144), half the slot's width,
+  which is Windows 11's 16 px icon in a 32 px slot at 150% (inferred; whether the shell shows it 1:1 needs the
+  `--pattern` picture).
+- **A posted `TaskbarCreated` re-adds.** `RegisterWindowMessage("TaskbarCreated")` was `0xc07f`; posted to the demo's
+  window, the demo logged `TaskbarCreated` and `Added { attempt: 1 }` 14 ms later, and the rect stayed the same. Not in
+  the log: whether the first `NIM_ADD` of the GUID that was still there failed and the delete-and-add ran.
+- **`taskkill /PID` without `/F` quits the demo.** taskkill's `WM_CLOSE` reached the hidden window's thread: the demo
+  logged `WM_CLOSE: quitting` 0.2 s later and `icon removed`, exit 0; `Shell_NotifyIconGetRect` then failed with
+  `0x80004005` (no such icon).
+- **The session locks 5 minutes after the last input on AC.** `LogonUI` started 02:00:38, 301 s after the last input
+  (`GetLastInputInfo`); `VIDEOIDLE` AC is 300 s and `DelayLockInterval` 0 (lock when the display turns off);
+  `WTSSessionInfoEx` gave `SessionFlags` 0 (locked). So "the tester away 15 minutes" and "screen usable" cannot both
+  hold unless a display request keeps the display on from before the 5 minutes run out.
+
+Screen run, 2026-11-04 11:39 to 11:46 (session unlocked, an agent session's DISPLAY request held; debug build with the
+old icon art). Its captures are not kept, since they show the old icon; only the pattern capture stays.
+
+- **`SessionFlags` 0 is not a lock test.** The same read gave 0 with the session unlocked (a screen grab showed the
+  live desktop, `LogonUI` not running, input desktop `Default`). Use a screen grab or `LogonUI` instead.
+- **`IsPromoted` works on an entry with only `IconSnapshot`.** At first Windows wrote just `IconSnapshot` under the
+  new id; writing `IsPromoted` = 1 there put the icon on the taskbar within 2 s. The id (`12880751163260563509`) was
+  the same for `ux_icon.exe`, `ux_menu.exe` and `ux_notices.exe`, so it follows the GUID, not the exe path.
+- **Size: drawn 1:1 at 150%.** `--pattern` in the 48x72 slot: a 24x24 box with a pure white one-pixel border and a
+  white/dark checker, no soft or doubled lines (pixel read of the grab,
+  `docs/research/img/ux/taskbar-pattern-150.png`). So
+  `SM_CXSMICON` at `GetDpiForWindow(Shell_TrayWnd)` is the size the shell shows. 125% was not checked: the taskbar is
+  on the 150% screen.
+- **Theme switch reaches the icon in under 1 s.** Light through Settings: `ThemeChanged(light)` 0.0 s, the redraw in
+  near black (26,26,26) 0.17 s after it; Dark back: white redraw 0.37 s after `ThemeChanged`. No restart.
+- **The taskbar background did not follow the first Light switch.** At 11:41:51 both `SystemUsesLightTheme` and
+  `AppsUseLightTheme` read 1, Explorer's own chevron and search glyphs turned dark, but the DELL taskbar stayed dark
+  for at least 67 s, so the near-black icon sat on a dark taskbar like Explorer's glyphs (seen in a capture). In the
+  next Light switch (11:49:52) the taskbar did turn light. Cause not checked (Windows build 26300).
+- **Clicks with version 4.** Left click and right click each reached the printing `MenuView` with the cursor point
+  (3346,2124); Win+B, Right, Enter and then Shift+F10 each reached it with the icon centre (3347,2124). Win+B put the
+  keyboard focus ring on the demo icon (seen in a capture).
+- **Tooltip.** `SetCursorPos` onto the icon showed no tooltip in 2.5 s; injected `mouse_event` moves did:
+  "Wakeshot demo" and the state line (seen in a capture).
+- **A posted `TaskbarCreated` with the session unlocked:** `Added { attempt: 1 }` 11 ms later, the icon back in the
+  same slot (seen in a capture).
+
+### Tray UX: menu on screen
+
+2026-11-04 11:47 to 11:51 (`ux_menu`, debug build with the old icon art, at Medium; the DELL at 150%, taskbar DPI
+144), on a plain grey window. The captures are not kept, since they show the old icon; today's menu on screen is in
+`docs/research/img/brand/screen-menu-*.png`.
+
+- **Screen reader names.** `AccessibleObjectFromWindow(OBJID_CLIENT)` on each `#32768` window: every name without
+  an `&` access mark; the status line keeps its one literal `&` and is unavailable; Automatic checked; Keep awake has
+  popup; in the submenu Off checked and Keep screen on unavailable; separators unavailable.
+- **Open and close.** Left click, right click and Win+B, Right, Enter each opened the menu; an outside click closed
+  it 4 of 4; Esc closes the submenu, then the menu. 31 `Opened`, 31 `Closed` in the log.
+- **Keys.** Access keys `a`, `r`, `k` then `1` posted `Menu(Automatic(false))`, `Menu(Restore)` and
+  `Menu(KeepAwake(Minutes(60)))`; `s` (disabled Keep screen on) did nothing and the submenu stayed open. Arrow keys
+  also stop on the greyed status line (Win32 menus let a disabled item be selected), so Down x3 is Keep awake; Right
+  opened the submenu, Left closed it; Enter on Restore posted `Menu(Restore)`.
+- **Theme at the next open.** After the Light switch the next open logged `theme: light: true` and drew light, with
+  no restart; the light captures showed the check mark in the accent colour (reddish here), the dark ones in grey.
+- **Look against Explorer's new menu** (`docs/research/img/tray-look-dark-explorer-new.png`, 125%): row pitch 50 px at
+  150% (33 DIP) against about 40 px at 125% (32 DIP); a small rounded corner (first menu pixel at +4, +2, +1, +0 on the
+  top four rows, read from the grab); Segoe UI text; the Armenian status line draws with real glyphs and ends in an
+  ellipsis. Font and glyph sizes were not measured in pixels this run.
+- **Where it opens.** Anchored at the click point with its bottom there, so the menu overlaps the taskbar by 36 px
+  (menu 2984,1808 to 3840,2124; taskbar top 2088), as Windows' own tray menus do from the cursor (seen, not measured).
+- **`Styled` timing.** Most main-menu opens logged `Styled { at: Idle }`, the first open and the submenus `at:
+  FirstPaint`; `corners` and `border` were `Ok(())` every time and every capture had the rounded frame.
+- **Cost.** Debug build working set 17,227,776 and private 2,433,024 bytes before 20 opens; 17,272,832 and 2,408,448
+  after (no growth). Release sizes, measured earlier: `ux_menu` 361,472, `ux_icon` 264,192 bytes; no release build in
+  this run (debug only).
+
+### Tray UX: chimes
+
+2026-11-04. First code and reads only, no sound played; then (02:31 to 02:33) each chime played through
+`examples/ux_sounds.rs` with a loopback capture running, reads before and after.
+
+- **The "No Sounds" scheme's key name is `.None`** (read on the test laptop, 2026-11-04 before 01:54, registry reads
+  only):
+  `HKCU\AppEvents\Schemes` default value `.Default`; `Schemes\Names` holds `.Default` = `@mmres.dll,-800` and
+  `.None` = `@mmres.dll,-801`; `SHLoadIndirectString` loads them as "Windows Default" and "No Sounds".
+- **What Windows writes when the user picks "No Sounds"**: no Microsoft Learn page found (web search 2026-11-04).
+  Third-party pages (ITPro Today "JSI Tip 6827", Petri) select the scheme by setting the `Schemes` default value to
+  `.None` (one writes `.NONE`). That the Sound dialog writes `.None` there: not verified, since the tests do not switch
+  the test laptop's own scheme. A forum post says a scheme changed after picking shows as "(modified)"; that this is
+  stored as `.Current`: not verified.
+- **Rule built** (`sound::player`): the chimes are skipped only when the value is `.None`, case ignored. `.Default`,
+  `.Current`, a saved scheme's name and a value that cannot be read all play, so only a clear "No Sounds" keeps
+  Wakeshot quiet.
+- **windows-rs 0.62.2** (read in the crate source): `PROPVARIANT` has no `Drop`, so each `IPropertyStore::GetValue`
+  result needs `PropVariantClear` (an earlier throwaway test program's name read never cleared it); `WAVEFORMATEX` is
+  `repr(C, packed(1))`, so the mix format is read with `read_unaligned`.
+- **Shapes** (`sound/chime.rs`; each has 150 ms lead and 100 ms tail silence, raised-cosine fades): lid closed
+  1046.5 Hz 160 ms then 1568 Hz 340 ms, rising, -6 dBFS, 750 ms in all; going to sleep the same two notes falling
+  (170 ms, 380 ms), -9 dBFS, 800 ms; battery floor two 130 ms pulses on 659.25 Hz, 100 ms apart, -6 dBFS, 610 ms.
+- **Live setup** (2026-11-04 02:31 to 02:33): session locked since 02:00:38 (screen off, then the lock), on AC, lid
+  open. The DELL's two endpoints read unplugged (state 8), so Speakers (Realtek) was the only active endpoint and the
+  default for all three roles (67.33%, not muted, System Sounds session 100%), scheme `.Default`. Harness
+  `ux_sounds` (debug build). Loopback: a scratch tool outside the repo, ported from an earlier throwaway listener,
+  sample by sample: -50 dBFS threshold, a sound ends after 300 ms of quiet, notes split at 40 ms of quiet, pitch from
+  rising zero crossings of channel 0 per 50 ms, times from each packet's QPC position. Logs not kept.
+- **A chime plays and reaches loopback in a locked session.** Every one of the nine chimes below did. Agrees with an
+  earlier manual check, where the chime after a lock was heard.
+- **Per cue, seen in the Speakers' loopback** (three runs each: `play` alone, `--all`, `--wait` alone; "warm" is the
+  2nd or 3rd stream of one `--all` process):
+
+  | Cue | Stream running after the call | Call to first sound in loopback | Length (tone) | Peak, loopback (PCM) | Pitch seen |
+  |---|---|---|---|---|---|
+  | lid closed | 416, 369, 384 ms | 614, 567, 582 ms | 501, 502, 502 ms (500) | -0.2 dBFS (-6) | 1020 to 1060 Hz, then 1540 to 1600 Hz: rising |
+  | going to sleep | 382, 376 ms; warm 103 | 586, 577 ms; warm 303 | 546 ms three times (550) | -2.6 dBFS (-9) | 1560 to 1580 Hz, then 1020 to 1060 Hz: falling |
+  | battery floor | 374, 377 ms; warm 102 | 573, 575 ms; warm 298 | 361, 362, 362 ms (360) | -0.1 dBFS (-6) | two pulses of 131 to 132 ms, 660 to 663 Hz, the 2nd at +229 to 230 ms |
+
+  The first sound comes 46 to 54 ms after the stream runs plus the 150 ms lead silence, in every run. The sleep
+  chime reads 4 ms short: its 30 ms fade ends below the threshold.
+- **The slow stream start is paid once per process.** The first stream of each process ran 369 to 416 ms after the
+  call (research "Lid-close sound": 290 to 570 ms, almost all in `IAudioClient::Initialize`); the 2nd and 3rd of the
+  same process, 3 s apart, ran 102 to 103 ms after it, though each sound has its own thread and COM. Why, and how
+  long it stays fast: not verified.
+- **`play_and_wait` returns after the chime**: `Ok(Played)` 1135 ms (lid), 1177 ms (sleep) and 986 ms (floor) after
+  the call, each 52 to 55 ms after the tone's last sample in loopback, so about 1.8 s under the 3 s limit. It returns
+  once the engine has taken every frame, so only part of the 100 ms tail silence is still to play then (inference
+  from the code and these times).
+- **The endpoint path adds about 6 dB**: -6 dBFS chimes peak at -0.2 and -0.1 dBFS in loopback, the -9 dBFS one at
+  -2.6 (as "Lid-close sound": -6 to -0.4). So the two -6 dBFS chimes sit within 0.2 dB of full scale there, and a
+  louder chime would gain little. Whether a limiter or the Dolby effect caps it: not verified.
+- **Not run live here**: the display-audio branch of the device rule (no DELL endpoint was active; an earlier manual
+  check ran the same rule live) and the "No Sounds" skip (the test laptop's scheme stays `.Default`; unit test only).
+- **Reads before (02:31:21) and after (02:33:40) were equal**: scheme, default per role, all 14 playback endpoints
+  with state and form factor, Speakers master and channel volumes and mute, System Sounds session level and mute; 20
+  lines, compared line by line. Nothing was written.
+
+### Tray UX: notices
+
+2026-11-04 (code `crates/wakeshot-windows/src/notify.rs`, harness `crates/wakeshot-windows/examples/ux_notices.rs`).
+Facts from code and tests first (no test calls `Shell_NotifyIconW`; the tests use a fake shell), then the screen run
+(icon choice, click, pair, Do not disturb).
+
+- **Microsoft's `NOTIFYICONDATAW` page** (learn.microsoft.com/windows/win32/api/shellapi/ns-shellapi-notifyicondataw,
+  updated 2024-11-20, read 2026-11-04): with `NIIF_USER`, Vista and later show `hBalloonIcon`; `NIIF_LARGE_ICON` asks
+  for the `SM_CXICON` size, "can be used with all stock icons", and with `hBalloonIcon` the app "must supply an
+  SM_CXICON x SM_CYICON version". An empty `szInfoTitle` hides the icon; an empty `szInfo` removes a balloon.
+  `NIF_REALTIME` discards a balloon that cannot show at once. `NIIF_RESPECT_QUIET_TIME` drops a balloon, without
+  queueing it, in the user's first hour after the first sign-in or after an OS upgrade or clean install. `uTimeout`
+  is ignored since Vista. One balloon at a time: a new one "is queued and displayed when the older notification goes
+  away". The page does not say whether the shell copies `hBalloonIcon`.
+- **Microsoft's `Shell_NotifyIconW` page** (updated 2025-07-01, read 2026-11-04): the return value section names no last
+  error for FALSE. `NIN_BALLOONUSERCLICK` is "Sent when the balloon is dismissed because the user clicked the mouse",
+  with no word of which balloon. "On Windows 11 ... When a banner notification times out or is otherwise dismissed, it
+  will not be displayed in the Notification Center." This agrees with "Notification centre" above (no entry for the
+  balloon). Whether a banner held back by Do not disturb shows later or is lost: not verified from the docs; the screen
+  run below saw it lost.
+- **`CreateIconFromResourceEx` keeps 32-bit alpha** (test `large_icon_reads_back`, 2026-11-04): one frame of
+  `art::ico` (a BITMAPINFOHEADER of twice the height, bottom-up BGRA, then the AND mask) at 48 px, format version
+  0x00030000 and `LR_DEFAULTCOLOR`, gives a 48 by 48, 32 bpp colour bitmap; `GetDIBits` returns the disc's centre
+  pixel as B, G, R with its alpha, and alpha 0 at the clear corner.
+
+Screen run, 2026-11-04 11:51 to 12:04 (`ux_notices`, debug build with the old icon art, at Medium; the DELL at
+150%), on a plain grey window. The captures are not kept, since they show the old icon, except
+`docs/research/img/ux/notice-dnd-centre.png`. Today's notice: `docs/research/img/brand/screen-notice-dark.png` and
+`screen-notice-light.png`.
+
+- **Text fit.** Windows shows the title and at most four body lines; the fourth runs on past its wrap point and is
+  cut mid-word at the edge. Cut in the `--all` run: `restored-by-user` ("...but only while the lid is"), `lock-failed`
+  ("...and hibernat"), `update-wakeshot` ("...awake f"), `journal-lost` ("Click to see the c"). The other ten fit. The
+  header shows the exe name (`ux_notices.exe`) and the small tray glyph. Each cut capture showed four body lines
+  under a one-line title.
+- **A wrap model of the body** (2026-11-04): a greedy word wrap with GDI `TextRenderer` widths of Segoe UI. Calibrated
+  on 41 body lines read off 13 of the captures: at 18 px the widest line shown whole is 343 px and the narrowest that
+  wrapped 344 px (at 21 px: 399 and 404), so any width in between gives back every wrap in the captures. Each body as
+  worded then takes four lines in it, also with a 6% narrower line; about 150 UTF-16 units of these words fit, which
+  `text.rs` uses as its stand-in. Units are not width: a 60-character hold reason in capitals in the closed-lid report
+  takes a fifth line at the narrower width. The banner's real font and size were not read; only the captures were
+  matched. **Verified** against the captures only; the new words were not shown on screen in this run.
+- **Warnings read as warnings.** Every `warning true` notice shows Windows' yellow warning triangle; the rest show
+  the chosen large icon. Silent ones (`step-back`, `idle-locked`, `updated`) were sent with `NIIF_NOSOUND` (the
+  demo's flag line); no sound check was run.
+- **App icon against info icon.** Both read clearly in dark and light (captures not kept, the old art). The app icon
+  names the sender; the info "i" adds nothing the text does not say.
+- **Click.** A synthetic left click on the banner body gave `balloon click: OpenLog` (restore-failed) and `balloon
+  click: OpenTaskbarSettings` (first-run), each about 20 ms after the click.
+- **Pair.** The second notice, 1 s after the first, did not replace it: the first stayed on screen (no input came, so
+  it did not time out) and the second showed after the first was clicked away. The click on the first banner gave no
+  `NIN_BALLOONUSERCLICK` at all; the click on the second gave its own action (`OpenLog`). So a click on an older banner
+  did not run the newer action here; its own action was lost.
+- **Banners wait for input.** With no real input, a banner stayed up for more than 10 s, and a banner of a demo that
+  had already quit and removed its icon still showed later, ahead of the next run's banner. Closing it with its X
+  button let the next one show.
+- **Do not disturb loses the balloon.** DND turned on through Settings (toggle
+  `SystemSettings_Notifications_QuietHours_MuteNotification_Enabled_ToggleSwitch`), one warning notice sent (`Ok(())`):
+  no banner; the notification centre (Win+N) said "Do not disturb is on" and had no entry for it
+  (`docs/research/img/ux/notice-dnd-centre.png`); after DND off, 8 grabs over 8 s with the demo still running showed no
+  banner. DND read Off before and after.
+
+### Tray mode: start order, the dry run end to end and icon entries
+
+2026-11-04. Code reads first: no tray started, no screen, no power setting.
+
+- **The core gives the first-run notice before the first icon view.** In `core.rs`, `take` handles `Started` and
+  pushes `Notify(FirstRun)` (and `WriteConfig`); `settle` runs after it and ends with `view::show`, which pushes the
+  first `Tray`. So in the `Started` batch `Notify` comes before `Tray`. The dispatcher pushes `Notify` onto the IO
+  queue at its place and runs `Tray` on the loop later in the same batch, so an IO thread that already runs could call
+  the shell for the balloon before `NIM_ADD`, and `BalloonNotifier` does not retry. Read in the code;
+  `tray_mode` therefore starts the IO thread right after `Dispatcher::new`.
+- **`LoopWindow::run` destroys its window before it returns** (`window.rs`: `run(self, ..)`, `Drop` calls
+  `DestroyWindow`). Microsoft, `WTSRegisterSessionNotification` Remarks (fetched 2026-11-04): "When a window no
+  longer requires these notifications, it must call WTSUnRegisterSessionNotification before being destroyed." So the
+  unregister cannot wait for step 9 of the shutdown; `tray_mode` does it when the dispatcher returns Quit. The same
+  page: `RPC_S_INVALID_BINDING` may come before the Remote Desktop services have started, and they have all started
+  once the event `Global\TermSrvReadyEvent` is set. `tray_mode` retries on each safety tick instead of waiting on
+  that event (not tested: no early sign-in here).
+- **The profile folder is found the way Node finds it.** Rust's `std::env::home_dir` on Windows returns `USERPROFILE`
+  when it is set and not empty, else `GetUserProfileDirectory`; before Rust 1.85 it read `HOME` (std docs, fetched
+  2026-11-04; the repo pins 1.99.1, where it is not deprecated: clippy `-D warnings` is clean). Node's `os.homedir()` on
+  Windows "uses the USERPROFILE environment variable if defined. Otherwise it uses the path to the profile directory of
+  the current user" (Node docs, fetched 2026-11-04). Claude Code 2.1.317 builds its folder from `homedir()` (its bundled
+  code, read 2026-11-04). Whether the runtime the installed Claude Code runs on follows Node's rule here: not verified.
+
+Live run, 2026-11-04 02:58 to 03:01, without the picture: the session was locked (`LogonUI.exe` ran, read 03:01), so
+nothing on screen was seen. One run of the smoke test (x64 debug, `--ignored --test-threads=1 --nocapture`), the
+dry-run tray's own log printed by the test.
+
+- **The whole dry-run tray runs end to end in a locked session.** The smoke test passed in 4.1 s: the `.cmd` started
+  through Explorer ran at Medium (`S-1-16-8192` in its `whoami /groups`), `state.json` came 1.9 s after the launch, a
+  script hold with the elevated test's pid gave holding within 0.9 s, its delete gave idle within 1.0 s, `ask_quit`
+  ended the tray with exit code 0, and the dry-run journal was gone. So a Medium tray takes an elevated (High) holder as
+  alive; whether through its own open or the process list: not verified.
+- **`state.json` follows the core about 0.9 s late here, by design.** The log has "Holding starts" 156 ms after the
+  start line and "Holding ends" 1 s before the quit, while the test saw each in `state.json` 0.9 to 1.0 s after its
+  own write. `core/view.rs` writes `state.json` at most once a second and holds back a change that comes within a
+  second of the last write (read in the code).
+- **The dry run reads the real plan and writes nothing.** Its log: `would write` lid AC and DC 1 to 0 and sleep DC
+  18000 to 0 on Balanced at the hold, the reverse at its end, "RunOnce value not set", and `PowerSetRequest SYSTEM` and
+  `EXECUTION` only as dry-run lines. `powercfg /q` read 03:00 after the run: sleep AC and DC `0x4650` (18000), as the
+  dry run read. `%LocalAppData%\Wakeshot` does not exist; `Run` and `RunOnce` name no Wakeshot value (read 03:01).
+- **The shell keeps a `NotifyIconSettings` entry for a run in a locked session, and no AUMID key without a notice.**
+  After the run there was one entry with the dry-run GUID, `ExecutablePath` the build folder's exe, and an
+  `IconSnapshot` PNG of 24 by 24 px (its `IHDR`), which fits the 150% taskbar. No
+  `NotifyIconGeneratedAumid_<id>` key existed: no balloon was shown (the test writes `config.json`, so no first-run
+  notice). Exported, deleted at 03:00:17, still gone at 03:01:26.
+- **The quit is quick and the 1400 line comes once.** From the quit's restore to "Wakeshot ends with code 0" took
+  3 ms; the IO thread's one `PostMessageW` 1400 line ("as after a quit ... dropped") is Info, once.
+- **The taskbar picture (2026-11-04 12:10 to 12:13, unlocked session).** Debug tray with the old icon art,
+  `--dry-run` at Medium through Explorer (`whoami /groups`: `S-1-16-8192`), a script hold written by the
+  picture script. Checked by reading `HKCU\Control Panel\NotifyIconSettings` before and after each run:
+  - The dry-run GUID's entry `15983757285637097514` was already there (only `IconSnapshot`, no `IconGuid`, no path, no
+    `IsPromoted`), with its two `NotifyIconGeneratedAumid_` keys, from an earlier run between 04:48 and 12:10. The new
+    run, from another exe path, made no new entry: so the entry id goes with the icon GUID, and the earlier entry's
+    settings apply to every dry-run exe.
+  - With no `IsPromoted` the icon stays in the overflow, and `Shell_NotifyIconGetRect` still answers S_OK, with the
+    overflow chevron's rect (run 1's grab at that rect is centred on the chevron). `IsPromoted` = 1 written on the
+    entry while the tray ran put the icon on the taskbar; it was there at the grab 4.4 s later (run 2), as in
+    the tray icon's screen run. The value was removed again after the quit.
+  - A PowerShell tool note: `FindWindowW(cls, $null)` through `Add-Type` finds no window with a title, since PowerShell
+    passes `$null` as an empty string; `[NullString]::Value` gives a real null. The tray's loop window was found that
+    way (and listed by `EnumWindows` as `Wakeshot.Loop.DryRun`), and `WM_CLOSE` to it gave exit code 0 within 20 ms.
+
+### The dry-run icon entry and the journal's `restored` mark
+
+Checked 2026-11-04 04:22 to 04:25, with one run of the dry-run smoke test
+(`cargo test -p wakeshot-tray --test smoke -- --ignored`, Medium, temp data folder, no power setting written).
+
+- **The dry-run icon's `NotifyIconSettings` entry may hold only `IconSnapshot`.** The run made one new entry under
+  `HKCU\Control Panel\NotifyIconSettings`, id `15983757285637097514` again (the id the tray mode run found).
+  Read about a minute after the tray ended, it had one value, `IconSnapshot`: no `IconGuid` and no `ExecutablePath`.
+  So a clean-up that picks the entry by `IconGuid` can miss it; compare the entry ids before and after the run.
+  **Verified** (test: `Get-ItemProperty`, ids listed before and after).
+- **The `restored` mark in `journal.json` is saved before the writes, in an apply and in a restore.** The dry-run log
+  shows a "journal saved" line with every entry marked (printed in that run as "plan holds the original", a
+  first wording) right before "would write lidAc ... 1 to 0" (apply), and again right before "would write
+  lidAc ... 0 to 1" (restore at the hold end); the save after the apply's writes has no mark. So the mark means a
+  change under way, and the journal line now says "being changed". **Verified** (test, and source:
+  `ownership/apply.rs` marks a new entry "until our value is in force", `ownership/restore.rs` marks an entry before
+  it writes the original).
+
+### Tray UX: the demo checked by hand
+
+2026-11-04 15:48 to 16:30. The tester ran the demo `ux_all` (debug x64 from the repo tree, at Medium, icon pinned on
+the DELL taskbar at 150%) their own way, not step by step, and found two problems: the notice header named
+`ux_all.exe`, and a click on the tray icon opened the menu at the click point, over the taskbar icons, not above the
+taskbar. Icon and words: kept as they are. Not checked step by step (no problem seen): the banner on the lock screen,
+the chimes and their device after a dock replug, the first-run click, high contrast, the 100% scale and an Explorer
+restart. The demo's log shows what was run: all 15 notices, the icon states, Light mode and back, Open log, the menu
+picks.
+
+- **The banner header names the exe by its version info, else by its file name.** `ux_all.exe` had no version
+  resource: the shell wrote `DisplayName` "ux_all.exe" under
+  `HKCU\Software\Classes\AppUserModelId\NotifyIconGeneratedAumid_12880751163260563509`, and the header said
+  "ux_all.exe". Rebuilt with the tray exe's `VERSIONINFO` (`FileDescription` and `ProductName` "Wakeshot", linked as a
+  `.res`) and that key deleted, the next banner's header read "Wakeshot" and the key's `DisplayName` was "Wakeshot".
+  Explorer's own icon key of this kind shows as "Windows Explorer" in Settings > Notifications: `explorer.exe`'s
+  `FileDescription`, while its `ProductName` is "Microsoft® Windows® Operating System". So `FileDescription` is the
+  likely source: inferred from that one case (both fields are "Wakeshot" in our exes). No Microsoft page found that
+  says where the header name comes from (web search 2026-11-04). **Verified** for our demo (screen grab and registry
+  read, 16:28).
+- **What the tray exe shows.** `wakeshot-tray.exe` embeds that version info from `crates/build-resources.rs`, and the
+  dry-run tray's header said "Wakeshot" on screen (the dry-run end to end screen checks). The installed exe is the same
+  build with the same resource and gets its own key for the product GUID, so its header should read "Wakeshot" too:
+  inferred, not checked on an installed copy. Velopack's Start menu shortcut plays no part in the name as far as seen
+  here (the key is the shell's own `NotifyIconGeneratedAumid_` one; not verified on an install).
+- **The menu covered the taskbar.** It was aligned with `TPM_BOTTOMALIGN` to the click point, which lies inside the
+  taskbar, so the menu's lower part hid the taskbar's upper half next to the icon. Now a point outside the monitor's
+  work area moves to the work area's edge facing the taskbar. Run 2, a synthetic click at 3336,2124: aligned to
+  3335,2088; the menu window `#32768` sat at 3327,1772 to 3840,2088, its bottom on the taskbar's top edge (2088), and
+  Windows slid it 8 px left to keep it on the monitor. **Verified** (window rect and screen grab).
+- **A tee keeps a console demo's keys.** `ux-all.cmd` runs `ux_all.exe ... 2>&1 | tee.exe -a -i <log>` (Git's GNU
+  tee 8.32): the demo's stdin stays the console, and `ReadConsoleInputW` got every key the tester pressed. Three stray
+  keys came in that nobody asked for (`m` at the start, then `k` and `s`); cause not checked. **Verified** (the log).
+- **Today's display scales:** the DELL 3840 by 2160 at 150% (primary, the tray) and the laptop screen 2304 by 1440
+  physical at 150% (`GetDpiForMonitor` effective DPI 144 in a per-monitor v2 process). Earlier notes in this file say
+  the laptop screen ran 1920 by 1200 at 125%; whether it changed since or was misread then: not verified. Undocked (run
+  2, 16:32:53) the demo's icon redrew at 20 px, which is 125% on the laptop taskbar, and at 24 px again once docked: so
+  the laptop screen likely has 125% alone and 150% docked (inferred from the icon size).
+
+Run 2 (16:27 to 16:34) and run 3 (16:37), after the fixes: the tester confirmed the menu's new place and ran two more
+steps (below).
+
+- **A notice shown while locked reaches the lock screen, content hidden.** `l`, then `IdleLocked` 10 s later
+  (`Ok`): the tester saw the banner on the lock screen with its content hidden as private, and no sound (the notice
+  is silent by design). The test laptop's "Show notifications on the lock screen" is On. **Verified** (the tester's
+  eyes, the log).
+- **The chimes take the laptop speakers.** Undocked: "on speakers (the default device)". After the dock replug, with
+  the DELL screen audio the default again: "on speakers (speakers instead of the default screen audio)". The tester
+  heard all three both ways. **Verified** (log lines, the tester's ears).
+- **A dock replug can make a new default output device.** Before: "4 - DELL U2723QE" at 20%; after an unplug and
+  replug: "3 - DELL U2723QE", a new endpoint id, at 18%, still the default. **Verified** (Core Audio reads 15:52 and
+  16:39); why Windows made a new endpoint: not checked.
+- **Banners go after about 6 s while the user is active, and a second one waits.** The test laptop's "Dismiss
+  notifications after this amount of time" is 5 s (`SPI_GETMESSAGEDURATION` and `HKCU\Control Panel\Accessibility`
+  `MessageDuration`, read only); third-party guides give 5 s as Windows' default, and Microsoft's
+  `SystemParametersInfoW` page names none. Run 3, two notices 1.7 s apart, grabs every 0.4 s: the first banner stayed
+  about 6 s, the second did not replace it and showed after it for about 6 s. A four-line body is hard to read in
+  that time, and the banner is not kept in the notification centre (above). **Verified** (grabs, reads).
+
+### The notice header's icon and the app id key
+
+Checked 2026-11-05 from 02:25, about the white square in the notice header that the manual checklist found. Sources
+read, not tested on screen: the Microsoft docs repo, the Windows App SDK and velopack 1.2.161 source. What the header
+shows after the change (seen in the screen session of 2026-11-05): the Wakeshot icon and name from both start paths, the
+Start menu and the exe itself; and a balloon is a banner-only toast (`bannerOnly="true"`) that Win+N never keeps.
+
+- **Velopack already gives every start the same app id.** `VelopackApp::run()` (velopack 1.2.161 `src/app.rs`, lines
+  147 to 159) calls `SetCurrentProcessExplicitAppUserModelID` for every start that is not a fast hook, with the
+  manifest's `shortcutAumid` or else `velopack.<pack id>` (`locator.rs` `get_app_user_model_id`). That covers the
+  Start menu shortcut, the Run value at sign-in, a restart after an update and a direct start of `current\` alike, so
+  the tray needs no call of its own. `pack.ps1` names no AUMID, so the id is `velopack.HaikAsatryan.Wakeshot`, the
+  Start menu shortcut's too. An exe run from `target\` is not installed, `run()` returns before the call, and the
+  shell files its balloons under its own `NotifyIconGeneratedAumid_<id>`. A `--dry-run` started from an installed
+  copy gets the real id as well (`velo::startup` runs before the mode is read). **Verified** (source). An earlier guess
+  that a start from the Run value gets the generated id was wrong for an installed exe (source; not seen on screen).
+- **Microsoft's page on the registration is gone.** "Send a local toast notification from other types of unpackaged
+  apps" redirects to `windows/apps/develop/notifications/app-notifications-other-frameworks`, which returns 404
+  (curl, 2026-11-05); the docs repo replaced it on 2025-07-28 with a page on the Windows App SDK APIs and no registry
+  values. The last version in `MicrosoftDocs/windows-dev-docs` (commit 2e559c1, ms.date 2020-11-17) shows the key
+  `HKEY_LOCAL_MACHINE\Software\Classes\AppUserModelId\<AUMID>` with `DisplayName` and `IconUri` (`REG_EXPAND_SZ`,
+  example `C:\icon.png`), `IconBackgroundColor` (`REG_SZ`, `AARRGGBB`) and `CustomActivator` (`REG_SZ`, a COM class
+  for clicks). It names no picture size. **Verified** (`gh api`, the file at that commit).
+- **What the Windows App SDK writes for an unpackaged app.** `AppNotificationManager::Register` writes
+  `HKCU\Software\Classes\AppUserModelId\<id>` with `DisplayName` and `IconUri` (both `REG_EXPAND_SZ`, a plain file
+  path) and `CustomActivator`, and no `IconBackgroundColor` (`dev/AppNotifications/AppNotificationUtility.cpp`
+  `RegisterAssets`). With no icon it deletes `IconUri`, with the comment "If no icon is specified in the Registry, the
+  OS will render a default icon for App Notifications". Its own icon is the exe's small icon saved as a PNG under
+  `%LocalAppData%\Microsoft\WindowsAppSDK\`, "good enough for an App Notification icon since higher quality doesn't
+  really impact in a substantial way"; it accepts `.bmp`, `.ico`, `.jpg` and `.png` (`ShellLocalization.cpp`).
+  **Verified** (source on GitHub, last change 2024-06-30). That the white square in the photo is that default
+  picture: likely (inferred from the comment and from there being no key), **not verified**.
+- **The shell's own generated keys on the test laptop.** `%TEMP%\NotifyIconGeneratedAumid_*.png`: four at 28 by 28 and
+  one at 56 by 56, all RGBA (read 02:30). So the shell sizes its own header picture near the small icon size.
+  `HKCU\Software\Classes\AppUserModelId` held no Wakeshot key; `HKCU\...\Notifications\Settings\
+  velopack.HaikAsatryan.Wakeshot` is still there from the 01:5x uninstall (`PeriodicNotificationCount` 14), Windows'
+  own, left alone. **Verified** (reads).
+- **Reading a shortcut's app id.** `Shell.Application` `ParseName(<lnk>).ExtendedProperty('System.AppUserModel.ID')`
+  gave the ids of five Start menu shortcuts on the test laptop (for example `com.squirrel.Postman.Postman`), so
+  `e2e.ps1` reads the installed shortcut's id this way. **Verified** (run).
+- **The key writer.** `notify::NoticeAppId` against scratch keys under `HKCU\Software\Wakeshot-test`: `DisplayName`
+  and `IconUri` come back as `REG_EXPAND_SZ` with the path as given, an Armenian folder name too; a register with no
+  icon deletes the old `IconUri`; `RegDeleteTreeW` plus `RegDeleteKeyW` takes the key with a subkey in it, and a
+  second remove answers "was not there". **Verified** (tests `app_id_key_is_written_and_removed`,
+  `real_install_and_updated_register_the_notice_app_id`).
+- **End to end on a local pack.** `packaging/e2e.ps1` at Medium (a `.cmd` opened with `explorer.exe`), 02:49:45 to
+  02:50:16, on a release x64 build of the tree: 102 checks passed, 0 failed, exit 0. After Setup.exe `--silent`, after
+  Setup.exe over the install and after `Update.exe apply` of 0.1.1, the key held `DisplayName` "Wakeshot" and `IconUri`
+  `%LocalAppData%\HaikAsatryan.Wakeshot\current\wakeshot-notice.png` (both type 2, `REG_EXPAND_SZ`), that file was
+  byte-equal to `assets/wakeshot-notice.png`, and each hook logged "notice app id velopack.HaikAsatryan.Wakeshot
+  registered with its icon ...". The installed Start menu shortcut's `System.AppUserModel.ID` was
+  `velopack.HaikAsatryan.Wakeshot`. After `Update.exe --uninstall --silent` the key was gone; no install trace, the
+  real plan's values and hash as before (lid 1 and 1, sleep 18000 and 18000, `C64AFDB1CFDD13CF`). The 0.1.0 to 0.1.1
+  delta was 6,934 bytes. **Verified** (the run's log, not kept).
+
+### Plain taskkill and the tray's windows
+
+Checked 2026-11-05 from 12:15, elevated, with a probe exe of our own and a dry-run tray on a temp data folder.
+Microsoft's taskkill page says only that `/f` ends a process by force; it names no window or message (not read again
+this time: from memory, **not verified**). Wine's and ReactOS's `taskkill.c` post `WM_CLOSE` to every top-level window
+of the process (web search result, source not read); the native tool does not, as below.
+
+- **taskkill without `/F` posts one `WM_CLOSE`, to the process's first top-level window in `EnumWindows` order.**
+  Probe (C#, `csc` of .NET Framework 4; three hidden `WS_OVERLAPPED` windows made in the tray's order and styles:
+  `Probe.Loop`, then `Probe.TrayMenu` and `Probe.TrayIcon` with `WS_EX_TOOLWINDOW`; each `WM_CLOSE` logged and
+  ignored). Order Icon, Menu, Loop: two `taskkill /PID` runs gave one posted `WM_CLOSE` each, both to the icon window
+  (the pump saw it, `InSendMessage` false), none to the others. After `SetForegroundWindow` on the menu window the
+  order was Menu, Icon, Loop, and the menu window got the one `WM_CLOSE`. taskkill said "SUCCESS: Sent termination
+  signal" each time. **Verified** (runs).
+- **The dry-run tray's order at a fresh start is `Wakeshot.TrayIcon`, `Wakeshot.TrayMenu`, `Wakeshot.Loop.DryRun`,
+  `IME`.** So before the fix a plain taskkill hit the icon window, and after a menu open the menu window (the order
+  the screen session saw), and the tray ran on. With the icon and menu windows passing `WM_CLOSE` on, the test
+  `real_e2e_plain_taskkill_quits_with_the_restore` (Keep awake on, then `taskkill /PID`) quit with exit 0 within the
+  test's wait, logged "restore of every plan: found journal entries; 0 entries left" and "Wakeshot ends with code 0",
+  and left no Keep awake file and no journal; twice. With the icon's pass taken out by hand, the same test failed:
+  "the tray did not quit after taskkill". **Verified** (runs).
+- **A sent `WM_SYSCOMMAND` `SC_CLOSE` becomes a sent `WM_CLOSE` through `DefWindowProcW`** on such a hidden window
+  (probe). A posted `WM_SYSKEYDOWN` `VK_F4` with the Alt bit gave nothing. Whether a real Alt+F4 reaches the menu's
+  hidden window while it is the foreground window after a menu open: **not verified** (a real key test could close
+  another program's window). The menu's window ignores `SC_CLOSE` for that case.
+
+### Notice retry
+
+Checked 2026-11-05 from 12:20, from the saved tray logs of two screen sessions and a probe that adds no icon.
+
+- **The refusal came once, in the second of two notices right after a resume and a lid open.** The log of the screen
+  session of 2026-11-05: 11:24:38.231 the first line after the resume, 11:24:39.004 "notice shown: StepBack",
+  11:24:39.010 "notice ClosedLidReport not shown: Shell_NotifyIconW failed with 1462" (lid open 11:24:36.4). The manual
+  checklist's log, the same pair after a resume and a lid open: StepBack 00:47:52.392 and ClosedLidReport 00:47:52.413,
+  both shown. Every other notice in the two logs (FirstRun four times, ClosedLidReport eight, StepBack three,
+  RestoredByUser once) showed at the first try. **Verified** (logs).
+- **The two differ in the balloon icon.** StepBack is a warning (`NIIF_WARNING`, no `hBalloonIcon`); ClosedLidReport is
+  not (`NIIF_USER | NIIF_LARGE_ICON` with the app icon drawn at `SM_CXICON` for the taskbar's DPI). 1462 is
+  `ERROR_INCORRECT_SIZE` ("Incorrect size argument"). Geoff Chappell's notes (Vista era) say a `NIIF_LARGE_ICON` icon
+  smaller than `SM_CXICON` fails the call, without an error code. That the 1462 came from an icon size check during
+  the display change of the lid open: a guess, **not verified**.
+- **The client side gives no 1462 for an icon that is not there.** Probe (C#, per-monitor v2, system and taskbar DPI
+  144, `SM_CXICON` 48): `NIM_MODIFY` with `NIF_INFO` on our own hidden window's uID 77, never added, for balloon icons
+  of 16 to 96 px with `NIIF_USER | NIIF_LARGE_ICON`, `NIIF_USER` and `NIIF_INFO | NIIF_LARGE_ICON`: every call FALSE
+  with last error `0x80004005` (`E_FAIL`). So the size check, if any, runs after the icon is found. A test on an added
+  icon was not made: it adds a tray icon and its settings entry, and may show a banner. **Verified** (run).
+- **The fix: one retry after 1 s, the app icon drawn again at the size of that moment.** The gaps seen were 6 ms
+  (refused) and 21 ms (shown); 1 s is far past both and is the settle time the tray icon gives display and theme
+  broadcasts. Spacing every pair of notices instead would delay each notice and would not help if Explorer's state
+  after the resume was the cause, so the retry is the lean fix. Change it when a log shows "the notice was refused
+  again" after the wait. A design call, not a fact.
+
+### Menu status glyph: place and contrast
+
+Checked 2026-11-05, offscreen renders through `menu_paint::paint_item` on the test laptop
+(Segoe UI Variable Text and Segoe Fluent Icons installed). No screen picture.
+
+- **Where WinUI puts a row icon**: at the left edge of the 28 epx icon column, 16 epx wide, and the text 28 epx
+  after that edge, which is why a status line with no icon starts after an empty space of two columns (check and
+  icon, 56 epx). The status glyph takes that same box. **Verified** in our layout constants (`menu_paint.rs`, from
+  the WinUI 3 template, `docs/research/tray-menu-look.md`); WinUI's template itself was not re-read.
+- **The glyph lines up with the row icons**: across its ink, the status glyph spans 45..57 px and the Automatic eye
+  43..59 px at 96 dpi, 56..72 and 54..74 at 120, 68..86 and 65..89 at 144, 78..100 and 75..103 at 168, 90..114 and
+  86..118 at 192: the same centre at every scale. The glyph's ink is narrower than the eye's, as the tray frame keeps
+  its padding. **Verified** (test `status_glyph_sits_where_the_row_icons_sit`, printed).
+- **Contrast on the menu's fill**, WCAG 2 and the worst of protan, deutan and tritan (Machado 2009, as `art.rs`), on
+  the fully covered drawn pixels at 96, 120 and 144 dpi: dark menu `#2C2C2C`: ink `#FFFFFF` 13.97 (colour-blind
+  13.97), light `#B6E05A` 9.18 (9.03); light menu `#F9F9F9`: ink `#1A1A1A` 16.53 (16.53), light `#3B7A2A` 4.98 (4.76).
+  All over 3:1. **Verified** (test `status_glyph_keeps_3_to_1`, printed).
+
+## Files, processes and the log
+
+### Medium launches through Explorer and console stop events
+
+Checked on 2026-11-03 between 03:30 and 03:57 (a second round: 04:20 to 04:30) on the Windows laptop, from an
+elevated agent session. The logs, the scripts and the three test programs run here (the power settings, lid and tray
+programs, throwaway test programs) are not kept.
+
+- **Windows Terminal opens elevated here.** Its `settings.json` has `profiles.defaults.elevate: true`; UAC is on
+  (`EnableLUA` 1) with `ConsentPromptBehaviorAdmin` 0 (no prompt). The running `WindowsTerminal.exe` had a High,
+  elevated token; the shell `explorer.exe` (the one that owns the desktop window) had Medium, not elevated (token read
+  with `OpenProcessToken` from the elevated session). `HKCU\Console\%%Startup` names Windows Terminal as the default
+  terminal. `SeparateProcess` is 0, so File Explorer windows run in the shell Explorer.
+- **A `.cmd` opened through Explorer runs at Medium.** `explorer.exe <file>.cmd` from the elevated session was served
+  by a new `explorer.exe /factory,{75dff2b7-6936-4c06-a8bb-676a7b00b24b} -Embedding` started by `svchost -k
+  DcomLaunch`; the chain was pwsh <- cmd <- that Explorer. `whoami /groups`: Medium Mandatory Level; Administrators
+  not enabled. Every exe started from that pwsh (the three test programs) reported "elevated false, integrity
+  Medium (0x2000)", and the lid test program enabled SeShutdownPrivilege (last error 0). A real mouse double-click goes
+  through the shell Explorer instead of a factory instance; that path was not run by an agent (the shell for the
+  manual steps, `morning-shell.cmd`, not kept and called "the morning shell" below, prints its token, so the tester
+  sees it).
+- **That `.cmd` runs in a new Windows Terminal window, not a classic console** (checked 04:26 in the second round, a
+  test `.cmd` opened with `explorer.exe`). From inside the shell, `GetConsoleWindow` gave a
+  window of class `PseudoConsoleWindow` whose owner window belonged to a new `WindowsTerminal.exe` (not the user's
+  elevated one, PID 13456), while `WT_SESSION` was empty. So a missing `WT_SESSION` does not mean a classic console
+  here: Windows Terminal takes over the console after the shell has started (it is the default terminal), too late to
+  add the variable. The shell token was still Medium, not elevated.
+- **powercfg as a normal user.** At Medium: `/duplicatescheme`, `/changename`, `/setacvalueindex` and
+  `/setdcvalueindex` (LIDACTION, STANDBYIDLE, VIDEOIDLE, RTCWAKE, ESBATTTHRESHOLD) on a plan copy, `/setactive`,
+  `/list` and `/delete` of an inactive copy all exit 0, and the values read back. CONSOLELOCK writes fail with exit 1,
+  "You do not have the permissions required to perform this action."; elevated they work. Same as the power settings
+  test program's `PowerSettingAccessCheckEx` result (5 for a CONSOLELOCK write).
+- **Ctrl+C and window close through pwsh.** A test program's exe started by `pwsh -Command` in a new console host
+  window gets Ctrl+C (`GenerateConsoleCtrlEvent` to the console group) in its own handler (event 0); pwsh waits for it
+  and then exits. `WM_CLOSE` to the console window gives the exe event 2 (close); the power settings program switched
+  back and deleted its
+  copy 130 ms later, before Windows ended the process. (That test used an explicit `conhost.exe` window.)
+- **Closing the morning shell's Windows Terminal window** (04:28 and 04:29, second round: the exe run through a
+  `function spike { & exe @args }` wrapper in a window started like the morning shell, then `WM_CLOSE` posted to that
+  Terminal window). `spike hold --allow-ac`: event 2 arrived 0.33 s
+  after the close, the plan was back and the copy deleted 0.47 s after it, the journal was gone, and the exe, pwsh and
+  that Terminal process all ended. `lidspike lid` (closed while it waited for the lid): restored 0.1 s after event 2,
+  and every log line through `DONE` and `[end]` was written before the process ended, 1.1 s after the close. Ctrl+C
+  typed into a Windows Terminal window was not tested by an agent.
+- **After a close event, Windows ends the process as soon as the handler returns.** Microsoft's `HandlerRoutine` page
+  (read 2026-11-03 04:20): for `CTRL_CLOSE_EVENT`, returning TRUE means "the system terminates the process"; the
+  time-out is `SPI_GETHUNGAPPTIMEOUT`, 5000 ms. Seen above: `hold` ended right after its handler returned (it marks
+  itself clean right after the restore); `lid` waits in its handler until its log is done (up to 4.5 s), so its log
+  survived. Marking the lid tool clean right after the restore would cut its RESULT lines.
+- **Logoff and shutdown never reach the test programs' console handlers.** Both exes import `user32.dll` (`dumpbin
+  /imports`). The rule that a console app which loads user32 gets no `CTRL_LOGOFF_EVENT` or `CTRL_SHUTDOWN_EVENT` is
+  from Microsoft's docs as a code review quoted it; not re-read. The `HandlerRoutine` page (read 2026-11-03) says
+  more broadly that interactive apps are ended at logoff and shutdown before those two signals are sent, so only
+  services receive them.
+- **PowerShell pipelines can stop a native exe early.** `lid-sleep-spike.exe read | Select-String ... |
+  Select-Object -First 1` in pwsh 7.6.9 left a log with 2 lines; the same run with the output collected first logged
+  everything. So step lists must not pipe a test program into `Select-Object -First`. Whether pwsh ended the process
+  or its output pipe broke: not checked.
+- **Thermal zone with the lid open on AC** read 55.1 C and 53.1 C at 03:47 and 03:51 during the dry runs (idle 41 to
+  47 C at 02:45). The test programs' new default heat limit of 85 C sits above both and the 67 C full-load reading,
+  and below `_CRT` 112.85 C.
+
+### Log appends, rolls and the UTC offset
+
+Checked 2026-11-03 on the test laptop (local NTFS SSD), with the tests in `wakeshot-windows/src/log.rs` and
+Microsoft's pages read the same day.
+
+- **Appends from several processes never mix.** `log::tests::appends_from_many_processes_never_mix` starts its own test
+  exe as 4 children with one start time. Each opens `wakeshot.log` with `FILE_APPEND_DATA` only (share read, write and
+  delete) and appends 2000 lines, one `WriteFile` each: payloads of 0 to 179 bytes, every 50th one 3000 to 5199 bytes,
+  so some lines cross a 4 KiB page. Six runs: 2,083,667 bytes each, every line whole, each child's lines all there and
+  in order, 7826 to 7936 switches between children (of 8000 lines), so the writes really overlapped. Network shares,
+  FAT, exFAT or ReFS: not verified.
+- **`FILE_APPEND_DATA` without `FILE_WRITE_DATA`** (Microsoft, "File Access Rights Constants"): "For local files,
+  write operations will not overwrite existing data if this flag is specified without FILE_WRITE_DATA." The page says
+  nothing about one process's write against another's; the test above is the evidence.
+- **Roll with the file open elsewhere** (`log::tests::roll_with_file_open_elsewhere`). `MoveFileExW` with
+  `MOVEFILE_REPLACE_EXISTING` on `wakeshot.log` while another writer (delete sharing) has it open: works, and that
+  writer's next lines land in the moved file. A reader without delete sharing on `wakeshot.log`: fails with 32
+  (`ERROR_SHARING_VIOLATION`). A reader that shares delete (std `File::open`) on the target `wakeshot.2.log`: fails
+  with 5 (`ERROR_ACCESS_DENIED`), so no roll happens while an app holds the oldest file open. No line was lost in any
+  case.
+- **The log's UTC offset matches Windows.** `FileTimeToLocalFileTime` on the current time gives local minus UTC of
+  +240 minutes; `GetDynamicTimeZoneInformation` (`Bias` plus the standard or daylight bias its return value names)
+  gives the same (`log::tests::local_offset_matches_windows`); `Get-Date -Format zzz` printed `+04:00`. Yerevan has no
+  daylight saving time, so a switch was not tested.
+- **`FileTimeToLocalFileTime` page** (Microsoft Learn, updated 2025-07-01). Remarks, in full: to account for daylight
+  saving time when converting a file time to a local time, use `FileTimeToSystemTime`,
+  `SystemTimeToTzSpecificLocalTime` and `SystemTimeToFileTime` instead. The page no longer says which time zone
+  settings the call uses. So "it applies the bias in force now" is inferred from that remark, not verified. The log
+  writes the offset it applied next to each time, so local time minus the offset is the exact UTC instant either way.
+- **A directory listing showed the true size of a file still open for append.** A scratch PowerShell check appended
+  2 MiB through an open .NET `FileStream` (append, share read, write and delete): `FileInfo.Length`, `dir` and
+  `DirectoryInfo.EnumerateFiles` all showed 2,097,157 bytes before the close. Same process only; another process's
+  open handle: not verified. The roll reads the size from its own handle anyway (`GetFileSizeEx`).
+- **`Win32_System_Time` is declared.** `crates/wakeshot-windows/Cargo.toml` lists it, and the log test's call to
+  `GetDynamicTimeZoneInformation` compiles.
+
+### Process opens, the system process list and exit waits
+
+Checked 2026-11-03 on the test laptop (Windows 11 Pro 10.0.26300), with the tests in
+`crates/wakeshot-windows/src/process.rs`: `cargo test --locked -p wakeshot-windows process:: -- --nocapture` and
+`cargo test --locked -p wakeshot-windows -- --ignored process:: --nocapture`. The tests print what each call returned.
+
+- **The test runner here is elevated, with SeDebugPrivilege on.** `whoami /groups` in the agent's shell: High
+  Mandatory Level; `whoami /priv`: SeDebugPrivilege Enabled. The test's own token read: High (S-1-16-12288),
+  elevation type Full. So agent sessions on the test laptop run elevated, and their children inherit an enabled
+  SeDebugPrivilege.
+- **SeDebugPrivilege passes the DACL, so a denied open needs a token without it.** With the runner's token, an open
+  with exactly `SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION` worked on both `csrss.exe` processes and on a child
+  made with an empty DACL (`D:`). With the same token minus every privilege but SeChangeNotify
+  (`CreateRestrictedToken(DISABLE_MAX_PRIVILEGE)`, impersonated on the test thread), all three opens failed with
+  `0x80070005`, and the system process list still had each pid with the same creation time, so `liveness` said Yes.
+  Not checked: a real Medium caller without the impersonation (the restricted token keeps the High label).
+- **An open handle does not keep an ended process in the system list, but under load the list can lag the exit by
+  tens of milliseconds.** A child was killed and waited on, with its handle still open:
+  `NtQuerySystemInformation(SystemProcessInformation)` had no record with its pid, while `OpenProcess` by pid still
+  worked and a 0 ms wait on that handle was signaled. One check per test run, in three runs. Checked again on
+  2026-11-08 on the test laptop with a test run (not kept): idle, 0 of 8,200 ended children were still listed after
+  the exit wait, and an open handle alone kept none listed (0 of 4,000 rounds); under full CPU load (24 to 72 busy
+  threads), about 1 in 16,000 was still listed after its exit wait returned, with the same pid, the same start and 1
+  thread, and left the list 62 ms later. So a listed pid runs, or ended a moment ago. A thread count check would not
+  catch that record (it still showed 1 thread).
+- **The list's parent pid and image name.** `Reserved2` in the `windows` crate's `SYSTEM_PROCESS_INFORMATION` (in the
+  NT layout `InheritedFromUniqueProcessId`; winternl.h does not name it) held the real parent pid: this test process
+  for a child from `std::process::Command` and for one from `CreateProcessW`, Explorer for the outside-tree child.
+  `ImageName` for this process was the exe file name only, `wakeshot_windows-a7dbc494c7637936.exe` (37 characters,
+  not cut to 15), no path. The creation time at `Reserved1` plus 24 bytes equalled `GetProcessTimes` for this process
+  and for each child.
+- **Explorer as the parent works, from High and from Medium.** `spawn_outside_tree` opened Explorer (the process of
+  `GetShellWindow`, pid 12528) with only `PROCESS_CREATE_PROCESS` and passed it as
+  `PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`. From the elevated runner: the child's parent pid in the list was Explorer's,
+  and its token was Medium (S-1-16-8192), elevation type Limited: Explorer's token, not the caller's. Then the test exe
+  was started that way (so with Medium, Limited) and ran the same test, writing a report file: it passed, so a Medium
+  process may use Explorer as the parent. Not tested: how Task Manager groups such a child, and that it
+  also takes Explorer's job (Microsoft's UpdateProcThreadAttribute page says it does; not re-read this session).
+- **Exit waits.** `RegisterWaitForSingleObject` with `WT_EXECUTEONLYONCE`, on a duplicate of the process handle:
+  fired once after the child was killed, though the caller had closed its own handle first; no second call within
+  300 ms. `UnregisterWaitEx(wait, INVALID_HANDLE_VALUE)` before the exit: the callback never ran (checked 300 ms
+  after the exit). The same call while a callback ran (it slept 300 ms) returned only after the callback finished.
+- **Command line quoting.** `CommandLineToArgvW` split the line `command_line` builds back into the exact arguments,
+  among them an empty one, one with spaces, one with quotes, `C:\dir\`, `C:\my dir\` and `back\\"quote`.
+
+### Files, the registry and named mutexes
+
+Checked 2026-11-03 by the tests in `store::tests` (Windows 11 Pro 10.0.26300,
+NTFS, files in `%TEMP%`, test keys under `HKCU\Software\Wakeshot-test`), unless a line names another source.
+
+- **`MoveFileExW` cannot replace a file a reader has open.** `MoveFileExW(REPLACE_EXISTING | WRITE_THROUGH)` over a
+  target that another handle had open returned 5 (`ERROR_ACCESS_DENIED`), even when that handle was opened with
+  read, write and delete sharing (first run of `atomic_write_replaces_a_file_a_reader_has_open`). The same 5 came
+  back when the holder had no delete sharing.
+- **A rename by handle with POSIX semantics can.** `SetFileInformationByHandle(FileRenameInfoEx)` with
+  `FILE_RENAME_FLAG_REPLACE_IF_EXISTS | FILE_RENAME_FLAG_POSIX_SEMANTICS`, on a `DELETE` handle of the temp file,
+  replaced the target while a reader with delete sharing held it; the reader then still read the old bytes, whole,
+  and a new open read the new bytes. When the holder had no delete sharing it failed too, and the old file stayed
+  whole with no temp file left (`atomic_write_keeps_old_file_on_failure`). So `store::write_atomic` tries
+  `MoveFileExW` first and this rename on 5. Rust's `std::fs::rename` does the same: `MoveFileExW`, then on
+  `ERROR_ACCESS_DENIED` the same `FileRenameInfoEx` call with the same two flags, returning the first error if it
+  fails (source read 2026-11-03, `library/std/src/sys/fs/windows.rs`, `rename_inner`, rust-lang/rust master).
+- **Delete with a reader.** `DeleteFileW` of a file a reader held with delete sharing succeeded, the name was free at
+  once (a read of it said missing, a new write of the same name worked), and the reader still read the old bytes
+  (`remove_and_rewrite_while_a_reader_has_the_file_open`).
+- **Write-through.** Microsoft, `MoveFileExW` (updated 2025-07-01): `MOVEFILE_WRITE_THROUGH` "The function does not
+  return until the file is actually moved on the disk. Setting this value guarantees that a move performed as a copy
+  and delete operation is flushed to disk before the function returns." The temp file sits beside the target, so the
+  move is never a copy and delete. What a power cut right after the move leaves: not tested by us.
+- **Missing versus error on read.** `CreateFileW(OPEN_EXISTING)` gave "missing" (2 or 3) for a missing file and for a
+  file in a missing folder; a folder path (no `FILE_FLAG_BACKUP_SEMANTICS`) failed with another error
+  (`read_whole_tells_missing_from_error`; the code was not printed).
+- **Abandoned mutex.** A thread that took a named mutex and ended without a release: the next wait returned
+  `WAIT_ABANDONED` with ownership, and a wait after the release returned `WAIT_OBJECT_0`
+  (`abandoned_mutex_counts_as_taken`). Microsoft, `WaitForSingleObject` (updated 2024-11-20): `WAIT_ABANDONED` means
+  the owner thread ended without releasing the mutex; "Ownership of the mutex object is granted to the calling
+  thread", and "If the mutex was protecting persistent state information, you should check it for consistency". A
+  `Global\` mutex was created and taken by the test runner, whose integrity level was High (0x3000): the agent shell
+  runs elevated, so these test runs do not cover Medium (the real checks on the laptop do). Microsoft,
+  `CreateMutexExW` (updated 2024-11-20): for a named mutex that existed, "the return value is a handle to the existing
+  object, and the GetLastError function returns ERROR_ALREADY_EXISTS".
+- **Registry.** `RegGetValueW` with `RRF_RT_REG_SZ` on a `REG_DWORD` value returned 1630 (`ERROR_UNSUPPORTED_TYPE`)
+  (`auto_start_refuses_other_types`). A get or a delete of a value under a `Run` key that did not exist yet came back
+  as missing (2 or 3), and a `REG_SZ` with Armenian letters came back unchanged (`auto_start_round_trip`).
+- **Pid check for the key sweep.** `OpenProcess(SYNCHRONIZE)` by pid of an ended child whose handle the test still
+  held worked, and a 0 ms wait was signaled, so the sweep deleted that pid's key; the live test process's key stayed
+  (`sweep_skips_live_pids`). Not tested: an open denied for a pid of another user's process (the sweep keeps such a
+  key).
+
+### Hold files: process start times, dates and the doc's examples
+
+Checked 2026-11-03.
+
+- **`procStart` from PowerShell.** `(Get-Process).StartTime.ToFileTimeUtc()` compared with the raw creation time from
+  `GetProcessTimes` (P/Invoke through `Add-Type`, `PROCESS_QUERY_LIMITED_INFORMATION`) for every process the shell
+  could open: equal for 337 of 337 in PowerShell 7.6.9 and 332 of 332 in Windows PowerShell 5.1 (1 skipped in each).
+  Run elevated. Not tested: a process that started inside the hour a daylight saving change repeats.
+- **Wall ms for the `expires` tests.** Every expected value in `holds::file` tests came from .NET
+  `[DateTimeOffset]::Parse(text, InvariantCulture).ToUnixTimeMilliseconds()` in pwsh 7.6.9, for example
+  `2026-11-03T18:00:00Z` = 1793728800000, `9999-12-31T23:59:59Z` = 253402300799000,
+  `2026-11-03T18:00:00.1234567-05:30` = 1793748600123 (fraction cut, not rounded, as ours).
+- **Date algorithms.** Howard Hinnant, "chrono-Compatible Low-Level Date Algorithms"
+  (`howardhinnant.github.io/date_algorithms.html`, read 2026-11-03): "Consider these donated to the public domain."
+  `holds::file` uses `days_from_civil` and `civil_from_days` from there, rewritten in Rust; no credit line is needed.
+- **The user doc's examples.** The PowerShell and cmd blocks of `docs/hold-files.md` were cut from the doc and run
+  in a scratch folder (only the folder line and the work line swapped) under pwsh 7.6.9, Windows PowerShell 5.1 and
+  cmd. Each wrote its file with the pid of the process that ran it (the cmd one through PowerShell's
+  `ParentProcessId`), UTF-8 with no byte order mark (`[IO.File]::WriteAllText`) or ASCII plus CRLF (cmd `echo`), and
+  deleted it at the end. The bytes parse with `holds::file::parse` (test `files_the_doc_examples_wrote_parse`).
+  `ToString('o')` on a UTC time gives `2026-11-03T20:05:00.2920348Z`, seven fraction digits, in both PowerShells.
+- **RFC 3339 grammar.** `rfc-editor.org/rfc/rfc3339.html`, read 2026-11-03. Section 5.6: `time-secfrac = "." 1*DIGIT`,
+  `time-numoffset = ("+" / "-") time-hour ":" time-minute`, `time-offset = "Z" / time-numoffset`,
+  `date-time = full-date "T" full-time`; a note says "T" and "Z" "may alternatively be lower case"; another says
+  applications "may choose" a space instead of `T` (an option, not the grammar, so `parse_expires` refuses it).
+  Section 5.7: `time-second` "may have the value "60" at the end of months in which a leap second occurs". Section
+  4.3: `-00:00` means the UTC time is known and the local offset is not.
+- **The examples' rename over an existing file.** In a scratch folder, `Move-Item -Force temp final` (pwsh 7.6.9 and
+  Windows PowerShell 5.1) and `move /y temp final` (cmd) each replaced an existing `final` with the new content and
+  left no temp file. Whether each does it in one rename or as a delete plus a move: not verified.
+
+### Hold file write times and a hold file held open
+
+Checked 2026-11-03 by the tests in `watch::data::tests` (Windows 11 Pro
+10.0.26300, NTFS, data folders on `%TEMP%` through `DataDir::at`; test runner elevated, High).
+
+- **A write time set to the 100 ns comes back exact.** `File::set_modified` with a `SystemTime` built from a FILETIME
+  (2026-11-03 12:00:00 UTC, and that minus or plus 100 ns as process starts) gave the same FILETIME from
+  `MetadataExt::last_write_time` on a later handle, so the "started at or before the write time" rule was tested at
+  its edge (`missing_proc_start_counts_a_process_started_by_the_write_time`).
+- **A hold file held with no sharing reads as error 32**, not as missing, so it is retried and then logged, never
+  read as a deleted hold (`an_unreadable_file_is_retried_then_logged`).
+
+### Folder watch with `ReadDirectoryChangesW`
+
+Checked 2026-11-04 by the tests in `watch::dir::tests` (Windows 11 Pro
+10.0.26300, NTFS, folders in `%TEMP%`; test runner elevated, High) unless a line names another source. No check here
+depends on elevation (the Medium case is in "Reading elevated Claude Code sessions").
+
+- **Microsoft docs, read 2026-11-04** (`ReadDirectoryChangesW`, "Synchronization and Overlapped Input and Output"):
+  the system keeps a buffer per directory handle from the first call, so changes between two calls come with the
+  next one; an overflow gives a zero-byte result or `ERROR_NOTIFY_ENUM_DIR`, and the caller should list the folder;
+  the buffer must be DWORD aligned; over the network a buffer above 64 KB fails with `ERROR_INVALID_PARAMETER`; the
+  folder's own changes are not reported; a name can come back in its short (8.3) form when the writer opened the file
+  by it. Each `OVERLAPPED` of several reads waited on together needs its own manual-reset event; with an auto-reset
+  one, a waiting `GetOverlappedResult` can block for good.
+- **Latency.** A create, an append, a delete and a rename into place came back in 0.3 to 2.6 ms (`latency` lines of
+  the test output, one run, several tests at once); a file one level down in a subtree watch in 0.7 to 1 ms.
+- **Names.** A rename into place gives the temp name and the final name. A subtree watch gives `sess-1` (the new
+  folder) and `sess-1\events.jsonl`; a one-level watch never gave the deeper name. An Armenian, a Russian and an
+  unpaired-surrogate name came back exactly (`names_come_back_as_given`).
+- **Overflow.** 5,000 new files (written in about 0.8 s) against a 4 KB buffer: the first read gave 1 name, the next
+  an overflow, so `Rescan`; the watch went on after it (`a_burst_that_overflows_the_buffer_gives_rescan`).
+- **The watched folder deleted.** After `DeleteFileW` of its file and `RemoveDirectoryW` of the folder, both `Ok`
+  while the watch held it, the queued read ended with `ERROR_ACCESS_DENIED` (`0x80070005`). The same name could be
+  made again at once, even before the watch closed its handle, and `RemoveDirectoryW` of the parent right after the
+  watched folder worked too: on this build a deleted folder leaves its name at once (POSIX-style delete; which Windows
+  build made that the default for `RemoveDirectoryW`: not verified).
+- **Renames.** With a subtree watch open, a file rename and delete, a subfolder rename and delete, and a rename of the
+  watched folder itself and back all worked. A rename of the folder above a watched one failed with 5 (Access
+  denied). A probe with an ordinary open file instead (`.NET File.Open` with read, write and delete sharing, two
+  levels down, pwsh) failed the same way and worked once the file was closed: Windows blocks renaming a folder that
+  holds any open handle below it, whatever the sharing. Deleting that folder with `remove_dir_all` worked.
+- **A read belongs to its thread.** A read queued by a thread that then ended completed with
+  `ERROR_OPERATION_ABORTED` (the watch reports `Rescan` and queues a new one;
+  `a_read_cancelled_by_its_thread_ending_gives_rescan_and_goes_on`).
+- **A path that is a file.** `CreateFileW` with `FILE_FLAG_BACKUP_SEMANTICS` opens it; `ReadDirectoryChangesW` then
+  fails with `ERROR_INVALID_PARAMETER` (`0x80070057`).
+- **No handle leak.** 1,000 cycles of add and remove (each with a missing folder too; every 10th with a completed
+  read nobody took, every 20th with one taken and queued again), in a child test process of its own: 122 handles
+  before and after (`GetProcessHandleCount`).
+
+### Opening files from the CLI, and its commands
+
+Checked 2026-11-04 (Windows 11 Pro 10.0.26300, elevated agent shell).
+
+- **`ShellExecuteExW` needs COM and `SEE_MASK_NOASYNC` here** (Microsoft docs, read 2026-11-04): the ShellExecuteEx
+  Remarks ask for `CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE)` first, since shell
+  extensions may need a single-threaded apartment. The SHELLEXECUTEINFO page says `SEE_MASK_NOASYNC` "must be
+  specified if the thread calling ShellExecuteEx does not have a message loop or if the thread or process will
+  terminate soon after", and that it is "only respected when launching files, does not apply to uris".
+  `SEE_MASK_FLAG_NO_UI` drops error dialogs; security prompts still show. On failure `GetLastError` holds the Win32
+  code (2, 3, 1155 no association, 1223 cancelled, among others).
+- **`AllowSetForegroundWindow(ASFW_ANY)` fails unless this process may set the foreground itself** (Microsoft docs):
+  for example right after the user clicked its menu. From a terminal it may fail; the open still works, the app may
+  then open behind.
+- **The real open** (`shell::tests::real_open_file`, run once by hand): a temp `.cmd` opened through
+  `open_with_default_app` returned after 119 ms, and the script had run (its mark file was there) within 622 ms. Its
+  window closed by itself: Windows Terminal is the default terminal on the test laptop, and its `closeOnExit` default
+  `"automatic"` closes a handed-off process's tab whatever its exit code (Windows Terminal docs, "Profile termination
+  behavior"). Windows started `smartscreen.exe` for the launch; it is Windows' own and was left to end on its own.
+- **A missing file opens nothing.** A path in a folder that does not exist, with an extension no app has, gave a
+  `ShellExecuteExW` error with `SEE_MASK_FLAG_NO_UI` (the test takes 2 or 3; which of the two: not recorded), and no
+  new process or window (`a_missing_file_is_an_error_without_a_dialog`, process list compared before and after).
+- **Why the real open was not a `.log`.** On the test laptop `.log` and `.txt` open in Windows Notepad
+  (`HKCU\...\FileExts\.log\UserChoice` ProgId `AppX4ztfk9wxr86nxmzzq47px0nh0e58b8fw`, Microsoft.WindowsNotepad
+  11.2607), and a Notepad window was open with an unsaved tab. Windows 11 Notepad opens a file as a new tab of an open
+  window by default (not verified here; not tried, so nothing touched that window). `open_log::tests::real_open_log`
+  does that open, for a run with a person at the screen.
+- **`wakeshot status`, `keep-awake 1h` and `automatic off` with `--dry-run`** (through each command's `main`,
+  `status::tests::dry_run_folder_checks`): "Wakeshot is not running.", exit 0;
+  "Wakeshot is not running. Start it, then try again.", exit 1, no `keep-awake.json`; "Automatic is off.", exit 0,
+  `config.json` `{"version":1,"automatic":false}`, then removed (it did not exist before). The log got one `cli` line
+  per command. `%LocalAppData%\Wakeshot` did not exist before the run; the run made only `dry-run\logs\wakeshot.log`,
+  and the folder was removed after.
+- **`wakeshot restore` with `--dry-run` and no dry-run journal** (through `main`,
+  `restore::tests::dry_run_folder_check`): "Nothing to restore.", exit 0; one log line `cli: restore: no journal,
+  nothing to do`. The folder it made was removed after, as above.
+- **`restore_locked` logs a line of its own per run** in area `journal` (`restore of every plan: found journal
+  entries; 0 entries left`, or `... failed: <call> failed with <code>; ...`), beside the CLI's one `cli` line (seen in
+  `MemoryLog` in the `restore::tests` runs).
+- **`FileNet::restore_only` over a RunOnce key that does not exist writes nothing to the registry**: its clean-up's
+  `AutoStart::remove` finds no value and creates no key. After the `restore::tests` runs, `HKCU\Software` had no
+  `Wakeshot*` key (`Get-ChildItem HKCU:\Software`).
+
+### The watch thread: latency, handles and a denied listing
+
+Checked 2026-11-04 by the tests in `watch::thread::tests` and
+`watch::agents::tests` (Windows 11 Pro 10.0.26300, NTFS, folders in `%TEMP%`, debug build; test runner elevated,
+High). Times are from one run with the crate's other tests running beside them.
+
+- **Latency through the whole thread** (file call or process end to the event in the fake sink): first round 11 ms
+  after start; a hold file written 12 ms, deleted 2 ms; `config.json` 3 to 7 ms; `restore-request.json` 17 ms; a
+  `holds\` folder made after start, then a hold in it, 15 ms (the data folder notice reopens it at once); a file in a
+  folder a source asked for later 3 ms. A process ended with `TerminateProcess`: its session and its hold posted as
+  `Gone` 4 ms later, through the exit wait alone (the fake liveness had changed 300 ms before and nothing was posted
+  until the process ended). A 200 ms retry fed 213 ms after the first feed. Stop took under 1 ms.
+- **No handle leak.** 50 start and stop cycles (each with two folders, one of them missing, a hold file, and a live
+  session with its exit wait on the test's own process), after 3 warm-up cycles, in a child test process of its own:
+  122 handles before and after (`GetProcessHandleCount`).
+- **A folder whose listing is denied, its files not.** A deny ACE for `FILE_LIST_DIRECTORY` (0x1) for Everyone on the
+  folder only (SDDL `D:(D;;0x1;;;WD)(A;OICI;FA;;;WD)`, set with `SetFileSecurityW`, which changes the folder and not
+  the files in it): `fs::read_dir` fails with error 5 even in this elevated shell, while the files in it can still be
+  read, written and deleted and a new file can be made. The test asserts the denial first, so it cannot pass for the
+  wrong reason under High.
+- **A tool fact for mutation checks.** `Copy-Item` keeps the source's `LastWriteTime`. A file restored from a backup
+  copy after a mutated build therefore looks older than the build, and cargo ran the mutated test binary again until
+  the file was touched (seen 2026-11-04: the restored tests failed exactly as under the mutation). Touch the file, or
+  restore it with a write, after such a check.
+
+### Command line splitting and the built CLI
+
+Checked 2026-11-04 (Windows 11 Pro 10.0.26300, Rust 1.99.1).
+
+- **How `std::env::args_os` splits the command line on Windows.** Read in the toolchain's own source
+  (`library/std/src/sys/args/windows.rs`, `parse_lp_cmd_line`, Rust 1.99.1). The program name: a quote only toggles
+  quoting (no escapes), and a space or tab outside quotes ends it. The arguments: space and tab separate, any run of
+  them counts as one; backslashes are literal unless a quote follows; 2n backslashes before a quote give n and the
+  quote toggles quoting, 2n+1 give n and a literal quote; inside quotes `""` is one literal quote and quoting goes
+  on. The last argument is kept even when empty if a quote opened it. Microsoft's "Parsing C command-line
+  arguments" (Learn, updated 2021-12-09) gives the same rules for the C runtime; its six example rows split the same
+  way in `args::next_arg` (test `microsofts_examples_split_the_documented_way`). `args::run_tail` and
+  `args::split_program` are a port of that loop, one argument at a time; a property test checks them against
+  arguments quoted the MSVC way (std's `\"` form and the `""` form).
+- **The built `wakeshot.exe`** (debug build): `wakeshot --help` printed the help to stdout, exit 0;
+  `wakeshot nonsense` printed `wakeshot: unknown command 'nonsense'. Run 'wakeshot --help'.` to stderr, exit 2;
+  `wakeshot run` and `wakeshot keep-awake off --screen` printed their one-line errors, exit 2. The same checks are in
+  `crates/wakeshot-cli/tests/exe.rs`.
+- **The `--dry-run` command checks, through the exe** (2026-11-04 00:54;
+  `%LocalAppData%\Wakeshot` did not exist before, `WAKESHOT_DATA_DIR` unset): `--dry-run log` "No log yet. Wakeshot
+  writes one once it runs." exit 0 (run first, so no window opened); `--dry-run status` "Wakeshot is not running."
+  exit 0; `--dry-run keep-awake 1h` "Wakeshot is not running. Start it, then try again." exit 1, no hold file;
+  `--dry-run automatic off` "Automatic is off." exit 0, `dry-run\config.json` `{"version":1,"automatic":false}`;
+  `--dry-run restore` "Nothing to restore." exit 0. The log got one `cli` line each (status, keep-awake, automatic,
+  restore). Only `dry-run\config.json` and `dry-run\logs\wakeshot.log` were made; both and the empty folders were
+  removed after.
+
+### `wakeshot run`: finding, quoting and stopping the child
+
+Checked 2026-11-04 between 01:00 and 01:11 (Windows 11 Pro 10.0.26300, Rust 1.99.1, elevated agent shell).
+
+- **How std's `Command` finds and quotes a program** (toolchain source, `library/std/src/sys/process/windows.rs`):
+  `resolve_exe` passes a path that has a folder part and ends in `.exe` to `CreateProcessW` as it is; another path is
+  tried as `<path>.exe`, then as given; only a bare file name (no `\` or `/`, `path::is_file_name`) is searched, with
+  `.exe` added when the name has no dot. `program_exists` reads `GetFileAttributesW`, which does not follow links.
+  `make_command_line` always quotes the program and adds each argument after one space; `raw_arg` text is added
+  unchanged (`Arg::Raw`), and `get_args` lists it. std starts a batch file through `GetSystemDirectoryW` plus
+  `\cmd.exe`, not `%ComSpec%`. So `child::command` passes the resolved full path, and a batch file goes to
+  `%ComSpec%` (a full path; else the system folder's `cmd.exe`) with `raw_arg("/d /s /c \"\"<path>\" <rest>\"")`.
+- **The text reaches the child exactly** (`child::tests::an_exe_child_gets_the_text_exactly`): `cmd /u /d /c echo`
+  given through `raw_arg` printed back, byte for byte, a text with doubled spaces, `\"`, `""`, trailing backslashes
+  before a quote, a tab, Armenian and an emoji. A `.cmd` file in a folder with a space, named with a space, got `%*`
+  exactly as typed and `%1` as its first quoted argument, and its `exit /b 3` came back as 3
+  (`a_batch_child_sees_its_arguments_as_typed`, and `run::tests::a_cmd_file_sees_its_arguments_as_typed`).
+- **Exit codes pass through whole**: `cmd /d /c exit -1073741510` gave 0xC000013A through `run` and through the
+  built exe (`std::process::exit`); 300 gave 300 (`tests/run.rs`, `the_exe_exits_with_the_childs_whole_code`).
+- **Ctrl+C, tested in a console with no window** (`tests/run.rs`, `ctrl_c_ends_the_child_and_wakeshot_exits_with_its_code`).
+  The test starts a helper (the test exe itself) with `CREATE_NO_WINDOW`; it got a console of its own:
+  `GetConsoleProcessList` there listed only the helper, `wakeshot.exe` and its child (pids 21476, 35068, 37348 in
+  one run), never the test runner. The helper resets the inherited Ctrl+C flag (`SetConsoleCtrlHandler(NULL,
+  FALSE)`), starts `wakeshot run -- <test exe> sleeper` (a child with Rust's default handling), waits for the hold
+  file, ignores Ctrl+C itself (NULL form, set after the start so nothing inherits it) and calls
+  `GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0)`. The child ended, `wakeshot` exited with 0xC000013A, deleted the hold
+  file and logged `exited with -1073741510 (0xC000013A)`; the last two show that it outlived the Ctrl+C (the default
+  handler would have ended it at once). The helper refuses to send when its console holds any other process. Not
+  tested: a real key press in Windows Terminal or conhost, Ctrl+Break, closing the console window.
+- **App execution aliases are found.** `%LocalAppData%\Microsoft\WindowsApps\winget.exe` is a 0-byte file with the
+  `ReparsePoint` attribute here; `wakeshot run -- winget --version` (debug exe, temp `WAKESHOT_DATA_DIR`) resolved it
+  through `PATH` and printed `v1.29.380`, exit 0. Here `Path::is_file`, `fs::metadata` (length 0) and
+  `fs::symlink_metadata` all succeed on it too (a throwaway probe test, removed); `child` reads the attributes
+  without following, as std does.
+- **The built-exe check** (2026-11-04 01:10, debug exe, `WAKESHOT_DATA_DIR` unset, `%LocalAppData%\Wakeshot`
+  missing before): `wakeshot --dry-run run -- cmd /c echo hi` printed `hi`, exit 0, and on stderr `wakeshot: Wakeshot
+  is not running, so nothing keeps the PC awake for this command until it starts.` It made `dry-run\holds` (empty
+  after: the hold file was deleted) and `dry-run\logs\wakeshot.log` with `cli: run: cmd started, pid 32640` and `cli:
+  run: cmd exited with 0`. Both and the empty folders were removed after.
+
+### Registry values and the user Path
+
+Checked 2026-11-04 between 01:15 and 01:28 (Windows 11 Pro 10.0.26300, `windows` 0.62.2, elevated agent shell). Tests
+wrote only scratch keys under `HKCU\Software\Wakeshot-test\<pid>`.
+
+- **`RegSetValueExW` stores a NUL it was not given.** For string types, when the data does not end in a NUL and the
+  UTF-16 unit just past the data is a NUL, Windows stores that NUL too. Seen first as a test that failed 3 runs in 5
+  (the unit past a `Vec` is whatever the heap holds there), then pinned by
+  `install::tests::windows_stores_a_nul_just_past_string_data`: a buffer `C:\A` plus NUL, passed without the NUL,
+  was stored with it, 3 runs of 3. Wine's `RegSetValueExW` has the same rule, with the comment "if user forgot to
+  count terminating null, add it (yes NT does this)" (`dlls/kernelbase/registry.c`, GitHub mirror `wine-mirror/wine`,
+  `master`, read 2026-11-04: `if (str[count / sizeof(WCHAR) - 1] && !str[count / sizeof(WCHAR)]) count +=
+  sizeof(WCHAR);`). Microsoft's page for
+  the function does not mention it (not verified). So Windows reads one unit past the buffer it is given; `install`
+  puts a non-zero guard unit there, and a value stored without a terminator then comes back byte for byte.
+- **A value's name keeps its case.** A value `PATH` updated and then restored through the name `Path` was still
+  listed as `PATH` by `RegEnumValueW` (`install::tests::the_value_keeps_its_name_case`).
+- **Raw reads and writes keep type and bytes.** `RegQueryValueExW` gives the bytes as stored (no terminator added, no
+  `%VAR%` expanded); `RegSetValueExW` with the old type stores them back. Round trips on the scratch key gave back the
+  exact old bytes and type for `REG_SZ`, `REG_EXPAND_SZ` with `%USERPROFILE%`, a trailing `;`, an empty value of 0
+  and of 2 bytes, a value with no terminator, and bytes after the first NUL (the `install::tests::round_trip_*`
+  tests).
+- **`SendMessageTimeoutW` with `HWND_BROADCAST`** (Microsoft Learn, read 2026-11-04): the timeout is per window ("each
+  window can use the full time-out period ... up to a 15 second delay" for three windows that do not answer);
+  `SMTO_ABORTIFHUNG` returns at once for a thread that "appears to not respond", which means it has not called
+  `GetMessage` or the like within five seconds; the result gives no per-window outcome for a broadcast; a zero result
+  with no last error is "a generic failure", and the function does not always set the last error, so set it to 0
+  first. `install` uses 1 s per window. Never run here: tests inject the broadcast, so no test sent it.
+- **Environment variable limit** (Microsoft Learn, "Environment Variables", read 2026-11-04): "The maximum size of a
+  user-defined environment variable is 32,767 characters." The same page says to broadcast `WM_SETTINGCHANGE` with
+  `lParam` "Environment" after changing the system variables in the registry; it names no flags or timeout. What
+  Windows does with a longer user Path: not verified, so `install` refuses an add that would pass the limit.
+- **The real keys were not touched.** A read-only script hashed the user `Path` (type and text) and every value under
+  the real `Run` key, and `reg export` of both keys, before and after the test runs: the same hashes each time.
+
+### A Windows wait timeout against Rust's clock
+
+Checked 2026-11-04 01:26 (Windows 11 Pro 10.0.26300, Rust 1.99.1, elevated agent shell). Fakes and temp folders only: no
+power plan, notice or window was touched.
+
+- **A `WaitForSingleObject` timeout can end a few ms early by Rust's clock.** `IoThread::finish(200)` waits on the
+  thread's handle with a 200 ms timeout. With the thread blocked, `Instant` measured 196.5 ms and 198.6 ms in 2 of 5
+  runs of `app::io_thread::tests::finish_gives_up_when_the_executor_blocks`; the other 3 were at or above 200 ms. Why
+  (the wait and `Instant` use different clocks, or the timer tick): not verified. So a test that times a Windows wait
+  checks a looser lower bound (150 ms for 200); 10 of 10 runs passed with it.
+
+### The watch thread's first wake names `holds`
+
+- **Right after the watch thread starts, a notice in the data folder names `holds`.** In the exit wait test
+  (`watch::thread`), the hold file is written into `holds\` before the thread starts. The thread's first wake after
+  its first round was a notice in the data folder naming `holds`, in every run: 3 runs alone and 40 runs with 8 copies
+  at once. Why Windows reports it then (the folder's new write time reaching its parent late, or the thread's own
+  read of the folder) is not verified. In the app it costs one extra read: the thread posts only what changed. It
+  made the exit wait test flaky: with 8 copies at once, 5 of 40 runs failed before the fix (the test now waits a
+  quiet spell before it changes the fake). After it, none failed: 40 runs with the probe, 60 runs (12 at once)
+  without. **Verified** (a temporary probe that printed each wake, removed after; repeated runs of the test binary).
+
+### A deny ACE and the backup privilege
+
+2026-11-04 12:50 to 13:10, on the test laptop, for the test
+`watch::agents::tests::a_folder_that_cannot_be_listed_reads_its_known_files` that failed in agent shells since about
+12:00 (the listing it denies by ACL was not denied).
+
+- **The Bash tool's shell runs with `SeBackupPrivilege` and `SeRestorePrivilege` enabled; PowerShell's does not.**
+  `whoami /priv` from the Bash tool (Git Bash, MSYS2 runtime) listed both Enabled; from the PowerShell tool, same
+  session, both Disabled; both High integrity with `SeDebugPrivilege` Enabled. The MSYS2 runtime turns them on in an
+  elevated process, and every child (cargo, the test exe) inherits them (not verified in the MSYS2 source; seen).
+  **Verified** (both commands run).
+- **With the backup privilege enabled, the deny ACE does not stop a listing.** The same test binary failed from the
+  Bash tool (`left: Ok([...1.json, ...2.json])`) and passed from PowerShell. `read_dir` opens a folder with backup
+  semantics, which a process with the backup privilege enabled passes for read access whatever the DACL says
+  (Microsoft, `CreateFileW`: `FILE_FLAG_BACKUP_SEMANTICS`; not read again here). A `Set-Acl` deny of List folder from
+  PowerShell denied `Get-ChildItem` there. **Verified** (runs); the "whatever the DACL" part from Microsoft's docs.
+- **The fix, for the test only.** The test thread takes a copy of the process token (`ImpersonateSelf`) and turns
+  `SeBackupPrivilege` off in it until the test ends (`RevertToSelf`). The test then passed from both tools. A tray
+  never runs so: its privileges are a normal token's. **Verified** (both tools, 13:05). Not run at Medium integrity
+  here, where the token has no backup privilege to turn off; that `AdjustTokenPrivileges` then still answers success
+  is Microsoft's doc, not seen.
+
+### Logs that clean themselves and a bug report bundle (2026-11-07)
+
+Sources read on 2026-11-07; tests run on the test laptop.
+
+- **How others take bug reports.** PowerToys: "Report Bug" in the tray menu (and in Settings) runs a bug report tool
+  that saves `PowerToys_Report_<date>_<time>.zip` on the Desktop with logs, settings, Windows version and more, and
+  "redacts certain types of private information" (user-specific paths, machine names, some module data); the user
+  attaches it to a GitHub issue ([PowerToys bug report
+  tool](https://microsoft.github.io/PowerToys/tools/bug-report-tool/), [PowerToys general
+  settings](https://learn.microsoft.com/en-us/windows/powertoys/general)). Wakeshot follows the same shape (Desktop, one
+  file, paths taken out, attach to the form) with a text file the user can read. **Read (docs)**; the PowerToys tool's
+  code was not read, so how it finds user names is not verified.
+- **What a log must not hold.** OWASP Logging Cheat Sheet: access tokens and passwords are never recorded as they are;
+  session ids "consider replacing with a hashed value if needed to track session specific events"; file paths and
+  personal data may need special handling ([cheat
+  sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html)). Hence the 8-hex FNV-1a hash for
+  agent session ids in log lines (a pid stays as it is: it names a process, not a person). **Read (docs)**.
+- **Size and age caps elsewhere.** Serilog's file sink: 1 GB per file and 31 files by default, a roll on the size limit,
+  an optional age limit, and `shared: true` for many processes on one file ([serilog-sinks-file
+  README](https://github.com/serilog/serilog-sinks-file/blob/dev/README.md)). A tray app needs far less: the test
+  laptop's installed log grew 250 KB in about 2 days (file listed 2026-11-07 about 03:50), so a 1 MiB file is about a
+  week and 8 MiB with a 30-day age limit is about a month of history. **Read (docs, disk)**.
+- **GitHub attachments.** Issues take `.txt`, `.log` and `.zip`, up to 25 MB for such files ([Attaching
+  files](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files)).
+  The bundle is at most about 8 MiB of logs plus small files, so it always fits. **Read (docs)**.
+- **Explorer with the file selected.** `SHOpenFolderAndSelectItems` with a count of 0 and the item's full id list opens
+  the parent folder and selects the item; COM must be initialized first
+  ([Microsoft](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shopenfolderandselectitems)).
+  In windows-rs 0.62.2 `ILCreateFromPathW` and `SHOpenFolderAndSelectItems` need the `Win32_UI_Shell_Common` feature
+  (read in the crate source); a feature adds no crate, so `Cargo.lock` stays. Whether the window really opens: not
+  verified by a test (the tests pass a fake), checked once by hand after the install update if the Result says so.
+- **Modern Standby or S3.** `CallNtPowerInformation(SystemPowerCapabilities)` fills `SYSTEM_POWER_CAPABILITIES`;
+  `AoAc` is "supports the S0 low power idle model" (Modern Standby), `SystemS3` and `SystemS4` the sleep and hibernate
+  states, plus `HiberFilePresent`, `LidPresent`, `SystemBatteriesPresent`
+  ([Microsoft](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-system_power_capabilities)). On the
+  test laptop: "Modern Standby yes, S3 no, hibernate yes, hibernation file yes, lid yes, battery yes", as "Windows
+  power facts" says (Modern Standby). **Verified** (`real_machine_facts_all_read`).
+- **Windows version without shims.** The facts read `CurrentMajorVersionNumber`, `CurrentMinorVersionNumber`,
+  `CurrentBuildNumber`, `UBR`, `DisplayVersion` and `EditionID` under `HKLM\SOFTWARE\Microsoft\Windows
+  NT\CurrentVersion` (64-bit view). `ProductName` there still says Windows 10 on Windows 11, so the name comes from the
+  build: 22000 and later is Windows 11 (Microsoft's release information; not fetched this session, **not verified**
+  here). On the test laptop: "Windows 11 Professional 26H2, version 10.0.26300.9711", which matches the OS version this
+  session reports (10.0.26300). **Verified**.
+- **Rolling with four writers.** Every line opens, appends and closes; a writer over 1 MiB checks the size and renames
+  the file on one handle (`DELETE | FILE_READ_ATTRIBUTES`, `FileRenameInfo` without replace). Four processes wrote 2000
+  lines each at once (lines up to 5 KB): with a 1 MiB roll 2 files, with a 64 KiB roll 32 files; in both runs every
+  line came back whole, exactly once and in its writer's order when the files are read in name order, with about
+  7950 switches between writers. A reader that opened `wakeshot.log` without delete sharing made the rename fail
+  (`CreateFileW` 32) and lost no line; a second roller finds the new small file and does nothing; two rolls in the
+  same millisecond meet `ERROR_ALREADY_EXISTS`, and the second skips. **Verified** (`log::tests`, 2026-11-07 04:06).
+- **What the bundle can hold.** Files found by name only (an allow list) and links or junctions skipped: a test plants a
+  prompt and two tokens in agents' files, in stray files inside Wakeshot's folders, in a hold reason, in a log line
+  and behind two junctions; none reaches the bundle, and the planted user name never shows
+  (`the_bundle_never_holds_a_planted_prompt_or_token`). The token rule is best effort: a secret with separators such
+  as `+`, `/` or `=` in it is cut at them, and a short one without a known prefix stays. Wakeshot's own files hold no
+  tokens by design, so the rule is a second line. **Verified** (test); the token patterns themselves are from common
+  service formats, **not verified** against each service's docs.
+
+## Install, updates and release
+
+### Distribution
+
+Checked 2026-11-03. Details, sources and marks: `docs/research/distribution.md`.
+
+- **Velopack 1.2.161 works with Rust.** Tested on the test laptop with a throwaway crate: `vpk pack`, silent install
+  (`Setup.exe --silent`) to `%LocalAppData%\{packId}` with no admin, update with all hooks, silent uninstall. Every
+  hook reaches Rust through `VelopackApp` callbacks. `vpk` 1.2.161 installs as a .NET tool and runs on the .NET 10
+  SDK (it ships net8, net9 and net10 builds).
+- **Velopack kills the app without warning** before uninstall, before an update swap, when Setup.exe runs over an
+  existing install, and after every hook. Setup.exe over an existing install runs no uninstall hook and wipes the
+  install folder. Uninstall runs `--veloapp-uninstall` after the kill (30 s limit in the docs). Silent install does
+  not start the app. Seen in source and in the trial.
+- **Size.** `Setup.exe` was 10.7 MB for a 1.5 MB app, mostly Velopack's own `Update.exe` (5.2 MB). Tested.
+- **winget** accepts unsigned installers: an unsigned Velopack `Setup.exe` (Flowersauce.FSClicker 1.4.0) is merged.
+  Manifest: `InstallerType: exe`, `Scope: user`, silent switch `--silent`, `ProductCode` = pack id. Validation runs
+  installed exes with no arguments and flags non-zero exit codes. Checked in winget-pkgs.
+- **SignPath Foundation** certificates are issued to "SignPath Foundation", so users see that name as publisher.
+  It requires an existing release, MFA, CI builds on GitHub-hosted runners, a code signing policy page, manual
+  approval per release, and "a certain verifiable reputation". Several new projects were declined in 2026 for lack
+  of users (reported). Read on signpath.org and docs.signpath.io.
+- **GitHub Actions**: standard runners, including Windows ARM64 (`windows-11-arm`), are free and unlimited for public
+  repos. 6 h per job, 20 concurrent jobs. Read on docs.github.com.
+- **scoop**: Extras needs about 100 stars or 50 forks, so only an own bucket at launch. A Scoop uninstall does not run
+  the Velopack hook. Read in ScoopInstaller repos.
+
+### Velopack checks for Wakeshot
+
+Checked 2026-11-03 between 21:50 and 22:15 on the test laptop. A throwaway
+crate outside the repo (`velopack = "=1.2.161"`, Rust 1.99.1, x64, static CRT, the repo's release profile with
+`panic = "abort"`) with two exes named like Wakeshot's: GUI `wakeshot-tray.exe` (`VelopackApp::build()`, the four fast
+callbacks, `on_first_run`, `on_restarted`) and console `wakeshot.exe` (no `VelopackApp`). Every start and hook logged
+its args, `VELOPACK_*` variables, working folder, exe path and token elevation to a file outside the install folder,
+and the crate's own `log` lines went to the same file. Packed with `vpk` 1.2.161: `vpk pack -u HaikAsatryan.Wakeshot
+-v <v> -r win-x64 --channel win-x64 -p <dir> -e wakeshot-tray.exe --packTitle Wakeshot --packAuthors "Haik Asatryan"
+--shortcuts StartMenuRoot -o <out>`, versions 0.1.0 to 0.6.0 into one feed folder. No power settings touched.
+Everything was uninstalled at the end. "Test" means seen in the logs on the test laptop; "source"
+means read in velopack 1.2.161 (the crate in the cargo registry, or tag `1.2.161` on GitHub through `gh api`). All
+runs were elevated (High), as agents here are; see "Elevation" at the end.
+
+- **1. The dotted pack id works.** With `HaikAsatryan.Wakeshot`, pack, silent install, four updates, Setup over an
+  install (three times) and silent uninstall all worked, exit 0. Install folder `%LocalAppData%\HaikAsatryan.Wakeshot`.
+  Uninstall key `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\HaikAsatryan.Wakeshot`, so winget's
+  `ProductCode` is `HaikAsatryan.Wakeshot`; `DisplayName` `Wakeshot`, `Publisher` `Haik Asatryan`, `DisplayVersion`
+  follows each update and each Setup run. File names: `HaikAsatryan.Wakeshot-win-x64-Setup.exe` and
+  `-win-x64-Portable.zip` (no version in them), `HaikAsatryan.Wakeshot-<v>-win-x64-full.nupkg` and `-delta.nupkg`,
+  `releases.win-x64.json`, `assets.win-x64.json`, `RELEASES-win-x64`. One quirk of the dot: Setup over an install
+  renames the old folder for rollback to `%LocalAppData%\HaikAsatryan.<16 random letters>` (the part after the dot is
+  replaced, like a file extension) and deletes it at the end, so a Setup killed midway would leave such a folder (not
+  tested). **Verified** (test; key read with `Get-ItemProperty`).
+- **2. Root stub and shortcut.** Layout after install: `Update.exe`, `Wakeshot.exe` (the stub, named after
+  `--packTitle`), `current\wakeshot-tray.exe`, `current\wakeshot.exe`, `current\sq.version`, `packages\*.nupkg`. The
+  stub runs `Update.exe start -- <its own args>`, which starts the main exe `current\wakeshot-tray.exe` with the same
+  args and working folder `current`; the stub exits 0 at once. Root `Wakeshot.exe` and `current\wakeshot.exe` do not
+  clash: different folders, no vpk warning, and every install, update and Setup run kept both. `--shortcuts
+  StartMenuRoot` made only `%AppData%\Microsoft\Windows\Start Menu\Programs\Wakeshot.lnk`, no desktop shortcut. Its
+  target is `current\wakeshot-tray.exe` (not the stub), working folder `current`, AUMID
+  `velopack.HaikAsatryan.Wakeshot`. Updates rewrite it in place; uninstall removes it. **Verified** (test; `.lnk` read
+  with `WScript.Shell`).
+- **3. `current` keeps its path.** Before and after each update (local `FileSource`, delta and full):
+  `C:\Users\haika\AppData\Local\HaikAsatryan.Wakeshot\current`. The folder itself is new each time (Velopack backs up
+  the old one and moves a new one in; its creation time changes). So the Run value and the Path entry can point at
+  `current\wakeshot-tray.exe` and `current`. **Verified** (test; update log "Replacing current dir").
+- **4. `wait_exit_then_apply_updates(asset, true, true, [])`.** It starts `Update.exe apply --package <nupkg> --waitPid
+  <own pid> --silent --root <root> --packageDir <packages>` and returns `Ok(())` in about 0.1 s.
+  - App exits 5 s after the call: Update.exe goes on at once (the obsolete hook started 30 ms after the exit). Order:
+    `--veloapp-obsolete <old>` run by the old exe; kill of any process left in the install folder; swap of `current`;
+    uninstall key rewritten; `--veloapp-updated <new>` run by the new exe; shortcut updated; then the new
+    `wakeshot-tray.exe` starts with no args, working folder `current`, env `VELOPACK_RESTART=true`, and
+    `on_restarted(<new version>)` fires. `on_first_run` fired in no run (all installs were silent). Hooks run with
+    working folder `current` and get no `VELOPACK_*` variable.
+  - App does not exit for 75 s: Update.exe waits 60 s, then does **not** give up. It runs the obsolete hook while the
+    old app still runs, kills the app (`TerminateProcess`, exit code 1), applies, runs the updated hook and starts the
+    new version as above. The doc comment "the updater will only wait for 60 seconds before giving up" means it stops
+    waiting, not that it drops the update.
+  - Each wait logs `WARN Failed to wait for process (<pid>) to exit (Access is denied...). Continuing...`, also on a
+    clean exit. Harmless: `wait_for_pid_to_exit` opens the pid with `PROCESS_SYNCHRONIZE` only, then calls
+    `GetExitCodeProcess`, which needs a query right (source `process_win.rs`). The wait itself works.
+  - Restart args, when given, reach the new app after `--` (seen in the auto apply below).
+  **Verified** (test, 21:57 and 22:01 to 22:02).
+- **5. `UpdateManager::new` when not installed.** From the build folder it returns
+  `Err(Error::NotInstalled("Could not auto-locate app manifest"))`, shown as "This application is not properly
+  installed: Could not auto-locate app manifest". `VelopackApp::run()` logs it as an error and returns normally. The
+  locator also gives `NotInstalled` when `Update.exe` or the manifest is missing (source `locator.rs`), so the tray can
+  treat `Error::NotInstalled(_)` as "no install" and every other error as a real failure. **Verified** (test and
+  source).
+- **6. Hooks that fail.**
+  - A panic (with `panic = "abort"`): the hook exits with 0xC0000409 (3221226505) after about 3 s, because Windows
+    Error Reporting takes the crash: Application log events 1000 and 1001, and a report folder
+    `C:\ProgramData\Microsoft\Windows\WER\ReportArchive\AppCrash_wakeshot-tray...`. Velopack logs `WARN Hook exited with
+    non-zero exit code: 3221226505` and goes on: the update and the install both finished. Seen for obsolete (Update.exe
+    apply) and install (Setup over an install).
+  - Past its limit: Velopack logs `ERROR Process timed out after <n>s and was killed.` and goes on. Measured: install
+    30 s (Setup), updated 15 s (apply), uninstall **60 s** (the docs say 30 s; the source and the test say 60 s).
+    Obsolete waits 15 s (log "Waiting 15000ms"); not run past it.
+  - stdout and stderr go nowhere: hooks start through `CreateProcessW` with no inherited handles, no std handles and
+    `CREATE_NO_WINDOW` (source `process_win.rs` `run_process`; the logs show the same "About to launch ... flags"
+    lines). The lines the hooks printed, and the panic message, appear in no log. A hook must write its own log.
+  - The limit counts from process start. A hook run by a just-extracted exe took 0.9 to 1.7 s in all, one already run
+    17 to 98 ms; the extra second is likely the antivirus scan of a new file (not verified). The updated hook always
+    runs a just-extracted exe, and so does the install hook. A 25 s inner limit in a 30 s hook leaves about 3 s; a
+    12 s inner limit in the 15 s updated hook leaves about 1.3 s.
+  **Verified** (test).
+- **7. `Setup.exe --silent` over a running install** (what `winget upgrade` runs), with the dotted id: the running
+  tray was killed (exit code 1), no obsolete or uninstall hook ran, the old folder was renamed and deleted (marker
+  files in the root and in `current` were gone), only `--veloapp-install 0.6.0` ran, the key was rewritten, and the
+  app was **not** started. Exit 0 in 2.4 s. **Verified** (test).
+- **8. `Update.exe apply` alone.** `Update.exe apply --silent --norestart`, with no `--package` and no `--waitPid`,
+  found the newest full package in `packages\` (staged by the app with `check_for_updates` and `download_updates`
+  only), ran the obsolete and updated hooks, swapped `current`, rewrote the key and started nothing; exit 0. So an
+  end-to-end test can stage with the app and apply with Update.exe, no running tray needed. `Update.exe apply -h`:
+  `--norestart`, `--waitPid <PID>`, `-p, --package <FILE>`, `--verbose`, `-s, --silent`, `--rootDir`,
+  `--packageDir`, `-l, --log`, `[-- EXE_ARGS]`. **Verified** (test).
+- **Auto apply at startup.** With the default `set_auto_apply_on_startup(true)`, when `packages\` holds a full package
+  newer than the running version and the start is not a Velopack restart, `VelopackApp::run()` starts `Update.exe
+  apply` (not silent, `--waitPid` itself, its own args after `--`) and calls `exit(0)`, so `main` never gets past
+  `run()`. Seen: a plain start of 0.4.0 with 0.5.0 staged ran both hooks, applied 0.5.0 and restarted it with
+  `VELOPACK_RESTART=true` and the original arg. That apply kills every process from the install folder, like any
+  apply. **Verified** (test and source `app.rs`).
+- **Package housekeeping.** `download_updates` deletes every other full package in `packages\` ("Deleting up old
+  package"); a delta is turned into a full package by a separate `Update.exe patch` run. **Verified** (test).
+- **9. ARM64 packing on the test laptop.** The repo's own release build for `aarch64-pc-windows-msvc` (no `velopack` in
+  it yet) built in 46 s, and `vpk pack -r win-arm64 --channel win-arm64` packed it with no warning. PE machine field
+  (read from the header): `HaikAsatryan.Wakeshot-win-arm64-Setup.exe` 0xAA64 (ARM64); in the nupkg,
+  `lib/app/Squirrel.exe` (the package's Update.exe, 4.7 MB) and `lib/app/Wakeshot_ExecutionStub.exe` 0xAA64; in the
+  portable zip, `Update.exe` and `Wakeshot.exe` 0xAA64. The x64 package's are 0x8664. So vpk ships native ARM64 Setup
+  and Update. ARM64 Setup 8.6 MB, x64 Setup 10.6 MB. Not installed (x64 PC). **Verified** (test).
+- **10. A main exe that never calls `VelopackApp`.** `vpk pack` says nothing: no warning, no error, also with
+  `--verbose` (the repo's skeleton tray for ARM64, and the trial's `wakeshot.exe` as main exe for x64). The check
+  (`CompatUtil.VerifyVelopackApp`, skipped by `--skipVeloAppCheck`) loads the main exe as a .NET assembly and returns at
+  once when it is not one. So vpk never catches a Rust tray that forgot `VelopackApp`; only a smoke test that looks
+  for the install hook's log line does. **Verified** (test, and vpk source
+  `src/vpk/Velopack.Packaging.Windows/CompatUtil.cs` at tag `1.2.161`).
+- **11. vpk upload, download and pack options.**
+  - `vpk upload github -H`: `-o, --outputDir` (default `Releases`), `-c, --channel` (default `win`), `--repoUrl`,
+    `--token` (both required), `--timeout` (minutes, default 30), `--publish` (else the release stays a draft), `--pre`
+    (pre-release), `--merge`, `--releaseName`, `--tag`, `--targetCommitish`. `vpk download github -H`: `-o`, `-c`,
+    `--repoUrl`, `--token` (optional), `--timeout`, `--pre`, each also from an env var (`VPK_REPO_URL`, `VPK_TOKEN`,
+    ...). **Verified** (the test laptop).
+  - Upload logic (source `src/vpk/Velopack.Deployment/_GitRelease.cs`, tag `1.2.161`): the tag defaults to the newest
+    full package's version (`0.1.0`, no `v`), so pass `--tag v<version>` to match the `v*` tag; the name defaults to
+    the tag. Without `--merge`, a release with that tag or name already there is an error. With `--merge`, the upload
+    adds its files to that release; the same channel twice still fails (`releases.<channel>.json` is already there).
+    `--pre` counts only when the release is created; `--publish` turns a draft into a published release. It uploads
+    the files the last pack of that channel listed in `assets.<channel>.json` (Setup, portable zip, full and delta
+    nupkg; inferred from `BuildAssets.Read` and the local file) plus a new `releases.<channel>.json`; `RELEASES` only
+    for the default channel `win`. So both channels go into one release with: upload `win-x64 --tag v<version>`
+    (draft), then `win-arm64 --tag v<version> --merge --publish`. **Verified** (source).
+  - Feed side (crate `sources/github.rs`, `sources/mod.rs`): `GithubSource` lists the 10 newest releases in one API
+    call, drops pre-releases unless asked, and joins the `releases.<channel>.json` of each release that has one,
+    skipping the rest; each file download lists the releases again. So a release with only one channel does not break
+    the other channel. Drafts are listed only to users with push access (GitHub REST docs, "List releases"), so an app
+    never sees a draft. **Verified** (source and docs).
+  - `vpk pack`: `--icon` sets the icon of Update.exe and Setup.exe and adds `setup.ico` to the package (source
+    `WindowsPackCommandRunner.cs`). `--releaseNotes <file>` (markdown) goes into the package manifest, comes back as
+    `VelopackAsset.NotesMarkdown` and `NotesHtml` (crate `manager.rs`), and becomes the GitHub release body
+    (`_GitRelease.cs`). `--delta None|BestSpeed|BestSize`, default `BestSpeed` (docs.velopack.io/packaging/deltas),
+    diffs against the newest full package in `-o`, which is why CI runs `vpk download github` into the same `-o`
+    first. `vpk pack` works in `%TEMP%\velopack\` and leaves that folder behind, empty. **Verified** (the test laptop,
+    source, docs).
+- **Velopack's own logs.** Setup writes `%LocalAppData%\velopack\velopack.log`; Update.exe and the stub write
+  `%LocalAppData%\velopack\velopack_HaikAsatryan.Wakeshot.log`. Uninstall removes neither. `-l <file>` on Setup.exe or
+  Update.exe moves them. **Verified** (test).
+- **Uninstall.** `Update.exe --uninstall --silent` while the app runs: kill, uninstall hook, shortcut, install folder,
+  `%TEMP%\velopack_HaikAsatryan.Wakeshot`, uninstall key; exit 0. Update.exe cannot delete itself, so the install folder
+  goes 3 s after it exits, through `cmd.exe /C choice /C Y /N /D Y /T 3 & rmdir /s /q "<folder>"`. A check right after
+  the exit still finds the folder and must wait. **Verified** (test).
+- **AUMID.** A normal start (not a hook: fast hooks exit before this) calls
+  `SetCurrentProcessExplicitAppUserModelID("velopack.HaikAsatryan.Wakeshot")` inside `VelopackApp::run()`, the same id
+  as the shortcut. A build run from `target\` is not installed, so `run()` returns before this and the process keeps
+  no explicit AUMID. `vpk pack --aumid` and `VelopackApp::set_app_user_model_id` change it. **Verified** (test log line
+  and source `app.rs`).
+- **Elevation.** Every process here ran elevated: Setup and Update.exe start hooks and restarts with their own token,
+  so all logged `elevated=yes`. A normal user install runs them all at Medium. Not tested unelevated: whether a Medium
+  Update.exe can kill a tray started elevated (a kill across integrity levels is normally denied), and the working
+  folder of a start from the Run value. The Access-denied warning in point 4 comes from the access mask, not from
+  elevation (source).
+
+### The update schedule and thread
+
+Checked 2026-11-04 between 01:30 and 01:40 (Rust 1.99.1).
+
+- **The schedule, on the fake clock** (`update::tests`): the first check after 5 minutes of run time, then every 12
+  hours; a sleep of 20 hours mid-wait, then the check within one 60 s wait of the wake-up; a wall clock set back 2
+  days, the check still 12 hours of run time after the last; a wall clock set forward 1 hour, no check; set forward a
+  day, a check within one wait. The fake wait runs the fake clock, so no test sleeps.
+- **The real thread** (system clock, `std::sync::mpsc`): an apply request reached the thread and its answer came back
+  through the sink; `UpdateHandle::stop` returned in under 1 s while the thread waited; dropping the handle ended the
+  thread (the test's channel closed). `UpdateHandle` is `Send` and `Sync` (a compile-time check), so `mpsc::Sender`
+  is `Sync` on this toolchain.
+- **Not verified:** whether `Receiver::recv_timeout` counts time the PC sleeps. The thread does not rely on it: it
+  reads both clocks again at least every 60 s of waiting.
+
+### Uninstall hook: deleting a folder with open files, and the 10 s limit
+
+2026-11-04. Tests in `crates/wakeshot-windows/src/hooks/tests.rs` on the test laptop (Windows 11 Pro 26300, `%TEMP%` on
+NTFS), against a temp data folder and scratch registry keys only.
+
+- **A file deleted while another handle has it open with delete sharing loses its name at once**: the test opens
+  `logs\wakeshot.log` with `LogWriter` (all three share flags), then deletes it with `std::fs::remove_file`
+  (`DeleteFileW`); `RemoveDirectoryW` of `logs` and of the data folder right after both succeed, and later writes
+  through the open handle bring nothing back (`real_delete_all_takes_the_open_log_too`, passed on every run). So the
+  uninstall hook can delete the data folder while its own log is open. That this comes from `DeleteFileW`'s POSIX
+  delete on NTFS (Microsoft, `FILE_DISPOSITION_INFORMATION_EX`) is inferred, not verified; FAT and network folders:
+  not verified.
+- **A file open without delete sharing stops `std::fs::remove_dir_all` of its folder** with code 32
+  (`ERROR_SHARING_VIOLATION`); the folder stays (`real_folder_that_cannot_go_whole_keeps_its_log`, a file in
+  `holds\` opened with `FILE_SHARE_READ` only). Which of the other files in that folder were already gone: not
+  checked.
+- **The hook limit is 10 s**, as `architecture.md` section 5, restore step 7, gives it; the code uses 10 s.
+
+### The release workflow: vpk, versions and wingetcreate
+
+Checked 2026-11-04 between 02:05 and 02:18: `vpk` 1.2.161 on the test laptop, Velopack and winget-create source at their
+release tags through `gh api`, and `gh api` release data. Nothing installed; packs went to the scratch folder only.
+
+- **`vpk download github` with no release yet** (this repo, 2026-11-04 02:09): "No releases found", "No full /
+  applicable release was found to download. Aborting.", exit 0, and the out folder is not created. So the first
+  tagged run packs with no delta. Source (`src/vpk/Velopack.Deployment/_DownloadCommandRunner.cs`, tag `1.2.161`): it
+  downloads only the newest full package of the channel (no index file), and a checksum mismatch logs an error and
+  returns without failing the command, so a bad download only costs the delta. **Verified** (run and source).
+- **vpk finds earlier releases by `*.nupkg` in the out folder** (`ReleaseEntryHelper.GetReleasesFromDirAsync`), each
+  package's channel read from the package, and refuses a version not above one there ("There is a release in channel
+  win-x64 which is equal or greater to the current version", exit -1, seen). A 0.1.1 pack with the 0.1.0 full package
+  copied in made a 8,975 byte delta (one of 5 files patched). **Verified** (source and run).
+- **`vpk upload github` uploads only this pack's files**: the files in `assets.<channel>.json` plus a new
+  `releases.<channel>.json` built from them (`_GitRelease.cs`, `GitReleaseUploadCommandRunner.RunCoreAsync`), so an
+  earlier full package left in the out folder for the delta is not uploaded again. The release body is the newest
+  full package's release notes (none unless `--releaseNotes` was packed). With `--merge` it finds the release by tag
+  or name, drafts included as listed by the token; it refuses a channel whose `releases.<channel>.json` is already
+  there. **Verified** (source); not run here (an upload publishes a release).
+- **Every vpk option also reads a `VPK_*` variable** (`src/vpk/Velopack.Vpk/Commands/BaseCommand.cs`): a value not
+  given on the command line comes from `VPK_<NAME>`; "required" is checked after that, so `VPK_TOKEN` satisfies
+  `--token`. A stray `VPK_DELTA` or `VPK_SIGN_PARAMS` would change a pack silently, which is why `pack.ps1` refuses to
+  run while any is set and `release.yml` gives `VPK_TOKEN` only to the download and upload steps. **Verified**
+  (source; `vpk pack -H` lists an `ENV=VPK_...` name for each option).
+- **DisplayVersion is three numbers only.** Velopack writes `get_manifest_version_short_string()`, which is
+  `major.minor.patch` (`src/lib-rust/src/locator.rs`, used by `src/bins/src/windows/registry.rs` for install and each
+  update). Hooks get the whole version, `get_manifest_version_full_string()` (`src/bins/src/windows/util.rs`,
+  `run_hook`). So `0.1.0-rc.1` shows as `0.1.0` in Apps and Features while the install hook logs `0.1.0-rc.1`; the
+  smoke test checks each against its own form. **Verified** (source); not seen in a real install.
+- **SemVer pre-release versions pack.** `pack.ps1 -Version 0.1.2-rc.1` gave
+  `HaikAsatryan.Wakeshot-0.1.2-rc.1-win-x64-full.nupkg`; Setup and portable zip names carry no version. **Verified**
+  (run).
+- **Pack sizes, repo exes without `velopack` yet** (`wakeshot-tray.exe` 426,496 and `wakeshot.exe` 667,648 bytes
+  x64; 406,016 and 615,936 ARM64): x64 Setup.exe 10,539,825, full package 2,982,193, portable zip 2,974,717; ARM64
+  Setup.exe 8,821,095 (PE machine 0xAA64), full package 2,869,607, portable zip 2,862,130. A pack takes about 3 s.
+  The `velopack` crate adds about 1.4 MB per tray exe (trial in `research/distribution.md`, section 1). **Verified**
+  (run).
+- **Action and tool versions** (`gh api .../releases/latest`, 2026-11-04): `actions/download-artifact` v8.0.2; its
+  `v8` tag exists, it runs on `node24`, and v8 fails a download whose digest does not match by default
+  (`digest-mismatch: error`). `actions/checkout` v7.0.1 and `actions/upload-artifact` v7.0.2 as in "CI workflow".
+  `microsoft/winget-create` v1.12.13.0: asset `wingetcreate.exe`, 39,486,456 bytes, SHA-256
+  `24042bd37915805615e6cf969ac57c6439124c3fe85823327f5f3fb24bd9ffea` (the API's asset digest; the exe was not
+  downloaded). **Verified** (API).
+- **`wingetcreate submit`** (source at tag `v1.12.13.0`): takes a manifest file or a folder; for a folder it reads
+  every file in it (`SubmitCommand.cs`, `Directory.GetFiles`), so the folder must hold only the manifests. It validates
+  YAML manifests before submitting (`BaseCommand.ValidateManifest`, `WinGetUtil.ValidateManifest`). The token comes
+  from `--token` or the variable `WINGET_CREATE_GITHUB_TOKEN` (`TokenHelper.cs`), which `doc/token.md` recommends for
+  CI; `--no-open` keeps it from opening a browser. It has telemetry (`Telemetry/` in the source); how to turn it off on
+  a runner: not verified. **Verified** (source and docs).
+- **actionlint was not run on `release.yml`**: downloading the actionlint release exe was refused by the agent session's
+  permission rules, and no YAML parser was on the test laptop (no PyYAML, no js-yaml). The workflow got a careful read,
+  and its version step ran locally (four refs and two versions, all as expected). **Not verified** until actionlint or
+  the first GitHub run.
+
+### winget manifests: schema, validation and the submit fork
+
+Checked 2026-11-04 between 02:20 and 02:23: `gh api` reads of `microsoft/winget-pkgs`, `microsoft/winget-cli` and
+`microsoft/winget-create`, and `winget` v1.29.380 on the test laptop. Tool facts used by the release workflow are in
+"The release workflow: vpk, versions and wingetcreate".
+
+- **Schema 1.28.0 is the newest winget-pkgs accepts.** `doc/manifest/schema/` in winget-pkgs holds 1.0.0 to 1.12.0
+  and 1.28.0. In the 40 newest commits on its master (merged 2026-11-03), the installer manifests listed were 21 at
+  `ManifestVersion: 1.28.0`, 13 at 1.12.0 and 6 older, so the pipeline merges 1.28.0 today. The client repo has JSON
+  schemas for 1.28.0 (`schemas/JSON/manifests/v1.28.0/`). **Verified** (API).
+- **Fields in the 1.28.0 schemas** (winget-cli JSON): installer root has `RequireExplicitUpgrade`, `Commands`,
+  `InstallModes`, `ReleaseDate` (format `date`), `UpgradeBehavior`, `ProductCode`, `AppsAndFeaturesEntries`; it
+  requires only `PackageIdentifier`, `PackageVersion`, `Installers`, `ManifestType`, `ManifestVersion`. Default
+  locale requires `PackageLocale`, `Publisher`, `PackageName`, `License`, `ShortDescription` (3 to 256 characters);
+  `Tags` at most 16, each 1 to 40 characters; `InstallationNotes` (up to 10,000 characters) is "displayed to the user
+  upon completion of a package installation". **Verified** (schema files).
+- **`winget validate --manifest <folder>` passes** on the folder `fill.ps1` wrote from local packs (x64
+  and ARM64 `Setup.exe` 0.1.0), with and without `ReleaseDate`: "Manifest validation succeeded.", exit 0. The same
+  folder with `InstallerType: bogus` fails ("Schema Error ... Failed to match against any enum values", exit
+  -1978335191), so the check is real. It ran in this elevated agent shell; whether it needs an administrator: not
+  checked under a Medium token (it reads files only). **Verified** (run).
+- **`wingetcreate submit` forks for you**: when the token's account has no fork of `microsoft/winget-pkgs`, it creates
+  one (`Repository.Forks.Create`) and syncs it with upstream before each PR (`src/WingetCreateCore/Common/GitHub.cs`,
+  tag `v1.12.13.0`). **Verified** (source).
+- **No release yet**: `fill.ps1 -Version 0.1.0` without `-FromDir` gets 404 from
+  `api.github.com/repos/HaikAsatryan/wakeshot/releases/tags/v0.1.0` and stops. Its download path (hash of the public
+  asset URL, checked against the API's asset `digest`) runs first on a real release. **Not verified** until then.
+
+### The `velopack` crate: clang for ARM64, lock growth and exe size
+
+Checked 2026-11-04 between 03:08 and 03:31 on the test laptop, in a build folder of its own, with no other cargo
+command running. Rust 1.99.1, the repo's static CRT config.
+
+- **clang was missing then.** `Get-Command clang`: not found. `vswhere -all -products * -find
+  'VC\Tools\Llvm\**\clang.exe'`: no hit (03:09). The one Visual Studio instance is Build Tools 2026 18.11.12324.101 in
+  `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools`; it already has
+  `Microsoft.VisualStudio.Component.VC.Tools.ARM64` (`vswhere -include packages`). Not installed then, since it
+  needs an administrator; it is in the Build Tools now (listed 2026-11-07).
+- **Component ids and the command.** Microsoft Learn, "Visual Studio Build Tools component directory", the Visual
+  Studio 2026 part, workload "Desktop development with C++" (`Microsoft.VisualStudio.Workload.VCTools`), all optional:
+  `Microsoft.VisualStudio.Component.VC.Llvm.Clang` ("C++ Clang Compiler for Windows (20.1.8)"),
+  `Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset` ("MSBuild support for LLVM (clang-cl) toolset"),
+  `Microsoft.VisualStudio.ComponentGroup.NativeDesktop.Llvm.Clang` ("C++ Clang tools for Windows (20.1.8 - x64/x86)").
+  "Use command-line parameters to install Visual Studio": `setup.exe modify --installPath <dir> --add <id>`,
+  `--passive` (a progress window, no questions), `--norestart`; the installer must be started from another folder than
+  its own; every command needs elevation; exit 0 is done, 3010 done with a reboot wanted. `ring`'s `BUILDING.md`
+  (`main`): for `aarch64-pc-windows-msvc`, the Build Tools "C++ ARM64 build tools" and "clang" components, and the
+  Visual Studio LLVM folder on the PATH. Read 03:10 to 03:12.
+- **`ring` calls clang by its bare name.** `ring` 0.17.14 (the version `velopack` locks) `build.rs` lines 562 to 564:
+  on Windows AArch64, when the compiler cc-rs found is not clang-like, it sets the compiler to `clang`. So the PATH of
+  the cargo process decides; no user Path change is needed if the cargo command's own PATH has the LLVM folder. Read in
+  the cargo registry copy. That `CC_aarch64_pc_windows_msvc` set to a full clang path works too: inferred from the same
+  lines (a clang there is clang-like), not tried.
+- **The ARM64 error without clang.** Workspace clippy (with and without `--all-targets`) and the release build for
+  `aarch64-pc-windows-msvc` stop in 1 to 3 s: `error: failed to run custom build command for ring v0.17.14` ...
+  `error occurred in cc-rs: failed to find tool "clang": program not found`. Build scripts run for clippy too, so every
+  ARM64 command that compiles `wakeshot-tray` fails the same way until clang is reachable.
+- **The CLI and the libs stay free of it.** `cargo tree --locked -p wakeshot-cli -e normal`: 50 lines, no `velopack`.
+  `cargo tree -e all --target aarch64-pc-windows-msvc` for `wakeshot-cli`, and for `wakeshot-core` with
+  `wakeshot-windows`: no `velopack` and no `ring`. So for ARM64, `cargo clippy -p wakeshot-core -p wakeshot-windows -p
+  wakeshot-cli` with and without `--all-targets` (`-D warnings`) and their release build pass without clang (03:24).
+- **Lock and package counts.** The one build without `--locked` took `Cargo.lock` from 80 to 181 packages (+101, all
+  targets); none removed, no locked version changed, six existing entries only gained a version suffix (now two
+  `windows-sys` and two `getrandom`) or an optional dependency (`rand` gains `chacha20`). Compared with a Python
+  `tomllib` diff of the two files. `cargo tree -p velopack -e normal --prefix none`, unique lines: 115 for x64 (114
+  packages besides `velopack`), 118 for ARM64 (plus `windows-sys` 0.52, `windows-targets` and `windows_aarch64_msvc`
+  0.52.6 for `ring`). Research "Dependency weight and the test-support feature" counted 113 in a scratch project on
+  2026-11-03; the newer resolve (`ureq` 3.5.1 now) likely explains the difference (not verified). The x64 tray build
+  gains 92 packages; 23 of velopack's are already in the libs' tree (`windows` 0.62.2 and its crates, `serde`,
+  `serde_json`, `syn`).
+- **Sizes and build time.** Release exes in bytes, before and after `velopack`:
+
+  | Exe | x64 before | x64 after | ARM64 before | ARM64 after |
+  |---|---|---|---|---|
+  | `wakeshot-tray.exe` | 1,640,960 | 2,026,496 (+385,536) | 1,318,400 | not built (no clang) |
+  | `wakeshot.exe` | 667,648 | 667,648 | 615,936 | 615,936 |
+
+  Clean release build in a fresh folder: before, the whole workspace for x64 took 55 s (ARM64 43 s); after, the tray
+  alone for x64 took 70.4 s with 133 crates compiled.
+- **Static CRT holds with `ring`'s C code.** `ci.yml`'s dumpbin step, run on the new x64 release exes: no `VCRUNTIME`,
+  `MSVCP`, `ucrtbase` or `api-ms-win-crt-*`. The tray imports `kernel32`, `ntdll`, `oleaut32`, `bcryptprimitives`,
+  `advapi32`, `api-ms-win-core-synch-l1-2-0`, `shell32`, `ole32`, `user32`, `combase`, `gdi32`, `dwmapi`, `powrprof`,
+  `propsys`, `wtsapi32`, `userenv` and `api-ms-win-shcore-scaling-l1-1-1`. Which of these are new: not compared (the
+  before exe was overwritten).
+- **velopack 1.2.161 behavior `velo.rs` relies on** (source in the cargo registry: `app.rs`, `manager.rs`,
+  `locator.rs`, `sources/github.rs`).
+  - `VelopackApp::run()`: when the first argument is `--veloapp-install`, `-updated`, `-obsolete` or `-uninstall`, it
+    calls that callback only if the second argument parses as a semver version, then `exit(0)` unless
+    `VELOPACK_DEBUG` is set. Otherwise it locates the install; not installed, it logs and returns.
+  - `set_auto_apply_on_startup(false)` skips the apply of a staged package in `run()`; `run()` still deletes local
+    full packages other than the running version and the newest staged one.
+  - `download_updates` returns at once when the target package is already in `packages\` ("Package already exists on
+    disk, skipping download"), so a package staged by an earlier run is offered again after the next good check,
+    with no second download.
+  - `wait_exit_then_apply_updates` uses only the target asset (`AsRef<VelopackAsset>`); a package missing on disk is
+    `Error::FileNotFound`.
+  - `GithubSource::new` panics only on a URL that does not parse (`expect`); `UpdateManager::new` auto-locates from
+    the exe: `Update.exe` beside it, or `<root>\current\` with `Update.exe` in `<root>`. A test exe in `target\` gets
+    `NotInstalled` (unit test `velo::tests::a_build_folder_exe_is_not_installed`).
+- **The dry-run tray still starts with `velopack` in.** The smoke test (`--test smoke -- --ignored
+  --test-threads=1`) passed after the change: 1 passed, test 4.5 s, 35 s with its debug build. `VelopackApp::run()`
+  in the not-installed build returned and the tray ran on, held, went idle and quit with code 0.
+- **The shell's entry for that run had no GUID.** One new `HKCU\Control Panel\NotifyIconSettings\<id>` key came with
+  the run (ids listed before and after), holding only `IconSnapshot`, a 24 px PNG of the idle glyph; no `IconGuid` and
+  no `ExecutablePath`, still so 1.5 minutes after the run (session locked). The earlier tray mode run had both. So a
+  clean-up that looks only for the dry-run GUID can miss the entry; comparing the ids before and after finds it. Why
+  the values were missing: not verified.
+
+### Velopack update wiring: a folder source, the restart callback and the install check
+
+Checked 2026-11-04 03:36 to 03:50. "Source" means read in velopack
+1.2.161 in the cargo registry (`~/.cargo/registry/src/index.crates.io-*/velopack-1.2.161/src`), the version
+`Cargo.lock` pins; "docs.rs" means the 1.2.161 pages on docs.rs; "test" means run on the test laptop.
+
+- **A local folder source exists.** `velopack::sources::FileSource::new<P: AsRef<Path>>(path: P)`: "Retrieves
+  available updates from a local or network-attached disk. The directory must contain one or more valid packages, as
+  well as a 'releases.{channel}.json' index file." `get_release_feed` reads `<folder>\releases.<channel>.json`;
+  `download_release_entry` copies `<folder>\<asset FileName>` to the local file. The channel is the app's own (from
+  its manifest) unless `UpdateOptions` names one, as for `GithubSource`. **Verified** (source `sources/file.rs` and
+  docs.rs `struct.FileSource.html`). The earlier Velopack runs already updated through a local `FileSource` (point
+  3 of "Velopack checks for Wakeshot").
+- **`UpdateManager::new_boxed(Box<dyn UpdateSource>, ..)`** takes a source chosen at run time; `new` boxes its
+  argument and calls it. `UpdateSource: Send + Sync`. **Verified** (source `manager.rs`, `sources/mod.rs`).
+- **The restarted callback.** `VelopackApp::on_restarted<F: FnOnce(Version) + 'a>(self, hook: F)`: "This hook is
+  triggered when the application is restarted by Velopack after installing updates." Inside `run()`: the manager is
+  made with `NoneSource` (no install: an error line and `run()` returns before any hook); then
+  `env::var(VELOPACK_RESTART).is_ok()`, then `env::remove_var(VELOPACK_RESTART)`; at the end, when restarted, the
+  hook gets `manager.get_current_version()`, the manifest version of the running (new) install. So the version must be
+  kept inside the callback: after `run()` the variable is gone. Wakeshot keeps it in a `OnceLock<String>`
+  (`velo::RESTARTED`). **Verified** (source `app.rs` lines 125 to 203; docs.rs `struct.VelopackApp.html`); that
+  Update.exe sets `VELOPACK_RESTART=true` and the hook gets the new version: **verified** earlier by test, point 4 of
+  "Velopack checks for Wakeshot".
+- **Install check before the thread.** `velopack::locator::auto_locate_app_manifest(LocationContext::FromCurrentExe)`
+  is public. On Windows it looks for `Update.exe` beside the exe, then in `<root>` for an exe under `<root>\current\`,
+  and `VelopackLocator::new` also needs the manifest; every miss is `Error::NotInstalled`, a manifest that does not
+  read is another error. `velo::installed()` treats only `NotInstalled` as no install, so a broken install still runs
+  the update thread, whose checks then log the error. A test exe in `target\` is not installed (unit test
+  `velo::tests::a_build_folder_exe_gets_no_update_thread_and_no_updated_notice`). **Verified** (source `locator.rs`,
+  test).
+- **The debug-only feed name is not in a release exe.** `findstr /c:"WAKESHOT_UPDATE_FEED"` on the release
+  `wakeshot-tray.exe` (x64): exit 1, not found; on the debug test exe of the tray: found. The name and the code that
+  reads it sit under `#[cfg(debug_assertions)]`. **Verified** (test).
+- **The release tray grew by the HTTPS stack.** x64 release `wakeshot-tray.exe`: 3,947,520 bytes, against 2,026,496
+  measured when `velopack` was first added. Before this change `velo::feed()` was dead code in the exe, so LTO dropped
+  `UpdateManager`, `GithubSource` and the `ureq`, `rustls` and `ring` code under them; now the update thread calls it.
+  `findstr` finds `rustls`, `ureq`, `webpki` and `api.github.com` in the exe now. That the whole 1.9 MB is that stack:
+  not verified (no size breakdown run).
+- **Not verified:** that the tray Update.exe restarts gets the old tray's environment, so a `WAKESHOT_UPDATE_FEED` or
+  `WAKESHOT_DATA_DIR` set for the old debug tray reaches the new one. Update.exe is a child of the tray
+  (`wait_exit_then_apply_updates` spawns it), so it likely inherits it.
+
+### Start at login switch check
+
+Checked 2026-11-04 between 06:15 and 06:21 on the test laptop: an x64 release build of commit f33bf50 packed as 0.1.0,
+installed, installed again over itself and uninstalled, all silent and at Medium (a `.cmd` opened with `explorer.exe`;
+its `whoami /groups` "Mandatory Label\Medium Mandatory Level"). The session was locked the whole time, so nobody used
+the real Settings switch. "Test" means seen on the test laptop.
+
+- **Where Windows keeps the switch.** `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run`,
+  one value per `Run` value, with the same name. No Microsoft page documents it (Learn search, 2026-11-04: no hit).
+  The UTF-16 string `Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved` is in
+  `SettingsHandlers_Startup.dll` (the Settings > Apps > Startup page) and `Taskmgr.exe` (both 10.0.26100.9549),
+  `explorer.exe` (10.0.26100.8117), `Startupscan.dll` and `twinui.pcshell.dll`; not in `shell32.dll`,
+  `windows.storage.dll` or `twinui.dll`. So the Settings page, Task Manager and Explorer all use the key. **Verified**
+  (string search in the binaries); what each of them does with it: **not verified**.
+- **The value's format.** REG_BINARY, 12 bytes: a DWORD state, then a FILETIME. Checked 2026-11-05: the real
+  Settings > Apps > Startup switch on the test laptop (build 26300) wrote state **1** and the FILETIME of the change for
+  off (`01-00-00-00-9D-AA-39-37-A4-6C-DD-01`, switched off 2026-11-05 01:34:04) and **12 zero bytes** for on, and
+  Windows honoured state 1: no tray started at the next sign-in. **Verified** (a manual check on the test
+  laptop: registry reads, the tray log, Winlogon 7001 and 7002). Web sources name other forms, 02 (or 06) on and 03
+  off: windowsir.blogspot.com, 2022-07-09 (Task Manager's switch); the
+  `auto-launch` Rust crate (`src/windows.rs`, used by Tauri's autostart plugin) writes `02` and 11 zero bytes to turn
+  it on and reads "the last 8 bytes all zero" as on. Those forms, and that a missing value counts as on (the same
+  sources): **not verified** here.
+- **A fresh install writes no switch value.** After `Setup.exe --silent` the Run value `Wakeshot` is REG_SZ
+  `"%LocalAppData%\HaikAsatryan.Wakeshot\current\wakeshot-tray.exe"` (158 bytes) and there is no
+  `StartupApproved\Run\Wakeshot` value, so start at login is on by the keys. **Verified** (test).
+- **Setup over the install keeps the switch off, by the keys.** With `StartupApproved\Run\Wakeshot` set to
+  `03 00 00 00` and a FILETIME (the web sources' off form; the real switch writes `01`, above), `Setup.exe --silent`
+  over the install (what `winget upgrade`
+  runs) exited 0 in 0.4 s; the install hook logged "Run value Wakeshot set to ..."; the Run value read the same; the
+  `StartupApproved\Run\Wakeshot` value kept the same 12 bytes and the `StartupApproved\Run` key's last write time did
+  not move. Neither Velopack nor the hook touches that key (Velopack's log; `hooks.rs` writes only `Run`, `RunOnce`
+  and the Path). **Verified** (test). That Explorer then skips Wakeshot at the next sign-in: **not verified** (no
+  sign-out was possible).
+- **Uninstall leaves the switch value.** `Update.exe --uninstall --silent` removed the Run value, but
+  `StartupApproved\Run\Wakeshot` stayed with the same off bytes. So a later fresh install writes the Run value again
+  and, by the keys, starts with start at login off. **Verified** (test) for the leftover; the reinstall case follows
+  from the step above, **not run**. windowsir.blogspot.com (2022-07-17) saw the same for a Run value deleted in
+  RegEdit.
+- **A registry write with the same data is not a write.** The hook's second `RegSetValueExW` of the same Run value did
+  not move the `Run` key's last write time. On a scratch key (`HKCU\Software\WakeshotSwitchCheckScratch`, made and
+  deleted): a second write of the same string kept the key's time, a write of other text moved it. **Verified**
+  (test). So a key's last write time cannot show that an installer wrote a value again.
+- **AFTER equals BEFORE.** Run (7 values, same hashes), RunOnce (empty), every `StartupApproved` subkey and value
+  (hash `E9B25BDF1FD8AC4E`), Path REG_EXPAND_SZ 332 bytes hash `A8FDC61D7FFE5745`; no install trace or data folder.
+  The test value was deleted at the end. The `Run` and `StartupApproved\Run` keys' last write times moved (any write
+  moves them; nothing puts them back). **Verified** (test; an elevated read at 06:16 and 06:20 matched).
+
+### winget upgrade over a running Wakeshot (2026-11-07)
+
+Read with `gh api` on 2026-11-07: Velopack tag `1.2.161` (our pin and still the
+latest release) and winget-cli `master` (latest release v1.29.380). Source reads only; not tested.
+
+- winget passes our `SilentWithProgress` switch (`--silent`) on a plain upgrade, `Silent` with `-h`, and only the
+  `Interactive` switch (we have none, so no switch) with `-i` (`ShellExecuteInstallerHandler.cpp`,
+  `GetInstallerArgsTemplate`). It waits only on the Setup process handle, no job object. Verified (source).
+- Velopack Setup over an install: `force_stop_package`, folder swap, install hook, uninstall entry, and starts the app
+  only when not silent (`src/bins/src/commands/install.rs`); there is no switch to start it after a silent install
+  (`setup.rs`). So a by-name upgrade leaves the tray off. Verified (source); the kill and no start are also tested
+  ("Velopack checks for Wakeshot", point 7).
+- `--all` skips Wakeshot only when winget installed it (`PinnedByManifest` in `PackageTrackingCatalog.cpp`, skip in
+  `UpdateFlow.cpp`); a GitHub install is upgraded. Verified (source), as in `docs/research/launch.md`.
+- Velopack starts hooks with `CreateProcess` and no job object (`src/lib-rust/src/process_win.rs`), but `run_hook`
+  (`src/bins/src/windows/util.rs`) ends every hook with `force_stop_package(root_dir)`, which ends every process whose
+  exe is under the install folder (`src/bins/src/shared/util_windows.rs`). So a process the install hook starts from
+  the install folder is killed right after the hook exits; only a starter from outside the folder could outlive it,
+  and the README's winget upgrade limit stays. Verified (source, tag `1.2.161` and branch `develop`, `gh api`
+  2026-11-07); not tested. Same as `docs/research/distribution.md`, "After every hook".
+
+## End to end and manual tests
+
+### The power_check harness on the test laptop
+
+Checked 2026-11-03 22:47 to 22:52 on the test laptop (Windows 11 Pro 10.0.26300, on AC, lid open, session locked by
+Windows at screen off, agent elevated: High), with the debug build of
+`crates/wakeshot-windows/examples/power_check.rs` and its own harness folder in a scratch folder. The test laptop's
+own values read by `powercfg` before (22:47:36, 22:49:42) and after (22:49:43): Balanced active and the only plan, lid
+AC 1 and DC 1, sleep AC 10800 and DC 14400, energy saver DC 30; no `WakeshotRestore` RunOnce value; no
+`%LocalAppData%\Wakeshot` and no `%LocalAppData%\Wakeshot-harness` folder.
+
+- **Windows shows our request reason.** While `power_check hold --for 10` held its requests, `powercfg /requests`
+  (elevated) listed `power_check.exe` under SYSTEM and EXECUTION with the text "Wakeshot: keeping the PC awake for
+  running work"; 6 s after the run's clear both were gone, and an agent session's own SYSTEM request stayed.
+- **First values of the notifications, in order.** `Subscriptions::start` gave, within 1 ms of the call: power AC
+  with no battery reading, lid open, power AC with battery 100%, then the active plan. Two runs, the same order.
+- **Ticks through `MsgWaitForMultipleObjects`.** 5 s ticks on the wall clock came 4996 to 5018 ms apart, wall and
+  unbiased steps within 11 ms of each other, over 6 ticks in three runs; no gap.
+- **A console window names its client as owner.** For a window started as `conhost.exe "<exe>" ...` from the
+  elevated shell, `GetWindowThreadProcessId` on the `ConsoleWindowClass` window gave the harness pid, not the
+  conhost pid; conhost's own windows were of class `IME` and `MSCTFIME UI`. `Process.MainWindowHandle` of that
+  conhost read 0 (the session was locked; why: not verified).
+- **The close of a console window reaches the harness's handler, which finishes first.** `WM_CLOSE` posted to that
+  window: the run logged "stopping: the console window closed" 1.3 s after its last tick, then every line through
+  "power_check hold ended" within 2 ms, and the process was gone 10 ms after the post (`CTRL_CLOSE_EVENT`, handler
+  waiting on the clean exit, as in "Medium launches through Explorer and console stop events").
+- **Session notices register from an elevated console process.** A hidden top-level window (class registered by
+  the harness, `WS_OVERLAPPED`, never shown) took `WTSRegisterSessionNotification` with no error and unregistered
+  with no error after 5 s; no notice came in those 5 s. `locked_now()` read locked, `on_console()` true.
+- **`Global\` mutex from High.** `NamedMutex::open("Global\Wakeshot.Probe.<pid>")` and `take(0)` worked at High
+  integrity. At Medium: not tested here.
+- **pwsh and exit codes.** `& exe bad-args 2>&1 | Select-Object -First 2` then `$LASTEXITCODE` read 0 though the
+  exe exits 2; without the pipe it read 2. Read exit codes without a pipe.
+
+### Install, update and uninstall end to end at Medium
+
+Checked 2026-11-04 between 03:38 and 03:53 on the test laptop, with `packaging/e2e.ps1`: two full runs (03:48:41 and
+03:52:16), 81 checks each, all passed. The exes were the repo's x64 release build of commit cd3d498 (velopack 1.2.161
+with the four hook callbacks), packed as 0.1.0 and 0.1.1 by `pack.ps1`. Every journal named only a throwaway copy of the
+active plan, "Wakeshot test e2e", never made active. "Test" means seen on the test laptop; "source" means read in
+Velopack at tag `1.2.161` through `gh api`.
+
+- **Installs at Medium.** A `.cmd` opened with `explorer.exe` ran the script: `whoami /groups` "Mandatory
+  Label\Medium Mandatory Level", the script "elevated False". Setup.exe's manifest asks for `asInvoker` (the first
+  such string in the file), so Setup, Update.exe and the hooks they start keep that token. Per-user installs,
+  updates and uninstalls all worked at Medium with no prompt. **Verified** (test).
+- **Nothing starts the tray.** Velopack starts the app after an install only when Setup is not silent (source
+  `src/bins/src/commands/install.rs`, `if !dialogs::get_silent()` before `start_package`), and after an apply only
+  without `--norestart` (`commands/apply.rs`; the log says "Restart: false"). After each Setup, apply and uninstall,
+  no process ran from the install folder (WMI `ExecutablePath`, 2 s after the exit). **Verified** (test and source).
+- **The real hooks restore a journaled value at install, update and uninstall.** Each time: the copy's DC lid action
+  set to 0 with `powercfg`, then `journal.json` with that entry (`original` 1, `written` 0) and an owner that had
+  ended (a `PING.EXE` the script started). Setup.exe `--silent` over the install, `Update.exe apply --silent
+  --norestart --package <0.1.1 full nupkg in packages\>` and `Update.exe --uninstall --silent` each put the copy back
+  to 1 and deleted the journal. Hook log: `journal saved ... restored`, `power: wrote lidDc on plan <copy>: 0 to 1`,
+  `journal deleted`, `restore: the journal's values are back`, and no `set_active` line (`Win32Power` logs every
+  one): an entry on an inactive plan is dropped after its write (restore step 5). The active plan's id, its lid,
+  sleep and energy saver values and the SHA256 of all of its `powercfg /qh` text stayed the same through every step.
+  **Verified** (test).
+- **Registry and Path.** Install wrote `Run\Wakeshot` = `"<root>\current\wakeshot-tray.exe"` and one Path entry
+  `<root>\current`; Setup over the install and the update kept both as they were (the updated hook logs "CLI folder
+  already in the user Path"). The uninstall removed Run, a test `RunOnce\WakeshotRestore` = `"<root>\current\
+  wakeshot-tray.exe" --restore` and the Path entry; the Path value then had its old type (REG_EXPAND_SZ) and bytes
+  (read with `RegQueryValueExW`), and both keys had all their other values unchanged. **Verified** (test).
+- **Uninstall clean-up.** After a good restore the data folder `%LocalAppData%\Wakeshot` went whole, with the
+  hook's own log in it, so the uninstall hook's lines cannot be read afterwards: the copy's value and the
+  missing folder are the proof. The install folder went 3.1 s after Update.exe exited (both runs), the uninstall key,
+  the Start menu shortcut and `%TEMP%\velopack_HaikAsatryan.Wakeshot` at once. The `choice` of Velopack's delete timer
+  printed `Y` into the script's output, which it inherited. **Verified** (test).
+- **`current` after an apply.** Same path, new folder (creation time 23:48:58Z before, 23:49:04Z after, UTC);
+  `current\sq.version` and the uninstall key's DisplayVersion said 0.1.1. **Verified** (test).
+- **Times** (script stopwatch around each exe): first install 3.8 s, of which the hook 1.57 s (a new Setup.exe and a
+  just-extracted exe); the second run's install 0.6 s. Setup over the install 0.4 and 0.5 s, apply 1.5 and 1.0 s,
+  uninstall 0.4 s. Hook times from Velopack's log (run 1): install 236 ms over an install, obsolete 17 ms, updated
+  197 ms, uninstall 128 ms. **Verified** (test).
+- **Sizes** (x64): `Setup.exe` 11,347,640 bytes, full nupkg 3,790,008, the 0.1.1 delta of the same exes 8,975,
+  portable zip 3,782,532. Tray exe 2,026,496, CLI 667,648. **Verified** (test).
+- **Velopack log quirks.** Apply and uninstall log `WARN Skipping killing self: <root>\Update.exe (<pid>)`: its check
+  for processes in the install folder finds Update.exe itself. Harmless. Setup over an install renamed the old folder
+  to `HaikAsatryan.i5WplhHtuq0JjQPq` and removed it at the end. **Verified** (test).
+- **Two tool facts.** In a `.cmd`, `echo %ERRORLEVEL%> file` writes nothing when the code is a single digit: cmd
+  reads `0>` as a redirect of handle 0 (seen: an empty file after an exit 0); `(echo %ERRORLEVEL%)> file` works (seen:
+  `0`). In pwsh 7.6.9, a comment help block right under `#Requires -Version 7` is not read by `Get-Help` (it shows
+  only the syntax); a blank line between them fixes it, a comment line between them does not. **Verified** (test).
+- **The test laptop's `powercfg /q` hides the lid action and the energy saver threshold**: `/q <plan> SUB_BUTTONS
+  LIDACTION` prints only the plan header; `/qh` prints the setting and its values. **Verified** (test).
+- **Rerun 2026-11-04 04:33:55 to 04:34:37**, the x64 release build of commit 7b6d076
+  (adds the update wiring and the wiring fixes), the same script and launcher, at Medium: exit 0, 81 of 81 checks
+  passed, the same check names, BEFORE and AFTER values and hashes as both earlier runs; an elevated read before and
+  after gave the same state. Differences: the tray exe is 3,952,640 bytes (was 2,026,496; the update wiring brings in
+  Velopack's update code), so `Setup.exe` is 12,364,401, the full nupkg 4,806,769 and the portable zip 4,799,293
+  (the delta is still 8,975); the first install took 7.7 s (Velopack: install hook 3,559 ms, while the hook's own
+  timer says 0.1 s; why the start of new exes is that slow is not verified), the updated hook 672 ms (was 197 ms).
+  Setup over the install 0.5 s, apply 1.0 s, uninstall 0.4 s and the install folder gone 3.1 s after, as before.
+  **Verified** (test).
+- **Uninstall removes the Settings switch value, 2026-11-04 06:37:15 to 06:37:52**, the x64 release build of commit
+  75233b6 plus the new `store.rs` and `hooks.rs`, with `e2e.ps1` extended for the switch value, the same launcher, at
+  Medium: exit 0, 88 of 88 checks passed (the 81 before plus 7). The install wrote no
+  `Explorer\StartupApproved\Run\Wakeshot` value. The script then wrote it in the web sources' off form (`03 00 00 00`
+  and the FILETIME of the write, research "Start at login switch check", where the real switch's `01` form is recorded
+  since 2026-11-05; not the real switch, the session was locked): Setup over the install and the update kept its 12
+  bytes, and the uninstall removed it with the Run, RunOnce and Path values. The other `StartupApproved\Run` values
+  (none here) and every other BEFORE value were equal at the end; an elevated read before and after gave the same state.
+  The uninstall hook's own log line goes with the data folder, so the missing value is the proof. Times: install 6.1 s,
+  Setup over the install 0.5 s, apply 0.9 s, uninstall 0.3 s (hook 112 ms by Velopack), install folder gone 3.1 s after.
+  **Verified** (test).
+
+### Dry-run end to end: the tray and the CLI together
+
+2026-11-04 04:37 to 04:49, code at 7b6d076, x64 debug. The suite
+`crates/wakeshot-tray/tests/e2e_dry_run.rs` ran twice in a locked session: the dry-run tray started at Medium through
+Explorer, and `wakeshot.exe` ran as the elevated test's child. No power setting was written. The outputs
+(`run1.txt`, `run2.txt`, `claude-timeline.txt`) are not kept.
+
+- **The two exes work together in dry run, end to end.** 12 of 12 passed in both runs (44.2 s, then 36.2 s), before
+  any fix. The tests cover every CLI command but `log` against a running tray, Keep awake with and without the
+  screen, `wakeshot run`, Automatic, restore, quit, a crash and the next start, the first run, and the log format.
+  **Verified** (test).
+- **Timings.** The first `state.json` came 0.51 to 0.60 s after the Explorer launch. The first launch of a run took
+  longer: 5.5 s in run 1 and 1.1 s in run 2 (a cold Explorer is likely; not verified). `state.json` follows a hold
+  change in 0.9 to 1.0 s, the view's one-second hold-back. A `run-<pid>.json` hold existed 58 ms after `wakeshot run`
+  started. `wakeshot restore` with a live tray answered in 136 ms in both runs. A second start through Explorer
+  exited 0, 2.5 s after the launch with Explorer and `cmd` included, and logged nothing. **Verified** (test, times
+  printed).
+- **A Gone hold drops in about 60 ms, not at the safety tick.** After the `wakeshot run` wrapper was ended by pid,
+  its child `ping` and the hold stayed, since the file names the child. When `ping` was ended by pid, `state.json` was
+  idle 62 ms (run 1) and 63 ms (run 2) later, and the tray deleted the file. The process exit wait does it, not the
+  30 s tick. **Verified** (test).
+- **A Medium tray deletes hold files that the elevated CLI wrote.** `keep-awake.json` written by `wakeshot keep-awake`
+  was gone after Quit, and the crashed tray's Keep awake file was gone after the next start. The CLI ran as the child
+  of the elevated test, so High; its level was not read in this run (inferred: agent shells on the test laptop run
+  elevated, checked 2026-11-03). **Verified** (test) for the deletes; the CLI's level is inferred.
+- **When a hold ends, `state.json` still lists the overridden keys for a moment.** It was seen 59 ms after a run ended:
+  holding empty, 3 keys overridden. The next write, after the restore's answer, lists none. So a `wakeshot status`
+  in that instant says "Nothing holds the PC awake" and "Changed by Wakeshot: ...", which is true then. **Verified**
+  (test output).
+- **A dry run cannot show a leftover restore's writes.** After the tray was ended by pid during a hold, its dry-run
+  journal stayed (the dry run starts no guard). The next start logged "journal deleted", "restore of every plan: found
+  journal entries; 0 entries left" and "startup restore done: no journal entry is left" before its first state write. No
+  "would write" line came: the new process's `DryRunPower` reads the real value, which is still the original. The real
+  path ran in the end to end test on real settings. No "the last tray of this session ended without quitting" line came
+  either. Windows destroys a named mutex when its last handle closes, so a later start never sees it abandoned (inferred
+  from that rule; not verified). **Verified** (test, log) for the lines.
+- **The log keeps to the format of `architecture.md` section 8 and logs no file content or command line.** The log
+  test's 42 lines (tray 34, cli 8) all parse into wall time with offset, monotonic seconds, process, level, area and
+  text; none is WARN or ERROR. None holds JSON, a Rust debug wrapper or an escaped path. None holds the `run` arguments,
+  which carried a marker. Read by eye: `wrote [LidAc, LidDc, SleepDc]` in the apply line is a Rust debug list.
+  **Verified** (test, and read).
+- **A quit while a hold file changes can log a false WARN.** The watch thread logged "an event could not be posted to
+  the loop (PostMessageW error 1400); the next tick posts everything again". That happened at 1 of 11 quits in run 1
+  and 3 of 12 in run 2. Each time, a hold file changed at the quit: Keep awake's file (the quit deletes it) or a
+  short `run`. The IO thread logs the same case as Info, "as after a quit". **Verified** (test log); the cause is read
+  in the code (the watch thread stops after `IoThread::finish`, once the window is gone).
+- **The dry-run tray holds for a Claude Code session and lets go after it.** Claude Code 2.1.318 ran with `claude -p
+  --model haiku` (`claude-haiku-5-5`), CLAUDE* variables dropped, in a throwaway folder. Its status file appeared
+  0.65 s after the start and was gone at the exit. With three other sessions on the laptop holding all along, the
+  tray went from 3 to 4 sessions at 00:42:01Z, 1 s after the session started. It went back to 3 at 00:43:07Z, 1 s
+  before the process ended 66.6 s later. **Verified** (test timeline against the session's own times).
+- **Claude Code refuses a foreground `sleep` in its Bash tool.** Asked to run `sleep 60`, it blocked the command and
+  told the model to use a background task, so the session ended in 12 s. `ping -n 61 127.0.0.1 > /dev/null` ran in
+  the foreground. So a test that needs a long foreground tool call must not use `sleep`. **Verified** (live, the
+  result text).
+- **The dry-run balloon's AUMID key names the app "Wakeshot".** The runs (first-run and restore notices) made
+  `HKCU\Software\Classes\AppUserModelId\NotifyIconGeneratedAumid_15983757285637097514` with `DisplayName`
+  "Wakeshot" and `IconUri` `%TEMP%\NotifyIconGeneratedAumid_15983757285637097514.png`, a PNG the shell wrote there.
+  The `NotifyIconSettings` entry with that id held only `IconSnapshot`. Both keys were exported and deleted, and were
+  still gone 2 minutes later. The PNG is left. The balloon header on screen was not seen: the session was locked.
+  **Verified** (`reg export`, `Get-ItemProperty`, ids listed before and after).
+- **Screen checks, 2026-11-04 12:15 to 12:17 (unlocked session).** Debug tray and CLI with the old icon art,
+  `--dry-run` at Medium through Explorer on an empty data folder, with `CLAUDE_CONFIG_DIR` on an empty folder so the
+  agent sessions on the test laptop do not hold it. The captures are not kept, since they show the old icon.
+  - The first-run balloon came at the start (`notice shown: FirstRun`). Its header says "Wakeshot"; the body
+    shows the app icon. **Verified** (screen grab).
+  - The header's small glyph is not the app icon: it is a plain outline glyph. The dry-run AUMID key (there before the
+    run, from an earlier run) points `IconUri` at `%TEMP%\NotifyIconGeneratedAumid_15983757285637097514.png`,
+    last written 04:38:17, before that build's art was in. So the header likely shows that stale cached PNG, and the
+    shell did not rewrite it. **Not verified** (the header was not compared with that PNG pixel by pixel; the
+    product GUID gets its own key, so a fresh install should not see it).
+  - Icon idle and holding: the idle glyph when idle, the holding glyph while Keep awake holds (screen grabs of 150
+    by 72). `keep-awake on` and
+    `off` exit 0, "Keep awake is on until you turn it off." and "Keep awake is off."; `state.json` followed in 0.14 s
+    and 0.36 s. **Verified**.
+  - Explorer shows the app icon as the file icon of `wakeshot.exe` and `wakeshot-tray.exe` (copies in a temp folder,
+    large icons 96). **Verified**.
+  - The run made no new `NotifyIconSettings` entry or AUMID key (18 ids and 6 keys before and after, read again
+    97 s after the quit). **Verified**.
+
+### End to end on real settings: holds, user changes, quit and the guard
+
+2026-11-04 05:14 to 05:21, code at 0932c60 plus the test changes made then, x64 debug, in a locked session. The suite
+`crates/wakeshot-tray/tests/e2e_real.rs` ran the real tray, not a dry run, at Medium through Explorer on a temp data
+folder, with real holds. Each test made its own `Wakeshot int A` (and `B`) as a Medium `powercfg /duplicatescheme` of
+the Balanced plan, made A active, and only then started the tray. Stored values were read with `powercfg /qh`. Values in
+force were read with `CallNtPowerInformation` `SystemPowerPolicyAc` and `Dc`. The test laptop's own Balanced plan was
+never active while a tray ran and never written. Its values, the plan list and the RunOnce key equalled the BEFORE
+record (read 04:39) after every test and at the end. The outputs (`out\suite-1.txt`, `out\suite-2.txt`) are not kept.
+
+- **Every path that writes or restores settings works on an active plan.** Run 2: 10 of 10 passed in 92.3 s. Run 1
+  had 9 of 10; the one failure was a test bug (below). No product fix was needed. **Verified** (test).
+- **Hold start and end.** On Keep awake on, the tray set the RunOnce value, started the guard, saved the journal
+  (marked), wrote lid AC, lid DC and sleep DC to 0, and called `PowerSetActiveScheme`, all within 60 to 90 ms of the
+  CLI's log line. In force after it: lid action 0 on AC and DC, DC idle timeout 2147483647 (Never). On Keep awake off,
+  the originals came back stored and in force: lid 1 (policy 2, Sleep) and sleep DC 18000. The journal and the RunOnce
+  value were gone and the guard ended with exit code 0. The journal's three entries named the tray's pid, start time and
+  session. `powercfg /requests` listed the tray's SYSTEM request during the hold. **Verified** (test).
+- **The test's "applied after about 1 s" is mostly the state file.** The tests wait for `state.json` first, which
+  follows in about 1 s (the view's hold-back), so "applied after 986 to 1099 ms" is that wait. The log shows the apply
+  done 60 to 90 ms after the CLI's line. The first `wakeshot.exe` start of a fresh build took 3.3 s before its log
+  line (a scan of the new exe is likely; not verified). **Verified** (test output and log times).
+- **A user change is seen by the next ownership check, and the restore leaves it.** `powercfg` set A's lid DC to 2
+  (Hibernate) and activated A again. The 10 s check dropped the entry 8.9 to 9.1 s later. The core logged "Released
+  the lid action on battery for this episode: the user changed it on plan ..." and the state listed 2 keys. At the
+  hold end, lid AC and sleep DC came back and lid DC stayed 2. **Verified** (test).
+- **Notices wait while the session is locked.** The `UserChanged` notice did not reach the log: `Core::notify` keeps
+  notices while the session is locked or off the console and shows them at the unlock. `session::locked_now()` read
+  `Some(true)`. Run 1's test waited for the notice line and failed on this; the test now waits for it only when the
+  session is unlocked. The unlock showing the notice was not seen (nobody unlocked). **Verified** (test, source).
+- **Plan switch (manual checklist 9).** With a hold on A, `powercfg /setactive B` gave A its originals back and B the
+  three writes, stored and in force, within 162 ms (run 1) and 573 ms (run 2). The journal then held three entries on B
+  only. The restore of A emptied the journal, so the old guard was told to stop and the apply to B started a new one. At
+  the hold end B was restored and A stayed as it was. **Verified** (test).
+- **Restore my power settings keeps the hold on with requests only.** `wakeshot restore` with the tray alive
+  answered in 138 to 343 ms: "Your power settings are restored." A was restored stored and in force, with no journal
+  and no RunOnce value, and the guard ended. The core logged "Released every key for this episode: Restore my power
+  settings". `state.json` still held Keep awake with nothing overridden, and `powercfg /requests` still listed the
+  SYSTEM request. For 35 s after (one safety tick and more), A stayed as restored, no journal came back and no guard
+  started. After Keep awake off and on again, the new episode applied again. **Verified** (test).
+- **Quit during a hold.** `ask_quit` (`WM_CLOSE`): exit code 0, A restored stored and in force, the Keep awake file
+  deleted, no journal, no RunOnce value, and the guard ended with 0. **Verified** (test).
+- **End of session (manual checklist 6, the automated part).** `SendMessageTimeoutW` with `WM_QUERYENDSESSION`
+  (`ENDSESSION_LOGOFF`) was answered TRUE. The `WM_ENDSESSION` TRUE send returned after 39 ms (run 1) and 56 ms (run
+  2), with A already restored stored and in force, no journal and no RunOnce value. The core logged "Session end: the
+  restore ran in 56 ms". The tray was then ended by pid, as Windows would, and the guard, already told to stop, was
+  gone. A real sign-out was not done (it is on the manual checklist). **Verified** (test).
+- **A killed tray's guard restores (manual checklist 4, the automated part).** The tray was ended by pid during a hold.
+  The guard logged "tray pid ... is gone; looking at the journal" and 40 ms later "restored the journal's entries". A
+  was back stored and in force, with no journal and no RunOnce value, 63 to 87 ms after the end, and the guard exited 0.
+  How Task Manager's End task groups the guard was not checked (it is on the manual checklist). **Verified** (test).
+- **`wakeshot restore` with a dead owner restores by itself.** The test hand-wrote a journal: owner a `ping` the
+  test started and ended, one `lidDc` entry on A with `original` 1 and `written` 0. A's lid DC was set to 0 and
+  activated, and no tray ran. The CLI printed "Your power settings are restored." and exited 0, and logged "restore:
+  owner pid ... gone, restored here". A's lid DC was 1 again, stored and in force, and the journal was gone.
+  **Verified** (test).
+- **The product GUID's `NotifyIconSettings` entry.** The entry is `2334163346184210159`, with `IconGuid`
+  `{7db9403e-d4b9-4165-a99e-a69b8ea56744}` as text (`REG_SZ`), `ExecutablePath` this run's x64 debug
+  `wakeshot-tray.exe`, and `IconSnapshot`. It existed before the run, so Windows points one entry per GUID at the
+  newest exe path. Left in place. No AUMID key was made for it, since every notice was held.
+  **Verified** (test, `Get-ItemProperty`).
+- **`powercfg /duplicatescheme` ends its output without a newline.** A `.cmd` that appends `echo` lines after it puts
+  the next text on the same line. **Verified** (test output: "...(Balanced)exit 0").
+
+### Update end to end: a local feed, the wait for holds and Setup over a hold
+
+Checked 2026-11-04 between 05:39 and 05:49 on the test laptop, with `packaging/e2e-update.ps1`: one full run (05:39:52
+to 05:48:13) at Medium, 125 checks passed, 0 failed, 1 skipped (the update notice, below). The exes were an x64 debug
+build of the tree at 05:39 (the feed variable exists in debug builds only), packed as 0.0.1, 0.0.2 and 0.0.3 by
+`pack.ps1`. Every hold wrote a throwaway copy of the test laptop's plan, "Wakeshot int update", which was the active
+plan from before the install until no process of the install was left. "Test" means seen on the test laptop.
+
+- **Medium.** A `.cmd` opened with `explorer.exe` ran the script ("Mandatory Label\Medium Mandatory Level"; the script
+  "elevated False"); each tray start went through a second `.cmd` opened with `explorer.exe` (its `whoami /groups`
+  had `S-1-16-8192`). That `.cmd` set `WAKESHOT_UPDATE_FEED` to a local folder and `CLAUDE_CONFIG_DIR` to an empty
+  one. **Verified** (test).
+- **The local feed works.** Velopack's `FileSource` on a folder with `releases.win-x64.json`, `RELEASES-win-x64` and
+  the nupkgs: the installed 0.0.1 tray's first check came 301 s after its start (5 minutes, `update.rs`), found 0.0.2,
+  and downloaded it through the delta: `Update.exe patch` applied the 8,975-byte delta to the installed full package
+  in 0.36 s. The tray logged `update 0.0.2 downloaded` and the core `Update 0.0.2 is ready: it applies once nothing
+  holds and nothing is overridden`. **Verified** (test; Velopack's `velopack_HaikAsatryan.Wakeshot.log`).
+- **The update waits for the hold.** With `wakeshot keep-awake 30m` (lid AC 0, lid DC 0, sleep DC 0 on the copy, 0.9 s
+  after the command; journal of the three keys owned by the tray; RunOnce naming the installed tray), no `Applying
+  update` line came in the 120 s after the ready line, the tray kept running and the copy stayed overridden.
+  **Verified** (test).
+- **Then it applies, in order.** `wakeshot keep-awake off` at 05:47:16.39: the tray wrote the three values back
+  (`power: wrote ... on plan <copy>`), set the copy active, deleted the journal and the RunOnce value, stopped its guard
+  (05:47:16.47); then `Applying update 0.0.2`, `the updater started` (0.10 s later), `Update applied: Wakeshot quits`,
+  `Wakeshot ends with code 0` (05:47:16.58). Update.exe (`--waitPid`, restart true) ran the obsolete hook (19 ms),
+  swapped `current`, ran the updated hook (688 ms; "restore: no journal, nothing to restore") and started the new tray,
+  which logged `Velopack restarted the tray after the update to 0.0.2` at 05:47:17.54: 1.1 s from keep-awake off to
+  the new tray. The old tray's exit code was 0. `current` kept its path (new folder: created 01:40:06Z before,
+  01:47:16Z after, UTC); `sq.version` and DisplayVersion 0.0.2; the Run value and the one Path entry unchanged.
+  **Verified** (test).
+- **The restarted tray keeps the launch's variables.** It logged "Claude Code is watched in the folder
+  CLAUDE_CONFIG_DIR names", so the environment the `.cmd` set reached it through the old tray and Update.exe. That it
+  also had `WAKESHOT_UPDATE_FEED` is likely for the same reason, not verified (it did not run 5 minutes). **Verified**
+  for `CLAUDE_CONFIG_DIR` (test).
+- **The update notice was not seen.** The session was locked all night (LogonUI.exe running since 02:00:38), and the
+  core keeps every notice while the session is locked (`core.rs`, `notify`); no `notice ... Updated` line came, as
+  expected. Whether it shows at the unlock: **not verified** here; it is on the manual checklist.
+- **Setup.exe over the install during a hold (`winget upgrade`).** Keep awake on (the 0.0.2 tray, overridden 0.6 s
+  after the command) and `wakeshot run -- ping -n 600 127.0.0.1` (hold file `run-<ping pid>.json`; the tray held for
+  both). 0.0.3's `Setup.exe --silent`: exit 0 in 5.4 s. Setup killed the tray, its guard and the wrapper in the same
+  millisecond, so the guard did not restore; the install hook did (`journal saved`, three `power: wrote` lines, `set
+  active plan <copy>`, `journal deleted`, `RunOnce value WakeshotRestore removed`, `restore: the journal's values are
+  back`, 730 ms by Velopack). The copy's values back, no journal, no RunOnce value, and no process from the install
+  folder afterwards: Wakeshot stays off until the next sign-in. The wrapper ended with exit code 1; its
+  `ping` kept running (as the README says) and was ended by its pid. Setup's rename of the old folder for rollback
+  failed once with "Access is denied" right after the kills and worked on its retry 1 s later. **Verified** (test;
+  Velopack's `velopack.log`).
+- **Uninstall during a hold.** A new tray (0.0.3) through the `.cmd`, Keep awake on, then the QuietUninstallString
+  `"<root>\Update.exe" --uninstall --silent` (Settings > Apps runs `UninstallString`, the same without `--silent`):
+  exit 0 in 0.5 s. Update.exe killed the tray and its guard, then ran the uninstall hook (149 ms). The copy's values
+  back; Run, RunOnce and the Path entry gone; Path type and bytes as before; the data folder gone after the good
+  restore, so its log is gone too; install folder gone 3.1 s after the exit; uninstall key, Start menu
+  shortcut and `%TEMP%\velopack_HaikAsatryan.Wakeshot` gone. **Verified** (test).
+- **AFTER equals BEFORE.** Run (7 values, same hashes), RunOnce (empty), Path type 2, 332 bytes, hash
+  `A8FDC61D7FFE5745`; Balanced `381b4222-...` active and the only plan; lid 1/1, sleep 18000/18000, energy saver DC 30,
+  all of `powercfg /qh` hash `C64AFDB1CFDD13CF`; no data folder (none before). An elevated read before (05:39:35) and
+  after (05:48:32) gave the same state. All 18 processes the script listed, the two Velopack Update.exe runs the tray
+  started (patch and apply) and the launch chain were gone, checked by pid. **Verified** (test).
+- **Sizes and times** (debug x64): tray 12,585,984 bytes, CLI 1,744,384; `Setup.exe` 14,921,322, full nupkg
+  7,363,690, delta 8,975, portable zip 7,356,214; Setup says the install needs 77.5 MB. Pack 3 to 6 s each. First
+  install 5.2 s (install hook 3.1 s by Velopack: a just-extracted debug exe), tray start to `state.json` 0.9 and 2.9 s.
+  **Verified** (test).
+- **Left by Windows:** the product GUID's `NotifyIconSettings` entry now points at the removed
+  `<root>\current\wakeshot-tray.exe`; Windows keeps one entry per GUID and moves it to the next exe that starts.
+  Velopack's own logs in `%LocalAppData%\velopack` grew by 13,412 and 15,992 bytes. **Verified** (test).
+
+### Manual power checks: sleep, a closed lid, sign-out and RunOnce
+
+2026-11-04 16:42 to 18:26. The tester ran steps A, C, D, E, B1 and B2 from step files (16:55 to 18:17), each run at
+Medium from Explorer, with `power_check` and the real `wakeshot-tray.exe` (debug x64, built 16:44 on commit e819f4b's
+tree). Logs read afterwards by an agent; the System log (Kernel-Power, Winlogon), the Shell-Core Operational log,
+`requests.log` (`powercfg /requests` every 30 s, elevated) and the tester's notes back them. The test laptop's own
+values (Balanced active and the only plan, lid 1 and 1, sleep 18000 and 18000, energy saver DC 30) were equal to the
+16:44 baseline after every check and at the end (18:26, `powercfg`). Checklist numbers are the items of the manual
+checklist in `architecture.md`.
+
+- **Checklist 3 holds: requests retaken after Start > Sleep keep the PC awake through the next screen off.** `hold` on
+  battery: `suspending (PBT_APMSUSPEND)` 17:33:29, one `GAP slept` (29.6 s wall, 1.1 s unbiased), `resumed` and
+  `requests retaken after the resume` 17:33:58; then ticks 4984 to 5018 ms apart, no GAP, through the screen off
+  (Kernel-Power 506 "Idle Timeout" 17:37:15, input idle 179 s) and 4 min 49 s past it, up to the tester's touch (507
+  "Input Keyboard" 17:42:04, input idle 469 s). No other DISPLAY, SYSTEM or EXECUTION request in the 20 samples.
+  **Verified** (logs).
+- **Checklist 1 holds: on battery with the lid closed, the active copy (lid DC Do nothing, sleep DC Never) and
+  SYSTEM plus EXECUTION requests run past 916 s of no input.** `hold --active-copy`: `lid closed` 17:43:50, ticks
+  4981 to 5019 ms apart, 0 GAP in 307 ticks, input idle up to 1477.6 s, `lid open` 18:08:25; the copy deleted and
+  Balanced active again at exit. Kernel-Power logged 506 "Idle Timeout" at 17:46:49 (Modern Standby entered at the
+  screen off) and 507 "Lid" at 18:08:25: the process never stopped in between. No other request in the 51 samples.
+  **Verified** (logs).
+- **Session notices: lock and unlock arrive twice each with the right state.** `session-watch`:
+  `WTS_SESSION_LOCK` 17:30:51 (Win+L) and 17:31:18 (`real_lock_locks`, exit 0), `WTS_SESSION_UNLOCK` 17:31:03 and
+  17:31:34, each with `locked yes` or `locked no` from the live read. **Verified** (logs).
+- **Checklist 6 holds: the end-session restore runs at sign-out.** `end-session`: `WM_QUERYENDSESSION (lparam
+  0x80000000: sign-out)` 18:14:02.769, the three writes back, `journal deleted`, `RunOnce value WakeshotRestore
+  removed`, restore done in 19.3 ms; `WM_ENDSESSION` 18:14:02.817; the copy deleted 18:14:02.820. Winlogon 7002
+  came at 18:14:08.509. **Verified** (logs).
+- **At sign-out Windows ends the guard before the tray hears of it.** Same run: at 18:14:02.777 the tray logged
+  `guard pid 27720 ended without being told to stop (exit code 1073807364)` and started a new guard, told to stop 11 ms
+  later by the restore's clean-up. 1073807364 is 0x40010004 (`DBG_TERMINATE_PROCESS`); that Windows' session end
+  sent it: likely, not verified. **Verified** (log), cause not verified.
+- **Task Manager's End task on `power_check` closed its console, so the tray restored itself, not the guard.** A1 (End
+  task on the row inside the group) and A2 (on the group row): both logged `stopping: the console window closed`,
+  `restore (Quit): ok` (15.6 and 12.0 ms), the guard `stopped`. So checklist 4's guard path did not run in either; it
+  was shown before with the tray ended by pid (the end to end test on real settings). The tester: `power_check` had an
+  arrow with one row inside, with no icon, no name and no usage; `wakeshot-tray.exe` (the guard, parent Explorer) was
+  one row of its own with an icon. Apps or Background processes: not noted. How Task Manager groups the real tray and
+  its guard: not verified. **Verified** (logs, the tester's eyes).
+- **The first guard start took 3.4 s.** A1's `step guard ensure: ok, 3391.7 ms`, the first start of the freshly built
+  exe; every later start took 7.7 to 9.7 ms. Cause (a scan of a new exe, for example): not verified.
+- **Explorer runs HKCU RunOnce once per sign-in, after every Run entry, about 40 to 65 s after sign-in on the test
+  laptop.** Shell-Core Operational (Explorer's `9705`, `9707`, `9708` and `9706` events): sign-in at 18:14:14 (Winlogon
+  7001): two Run enumerations 18:14:22 to 18:15:12 (each command waits for the one before; GoogleDriveFS 18 s, Edge
+  12 s), then RunOnce at 18:15:18.653 (64.6 s after sign-in). Sign-in at 18:15:58: Run 18:16:04 to 18:16:21, RunOnce
+  at 18:16:37.290 (39.0 s). A value written after the sign-in but before that pass is run in the same session.
+  `Logon task 'RunOnce'` (62170 and 62171) also came about 1 s after each sign-in; which key it covers: not verified.
+  **Verified** (event log, two sign-ins).
+- **Checklist 5 was not shown: Explorer's RunOnce pass of B1's sign-in took B2's value while B2's tray still ran.** B2
+  started 48 s after B1's sign-in and set the value at 18:15:02.337, before that sign-in's RunOnce pass. At 18:15:18.653
+  Explorer ran `wakeshot-tray.exe" --restore` (pid 35732), which logged `restore mode: the journal's owner (pid 41604
+  ...) runs and restores it itself` and exited, as the design says (`recovery.rs:756`). Windows had deleted the value
+  first, so `B2-kill.txt` read `RunOnce: none` and `NOT READY` at 18:15:21; the tester signed out anyway. At the next
+  sign-in nothing restored; journal and copy (never active) were left, and `power_check cleanup` restored them at
+  18:24:50. The restore mode start from RunOnce, its journal read and its owner check: **verified**; the
+  restore of a gone owner's journal by restore mode at sign-in: **not verified**.
+- **Explorer's RunOnce pass takes about 17 ms and does not wait for the command to end.** Read
+  later from B1's sign-in in the Shell-Core Operational export (`shell-core.txt` lines 217 to 220) and the restore
+  mode's log: `9705` (RunOnce enumeration started)
+  18:15:18.653, `9707` (execution of `wakeshot-tray.exe" --restore` started) 18:15:18.653, `9708` (finished, PID 35732)
+  18:15:18.670, `9706` (enumeration finished) 18:15:18.670; restore mode's own first lines (`restore mode started`, its
+  owner check) at 18:15:18.683, after the pass had ended. So a value the tray writes again at its next plan read (up to
+  10 s later) is not run a second time by that pass. Whether Explorer would pick up a value written inside those 17 ms:
+  **not verified**. **Verified** (event log and Wakeshot log, one sign-in).
+- **Checklist 5 holds: with tray and guard ended, restore mode at the next sign-in restores the journal.** B2 redone
+  2026-11-04 22:34 to 22:42, on the code after the RunOnce fix (debug x64, built 19:06). The hold ran in `power_check
+  fake-tray` (Medium, through the real executor and `FileNet`), restore mode in the real `wakeshot-tray.exe --restore`.
+  The fake tray started 22:34:11, long after its sign-in's RunOnce pass (18:16:37.290), applied lid AC 0, lid DC 0,
+  sleep DC 0 to a copy that is never active, set the value at 22:34:11.720 and started guard pid 5280; at the plan reads
+  of 22:34:24 and 22:34:34 the new RunOnce step found the value there (no "was missing" line). `kill.ps1` ended guard
+  and tray at 22:34:39.892; `B2-kill.txt`: both gone, journal left, RunOnce `"...\wakeshot-tray.exe" --restore`, `READY:
+  SIGN OUT NOW` 22:34:42.032. Winlogon 7002 22:35:15.117, 7001 22:35:23.220. Shell-Core: RunOnce `9705` and `9707`
+  (`wakeshot-tray.exe" --restore`) 22:36:00.200, 37.0 s after the sign-in, `9708` (PID 29660) and `9706` 22:36:00.227 (a
+  27 ms pass). Restore mode: `restore mode started` 22:36:00.239, after the pass; lidAc 0 to 1, lidDc 0 to 1, sleepDc 0
+  to 18000 on the copy, `journal deleted`, `restored the journal's entries` 22:36:00.251. It logs no owner line on this
+  path: it restores only when the owner is Gone (`recovery.rs:758`). No `RunOnce value WakeshotRestore removed` line
+  either: Windows deleted the value before it ran it, and `clear_run_once` logs only a value it removed. The copy read
+  lid 1 and 1, sleep 18000 and 18000 at 22:41:25 (`powercfg /qh`); `check.log` 22:37:25 `check: ALL OK`; the test
+  laptop's own values equal to the 19:06 baseline at 22:41:44 and 22:42:28. **Verified** (Wakeshot log, event logs,
+  `powercfg`, one sign-in). The case the fix closes (a hold that starts before its sign-in's pass gets the value back at
+  its next plan read) was not run here: shown only by tests (`run_once_comes_back_with_the_real_net` over a scratch HKCU
+  key); on a real sign-in **not verified**.
+
+### Manual checklist on the test laptop: preparation
+
+2026-11-04 22:59 to 23:17, on the test laptop.
+
+- **Release install, sizes and times.** Release x64 of the tree at 23:01 (91 s cold build into a new target folder):
+  `wakeshot-tray.exe` 2,740,224 bytes, `wakeshot.exe` 558,080. `pack.ps1` 0.1.0 with the icon, 4 s: `Setup.exe`
+  11,763,094 bytes, full nupkg 4,205,462, portable zip 4,200,315. `Setup.exe --silent` at Medium (a `.cmd` opened with
+  `explorer.exe`): exit 0 in 3.3 s, then 1.1 s on a second install; no process from the install folder 3 s after it,
+  so a silent install does not start the tray. Measured with the script's own clock; **verified**.
+- **A plan copy keeps every setting.** A Medium `powercfg /duplicatescheme` of Balanced: its 1,736 `powercfg /qh`
+  setting lines equal Balanced's but the "GUID Alias: SCHEME_BALANCED" line, which the copy lacks. Compared line by
+  line with `Compare-Object`; **verified**.
+- **A copy can be made again under the same id.** At Medium, `powercfg /duplicatescheme <plan> <new id>` made a copy
+  under the given id after the first copy with that id was deleted, and `/changename` and `/setactive` worked on it.
+  So helper scripts that name a copy's id keep working after an undo and a redo. **Verified** once (23:07:49).
+- **Undo of an install with an active copy.** `Update.exe --uninstall --silent`, then `/setactive` of the own plan,
+  then `/delete` of the copy, at Medium: 7 s in all; a read of Run, RunOnce, `StartupApproved\Run`, the user Path
+  (type, bytes, hash), the plan list, the active plan and its values, the data and install folders, the uninstall key,
+  the shortcut and the `NotifyIconSettings` entries equal to the read before the install. **Verified** (23:07).
+- **Battery saver after a short floor test.** With the copy active, on battery at 98%, the copy's energy saver
+  threshold sat at 99% for 3 s (23:14:57 to 23:15:00) and was set back to 30%; `GetSystemPowerStatus` gave
+  `SystemStatusFlag` 0 (battery saver off) at 23:15:10. Whether battery saver turned on in those 3 s: **not
+  verified**.
+
+### Manual checklist on the test laptop
+
+2026-11-04 23:30 to 2026-11-05 01:57: the installed release x64 0.1.0, the plan copy active. Sources: the tray log
+(copied before the uninstall), the System log (Kernel-Power 105, 506, 507, 566), the tester's words, a photo, registry
+reads. The Kernel-Power `Reason` field is read as
+`POWER_MONITOR_REQUEST_REASON`: 12 idle timeout, 15 lid, 31 keyboard, 32 mouse (the SDK enum as ntdoc.m417z.com lists
+it, read 2026-11-05; that the event uses this enum is inferred: every lid open logged 15). Kernel-Power 566
+`NextSessionType` 0, 1, 2 read as screen on, screen off, sleep: inferred from the order and 507's `SleepEntered`.
+
+- **The first-run click cannot open "Other system tray icons" itself.** The click opened Settings > Taskbar (log
+  00:23:46) with that section closed. The tester: "Clicking the notification moves to the correct section in Settings
+  but not directly Other system tray icons." Microsoft's `ms-settings:` list ("Launch Windows Settings", Learn, updated
+  2026-11-02, read 2026-11-05) has only `ms-settings:taskbar` for the page and no way to open a section; a web search
+  found none either. An OS limit. **Verified** (docs, log).
+- **Settings shows the tray icon Windows saw first, not the current one.** Settings draws each tray icon from
+  `HKCU\Control Panel\NotifyIconSettings\<id>\IconSnapshot`. The product GUID's entry `2334163346184210159` held a 24 px
+  PNG of an older art's idle glyph: a white outline in rows 9 to 23 of 24, low because that glyph left room for a part
+  it drew only while holding, so it looked "not centred". An earlier run of the product GUID made the entry before the
+  art changed (2026-11-04), and Windows did not renew the picture while the next build ran from 00:20 to 01:33 (still
+  the old picture at 01:5x); it only points the entry at the newest exe path. A fresh install gets a new entry with the
+  first icon Windows sees: inferred from "First add lands in the overflow" above (the snapshot is written at the first
+  `NIM_ADD`), not checked on another PC. **Verified** for the test laptop (registry read, PNG saved and seen).
+- **The balloon header's white square.** Started from the Start menu, the tray carries the shortcut's AppUserModelID
+  `velopack.HaikAsatryan.Wakeshot` (Velopack sets it on the `.lnk`; read as `System.AppUserModel.ID`). Windows filed the
+  session's 14 balloons under it (`HKCU\...\Notifications\Settings\velopack.HaikAsatryan.Wakeshot`:
+  `PeriodicNotificationCount` 14, last added 01:33:03, the Restore notice), not under the shell's own
+  `NotifyIconGeneratedAumid_2334163346184210159` (no such key, no such PNG in `%TEMP%`). There is no
+  `HKCU\Software\Classes\AppUserModelId\velopack.HaikAsatryan.Wakeshot` key, so no `IconUri`. The exe's icon is right:
+  the app icon at 16 to 256 px (`PrivateExtractIconsW`). The header in a photo of the screen is a plain white rounded
+  square, the plate's shape in one colour. Why Windows draws it so: **not verified**. With the generated id (dry-run
+  runs, above) the header showed the tray glyph PNG. A start from the Run value at sign-in has no shortcut, so its
+  balloons most likely use the generated id: inferred, not checked.
+- **Lid close and report (block 2).** Lid close 00:28:56.0: lock; chime audible 1.1 s later. Screen off at 00:29:27
+  (506 reason 12: the lock screen's display timeout, 31.5 s after the close). Lid open 00:31:28 (507 reason 15), so
+  closed 2 min 32 s, not the 90 s of the step. Report balloon 00:31:30.8. **Verified** (logs).
+- **Console left and back (block 3).** Switch user at 00:32:50.4: "Another session has the PC's screen", keys put
+  back; back at 00:33:18.9: keys applied again. **Verified** (log).
+- **The floor, lid open (block 4 steps 1 to 3).** `floor-on` at 00:34:42 (battery 91%, floor 99%); the tray stepped
+  back 2 s later with nothing held. Keep awake at 00:35:17.8: step back balloon at once, chime audible 1.1 s later.
+  Charger in at 00:35:40.43 (Kernel-Power 105): hold in force again 00:35:40.88. **Verified** (logs).
+- **The floor with the lid closed: Windows slept at once (block 4 step 4).** Lid close 00:36:47.8 (lock, chime).
+  Unplug 00:37:07.47. Step back 00:37:07.50; the user's lid actions (Sleep) and battery sleep written back at
+  00:37:08.49; during the plan re-apply (it returned at 00:37:08.88) Windows turned the screen off for the lid (506
+  reason 15, 00:37:08.80) and slept (566 to sleep, 00:37:08.89), 1.4 s after the unplug. Wakeshot's 5-minute
+  countdown started 5 ms before the suspend and was cancelled at the lid open: no sleep check, no sound, no 1-minute
+  timeouts. The floor chime's audio call was cut by the suspend (WARN `GetCurrentPadding` failed with 1460 at
+  resume). Asleep 10 min 42 s, disconnected standby, 140 mWh used. Lid open 00:47:50 (507 reason 15); the step back
+  balloon and the report ("less than a minute", text from `text.rs`) at 00:47:52. The tester: "after 5 min I did not
+  hear the sleep sound, but I think it slept". Test E ("Screen off is not suspend", above) put the lid action back
+  with the lid closed and the PC did not sleep; there no power source change came with it. Which of the two made
+  Windows act here, the re-apply or the AC loss 1 s before it (an AC to DC switch with the lid closed,
+  `research/rivals-others.md` trap 12): **not verified**. The order of events: **verified** (logs).
+- **A dock drop under the floor (block 4 step 6).** Dock in 00:49:37.83, hold again 00:49:38.45. Pull and replug
+  "within 2 s": AC gone from 00:50:01.89 to 00:50:11.55, 9.65 s. Step back 23 ms after the loss, chime audible 1.4 s
+  after it, step back balloon at 00:50:03.76. AC back: hold in force again at 00:50:12.63, no sound, no balloon, and
+  the step back balloon is not taken away. A photo (taskbar clock 12:50) shows that balloon on the external
+  screen with the battery charging at 92% and the pointer resting on it. It was the only balloon sent in that minute,
+  so no queue of late balloons. That Windows keeps a banner up while the pointer is on it: common behaviour, **not
+  verified** in Microsoft docs. The dock's AC drops this night lasted 4.3, 4.4, 4.5, 4.7 and 9.65 s (Kernel-Power 105
+  pairs) for pulls of about 2 s; only the 9.65 s one came with the floor on and the lid open. **Verified** (logs).
+- **Work end with the lid closed (block 5, AC).** `ping -n 91`; lid close 00:54:59.9 (a first try from 00:54:12 was
+  stopped with Ctrl+C at 00:54:50); screen off 00:55:31.4 (506 reason 12, 31.5 s after the close); work end 00:56:24.6;
+  countdown due 00:59:53.7 ("300 s without input": it counts from the last input, here 3.5 min after the work end);
+  sound 00:59:55.5 (the tester heard it); 1-minute timeouts written 00:59:55.6; Windows slept 01:00:13.6, 18 s later;
+  lid open 01:12:20.8 (asleep 12 min 7 s); timeouts back 01:12:22.3. No hibernate (no Kernel-Power 42, no
+  `SetSuspendState`). `values.cmd` 01:12:50: both plans hold their own values. **Verified** (logs).
+- **The dim timeout played no part.** In blocks 2 and 5 the screen went off 31.5 s after the lid close at the lock
+  screen's own display timeout (506 reason 12), before any 1-minute timeout; in block 4 Windows slept at once.
+  **Verified** for these runs.
+- **Dock lid cases (block 6 steps 1 and 2).** The own AC lid action Do nothing (`dock-on` 01:19:16): Keep awake wrote
+  only lidDc and sleepDc, the lid close gave no chime and no lock; dock pulled 01:21:25.4, lock and chime at
+  01:21:55.4, 30 s later. Signed in on the external screen: lid close 01:23:50.3 lock and chime; a pull of 4.7 s
+  (01:25:38.3 to 01:25:43.0) gave nothing; a pull left out (01:26:00.2) gave lock and chime at 01:26:30.2.
+  **Verified** (logs).
+- **Typing on the external screen (block 6 step 3).** `ping -n 61`; lid close 01:27:26.3; work end 01:28:21.7; lid
+  open 01:32:17.0 cancelled the countdown. Open again 4 min 51 s after the close, before 5 minutes without input could
+  have passed even with no typing (due about 01:32:21 to 01:32:26). So no sleep came, but this run does not show that
+  typing holds the sleep off. **Verified** (log).
+- **Restore and Quit (block 7).** Restore my power settings at 01:33:03.2: keys back, still holding by request.
+  Quit 01:33:18.4: no journal left, exit 0. `values.cmd` 01:33:28: both plans their own values. **Verified** (log).
+- **The real Startup switch writes `01` and `00`, not `03` and `02`.** Settings > Apps > Startup, off at 01:34:04:
+  `StartupApproved\Run\Wakeshot` = `01-00-00-00-9D-AA-39-37-A4-6C-DD-01` (state 1, then the FILETIME of the change); on
+  again: 12 zero bytes (read 01:56). Web sources and a script name `03` and `02`. Windows honoured `01`: no tray started
+  at the 01:38:35 sign-in (no log line after the 01:33:18 quit, no process at 01:43). Build 26300. **Verified**
+  (registry reads, tray log, Winlogon 7001 and 7002).
+- **Teardown.** `undo-part-a.ps1` at Medium, 01:56:37 to 01:56:43: uninstall exit 0, Balanced active, copy deleted.
+  AFTER equals BEFORE on every field but the icon entry's `IsPromoted` = 1 (the tester's own choice in block 1).
+  Windows' `Notifications\Settings\velopack.HaikAsatryan.Wakeshot` key stays after the uninstall, like
+  `NotifyIconSettings`. **Verified** (`state.ps1` reads compared field by field).
+
+#### Screen session of 2026-11-05
+
+10:11 to 11:31: the installed release x64 0.1.0 of the tree at 10:14, the plan copy "Wakeshot test notice" active,
+the tester on the DELL dock. Sources: the tray log, the System log (Kernel-Power), screen grabs of the DELL screen,
+registry reads, the tester's words.
+
+- **The notice header shows the Wakeshot icon from both start paths.** With the app id key registered, the first-run
+  banner from the Start menu (10:24:25) and from the exe itself (`explorer.exe "<exe>"`, as the Run value starts it;
+  10:45:33) both show the app icon (the art of that day), about 22 px, and the name "Wakeshot"; a plate pixel read as
+  the plate's own colour, so no red and blue swap. The tester saw it from Start; for the second they looked at the tray
+  glyph, so the grabs decide. **Verified** (grabs).
+- **A balloon is never kept in the notification centre.** Windows filed each balloon under
+  `velopack.HaikAsatryan.Wakeshot` (`PeriodicNotificationCount` 14 to 19 for the day's five) and stores its payload
+  as `<toast bannerOnly="true">` with `ToastImageAndText02` (a read-only copy of `wpndatabase.db` and its WAL). Win+N
+  listed none, after a click (10:24) and with no click (10:45). That `bannerOnly` is why: inferred from the name,
+  **not verified** in Microsoft docs.
+- **A `NotifyIconSettings` entry deleted while Explorer runs comes back incomplete.** After `reg delete` of
+  `2334163346184210159` (10:11:57), the tray's first add (10:24:25.6) made the entry again within 49 ms with only
+  `IconSnapshot` (a fresh 24 px picture of the current idle tray glyph) and no `ExecutablePath`, `IconGuid` or
+  `IsPromoted`; a second start added nothing (read 10:29, 10:50, 11:30). It is the only one of the 18 entries without
+  `ExecutablePath`, and Settings > Taskbar > Other system tray icons did not list Wakeshot, also after Settings was
+  closed and opened again (the tester). **Verified** (reads, the tester). Why Explorer wrote only the snapshot, and that
+  Settings skips an entry with no `ExecutablePath`: **not verified**.
+- **Typing rerun: input held the work end countdown off; typing itself is not shown.** Lid close 10:52:50.3 (the tester
+  noted 10:41, likely a misread clock), work end 10:53:38.7, lid open 11:02:38.5: 9 min 48 s closed, no countdown end,
+  no sound, no Kernel-Power 506 or 507 between. The countdown reads only `GetLastInputInfo`, clamped to the last resume
+  or unlock (`core/lid.rs` `check_countdown`, `policy/ending.rs`), so Windows saw input at least every 5 minutes. The
+  tester typed to search a video, then watched it. Whether a playing video moves the input tick: **not verified** (an
+  `ES_SYSTEM_REQUIRED` hold did not, "Power settings without admin: writes, change detection and the battery rule"
+  above).
+- **Floor grace on the dock.** `floor-on` set the copy's threshold to 99 at 97% (11:11:56). Keep awake 11:13:00. A
+  pull and replug "at once" lost AC for 6.9 s (11:13:33.4 to 11:13:40.3): the 30 s wait started and ended, with no
+  step back, sound or notice. A pull 18.4 s later (11:13:58.7) stepped back 4.7 s after it, 30.0 s after the short
+  drop's loss: AC had lasted under 30 s, so the wait kept the first loss, as `product.md` "Battery floor" says. One
+  StepBack notice (11:14:03.9) and one chime (11:14:04.4). Dock in 11:15:18.8: holding again, no sound.
+  **Verified** (log, the tester).
+- **The lid closed under the floor with the 30 s wait: Windows did not sleep at the restore; Wakeshot's 5-minute route
+  ran.** Lid close 11:16:12.5 (lock, chime 1.8 s later); the lock screen's timeout turned the screen off at 11:16:44
+  (506 reason 12). Pull 11:16:24.75. At 11:16:54.80, 30.0 s later, the step back ("lock, with the step back's sound and
+  no chime") restored the lid actions and battery sleep; plan applied 11:16:55.22; floor chime 11:16:56.5 (the tester:
+  "after 30 second"); no sleep then. Floor countdown due 11:20:58.9 ("300 s without input"), sleep check passed, "going
+  to sleep" sound 11:21:00.8 (the tester: "around 5 min"), 1-minute timeouts 11:21:00.8, Windows slept 11:21:13.9 (566).
+  Lid open 11:24:36.4 (507 reason 15): the screen came on by itself at the sign-in page (the tester); asleep 3 min 23 s;
+  timeouts back 11:24:38.3. In block 4 the restore came 1 s after the unplug with the screen on, here 30 s after it with
+  the screen already off; which difference made Windows act then: **not verified**. The order of events: **verified**
+  (logs).
+- **A notice lost at the lid open.** The StepBack notice showed at 11:24:39.004; 6 ms later the closed-lid report
+  failed (`Shell_NotifyIconW` failed with 1462, "Incorrect size argument") and was not tried again. Why: **not
+  verified**. **Verified** (log). A refused notice is tried again now ("Notice retry").
+- **The dock did not charge at 96 to 97%.** On AC the battery went from 78,110 to 77,970 mWh (11:12:48 to 11:13:33),
+  77,740 to 77,720 (11:15:19 to 11:16:24) and 77,120 to 77,110 (11:25:40 to 11:28:39; Kernel-Power 105 readings); at
+  92% the night before it charged at about 25 W. A charge start threshold between 92 and 96%: inferred, **not
+  verified**. The percent is rounded: 97.3% read 97 and 99.9% read 100 (inferred from readings close in time).
+- **`taskkill /PID` without `/F` does not quit the installed tray.** It says "SUCCESS: Sent termination signal" and
+  the tray runs on (10:29 elevated, 10:30 at Medium). Its top-level windows in `EnumWindows` order are
+  `Wakeshot.TrayMenu`, `Wakeshot.TrayIcon`, `Wakeshot.Loop`; a `WM_CLOSE` posted to `Wakeshot.Loop` quit it in 138
+  and 159 ms with the full restore. **Verified** (runs). That taskkill posts to only one window: **verified** later
+  the same day ("Plain taskkill and the tray's windows").
+- **`vpk pack` writes `%TEMP%\velopack`.** Its write time became the pack's (10:14:54.2); Setup and the uninstall left
+  it so; it stays empty. **Verified** (reads).
+- **Teardown.** Quit 11:29:58.6 (exit 0), `Update.exe --uninstall --silent` at Medium 11:30:17 (exit 0 in 4.3 s,
+  install folder gone), Balanced active, copy deleted. AFTER (11:30:32) equals BEFORE on the active plan, Balanced's
+  lid 1 and 1, sleep 18000 and 18000, energy saver DC 30, `/qh` `C64AFDB1CFDD13CF`, Run, RunOnce, StartupApproved and
+  Path, with no install trace, data folder or process. **Verified** (reads compared field by field).
+
+### Install guard: looking for a running tray without taking it
+
+Checked 2026-11-05 02:00 to 02:25, elevated, on scratch names, keys and folders only (`store.rs` tests `real_signs_*`, a
+scratch PowerShell script); the real places were only read.
+
+- **Looking for a mutex takes nothing.** `OpenMutexW` with `SYNCHRONIZE` only: a missing name gives the not-found
+  error (no sign), a made or a taken mutex opens, and while the look ran, another thread's wait of 0 on a mutex this
+  thread held still timed out. Once its last handle closed, the name was gone. A name held by an event fails with
+  `ERROR_INVALID_HANDLE` (6), which the Rust guard counts as "cannot tell" and stops on. **Verified** (test). That a
+  mutex this user may not open gives `ERROR_ACCESS_DENIED`, which the guard counts as a tray: **not verified** (no
+  deny ACL test; the test shell runs elevated).
+- **The same look in PowerShell.** `[Threading.Mutex]::TryOpenExisting` with a `Local\` name (PowerShell 7.6.9, .NET
+  10.0.14): `False` for a missing name, `True` for a made and for a taken mutex, the owner's hold kept (another
+  thread's `WaitOne(0)` false), `False` again once disposed. For an event of that name it returns `False` and throws
+  nothing, so `e2e.ps1` passes where the Rust guard stops; nothing Wakeshot makes has that name. **Verified** (test).
+  That a mutex this user may not open throws `UnauthorizedAccessException`, which `e2e.ps1` counts as a tray, is from
+  memory of the .NET docs: **not verified** (the docs page was not read, and the test needs a mutex with a deny ACL).
+- **The test laptop's real places, 02:20.** `power_check hold --plan-only` and `cleanup --plan-only` read the tray lock
+  `Local\Wakeshot.Tray`, `%LocalAppData%\HaikAsatryan.Wakeshot`, `HKCU\...\Uninstall\HaikAsatryan.Wakeshot`, the Run
+  value `Wakeshot` with its switch value, `%LocalAppData%\Wakeshot\journal.json` and the RunOnce value
+  `WakeshotRestore`: no sign and no read failure, exit 0. `e2e.ps1` (elevated) passed its lock check and refused at the
+  elevation check, exit 2, no work folder made. **Verified** (runs).
+- **How the guard reads the switch value.** Off when the first DWORD is 1 (the real switch's form, "Start at login
+  switch check") or 3 (the web sources' form); no value or any other form counts as on, so an unknown form stops a
+  sign-out test rather than miss a tray that starts at sign-in. A rule of ours, not a fact about Windows.
+
+### Install check: the bigger v1 installed, one turn per agent (2026-11-06)
+
+How: the x64 build packed and installed over the tester's install with `Setup.exe --silent`
+at Medium; the tray started through Explorer; one cheap turn per agent at Medium. Times from each agent's own record
+(Claude status file, Codex rollout, Copilot `events.jsonl`, OpenCode row read with SQLite `mode=ro`, Cursor's hooks
+output log) to the installed tray's log line or `state.json`, read every 100 ms.
+
+- **Velopack `Setup.exe --silent` over the same version overwrites the install** ("User chose to overwrite existing
+  installation"), keeps `config.json`, runs the install hook, and does not start the tray. **Verified** (exe hashes,
+  config bytes, process list).
+- **The first start adds Cursor's hook folder with one log line and one `HooksAdded` notice**; the notice waits while
+  the session is locked and shows at the unlock (here 50 minutes later). No Antigravity folder. **Verified** (log,
+  folders).
+- **Hold start and end, installed tray**: Claude Code under 0.06 s and 0.04 s; Codex CLI 0.04 s and 0.01 s; Copilot
+  CLI 0.14 s and 0.02 s; Copilot in VS Code (harness) 0.14 s and 0.06 s; OpenCode 2.0 s and 1.6 s (its 2 s poll);
+  Cursor about 0.9 s and 0.9 s from Cursor's hook request (2.2 s for a new window's first prompt), most of it the hook's
+  own PowerShell start. **Verified** live, one turn each.
+- **The tray log names label changes only**: a second session of an agent that already holds gives no log line;
+  `state.json` counts sessions. **Verified** (log and `core.rs`).
+- **Cursor 3.27.12: a chat deleted while it runs gets no `stop`.** Deleting cancels the turn (Cursor's agent host
+  logs "Cancel action received" and "Deleted agent host session"), and the hook gets only a `sessionEnd` with
+  `final_status` `generating` and `reason` `user_close`. The second delete sent the same fields as a tab closed with
+  Ctrl+F4 (whose turn runs on and sends its own `stop`), with the same `reason`, `final_status`, `duration_ms` 0 and a
+  transcript path, only its own `generation_id` differing; the first delete differed only in `duration_ms`
+  (19152, not 0) and `transcript_path` (null). The chat's transcript file stays. So Wakeshot holds on until the
+  window's extension host exits (here 89 s and 101 s after two deletes). **Verified** live, two deletes.
+
+## Build, CI and toolchain
+
+### Toolchain
+
+Set up on 2026-11-03 on the Windows laptop.
+
+- **Build Tools.** Visual Studio Build Tools 2026, version 18.11.2 (installationVersion 18.11.12324.101), in
+  `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools`. Installed by hand (it needs admin) with workload
+  VCTools, component VC.Tools.ARM64 and `--includeRecommended`. Checked with `vswhere -products *`.
+- **MSVC and SDK.** MSVC 14.51.36231 with `bin\Hostx64\x64`, `arm64` and `x86`. Windows SDK 10.0.26100.0 with `um`
+  libs for x64, arm64 and x86. Checked by listing the folders.
+- **rustup.** 1.29.2 (2026-10-21), the current release per `static.rust-lang.org/rustup/release-stable.toml`.
+  `winget install --id Rustlang.Rustup` installs it per user with no admin prompt, into `%USERPROFILE%\.cargo` and
+  `%USERPROFILE%\.rustup`, and adds `.cargo\bin` to the user PATH. Adding `--scope user` fails with "No applicable
+  installer found": the manifest declares no scope. Shells and Claude Code sessions started before the install do not
+  see the new PATH.
+- **Rust.** Stable 1.99.1 (2026-10-13), LLVM 23.1.1, host `x86_64-pc-windows-msvc`, profile default. The Rust blog's
+  latest release page points to 1.99.1. Other versions: cargo 1.99.1, clippy 0.1.99, rustfmt 1.10.0, rust-analyzer
+  1.99.1 (rustup component). Targets `x86_64-pc-windows-msvc` and `aarch64-pc-windows-msvc`. Checked with `rustc -vV`,
+  `rustup show` and each tool's `--version`.
+- **`cargo new`** uses edition 2024 by default.
+- **Linker.** rustc finds the Build Tools 2026 linker by itself, with no Developer prompt or env setup:
+  `MSVC\14.51.36231\bin\HostX64\x64\link.exe` for x64 and `HostX64\arm64\link.exe` for ARM64. Checked with
+  `cargo rustc -- --print link-args`.
+- **Cross build.** A hello-world builds in release for both targets. The PE machine field is `0x8664` (x64) and
+  `0xAA64` (ARM64); each exe is about 130 KB. The x64 exe runs and prints. The ARM64 exe was not run: there is no ARM64
+  device here.
+- **Lint and format.** `cargo clippy -- -D warnings` passes for both targets. `cargo fmt --check` passes on clean code
+  and prints a diff on badly formatted code.
+- **Claude Code LSP.** The official plugin is `rust-analyzer-lsp@claude-plugins-official` 1.0.0 (marketplace
+  `anthropics/claude-plugins-official`). It runs the `rust-analyzer` command from PATH, which the rustup proxy
+  provides. Installed at user scope and listed as enabled by `claude plugin list`. Not verified: that it serves a
+  session; it loads only in a session started after the install.
+
+### Crates, runners and Windows APIs read for the design
+
+Checked 2026-11-03 between 14:37 and 15:06. Reads only; nothing installed or changed.
+
+- **Crate versions.** crates.io API `https://crates.io/api/v1/crates/<name>/versions` (newest first) and `cargo info`:
+  `windows` 0.62.2 (2025-10-06, newest; MSRV 1.82), `windows-sys` 0.61.2, `serde` 1.0.229, `serde_json` 1.0.154,
+  `embed-resource` 3.0.12, `proptest` 1.12.0, `jiff` 0.2.39, `croner` 4.0.2. `velopack`: newest stable 1.2.161
+  (2026-09-29); 1.3.39-g8d2844f (2026-10-17) carries a semver pre-release tag.
+- **windows-rs 0.100.** `windows-core`, `windows-result` and `windows-strings` are at 0.100.0 (2026-09-03), but
+  `windows` and `windows-sys` are not (crates.io lists above). GitHub release 74 (2026-09-03) points to issue #4867,
+  the August 2026 newsletter (read with `gh api`): 0.100 moves the crates to new metadata parsed from the SDK headers,
+  MSRV 1.95; "We may initially publish the release without `windows` and `windows-sys`"; API shapes change (raw
+  `HRESULT` values, header-named modules). The same release ships `windows-reactor` and `windows-window` as first real
+  versions.
+- **GitHub Actions** (`gh api repos/<repo>/releases/latest`): `actions/checkout` v7.0.1, `actions/upload-artifact`
+  v7.0.2, `actions/cache` v6.1.0, `Swatinem/rust-cache` v2.9.3.
+- **ARM64 runner image.** `actions/partner-runner-images`, `images/arm-windows-11-image.md` (image version
+  20260105.41.1): Rust 1.92.0, Rustup 1.28.2, Rustfmt, Visual Studio Enterprise 2022. The live image may be newer, and
+  whether it has the MSVC ARM64 tools the workspace needs: not verified.
+- **Posted thread messages and modal loops.** Microsoft, `PostThreadMessageW` Remarks (page updated 2025-07-01): "if
+  the recipient thread is in a modal loop (as used by MessageBox or DialogBox), the messages will be lost"; limit of
+  10,000 posted messages per queue.
+- **RunOnce.** Microsoft, "Run and RunOnce Registry Keys" (updated 2026-02-21): "By default, the value of a `RunOnce`
+  key is deleted before the command line is run"; a `!` prefix defers the delete until after the command; command
+  line at most 260 characters; a program run from these keys "should not write to the key during its execution";
+  ignored in Safe Mode. HKLM RunOnce runs only for administrators; the HKCU key has no such note. Not tested here.
+- **`Global\` named objects.** Microsoft, "Kernel object namespaces" (updated 2025-04-15): the namespaces cover
+  events, semaphores, mutexes, waitable timers, file mappings, jobs and symbolic links. Only creating a file mapping or
+  a symbolic link in the global namespace from a non-zero session needs SeCreateGlobalPrivilege. So a normal user may
+  create a `Global\` mutex. Whether another user's process can open it (default security): not verified.
+
+### Licence text and git file rules
+
+Checked 2026-11-03 between 15:51 and 15:57. Reads only.
+
+- **MIT text.** SPDX `https://spdx.org/licenses/MIT.html` and `spdx/license-list-data` `text/MIT.txt` (downloaded
+  with `Invoke-WebRequest`) give the same text once the page's optional words ("on", "(including the next
+  paragraph)") are left out. `LICENSE` is `MIT.txt` byte for byte, except the copyright line (script compare).
+- **Claude Code and git.** Claude Code docs, "Run parallel sessions with worktrees": worktrees go to
+  `.claude/worktrees/<name>/` at the repo root, and "Add `.claude/worktrees/` to your `.gitignore` so worktree contents
+  don't appear as untracked files". "Settings files and precedence": Claude Code adds
+  `**/.claude/settings.local.json` to the global git excludes the first time it writes the file; a file made by hand
+  needs its own `.gitignore` entry. On Windows the local file stays next to `.claude/settings.json`. "How Claude
+  remembers your project" (https://code.claude.com/docs/en/memory, read 2026-11-08): a `CLAUDE.local.md` at the
+  project root holds "Personal project-specific preferences; add to `.gitignore`", loads with `CLAUDE.md` and comes
+  after it; no deprecation note. So `.gitignore` lists it.
+- **When git sees a text file as binary.** git source, `master` on GitHub: `convert.c` `convert_is_binary` treats a
+  file with a lone CR, a NUL, or too many control bytes as binary, so `text=auto` stores it unchanged. Diff and
+  `git grep -I` use another test, `buffer_is_binary` in `xdiff-interface.c`: a NUL in the first 8000 bytes.
+- **Logs of Windows tools can look binary to git** (a script with the same tests over every file, 15:56). Six test
+  logs, not kept, were binary to `text=auto`: three with lone CRs (`powercfg` output) and three with NUL bytes (inside
+  Windows event messages). One had a NUL in its first 8000 bytes, so `git grep -I` would skip it. Not run through git.
+
+### Workspace build
+
+Checked 2026-11-03 between 16:02 and 16:12 on the Windows laptop.
+
+- **Pinned toolchain.** A `rust-toolchain.toml` with `channel = "1.99.1"` needs a toolchain named
+  `1.99.1-x86_64-pc-windows-msvc`; the existing `stable` (also 1.99.1) does not count. `rustup toolchain install 1.99.1
+  --profile minimal` with rustfmt, clippy and both targets took 17 s. Under the pin, the rustup proxy runs the pinned
+  toolchain's `rust-analyzer`, so the Claude Code LSP plugin needs `rustup component add rust-analyzer --toolchain
+  1.99.1` (done here). `rustup show active-toolchain` in a subfolder names the root file as the override.
+- **Static CRT.** With `-C target-feature=+crt-static` in `.cargo/config.toml`, all four release exes (x64 and ARM64)
+  import only `KERNEL32.dll`, `ntdll.dll` and `api-ms-win-core-synch-l1-2-0.dll` (`dumpbin /dependents`). A control
+  build of `wakeshot.exe` with `RUSTFLAGS=-C debuginfo=0` imports `VCRUNTIME140.dll` and six `api-ms-win-crt-*` DLLs and
+  is 120,320 bytes against 217,600. So Rust links the CRT DLL by default and the flag removes it, for about 97 KB.
+- **RUSTFLAGS.** Cargo reference, "Configuration", `build.rustflags`: four sources, "mutually exclusive", first match
+  wins: `CARGO_ENCODED_RUSTFLAGS`, `RUSTFLAGS`, then `target.<triple>.rustflags`, then `build.rustflags`. The control
+  build above confirms it: any `RUSTFLAGS` drops the static CRT. With `--target`, config rustflags skip build scripts
+  and proc macros.
+- **Skeleton sizes.** Release, static CRT: x64 `wakeshot-tray.exe` 212,992 bytes, `wakeshot.exe` 217,600; ARM64
+  210,944 and 216,064. PE machine `0x8664` and `0xAA64` (script reads the PE header).
+- **`embed-resource` 3.0.12.** docs.rs page for `compile` and the crate source: since rustc 1.50 the resource links
+  only to the bins (`cargo:rustc-link-arg-bins`), or to the lib when there are none; `manifest_required()` turns "not
+  attempted" into an error. The SDK `rc.exe` was found for both targets with no setup. `mt.exe -inputresource:<exe>;#1`
+  reads the embedded manifest back.
+- **Manifest.** Microsoft, "Application manifests" (updated 2026-04-15): `assemblyIdentity` with `type`, `name` and
+  `version` is required and must be the first child; one supportedOS Id, `{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}`,
+  covers Windows 10 and Windows 11; "Application manifests without a compatibility element default to Windows Vista
+  compatibility on Windows 7".
+- **Clock calls.** `windows` 0.62.2 source: `GetSystemTimePreciseAsFileTime` is under feature
+  `Win32_System_SystemInformation` and returns `FILETIME` (`Win32_Foundation`); `QueryUnbiasedInterruptTime` is under
+  `Win32_System_WindowsProgramming`. Microsoft (updated 2025-07-01): it counts 100 ns units without sleep or
+  hibernation and fails only when called with a null pointer. The test reads wall time after 2026-01-01 and mono time
+  above 0.
+
+### CI workflow
+
+Checked 2026-11-03 between 16:14 and 16:25: `gh api`, docs.github.com, and local runs on the Windows laptop.
+
+- **Action versions.** `gh api repos/<repo>/releases/latest`: `actions/checkout` v7.0.1, `actions/upload-artifact`
+  v7.0.2, `actions/cache` v6.1.0 (same as "Crates, runners and Windows APIs read for the design"). The major tags `v7`,
+  `v7` and `v6` point at those release commits (`gh api repos/<repo>/git/ref/tags/<tag>`). All three run on `node24`
+  (their `action.yml`).
+- **Runner labels.** docs.github.com, "GitHub-hosted runners" reference: Windows x64 `windows-latest`, `windows-2025`,
+  `windows-2025-vs2026`, `windows-2022`; Windows arm64 `windows-11-arm`, `windows-11-vs2026-arm`; Ubuntu x64
+  `ubuntu-latest`, `ubuntu-24.04`, `ubuntu-22.04`, `ubuntu-26.04`. `windows-latest` is Windows Server 2025 and
+  `ubuntu-latest` is Ubuntu 24.04. No preview mark on `windows-11-arm`.
+- **ARM64 image.** The current Windows 11 ARM64 readmes are in `actions/runner-images`, `images/windows/`
+  (`Windows11-Arm64-Readme.md`, image 20261006.188.1, VS 2022; `Windows11-VS2026-Arm64-Readme.md`, image
+  20261026.197.1, VS 2026 18.11); the copy in `actions/partner-runner-images` is older (20260105.41.1). Both current
+  images list rustup 1.29.x, Rust 1.99.x, `VC.Tools.ARM64`, `VC.Tools.x86.x64` and Windows SDK 10.0.26100.0, which
+  answers the open point in "Crates, runners and Windows APIs read for the design". Issue `actions/runner-images#14602`:
+  `windows-11-arm` moves to the VS 2026 image between 2026-09-21 and 2026-09-30; the issue is still open, so which image
+  the label gives today: not verified. The image script `Install-Rust.ps1` downloads the `aarch64-pc-windows-msvc`
+  rustup-init on ARM64, so the toolchain there is native ARM64.
+- **x64 and Linux images.** Windows Server 2025 image 20261021.299.1: rustup 1.29.1, Rust 1.99.1, VS 2022 17.14 with
+  `VC.Tools.x86.x64` and `VC.Tools.ARM64`, SDK 10.0.26100.0, PowerShell 7.6. Ubuntu 24.04 image 20261026.354.1:
+  rustup 1.29.2, Rust 1.99.1. Ubuntu installs rustup into `/etc/skel`, which becomes the runner's home; that `~/.cargo`
+  is the cargo home at run time: not verified (the `actions/cache` Rust example assumes it).
+- **Toolchain step.** `rustup toolchain install` with no toolchain name installs "by default the active toolchain"
+  (rustup 1.29.2 help). `rustup toolchain install --no-self-update`, run from the repo root on an empty scratch
+  `RUSTUP_HOME`, installed `1.99.1-x86_64-pc-windows-msvc` with 6 components (cargo, clippy, rustc, rustfmt, rust-std
+  for both Windows targets) in 10 s. So it honors the profile, components and targets in `rust-toolchain.toml`.
+- **pwsh steps.** docs.github.com, "Workflow syntax", "Exit codes and error action preference": the `pwsh` shell
+  prepends `$ErrorActionPreference = 'stop'` and appends `if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit
+  $LASTEXITCODE }`, so only the last native exit code of a step counts. pwsh is the default shell on Windows runners.
+- **CRT check.** `vswhere -latest -products * -find 'VC\Tools\MSVC\**\dumpbin.exe'` lists six `dumpbin.exe` here
+  (Build Tools 2026). The CI step, run on the test laptop's release builds: x64 and ARM64 `wakeshot.exe` and
+  `wakeshot-tray.exe` import only `KERNEL32.dll`, `ntdll.dll` and `api-ms-win-core-synch-l1-2-0.dll`, and it passes. On
+  a control build with `RUSTFLAGS=-C debuginfo=0`, which imports `VCRUNTIME140.dll` and six `api-ms-win-crt-*` DLLs,
+  it fails. That the same lookup works on the runners: not verified until the first run.
+- **actionlint** 1.7.12 (release exe, SHA-256 matches the release checksum list): 0 errors on `ci.yml`. It knows
+  `windows-11-arm` and the `actions/upload-artifact@v7` inputs: a copy with a bad label and a bad input is flagged. Its
+  label list lacks `windows-11-vs2026-arm` and `ubuntu-26.04` (neither is used). It does not check pwsh scripts.
+
+### Dependency weight and the test-support feature
+
+Checked 2026-11-03 between 16:24 and 16:34 on the Windows laptop.
+
+- **`velopack` 1.2.161 weight.** A scratch project outside the repo, `cargo add velopack@=1.2.161`, then
+  `cargo tree -e normal --target x86_64-pc-windows-msvc`: 113 packages besides the project itself (`cargo add` locked
+  148, for all targets). Among them `ring`, `rustls`, `rustls-webpki`, `webpki-roots`, `ureq`, `zip`, `zopfli`,
+  `flate2`, `regex`, `uuid` and `xml`. Default features only; it also offers `file-logging`, `log-panics`,
+  `public-utils`, `simplelog` and `time`. Whether `ring` builds for `aarch64-pc-windows-msvc` with the tools on this
+  laptop: not verified. Not built here.
+- **Fakes stay out of normal builds.** Both libs have a `test-support` feature that only the bins' dev-dependencies
+  turn on (resolver 3). `cargo tree -p wakeshot-tray -p wakeshot-cli -e normal,features` lists only `default` for
+  both libs; `-e dev,features` lists `test-support`. The release exes are byte-count identical to the empty skeleton's
+  (x64 212,992 and 217,600; ARM64 210,944 and 216,064) after both bins gained both libs and `windows`, so an unused
+  dependency adds nothing to an exe (sizes compared, contents not compared).
+- **The core stays free of Windows crates.** `cargo tree -p wakeshot-core -e normal`: only `serde`, `serde_json` and
+  their own dependencies. With dev-dependencies on the Windows host, `windows-sys` 0.61.2 and `windows-link` appear,
+  through `proptest`'s dependencies (test builds only). `cargo tree -p wakeshot-core --target
+  x86_64-unknown-linux-gnu` lists no `windows` crate. The core was not compiled for Linux here (no Linux target
+  installed); CI does that.
+- **A module named `core`.** `pub mod core;` in `wakeshot-core` builds and passes `clippy -D warnings` with serde and
+  std derives in other modules. Not tried: a `use core::...` at the crate root, where Rust 2018 and later would see two
+  `core` names.
+- **Unknown journal keys.** serde `#[serde(untagged)]` over `Known(SettingKey)` and `Other(String)` reads `"sleepAc"`
+  as `Other` and `"sleepDc"` as `Known`, and writes both back unchanged (`files::tests`).
+
+### `windows` crate features for the power layer
+
+Checked 2026-11-03 between 16:45 and 16:50. Reads only: the `windows` 0.62.2 crate source in the local cargo registry
+and `crates/wakeshot-windows/Cargo.toml`; nothing built or run.
+
+- **The process list needs a `Wdk` feature.** `NtQuerySystemInformation` and the class value
+  `SystemProcessInformation` are in `Wdk::System::SystemInformation` (feature `Wdk_System_SystemInformation`, which
+  pulls in `Wdk_System`, `Wdk` and `Win32_Foundation` by the crate's own feature table). The record type
+  `SYSTEM_PROCESS_INFORMATION` is in `Win32::System::WindowsProgramming`. `wakeshot-windows` declares both ("Workspace
+  members, `windows` features and the core's tree"), and the process module builds the list with them ("Process
+  opens, the system process list and exit waits").
+- **Every other call the power layer needs is behind a declared feature.** A script over the crate source found the
+  module of 50 functions: power requests, plan reads, writes, copies and access checks, suspend and setting
+  notifications, `SetSuspendState`, `IsPwrHibernateAllowed`, `GetSystemPowerStatus` (`Win32_System_Power`); process
+  open, times, waits, mutexes, events, `RegisterWaitForSingleObject`, the parent process attribute and `CreateProcessW`
+  (`Win32_System_Threading`); `GetShellWindow` (`Win32_UI_WindowsAndMessaging`); WTS session calls and
+  `ProcessIdToSessionId` (`Win32_System_RemoteDesktop`); `LockWorkStation` (`Win32_System_Shutdown`); token privilege
+  calls (`Win32_Security`); `MoveFileExW`, `FlushFileBuffers`, `FileTimeToLocalFileTime` (`Win32_Storage_FileSystem`);
+  registry values (`Win32_System_Registry`); `SHGetKnownFolderPath` (`Win32_UI_Shell`); `GetLastInputInfo`
+  (`Win32_UI_Input_KeyboardAndMouse`). That a function compiles with only its own module's feature: not verified (some
+  take types from other modules); the throwaway test programs built these calls with the same feature list.
+- **Local time for log lines.** `FileTimeToLocalFileTime` (declared) gives local time from UTC with the current time
+  zone rules, enough for a line stamped "now"; its offset is local minus UTC. `GetDynamicTimeZoneInformation` and
+  `SystemTimeToTzSpecificLocalTime` are in `Win32_System_Time` (declared). That `FileTimeToLocalFileTime` uses the
+  current time zone and daylight saving settings: not verified (see "Log appends, rolls and the UTC offset").
+
+### clang for `ring` on ARM64, and the Velopack update API
+
+Checked 2026-11-03 between 16:40 and 16:50. Reads only; nothing installed, built or changed.
+
+- **`ring` needs clang for ARM64.** `ring`'s `BUILDING.md` (GitHub, `main`): for `aarch64-pc-windows-msvc` the Build
+  Tools need the C++ ARM64 build tools and clang, with the Visual Studio LLVM folder on the PATH. `ring` comes into
+  the tray with `velopack` ("Dependency weight and the test-support feature" saw it in the tree). Build scripts run for
+  `cargo clippy` too, so once `velopack` is declared, an ARM64 clippy, test or build of the workspace needs clang. Not
+  tried here.
+- **This laptop has no clang.** `Get-Command clang` finds nothing, and `vswhere -all -products * -find
+  'VC\Tools\Llvm\**\clang.exe'` finds nothing in Build Tools 2026 18.11. So local ARM64 checks with `velopack` fail
+  until the clang component is added (inferred from the two facts above; not tried). The component was added later:
+  `VC\Tools\Llvm\x64\bin\clang.exe` is in the Build Tools folder (listed 2026-11-07).
+- **Runner images have LLVM.** `actions/runner-images` readmes: `Windows11-Arm64-Readme.md` (image 20261006.188.1)
+  lists LLVM 22.1.8 and the VS components `VC.Llvm.Clang` and `VC.Llvm.ClangToolset`, and .NET SDKs up to 10.0.401;
+  `Windows2025-Readme.md` (image 20261021.299.1) lists LLVM 20.1.8, `VC.Llvm.Clang` and .NET SDKs up to 10.0.402.
+  Whether `clang` is on the runner's PATH and `ring` builds there: not verified (the first CI run with `velopack`
+  shows it).
+- **`velopack` 1.2.161 manifest** (docs.rs, `Cargo.toml.orig`): features `default = []`, `file-logging`,
+  `public-utils`; `ureq` 3.4 with no features named, so its TLS stack comes from `ureq`'s defaults and cannot be
+  switched off from our side (features only add). That `ureq`'s defaults pick `rustls` with `ring`: inferred from the
+  tree in "Dependency weight and the test-support feature", not read in `ureq`'s manifest.
+- **`UpdateManager` API** (docs.rs 1.2.161): `new(source, Option<UpdateOptions>, Option<VelopackLocatorConfig>)`,
+  `check_for_updates() -> Result<UpdateCheck, Error>`, `download_updates(&UpdateInfo, Option<Sender<i16>>)`,
+  `apply_updates_and_restart`, `apply_updates_and_exit` (both "exit your app immediately"),
+  `wait_exit_then_apply_updates(asset, silent, restart, restart_args)` ("You clean up any state and exit your app
+  after calling this method"; the updater waits only 60 s for the exit), `get_update_pending_restart()`,
+  `get_current_version()`. `UpdateManager` is `Clone`; whether it is `Send`: not shown. `UpdateOptions` fields:
+  `AllowVersionDowngrade`, `ExplicitChannel` ("should usually be left None"), `MaximumDeltasBeforeFallback`.
+- **Tools on the test laptop.** `vpk` 1.2.161 is still installed (`~\.dotnet\tools\vpk.exe`, `vpk --help`). `winget
+  --version`: v1.29.380, the release that fixed the Velopack install bug (`distribution.md`, section 2).
+
+### `windows` crate features for the tray
+
+Checked 2026-11-03 16:50. A scratch crate outside the repo (no `RUSTFLAGS`, toolchain 1.99.1, `--offline`) with
+`windows` 0.62.2 and exactly the 32 features `crates/wakeshot-windows/Cargo.toml` declared then, importing each API the
+tray was planned to call.
+
+- **The declared features cover the tray.** The crate built on `x86_64-pc-windows-msvc` and
+  `aarch64-pc-windows-msvc` with these imports: `Shell_NotifyIconW`, `Shell_NotifyIconGetRect`, `NOTIFYICONDATAW`,
+  `NOTIFYICONIDENTIFIER`, `NIF_GUID`, `NIF_INFO`, `NIIF_USER`, `NIIF_LARGE_ICON`, `NIIF_NOSOUND`, `NIN_SELECT`,
+  `NINF_KEY`, `NIN_BALLOONUSERCLICK`, `ShellExecuteExW`, `SHELLEXECUTEINFOW`, `AssocQueryStringW`,
+  `SHQueryUserNotificationState` (`Win32_UI_Shell`); `CreateIconIndirect`, `DestroyIcon`, `ICONINFO`,
+  `TrackPopupMenuEx`, `MENUITEMINFOW`, `WM_MENUCHAR`, `MNC_EXECUTE`, `ChangeWindowMessageFilterEx`,
+  `AllowSetForegroundWindow`, `RegisterWindowMessageW`, `SystemParametersInfoW`, `SPI_GETHIGHCONTRAST`
+  (`Win32_UI_WindowsAndMessaging`); `DRAWITEMSTRUCT`, `MEASUREITEMSTRUCT`, `LoadIconMetric` (`Win32_UI_Controls`);
+  `MSAAMENUINFO`, `HIGHCONTRASTW`, `HCF_HIGHCONTRASTON`, `AccessibleObjectFromWindow`, `IAccessible`
+  (`Win32_UI_Accessibility`); `GetDpiForMonitor`, `GetDpiForWindow`, `GetSystemMetricsForDpi`,
+  `SetProcessDpiAwarenessContext` (`Win32_UI_HiDpi`); `DwmSetWindowAttribute`, `DWMWA_WINDOW_CORNER_PREFERENCE`,
+  `DWMWA_BORDER_COLOR`, `DWMWCP_ROUND`; `CreateDIBSection`, `CreateCompatibleDC`, `CreateFontIndirectW`, `DrawTextW`,
+  `RoundRect`, `ExcludeClipRect`, `GetSysColor`, `MonitorFromPoint`; `RegGetValueW`; `IMMDeviceEnumerator`,
+  `MMDeviceEnumerator`, `IAudioClient`, `IAudioRenderClient`, `IAudioSessionControl`, `PKEY_AudioEndpoint_FormFactor`,
+  `AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM`, `WAVEFORMATEXTENSIBLE`; `KSDATAFORMAT_SUBTYPE_IEEE_FLOAT`
+  (`Win32_Media_Multimedia`); `PKEY_Device_FriendlyName`; `IPropertyStore`; `CoInitializeEx`, `CoCreateInstance`;
+  `GetProcAddress`, `LoadLibraryW`. So the tray needs no new `windows` feature.
+- **Not in `windows` 0.62.2:** `NIN_KEYSELECT` (Win32 defines it as `NIN_SELECT | NINF_KEY`; the crate has both
+  parts). `DRAWITEMSTRUCT` and `MEASUREITEMSTRUCT` live in `Win32::UI::Controls`, not `WindowsAndMessaging`. Both seen
+  as compile errors on the first try.
+- **A file module can have child modules without moving to `mod.rs`.** `tray.rs` with `pub mod art;` resolved to
+  `tray/art.rs` (the build ran and printed the child's constant). So `tray.rs` can declare its children and keep its
+  file name.
+
+### Workspace members, `windows` features and the core's tree
+
+Checked 2026-11-03 with the pinned toolchain 1.99.1 and no `RUSTFLAGS`.
+
+- **A folder under `crates/` without a `Cargo.toml` breaks the workspace; a plain file does not.** Checked in a
+  scratch workspace with `members = ["crates/*"]` and `cargo metadata --no-deps --offline`: a stray `crates/shared.rs`
+  is ignored (exit 0, one member); a `crates/build/` folder fails with "failed to load manifest for workspace member".
+  So the shared build file is a plain file, `crates/build-resources.rs`, not a `crates/build/` folder.
+- **The new features exist in `windows` 0.62.2 and change nothing in `Cargo.lock`.** `Wdk_System_SystemInformation`,
+  `Win32_System_RestartManager` and `Win32_System_Time` added; `cargo clippy` and `cargo build --release` with
+  `--locked` pass on x64 and ARM64.
+- **The clippy run without `--all-targets` catches imports only test code uses.** Its first run failed on an import
+  used only by a fake (`std::sync::Mutex` in `sink.rs`), while the `--all-targets` run passed. Fixed with a `cfg`.
+- **The core's tree on every target has no `windows` crate.** `cargo tree -p wakeshot-core -e normal --target all
+  --prefix none --locked` lists only `serde`, `serde_core`, `serde_derive`, `serde_json`, `itoa`, `memchr`, `zmij`,
+  `proc-macro2`, `quote`, `syn`, `unicode-ident`. The CI step's `grep -E '^windows'` was run in Git Bash on that output
+  (no hit) and on a made-up line `windows-sys v0.61` (hit).
+- **The app icon is in both exes.** A placeholder `assets/wakeshot.ico` (a ring, 16, 32 and 48 px, 32-bit frames) is
+  embedded through `1 ICON` in the generated `.rc`; a script found all three frames byte for byte in all four release
+  exes (x64 and ARM64).
+- **The CI `dumpbin` pick.** On the test laptop `vswhere -find` lists six `dumpbin.exe` (`Hostx64` and `Hostx86`, each
+  for `arm64`, `x64`, `x86`), the first being `Hostx64\arm64`; the new rule picks the first under the runner's own host
+  folder (`Hostx64` here). Whether the `windows-11-arm` image has a `HostARM64` folder: not verified.
+- **A `std::sync::Mutex` guard as a temporary blocks a second lock in the same statement.** The first `FakePlans` test
+  hung on `fake.script(fake.state().calls.len(), ..)`: the guard from `state()` lives to the end of the statement.
+
+### rustfmt on one file, and cargo test filters
+
+Checked 2026-11-03 with rustfmt 1.10.0 and cargo 1.99.1 (the pinned toolchain), on throwaway files outside the repo.
+
+- **A bare `rustfmt` uses the 2015 edition.** With no `rustfmt.toml` up the tree, `rustfmt --check` on a file with
+  `pub async fn` failed with "`async fn` is not permitted in Rust 2015"; `--edition 2024` parsed it (and rejected
+  `let gen`, a 2024 keyword). The repo has no `rustfmt.toml`, so `rustfmt` on single files needs `--edition 2024`.
+- **`rustfmt` on a file also checks the child modules it declares.** `rustfmt --check lib.rs`, where `lib.rs` says
+  `mod child;`, printed the diff of an unformatted `child.rs` and exited 1. So `--check` on a module-list file reports
+  its child files too, and `rustfmt` without `--check` on it rewrites them.
+- **`cargo test` takes one test-name filter before `--`.** `cargo test alpha:: beta::` failed: "unexpected argument
+  'beta::' found". After `--` several filters work and run tests matching any of them (`cargo test --lib -- alpha::
+  beta::` ran the tests of both modules).
+- **`real_` with `--ignored` runs every ignored test whose name holds `real_`, in any module.** `cargo test --lib
+  real_ -- --ignored` ran `alpha::tests::real_alpha` and `beta::tests::real_beta`; `cargo test --lib -- --ignored
+  alpha::` ran only the first. So a run of real-laptop tests filters by module path.
+
+### `GetCommandLineW`'s feature, a lock file line and a workspace copy
+
+Checked 2026-11-03 with the pinned toolchain (cargo 1.99.1) and no `RUSTFLAGS`.
+
+- **`GetCommandLineW` needs the feature `Win32_System_Environment`.** In the cached `windows-0.62.2` source,
+  `src/Windows/Win32/System/mod.rs` declares `pub mod Environment;` under `#[cfg(feature =
+  "Win32_System_Environment")]`, and `GetCommandLineW` in `Environment/mod.rs` has no other `cfg`. Microsoft's
+  `windows-docs-rs` page for 0.62.2 puts it in `windows::Win32::System::Environment`. docs.rs has no page for that
+  version of the crate (404). A feature of `windows` does not change `Cargo.lock` (checked: the lock gained no line for
+  it).
+- **`proptest` 1.12.0 is the newest and not yanked.** crates.io API (`/api/v1/crates/proptest`): max version 1.12.0,
+  `yanked: false`. It was already locked for the core, so adding `proptest.workspace = true` to the CLI's
+  dev-dependencies downloaded nothing: `cargo metadata --offline` wrote one line to `Cargo.lock`, ` "proptest",` in
+  the `wakeshot-cli` entry, and nothing else (diff against a copy taken first).
+- **A scratch copy of the workspace builds and tests alone.** `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`,
+  `.cargo\`, `assets\` and `crates\` copied to a scratch folder: `cargo test --locked -p wakeshot-core` there passed
+  (24 tests) with its own `CARGO_TARGET_DIR`. A mutant planted in the copy's `files.rs` (the newer-version check
+  moved by 100) failed `files::tests::read_ignores_newer_files`, and the repo's `files.rs` hash stayed the same. The
+  exes' build scripts read `assets\wakeshot.ico` through `..\..\assets`, so a copy without `assets\` cannot build
+  the bins.
+
+### Tray size
+
+Checked 2026-11-04 between 06:13 and 06:59: release x64 builds of the tray
+(`--locked` unless the lock changed, no `RUSTFLAGS`), option builds in a scratch copy of the workspace. `cargo bloat`
+is not installed, so bytes per crate come from a linker map (`/MAP`, symbol address gaps) and builds with one change.
+
+- **What the update wiring added** (tray 2,026,496 to 3,953,152 bytes). TLS (`rustls`, `ring` with its C and asm
+  code and tables, `webpki-roots`): about 1.09 MB, since a build with SChannel instead was 1,086,464 bytes smaller.
+  The HTTP client (`ureq`, `http`, `ureq-proto`, `httparse`, `bytes`, `base64`): about 213 KB of code. `url`, `idna`
+  and ICU: a build with the IDNA stub was 132,608 bytes smaller. `regex` (a velopack dependency) leaves no code.
+  **Verified** (map and builds).
+- **velopack's features cannot turn these off.** 1.2.161 and the newest, `1.3.39-g8d2844f` (a pre-release), have only
+  `default = []`, `file-logging` and `public-utils`. Both take `ureq` with its default features and `url` as plain
+  dependencies. `ureq` 3.5.1's defaults are `rustls` (with `ring` and `webpki-roots`) and `gzip`; its TLS provider
+  defaults to Rustls and never picks native TLS by itself. **Verified** (registry `Cargo.toml` and
+  `ureq-3.5.1/src/tls/mod.rs`; crates.io API for the feature lists).
+- **The IDNA stub is safe for the tray.** `idna_adapter` README: 1.2.x uses ICU4X, 1.1.x unicode-rs (a larger binary),
+  1.0.x has no Unicode data and rejects non-ASCII host names. `idna` 1.1.0 passes lowercase ASCII labels through
+  without the Unicode back end (`is_passthrough_ascii_label` in `src/uts46.rs`). velopack parses only the GitHub repo
+  URL with `url` (`GithubSource::new`); asset and redirect URLs go to `ureq`. The 7 `velo` unit tests pass with the
+  stub; they build the GitHub source, which panics on a URL that does not parse. **Verified** (source and test);
+  `host_str()` at run time: **not verified** beyond the source.
+- **Sizes, release x64, bytes** (tray alone, `-p wakeshot-tray`): baseline 3,953,152; `opt-level = "s"` 3,053,568;
+  `"z"` 2,827,776; IDNA stub 3,820,544; SChannel (a patched velopack) 2,866,688; `"z"` and the stub 2,705,920; all
+  three 1,865,728 (ARM64 1,699,840). **Verified** (builds).
+- **Shipped: `opt-level = "z"` and `idna_adapter = "=1.0.0"`.** Workspace release x64 build: tray 3,954,176 to
+  2,706,432 (minus 31.6%), CLI `wakeshot.exe` 668,672 to 557,056 (minus 16.7%). `Cargo.lock` 181 to 160 packages:
+  `idna_adapter` 1.2.2 to 1.0.0 and 21 ICU packages gone, nothing else. Both exes pass the CI CRT check. **Verified**
+  (builds, lock diff, `dumpbin /dependents`).
+- **SChannel works for the update path; not shipped.** `ureq` 3.5.1 with `native-tls-no-default`,
+  `TlsProvider::NativeTls` and `RootCerts::PlatformVerifier`: GET of the GitHub releases API 200 (for
+  `HaikAsatryan/wakeshot` and `velopack/velopack`), HEAD of a release asset through the github.com redirect 200. With
+  it, `ring` leaves the build and the ARM64 tray builds with no clang on PATH. **Verified** (scratch program and
+  scratch build). Needs a patched velopack, so not shipped.
+- **Cargo's `trim-paths` is not stable in Cargo 1.99.1** ("feature `trim-paths` is required"), so release exes keep
+  the build machine's source paths as panic locations (about 19 KB). **Verified** (manifest parse).
+- **No test runs the release exes.** The dry-run smoke test skips itself in a release build, and the CLI's
+  `tests/run.rs` has no such guard: under `cargo test --release` its runs ignore `WAKESHOT_DATA_DIR` and use the real
+  `%LocalAppData%\Wakeshot`. **Verified** (test; the folder this made was deleted).
+
+### ARM64 builds with clang, the smoke test's app id checks and one sound per step
+
+Checked 2026-11-05 from 11:20 on the test laptop, in a build folder of its own, with no other build running.
+
+- **clang is in the Build Tools now.** `Get-Command clang`: not found (as planned, no user Path change).
+  `vswhere -all -products * -find 'VC\Tools\Llvm\**\clang.exe'`, exit 0, two hits:
+  `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\Llvm\ARM64\bin\clang.exe` and
+  `...\Llvm\x64\bin\clang.exe`. The x64 one with `--version`: `clang version 22.1.3`, target `x86_64-pc-windows-msvc`,
+  `InstalledDir` that `x64\bin` folder. So the installed clang is 22.1.3, not the 20.1.8 the component list named on
+  2026-11-04. `vswhere -include packages` lists `Microsoft.VisualStudio.Component.VC.Llvm.Clang`,
+  `Microsoft.VisualStudio.VC.Llvm.Clang` and `Microsoft.VisualStudio.VC.Llvm.Base`; the instance shows display
+  version 18.11.2. **Verified** (runs).
+- **ARM64 of the whole workspace builds with that folder on the cargo command's PATH.** With
+  `...\Llvm\x64\bin` put first on the PATH of that one PowerShell command only (no `RUSTFLAGS`, no `CC_*`):
+  `cargo clippy --workspace --all-targets --locked --target aarch64-pc-windows-msvc -- -D warnings` exit 0 in 80 s
+  (`ring` 0.17.14 compiled), the same without `--all-targets` exit 0, and `cargo build --release --workspace --locked
+  --target aarch64-pc-windows-msvc` exit 0 in 68 s, no warning. ARM64 release sizes: `wakeshot-tray.exe` 2,404,352
+  bytes, `wakeshot.exe` 532,480 (x64 from the same tree: 2,743,808 and 558,080). **Verified** (runs).
+- **The ARM64 exes still need no Visual C++ runtime.** `ci.yml`'s dumpbin step, run by hand with
+  `...\MSVC\14.51.36231\bin\Hostx64\arm64\dumpbin.exe /dependents`: neither exe imports `vcruntime`, `msvcp`,
+  `ucrtbase` or `api-ms-win-crt-*`; both import Windows system DLLs and API sets only (20 import lines for the tray,
+  11 for the CLI, `advapi32` and `kernel32` twice in different case). `/headers` of the
+  tray: `AA64 machine (ARM64)`. **Verified** (run).
+- **The smoke test with the notice app id checks passes on a local pack.** Read-only first: none of the eight traces the
+  script refuses on (install folder, data folder, uninstall key, Run, RunOnce, Path entry, notice app id key, shortcut)
+  was there, and no Wakeshot process ran, so the script allowed the run. x64 release build of the tree, `pack.ps1
+  -Version 0.1.0 -Cpu x64` into a scratch folder, then `smoke-test.ps1` in an elevated agent shell (as on a CI
+  runner), 11:56:31 to 11:56:42: 28 checks passed, 0 failed, exit 0, among them `DisplayName` "Wakeshot" and `IconUri`
+  naming `current\wakeshot-notice.png`, both `REG_EXPAND_SZ`, the file byte-equal to `assets/wakeshot-notice.png`, and
+  the key gone after the uninstall. Afterwards all eight traces were gone, no `HaikAsatryan.*` folder was left, and the
+  script's own check found the user Path bytes as before. **Verified** (run).
+- **The .NET registry API tells `REG_EXPAND_SZ`.** `RegistryKey.GetValueKind` gave `ExpandString` (2) for
+  `HKCU\Environment` `TEMP`, and `GetValue(..., 'DoNotExpandEnvironmentNames')` gave the stored
+  `%USERPROFILE%\AppData\Local\Temp`; a missing value or key gives `$null` for both in the script's `Get-RegText`. So
+  the smoke test needs no raw-bytes helper for the type. **Verified** (run, read-only).
+- **The core props do not reach the window lock that falls with a floor step back.** The new property
+  `no_step_plays_two_sounds` passed at 10000 cases with the fix reverted by hand, while the new scenario
+  `a_window_lock_due_with_a_floor_step_back_plays_only_the_floor_sound` failed with two plays. The chain (journal
+  unread at start, the lid closed in the window, a hold after it with Wakeshot's battery Do nothing over the user's
+  own AC Do nothing, then an unplug under the floor) is too long for the mixes. **Verified** (runs).
+
+## Rivals and launch
+
+### Competitors
+
+| Tool | Platform | Tech | Agent aware | Blocks idle sleep on Modern Standby | Lid close | Stars |
+|---|---|---|---|---|---|---|
+| PowerToys Awake (microsoft/PowerToys) | Windows | C#, .NET 10, part of PowerToys | No: manual, timer or process id | Not checked | No | 140,491 (all of PowerToys) |
+| LidGuard (airtaxi/LidGuard) | Windows, Linux, macOS | C#, .NET 10 NativeAOT, a `dotnet tool` | Codex, Claude Code, Copilot CLI, OpenCode (hooks; officially tested: Codex on Windows) | Not checked | Yes, optional | 13 |
+| Agents Don't Sleep (itsmbaqer/agents-dont-sleep) | macOS, Windows, Linux | Rust, Tauri 2, web UI | 8 agents through hooks, others by process name (tested: Claude Code) | Not checked | Yes | 10 |
+| Insomnia (stanley-projects/Insomnia) | Windows | Electron | Claude Code, Codex (hooks); apps by process | No (see Electron above) | No | 7 |
+| Insomnia (krishhgg/Insomnia) | macOS | | | | Yes | 1,894 (2026-11-02) |
+
+Stars read with `gh api` on 2026-11-04 (`docs/research/launch.md`, part 1, which has the facts and links per tool),
+except the macOS Insomnia (2026-11-02). Rivals for the README: PowerToys Awake, LidGuard and Agents Don't Sleep
+(same file, "Pick: three rivals").
+Many more tiny tools exist (0 to 30 stars): LidKeeper (a PowerShell script, no release), LidAwake, lidwake, LidGuard
+(macOS), wakekeeper (Windows and macOS), StayLit, WideAwake, Caffeinator, DozeGuard, a claude-kit keep-awake plugin,
+the claudfeine wrapper.
+
+**Demand:** real on macOS (1.9k stars for a lid keep-awake app). On Windows every agent-aware tool found is small (7 to
+13 stars) and young. The space is busy with small projects. Simple, native and correct on Modern Standby is the open
+spot.
+
+#### Insomnia review (code read 2026-11-02)
+
+Electron app. Polls `tasklist` every 10 s for watched apps. For Claude Code it adds hooks to `~/.claude/settings.json`
+and keeps awake for 15 minutes after the last hook. Uses `prevent-app-suspension`, so on Modern Standby it does not
+stop idle sleep. No lid handling, no battery rules.
+
+### Name research
+
+Picked: **Wakeshot**. On 2026-11-02 there was no GitHub repo with that name, no winget package and no NuGet package.
+Domains and trademarks not checked.
+
+Rejected:
+
+- Taken by big or same-space projects: Insomnia (Kong API client 40k stars, plus two keep-awake apps), Adrenaline
+  (several large repos; AMD's driver software is "AMD Software: Adrenalin Edition", from memory), Caffeinator,
+  Unblink, Allnighter, OpenEyes, Wakekeeper, LidAwake, Lidwake, LidGuard, StayLit, WideAwake, Shutlid.
+- Common coffee words, all used: Espresso, Doppio, Cortado, Barista, Jolt, Taurine, Redeye, Doubleshot.
+- Free but weaker: EyesOpen (clear, great eye icon, but a search finds a song and eye clinics), EyesAwake, WideEyed
+  (also means naive), NoBlink, Blinkless, Wakebrew, Wakejolt, Wakedose, Holdwake.
+
+### Launch facts: rivals, winget, the Store and README media
+
+Checked 2026-11-04; details, quotes and links in `docs/research/launch.md`. Nothing installed or run.
+
+- **Rival stars** (`gh api repos/<o>/<r>`, 2026-11-04 00:45): PowerToys 140,491 (all of PowerToys), LidGuard 13,
+  Agents Don't Sleep (`itsmbaqer/agents-dont-sleep`, new) 10, LidKeeper 10 (no release), Insomnia 7.
+  Picked for the README table: PowerToys Awake, LidGuard, Agents Don't Sleep.
+- **Rival download sizes** (release and NuGet APIs): PowerToys user setup x64 323.9 MB (v0.102.3001); LidGuard
+  `lidguard.win-x64` 2.1.7 25.3 MB (a .NET tool, needs the .NET SDK to install); Agents Don't Sleep v0.4.0 x64 setup
+  1.9 MB (Tauri, no ARM64). None publishes idle RAM or CPU, except a PowerToys PR harness (C# Awake 14.3 MB
+  private memory, PR #51181, closed).
+- **winget and self-updating apps**: winget compares the ARP `DisplayVersion` with the manifest version
+  (winget-cli #1239, PM comment 2026-07-28). `RequireExplicitUpgrade: true` keeps a package out of `winget upgrade
+  --all`, but only when winget installed it (`PackageTrackingCatalog.cpp`, `UpdateFlow.cpp`). The 2026 loops came from
+  manifest data: VS Code 1.142.0 pointing at 1.141.2 installers (winget-pkgs #453148), Docker 4.78.0 published twice
+  (#389278).
+- **Velopack has no lock that stops Setup.exe** (source at tag 1.2.161): its only lock is `packages\.velopack_lock`,
+  taken by apply, download and start, and by Setup only after it has killed every process in the install folder
+  (`force_stop_package`, which also kills a running `Update.exe`) and renamed the old folder. Setup over an install
+  always wins. Source read; not tested.
+- **winget-pkgs merge time** (`gh api search/issues`, 7 days 2026-10-14 to 10-26, merged PRs only): new version
+  median 3.9 h, 90th percentile 51.8 h; new package median 1.8 h, 90th 33.3 h.
+- **Microsoft Store**: no registration fee for either account type (Learn, updated 2026-10-29); every PE file of an
+  EXE or MSI submission must be signed by a Microsoft Trusted Root CA (Store Policies 7.20, 10.2.9); Azure Artifact
+  Signing takes individual developers only in the US and Canada (Learn, updated 2026-10-08); winget may pick the
+  `msstore` copy of an app installed from the winget source (winget-cli #4347, open). Recommendation: no Store at
+  launch.
+- **GitHub README media**: videos up to 10 MB on a free plan (GitHub docs, attaching files); an uploaded video plays
+  muted with controls, an MP4 kept in the repo does not play (observed in rendered HTML, not in a browser);
+  `gh issue comment <n> --attach` uploads by script (gh 2.103.3 here). `<picture>` with `prefers-color-scheme` works.
+- **Video tool**: Remotion 4.0.540; its license is free for "an individual" and companies "with up to 3 employees"
+  (`LICENSE.md`). Node v26.13.0 is on the test laptop; `ffmpeg` is not on the PATH (Remotion bundles its own).
+
+### Story checks: PowerToys Awake and Claude's own keep awake
+
+Checked 2026-11-06 about 04:00 (UTC+4), so the README's story says nothing about another tool that its own docs or
+source do not back. Raw pages with `curl`, source with `gh api` at the
+release tag; no fetch summary. Nothing installed or run.
+
+- **PowerToys download size**: the latest release is still `v0.102.3001` (published 2026-10-27);
+  `PowerToysUserSetup-0.102.3001.0-x64.exe` is 323,884,640 bytes (323.9 MB), the machine-wide x64 setup 323,913,184,
+  the ARM64 user setup 311,603,808. **Verified** (`gh api repos/microsoft/PowerToys/releases/latest`):
+  https://github.com/microsoft/PowerToys/releases/tag/v0.102.3001
+- **Longer periods in Awake**: yes, but not in the tray's default list. The docs (page updated 2026-10-21) list "Keep
+  awake for a time interval" set in "the hours or minutes", "Keep awake until expiration" ("a defined date and time"),
+  `--time-limit` in seconds and `--expire-at`, and `customTrayTimes` in `settings.json` to change the tray's entries.
+  In the source at `v0.102.3001` the Settings page's hours box has `Minimum="0"` and no maximum
+  (`src/settings-ui/Settings.UI/SettingsXAML/Views/AwakePage.xaml` lines 73 to 92), and the tray's default list is 30
+  minutes, 1 hour and 2 hours (`src/modules/awake/Awake/Core/Manager.cs`, `GetDefaultTrayOptions`, lines 508 to
+  517). **Verified** (docs page and source): https://learn.microsoft.com/en-us/windows/powertoys/awake
+- **Time left in Awake**: shown. In timed mode the tray tooltip reads "<time> remaining", updated every second
+  (`Manager.cs` lines 404 to 417, string `AWAKE_TRAY_REMAINING` = "remaining" in `Properties/Resources.resx`); the
+  docs say only that the tooltip gives "a hint about the currently active PowerToys Awake mode". An older form of the
+  same tooltip was in the source by 2025-09-24 (commit `5cbebad63f`). **Verified** (source); not seen on a screen.
+- **Extending a running Awake timer**: the tray's time items are always enabled (`TrayHelper.cs`,
+  `CreateAwakeTimeSubMenu`, plain `MF_STRING`), and `SetTimedKeepAwake` first cancels the running timer, then starts
+  a new one from now. So picking the same time again starts it over. **Verified in source; not run.**
+- **Bugs Awake fixed this year**: PR #44795 (merged 2026-01-21) fixed Awake settings that stopped working after the
+  PC woke from sleep (#32544) and Awake not keeping the PC awake once AC power was connected (#36150). **Verified**
+  (`gh api repos/microsoft/PowerToys/pulls/44795`).
+- **Claude's own keep-awake setting**: Anthropic's docs name one in the desktop app. "To prevent idle-sleep, turn on
+  **Keep computer awake** in **Settings > Desktop app** or **Settings > This computer > System**. Closing the laptop
+  lid still puts it to sleep." (Schedule recurring tasks in Claude Code Desktop, "How scheduled tasks run".) A
+  second one is for Remote Control: "Keep this computer awake for Remote Control" in **Settings > Code** or
+  **Settings > Claude Code** (Projects page). The docs do not say whether the first holds only while Claude works.
+  **Verified**
+  (raw `.md` pages): https://code.claude.com/docs/en/desktop-scheduled-tasks and
+  https://code.claude.com/docs/en/claude-projects
+- **Claude Code CLI on Windows holds nothing, still**: in the installed `claude.exe` 2.1.318 (the newest here),
+  `getSpawnArgs()` returns `["caffeinate",["-i","-t",e]]` when the platform is `macos` and `null` otherwise; the
+  binary holds no `PowerSetRequest`, `PowerCreateRequest`, `SetThreadExecutionState` or `ES_CONTINUOUS` (0 each;
+  `caffeinate` 10, `systemd-inhibit` 2). anthropics/claude-code#96679 is still open. **Verified** (`grep -a` on the
+  binary), as "Claude Code today" above found for 2.1.316.
+
+### Community files: GitHub's rules and the repo's state
+
+2026-11-06 04:00 to 04:30.
+
+- **The owner's public profile has no contact.** `gh api users/HaikAsatryan`: `email` null, `blog` empty,
+  `twitter_username` null; name, company and location set. So the community files name no
+  email. **Verified** (API read).
+- **Repo state.** `gh api repos/HaikAsatryan/wakeshot/private-vulnerability-reporting`: `{"enabled":false}`.
+  `has_discussions` false, 0 releases, community profile 42% (only README and LICENSE). Labels include `bug` and
+  `enhancement`. **Verified** (API reads).
+- **The house way.** No community files in PandaTechAM's public repos (community profile API on six of them; no
+  `PandaTechAM/.github` repo). The owner's own repos have some: `armenian-bank-financials` (CONTRIBUTING, a YAML issue
+  form with a markdown intro, `config.yml` with `blank_issues_enabled: true`), `go-vs-dotnet-benchmark` and
+  `java-vs-dotnet-benchmark` (CONTRIBUTING, a PR template with a checkbox list), `ResultCrafter` (a short code of
+  conduct that names the Contributor Covenant). **Verified** (`gh api .../contents`, read only).
+- **Contributor Covenant 3.0 is current.** contributor-covenant.org home page names 3.0 as the latest; its markdown
+  (`/version/3/0/code_of_conduct/code_of_conduct.md`, 8,778 bytes, sha256 `ed3f8089...8422`) has two placeholders,
+  `[NOTE: describe your means of reporting here.]` and a note on the enforcement section, two curly apostrophes, no em
+  dash, and is under CC BY-SA 4.0. **Verified** (fetched 2026-11-06).
+- **Issue forms rules** (GitHub docs "Syntax for issue forms", "Syntax for GitHub's form schema", "Common validation
+  errors when creating issue forms", read 2026-11-06): `name`, `description`, `body` required; `id` only letters,
+  digits, `-` and `_`, unique in the form; labels unique and not too similar once made into slugs; at least one
+  non-markdown field; `None` is reserved in dropdowns; `validations.required` works only in public repos; forms live
+  in `.github/ISSUE_TEMPLATE/*.yml`, listed alphanumerically, YAML before Markdown; issue forms are "in public
+  preview and subject to change". A `labels` entry that does not exist in the repo is not added.
+- **Private vulnerability reporting** (GitHub docs, read 2026-11-06): owners and admins of a public repo turn it on in
+  Settings > "Advanced Security" (sidebar section "Security and quality") > "Enable" next to "Private vulnerability
+  reporting". Reporters use the "Security and quality" tab > "Report a vulnerability". Draft advisories are private
+  until published. The repo's tab reads "Security and quality" on the public page (`curl`, logged out, 2026-11-06).
+  The form link `https://github.com/<owner>/<repo>/security/advisories/new` is the one many public `SECURITY.md`
+  files use (`gh search code`); logged out it redirects to sign-in. That it opens the form here once reporting is on:
+  not verified.
+- **Reporting a comment to GitHub** (GitHub docs "Reporting abuse or spam"): the comment's three-dot menu, then
+  "Report content"; an account: "Block or Report" on the profile, then "Report abuse". Not tried. Reports to the
+  repo's admins ("Reported content" under Settings > Moderation options) exist only for repos an organization owns
+  (GitHub docs "Managing how contributors report abuse in your organization's repository"), so on this user-owned
+  repo such a report goes to GitHub (inferred, not tried).
+- **`cargo test --workspace --locked` writes no real power settings.** Every test that writes them is `#[ignore]` and
+  works on a plan copy (`e2e_real.rs`, `power/plan.rs`, `power/stop_points.rs`); the `power_check` example has
+  `required-features = ["test-support"]` and examples do not run their tests by default. **Verified** by reading the
+  code (grep for `Win32Power`, `#[ignore`), not by watching a run.
+- **The version a user can quote.** The tray logs `Wakeshot <version> starts: tray, pid <n>` at each start
+  (`app/tray_mode.rs`, `CARGO_PKG_VERSION`); `wakeshot status` does not print a version. **Verified** (code).
+- **`rustup toolchain install` with no toolchain name installs the pin.** CI runs it to read `rust-toolchain.toml`,
+  and the CI runs of 2026-11-05 passed on both runners. **Verified** (CI result), not run here.
+
+### Pages page: release state, winget path, heading ids (2026-11-07)
+
+03:47 to 04:10, by `gh api` and headless Edge 156 on the test laptop.
+
+- **Nothing is out yet**: `repos/HaikAsatryan/wakeshot/releases` is empty, `.../pages` gives 404 (Pages off), and
+  the repo has no environments. Every media file the page shows (`media/out/`, the `readme-*` shots in
+  `media/public/shots/`) is on `main` (contents API). **Verified.**
+- **winget-pkgs keeps a package under `manifests/<first letter>/<publisher>/<name>/`**:
+  `manifests/m/Microsoft/PowerToys` lists version folders (`0.100.0` ...); `manifests/h/HaikAsatryan/Wakeshot` gives
+  404 today. `site/build_page.py` shows the winget line only once that folder exists. **Verified** (contents API).
+  Whether the workflow's `GITHUB_TOKEN` may read `microsoft/winget-pkgs` contents: **not verified** until the first
+  Pages run (a 404 there only hides the winget line).
+- **GitHub's heading ids match `check_page.py`'s rule** (lower case, punctuation dropped, spaces to hyphens, a repeat
+  gets `-1`): the README rendered by GitHub (`gh api repos/HaikAsatryan/wakeshot/readme`, HTML) has the same 17
+  `user-content-` heading ids the script computes from `README.md`, plus one id `------------` the script does not
+  make (cause not checked). `gh api markdown` gives no ids, so it cannot be used for this. **Verified.**
+- **Headless Edge follows the Windows mode**: with Windows dark, a plain `--headless=new --screenshot` render showed
+  the page dark. `--blink-settings=preferredColorScheme=1` gave light, `=0` dark. The first `msedge.exe` process exits
+  before the picture is written, so a script must wait for the file and for the profile's processes. **Seen.**
+- **SmartScreen words on the page** come from "Brand screen session: what Windows shows" above (seen 2026-11-05 on a
+  local build with a download mark); the real GitHub download may differ (reputation): **not verified** until the
+  first release.
+
+Checked 2026-11-04 for `pages.yml`:
+
+- **No workflow from a `GITHUB_TOKEN` event**: GitHub docs ("Triggering a workflow", WebFetch): "events triggered by
+  the `GITHUB_TOKEN` will not create a new workflow run"; `workflow_dispatch` and `repository_dispatch` always do.
+  `release.yml` publishes with that token, so `pages.yml` runs on `workflow_run` of Release. **Verified** (docs).
+- **`workflow_run`** (docs, "Events that trigger workflows"): fires only if the workflow file is on the default
+  branch; its `GITHUB_SHA` is the last commit on the default branch; at most three levels of chaining.
+  `release: published` also fires for pre-releases. For a run started by a tag push, the run's `head_branch` is the
+  tag name (`gh api` on `BurntSushi/ripgrep` `15.2.0` and `rhysd/actionlint` `v1.7.12` runs). **Verified.**
+- **Action versions** (`gh api` releases and `action.yml` at the major tag): `actions/upload-pages-artifact` v5.0.0
+  (inputs `name`, `path`, `retention-days`, `include-hidden-files`; leaves out dotfiles by default),
+  `actions/deploy-pages` v5.0.1 (output `page_url`, Node 24), `actions/checkout` v7.0.1. `actions/configure-pages`
+  is not needed for a plain HTML site. **Verified.**
+- **Permissions** (docs, "Using custom workflows with GitHub Pages"): the deploy job needs `pages: write` and
+  `id-token: write`; the default environment is `github-pages`. **Verified** (docs).
+- **The `github-pages` environment refusing a run on a tag**: reported by users (community discussion 39054), not in
+  GitHub's docs. **Not verified.**
+- **REST "Create a GitHub Pages site"**: `build_type` is `legacy` or `workflow`; the caller must be an admin or
+  maintainer. Whether `source` may be left out with `workflow`: the docs do not say. **Not verified** until the
+  command runs.
+- **Visitor IPs** (docs, "What is GitHub Pages"): "When a GitHub Pages site is visited, the visitor's IP address is
+  logged and stored for security purposes." Project site address `https://<owner>.github.io/<repository>`.
+  **Verified** (docs); the live address **not verified** until Pages is on.
+- **Release links** (docs, "Linking to releases"): `/releases/latest` and `/releases/latest/download/<asset>`. That
+  `vpk upload` assets work there: **not verified** until the first stable release (`build_page.py` checks the
+  latest release has each Setup the page links).
+- **actionlint 1.7.12 limits**: it flags a bad permission scope, but not a wrong `upload-pages-artifact@v5` input or
+  a wrong `github.event.workflow_run` field (broken copies passed). **Verified** (broken copies).
+- **Python on the runner**: the `actions/runner-images` readme for Ubuntu 24.04 (image 20261026) lists Python 3.12.3.
+  Which Ubuntu `ubuntu-latest` maps to: **not checked**; Python 3 is on both. The page scripts need 3.8.
+- **Headless Edge at phone width**: `--window-size=390,...` did not narrow the page (the shot was cut on the right); a
+  390 px iframe in a wider window did. **Seen**; the cause is not verified.
+
+## Brand and media
+
+### Brand on macOS
+
+Checked 2026-11-05, on the web only (no Mac). The rules that follow from it are in `docs/brand.md`, "Mac (later
+work)".
+
+- **The current Mac is macOS 27 Golden Gate** (apple.com/macos; Apple's "macOS 27 Golden Gate Release Notes").
+  **Verified.**
+- **Mac app icons are one layered Icon Composer `.icon`**, square 1024 px layers that macOS masks to a rounded
+  rectangle; "Irregularly shaped icons receive a system-provided background"; six appearances (default, dark, clear
+  light and dark, tinted light and dark), the last four without the icon's own colours. HIG App icons (changed
+  2026-10-28), Icon Composer article, Adopting Liquid Glass, WWDC25 sessions 220 and 361, read through Apple's JSON
+  copies of the pages. **Verified.** Icon Composer "Requires macOS Tahoe 26.4 or later". **Verified.**
+- **Menu bar extras use one-colour template images and a menu, not a popover** (HIG The menu bar; `NSImage.isTemplate`).
+  **Verified.** The glyph size (16 pt body in a 22 pt area) is Bjango's, **not verified** at Apple.
+- **macOS 27 hides menu item images by default** for apps linked on macOS 26 and later (symbol images) and on the 27
+  SDK (all images); `preferredImageVisibility` overrides it (macOS 27 release notes, AppKit). **Verified.**
+- **SF Symbols has `sun.horizon` and `sun.horizon.fill`** (half sun with rays over a line; SFSafeSymbols' list and
+  previews, not Apple's app), and the HIG names "the prohibition against using symbols", "or images that are
+  confusingly similar", "in app icons, logos, or any other trademarked use". **Verified** (names from a third-party
+  list).
+- **Shut the Lid**, a free Mac keep-awake app released 2026-11-04 (iTunes lookup id 6821751029), has a gold half sun
+  over a white line on a blue-indigo rounded square, and a sun-over-horizon menu bar glyph. Icon and screenshot seen.
+  **Verified.**
+- **Violet plates are common among new Mac keep-awake apps for AI agents** (Vigil, Sleepless, Keep Awake: AI Agents,
+  InsomniaZ), icons seen by a helper agent. **Verified** by a helper agent's downloads, not each one again.
+- **Nine cross-platform apps** (Slack, Telegram, VS Code, Signal, Discord, Figma, Notion, Firefox, 1Password) keep
+  one picture and palette on Mac and Windows with a per-platform shape and finish; none copies glass onto Windows.
+  Icons downloaded and seen by a helper agent; Signal and Figma rechecked. **Verified.**
+
+### Installer splash and the wordmark font
+
+Checked 2026-11-05. Source read at Velopack tag `1.2.161` (commit
+`92d6a1c9`, the version `Cargo.lock` and `pack.ps1` use), files fetched with `gh api` and raw GitHub URLs. Nothing was
+installed or run, so how the window looks on screen is **not verified**.
+
+- **Without `--splashImage`, Velopack's `Setup.exe` shows its own progress window**, not nothing. The chain:
+  - `vpk pack` puts a splash into the bundle only when one is given: `if (Options.SplashImage != null)
+    dict["splashimage" + ...]` (`src/vpk/Velopack.Packaging.Windows/Commands/WindowsPackCommandRunner.cs` line 292).
+    No default image.
+  - `get_splash_bytes()` returns `None` when the bundle has no `splashimage` file (`src/lib-rust/src/bundle.rs` lines
+    94 to 99).
+  - Unless silent, `install` calls `show_splash_dialog` with those bytes (`src/bins/src/commands/install.rs` lines 129
+    to 145); silent installs show nothing.
+  - With `None`, `show_splash_dialog` logs "No splash image, using progress dialog..." and opens
+    `dialogs::progress::show_splash_progress` instead of the splash window (`src/bins/src/windows/splash.rs` lines 63
+    to 80).
+  - That is `xdialog::show_progress(title, header, body, XDialogIcon::Information)` (`src/l18n/src/progress.rs` lines
+    76 to 101; `xdialog` 3.1 with feature `win32-direct`, root `Cargo.toml` line 73).
+  - Its English words (`locales/en-US.ftl` lines 3, 56, 57): title "Wakeshot Setup", header "Installing Wakeshot",
+    body "Setting up Wakeshot 0.1.0, please wait...". Progress moves 5, 10, 10 to 90 while files unpack, 100 after the
+    install hook (`install.rs` lines 213 to 249); the window closes when the install ends.
+  **Verified** in the source. Not verified: the window's look, whether it shows the app icon in its title bar, and
+  how long it stays up on the test laptop (a few seconds is a guess).
+- **A splash, when given, is a borderless picture** (`splash.rs` lines 384 to 526): a layered, topmost tool window
+  (`WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`, `WS_POPUP`), the PNG or GIF drawn with its
+  alpha at its pixel size times the monitor's DPI scale (shrunk to fit the monitor), and a 12 px (times DPI) flat bar
+  along its bottom edge in `--splashProgressColor` (default `#00FF00`; `None` hides it; lines 44 to 50, 101 to 121).
+  No title, no text, no taskbar button. **Verified** in the source. `vpk pack -H` 1.2.161 on the test laptop lists
+  `--splashImage, -s` ("Path to image displayed during installation") and `--splashProgressColor`. **Verified.**
+- **Instrument Sans SemiBold for the page**: the designer's repo `https://github.com/Instrument/instrument-sans`
+  (OFL-1.1 per GitHub's licence field) ships a static `fonts/webfonts/InstrumentSans-SemiBold.woff2`, 35,812 bytes,
+  at commit `7fa22308a3d0c94ee2b3cd537a1196b65db34a3e` (2023-06-14, the newest). Google Fonts'
+  `ofl/instrumentsans/METADATA.pb` names that same commit as its upstream source, and has only the variable font. The
+  static TTF beside it reads (name table, our script): "Instrument Sans SemiBold", "Version 1.000; ttfautohint
+  (v1.8.4.7-5d5b);gftools[0.9.28]", OS/2 weight 600, fsType 0 (no embedding limits). The WOFF2 header's sfnt size
+  (87,004) equals that TTF's size, and its version is 1.0. `OFL.txt`: "Copyright 2022 The Instrument Sans Project
+  Authors", with no Reserved Font Name after it, so a subset or renamed copy would also be allowed. We ship the file
+  unchanged. SHA-256 of the WOFF2: `04235f235483213906d69cafb7a87ee197adaffacb081c8a7f809d00f9b353cd`. **Verified.**
+
+### Media: GitHub's page colours, the video font and exact GIF colours
+
+Checked 2026-11-05.
+
+- **GitHub's page colour per theme** is Primer's `--bgColor-default`, read from github.com's own theme CSS: the repo
+  page `https://github.com/HaikAsatryan/wakeshot` (fetched with `curl`) links `light-0011b1fed09cb294.css`,
+  `dark-37b5e41810563d82.css`, `dark_dimmed-c1d783f33c1db2a8.css` and `dark_high_contrast-d69295870cb5f203.css` on
+  `github.githubassets.com/assets/`; they set `--bgColor-default` to `#fff`, `#0d1117`, `#212830` and `#010409`.
+  Primer's `primer-*.css` draws the page with `body{... background-color:var(--bgColor-default, ...)}`. The page's
+  `<html>` carries `data-color-mode="auto" data-light-theme="light" data-dark-theme="dark"` for a visitor who is not
+  signed in, so the defaults are `light` (`#FFFFFF`) and `dark` (`#0D1117`). **Verified** in the CSS. Not verified:
+  how the README's box looks on a signed-in account with dark dimmed or high contrast (the loop's dark GIF is drawn on
+  `#0D1117`, so it shows as a box of a slightly different dark there).
+- **The video's Instrument Sans Regular** comes from the same commit and folder as the SemiBold above
+  (`fonts/webfonts/InstrumentSans-Regular.woff2`, 34,628 bytes, SHA-256
+  `f28af62faa9eec1e5482cf6e2a3e06bc865fa2fa6937bd56c14d2be23c9b4c46`); the TTF of the same commit reads
+  "Instrument Sans", "Version 1.000; ...", OS/2 weight 400 (name table, read with a small Node script). The SemiBold
+  WOFF2 in `media/public/fonts/` is byte-equal to the page's (same SHA-256 as above). **Verified.**
+- **A GIF from Remotion's `--codec=gif` moves colours.** Remotion 4.0.540 encodes GIFs with FFmpeg's
+  `split[v],palettegen,[v]paletteuse` (`@remotion/renderer` `dist/stitch-frames-to-video.js` line 257): one palette for
+  the whole clip, with dithering. A loop that Remotion encoded on one flat dark colour reads one level lower in green
+  and in blue in every frame of the file (red unchanged; decoded with `media/scripts/lib/gif.mjs`). So the loop is now
+  rendered as PNG frames and written by our own GIF writer with each frame's exact colours. The writer, our reader and
+  the bundled `ffmpeg.exe` decode agree to the bit on test frames (a 400-colour patch, random noise that fills the LZW
+  table many times). **Verified.**
+- **Loop frames hold up to 252 colours** in their changed area (Chrome's anti-aliasing of a 128 px ring and line, and
+  the fades), under the 255 a GIF frame with a see-through index holds, so no colour is merged today; the writer
+  merges the rarest edge colour into its nearest if a frame ever needs more and reports how far it moved. **Verified**
+  (build output, 2026-11-05).
+
+### Brand apply: the held light in art.rs
+
+Checked 2026-11-05 (code `crates/wakeshot-windows/src/tray/art.rs`; pictures `docs/research/img/brand/apply-*.png`; the
+scripts named below are not kept). Renders are offline (headless Edge at device scale 1); no live taskbar, Start or
+notice was looked at.
+
+- **Microsoft's icon sizes, read again** ("Construct your Windows app's icon", learn.microsoft.com, ms.date
+  2026-07-21, updated 2026-08-05, **verified**): the scale table asks 16, 20, 24, 32, 40, 48, 64 (title bar, tray),
+  24, 30, 36, 48, 60, 72, 96 (taskbar, all apps) and 32, 40, 48, 64, 80, 96, 256 (Start pins); its AppList target
+  sizes are the same 14: 16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256. "Apps should have, at the bare
+  minimum: 16x16, 24x24, 32x32, 48x48, and 256x256." `assets/wakeshot.ico` now holds all 14, the 256 frame as PNG
+  (the Windows 7 guide's "only the 256x256 pixel image should be compressed"), the rest 32-bit bitmaps.
+- **Windows' own tray glyphs sit at 0.477 to 0.479 of the box** (ink centre, the mean of chevron E70E, Wi-Fi E701,
+  volume E767, battery E83F in Segoe Fluent Icons; each from 0.415, Wi-Fi, to 0.500), the same at every size from 16
+  to 64 px (`sysglyphs.py`, Edge render). **Verified** in the render; the real taskbar may place them a little higher
+  (a review measured the chevron at 0.471 at 150%).
+- **The held light's position** (target 0.455 of the box for the filled glyph, `docs/brand.md`, "Tray icon"). Measured
+  on a rebuilt taskbar render (`look.py measure`) and by the test `the_light_sits_level_with_the_next_icon`; both agree
+  to 0.01 px. Offset from 0.455, in px (minus is higher):
+
+  | Size | 16 | 20 | 24 | 28 | 32 | 36 | 40 | 48 | 56 | 64 |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | Holding | -0.03 | +0.34 | +0.46 | -0.11 | -0.09 | +0.30 | +0.41 | -0.14 | +0.37 | -0.18 |
+  | Idle | +1.01 | +2.06 | +1.69 | +1.63 | +1.97 | +2.94 | +2.65 | +2.96 | +3.64 | +3.97 |
+  | Off | +0.72 | +1.77 | +1.23 | +1.15 | +1.41 | +2.33 | +1.95 | +2.15 | +2.66 | +2.86 |
+  | Holding against Windows' glyphs | -0.39 | -0.13 | -0.11 | -0.73 | -0.82 | -0.53 | -0.50 | -1.22 | -0.92 | -1.64 |
+
+  Idle and off sit lower only by ink: their ring is hollow; the light keeps one place in all three states (by
+  design). About a sixteenth of the box in all (1 logical px).
+- **States differ by shape** (share of the ink in different pixels, test `states_differ_in_shape`, minimum 25%):
+  16 px holding/idle 50%, holding/off 58%, idle/off 43%; 20 px 58%, 62%, 33%; 24 px 35%, 50%, 48%. With only the
+  four pixels beside each slash step cleared, idle/off at 20 px was 24% and the ring touched the slash; clearing all
+  eight raised it to 33%.
+- **Crisp at 16 to 32 px**: half-covered pixels at most 23% of the ink (idle, 20 px); the line is whole pixels at every
+  size, and the 1 px rings at 16 and 20 px are drawn by hand (whole pixels and quarter-covered corners), so no pixel
+  is half grey (tests `strokes_are_crisp_at_small_sizes`, `the_line_is_solid`,
+  `the_ring_is_as_solid_as_the_line_at_1_px`).
+- **Contrast, WCAG 2 (test output):**
+
+  | Pair | Ratio | Needs |
+  |---|---|---|
+  | Line and outline, white on dark taskbar 202021 / hover 2d2d2e | 16.28 / 13.76 | 3.0 |
+  | Holding light B6E05A on dark taskbar / hover | 10.70 / 9.04 | 3.0 |
+  | Line and outline, 1a1a1a on light taskbar d8dadc / hover ecedee | 12.42 / 14.85 | 3.0 |
+  | Holding light 3B7A2A on light taskbar / hover | 3.74 / 4.48 | 3.0 |
+  | Plate 628C2B on light / dark Start (f3f3f3, 202020) | 3.57 / 4.12 | 3.0 |
+  | Plate 3E7C3B on light / dark Start | 4.56 / 3.22 | 3.0 |
+  | Light's edge on the plate next to it, flat frames 16 to 24, as drawn | 3.75 to 3.95 | 3.0 |
+  | Light's core FFFBE8 on the plate just past its bloom, lit frames 30 to 256, as drawn | 3.11 to 3.60 | 3.0 |
+  | Lit light's edge on the plate next to it, as drawn (bloom and glow are its soft edge) | 1.40 to 2.03 | none |
+  | Bar (white to FFFBE8) on the plate next to it, every frame, as drawn | 3.12 to 4.34 | 3.0 |
+  | Half rule at 48 px, light / dark Start (share of the icon at 3:1) | 69% / 91% | 50% |
+
+  These are the drawn pixels' numbers (2026-11-05, after a review). A first measure compared the rim and the bar
+  with a plate colour that left out the bloom, which `draw_plated` paints over the plate round the light and over the
+  bar. On the drawn pixels the bar was 2.78 to 2.95 from 64 px up, so the bloom now ends at 1.6 light radii instead of
+  1.9; the rows above are after that change. Method and the colour-blind numbers: "Brand apply review fixes".
+- **Notice colours**: the notice header's background on the test laptop is 252525 (dark) and e5e5e5 (light), the most
+  common colour of the header band in a dark and a light first-run notice, measured on 2026-11-04 captures, not kept
+  (they show the old icon). Acrylic over a grey test background, so a real desktop shifts them a little. The 48 px full
+  drawing scaled to 16, 20 and 24 px by area averaging blurred the light into its glow and left the shadow as a grey rim
+  on the light notice; the flat drawing at 48 px keeps a clear light, so `assets/wakeshot-notice.png` is the flat
+  drawing (palette PNG, 48 px, 1,798 bytes, the same form as the old file the header showed on screen). Which filter the
+  shell scales with: not verified.
+- **Files and sizes** (184,720 and 31,114 bytes since the review fixes): `assets/wakeshot.ico` 185,835 bytes (was
+  43,006); its 256 PNG frame 32,229 bytes, 12% of the 262,144 bytes of pixels, by `art.rs`'s new deflate (LZ77
+  through hash chains with lazy matching, fixed or dynamic Huffman codes per block; the old one wrote fixed codes and
+  runs of one byte only). `site/favicon.ico` 15,086 bytes
+  (16, 32, 48; was a copy of the old ICO). Python's own `zlib` inflated every PNG the writer made, and Windows'
+  `LoadImageW` (LR_LOADFROMFILE) loaded all 14 frames of the ICO and the three of the favicon at their sizes with the
+  light's core colour fffbe8 and a clear corner (`loadico.ps1`). A second writer run left every file byte-equal.
+- **Exe sizes** (release, `--locked`): x64 `wakeshot-tray.exe` 2,745,856 to 2,907,648 bytes (+161,792), `wakeshot.exe`
+  558,080 to 701,440 (+143,360); ARM64 after: 2,565,120 and 675,840 (no ARM64 build before). The ICO is about 143 KB
+  of that; the rest in the tray is the lit drawing and the deflate, which the notice's large icon reaches at run time.
+  All 14 frames sit byte for byte in all four exes, and Windows' `PrivateExtractIconsW` gave 16, 24, 36, 48 and 256 px
+  icons from both x64 exes with a clear corner and the light's fffbe8 (`exeicon.ps1`). **Verified.**
+- **Same bytes on x64 and ARM64**: the art uses `+`, `-`, `*`, `/` and `sqrt` in f32 and integer box blurs, so the
+  golden tests compare exactly; ARM64 got clippy and a release build, not a test run.
+
+### Brand apply: the page, the README header and the social card
+
+Checked 2026-11-05 (files in `site/` and the top of `README.md`; pictures `docs/research/img/brand/apply-web-*.png`;
+the scripts named below are not kept). Renders are headless Edge at device scale 1 or 2, offscreen.
+
+- **`site/wakeshot.svg` against the ICO's 256 frame**: the SVG ports `Plated::at(256)` and every layer of `art.rs`
+  (`gen_icon.py`; since the review fixes `art.rs` writes the SVG itself, see "Brand apply review fixes"). Rendered
+  at 256 px with a clear background and compared pixel by pixel (`compare_icon.py`): over white mean 0.64 and max 41
+  of 255; over `#121610` mean 0.47, max 29; alpha mean 0.23, max 52. Inside the shapes the
+  difference is 3 at most (Chrome dithers gradients). The larger values are single edge pixels where Chrome's
+  anti-aliasing of a curve close to its tangent covers less than the true area (plate corners 41, bar ends 29, light
+  edge 14); `art.rs` matches the true area there (checked by sampling each pixel 64 x 64 times). A mask, a clip path
+  and three separate plates give the same numbers. **Verified.**
+- **Wordmark outlines equal Chrome's text**: "Wakeshot" shaped with HarfBuzz (uharfbuzz 0.57.0, the font's default
+  features; with letter spacing, spacing after each glyph and no optional ligatures, as Chrome does) and drawn from
+  the TTF's outlines (fontTools 4.68.0) lands on the same ink box, to the pixel, as Edge drawing the WOFF2 with
+  `letter-spacing: -0.01em` at 200 px; every glyph sits in the same place, so kerning matches. Only Chrome's vertical
+  hinting moves some x-height edges by one pixel. **Verified.** With line height 1, Instrument Sans (typo ascender
+  970, descender -250, `USE_TYPO_METRICS` set) centres its cap height (720) in the line box, so a flex row with
+  `align-items: center` centres the cap height on the icon. Computed from the font's tables; the render agrees.
+- **What GitHub keeps of the README header**: GitHub's Markdown API (`gh api markdown`, mode gfm, context
+  `HaikAsatryan/wakeshot`, 2026-11-05) returns the `<h1 align="center">`, the `<picture>` with its `<source
+  media="(prefers-color-scheme: dark)">` and the img's alt, width and height, and wraps the picture in GitHub's own
+  `<themed-picture>` element. **Verified** (API output). That element exists so the picture follows GitHub's theme
+  rather than the system's. A GitHub community discussion (#210983, 2026-10-22) reports README pictures following the
+  system's theme instead; no GitHub staff answer. **Not verified**: if it is true, a reader with a dark system and
+  GitHub set to light sees the light-text lockup on white. A first render without the theme pinned showed exactly
+  that look.
+- **GitHub's social preview**: "Your image should be a PNG, JPG, or GIF file under 1 MB in size", "at least 640 by
+  320 pixels (1280 by 640 pixels for best display)", transparency allowed but a solid background advised
+  (docs.github.com, "Customizing your repository's social media preview", read 2026-11-05). **Verified.**
+  `site/social-card.png` is 1280 x 640, 285,642 bytes (285,193 since the review fixes re-rendered it), solid
+  background, all content at least 108 px from each edge.
+- **The page's Pages address** in the share tags, `https://haikasatryan.github.io/wakeshot/`, follows GitHub's project
+  site pattern `https://<owner>.github.io/<repository>/`. **Not verified** live: Pages is off until v1
+  (`gh api repos/HaikAsatryan/wakeshot/pages` gives 404). `check_page.py` fails the page if a share tag leaves that
+  address or names a file the folder lacks.
+- **Setup.exe carries the new ICO whole**: `packaging/pack.ps1` with vpk 1.2.161 on a local x64 release build of the
+  current code (`-Icon assets/wakeshot.ico`, into scratch, nothing installed) gives a Setup.exe with one icon group
+  of 14 frames, each byte-equal to the ICO's frame (13 bitmaps and the 256 PNG), and `CreateIconFromResourceEx` loads
+  each at its size; `PrivateExtractIconsW` gives 16 to 256 px icons from it (`exe_icons.py`, ctypes). The portable
+  zip's `Update.exe` and `Wakeshot.exe` carry the same 14 frames. **Verified.** Not verified: how Velopack's progress
+  window shows the icon (that needs a real install on screen).
+- **No request leaves the page**: served from `127.0.0.1` and loaded in headless Edge with a network log, the page
+  started three requests (`style.css`, the SemiBold font, `wakeshot.svg`), all local. **Verified.**
+
+### Media: the art port in f32, and the loop and title drawn from it
+
+Checked 2026-11-05.
+
+- **A JavaScript port can draw `art.rs`'s bytes exactly** if every f32 operation is rounded with `Math.fround` one
+  step at a time, in Rust's order. A double rounded to f32 after a single +, -, *, / or sqrt of two f32 values is the
+  f32 result, since a double has more than 2 x 24 + 2 bits (the known bound for double rounding of these operations;
+  not proved here, shown by the checks). `media/scripts/check-art.mjs` compares `media/src/art/heldLight.ts` with all
+  three review sheets, the 14 ICO frames and the notice picture: 9,458,740 pixels, 0 differ. Control: the same port
+  with `F` as a no-op (plain f64) differs by 1 level in 4 to 186 pixels of 11 app icon frames (the shadow's edge and
+  the plate's ramp), so the rounding is needed and the check sees a 1-level slip. **Verified** (both runs).
+- **Pixels drawn on a canvas reach Remotion's frames unchanged**: the loop's GIFs, rendered through Chrome Headless
+  Shell from a `<canvas>` filled with `putImageData` at whole-pixel places, hold the port's idle and holding glyphs
+  (`tray_mask` at 128 px over GitHub's page colour) in every pixel of the 480 x 240 frame (`check-video.mjs`), and the
+  title and outro stills hold `app_icon(256)` and `app_icon(192)` in all 52,952 and 29,920 opaque pixels. **Verified.**
+  The icon's half-covered edge pixels go through the browser's premultiplied blend over the video background; not
+  compared.
+- **H.264 at CRF 20 breaks the plate's edge into blocks while the title's light comes on** (the whole plate changes
+  colour at once); CRF 16 keeps it clean, at 1.5 times the bytes (title alone: 121 KB to 181 KB; whole draft 1.9 to
+  2.5 MB). Seen by eye at 5 times, frame 22 of both encodes, yuv420p (`docs/research/img/brand/apply-media-title.png`
+  shows the stills). **Verified** by looking; no metric.
+
+### Brand colours under colour-blind simulation
+
+Checked 2026-11-05 with scripts that are not kept (`colours.py`, `rim.py`, `de.py`). Method: WCAG 2 contrast after
+Machado, Oliveira and Fernandes (2009) simulation at full strength in linear sRGB, the brand's rule (`docs/brand.md`,
+"Colours": 3.0 after protan, deutan and tritan). Each pair's plain ratio was computed again and equals the earlier apply
+checks' numbers to 0.01 (25 pairs).
+
+- **Tray, page and lockup pairs keep their minimum under all three simulations.** Worst cases: the holding light
+  `#3B7A2A` on the light taskbar `#D8DADC` 3.60 (protan; plain 3.74), on its hover 4.31; `#B6E05A` on the dark
+  taskbar 10.53 (tritan); plate ends on light Start 3.47 and 4.34 (protan), on dark Start 4.05 and 3.09 (deutan); the
+  page's step number `#FFEA9C` on `#33701F` 4.61 (protan; text, needs 4.5); the light page's link on its panel 5.16.
+  **Verified** (script).
+- **The lit light's rim is just under 3:1 for protan.** A port of `art.rs`'s test `app_icon_contrast` (same
+  `Plated::at`, `plate_colour` without the glow and 64 directions a pixel outside the light; its plain numbers equal
+  the test's: 3.50 to 3.51 flat, 3.13 to 3.16 lit, bar 3.46 to 4.15) gives, under the worst simulation: the flat
+  frames' edge `#FFEA9C` 3.25 (protan), the lit frames' rim `#F7DC7F` 2.88 to 2.92 (protan), the bar 3.36 to 4.01.
+  Against the plate's light end `#628C2B` alone the rim is 2.92 plain and 2.72 protan; the light sits nearer the
+  middle of the ramp. **Verified** (script). The plate colour was rounded to whole levels before the simulation.
+  Superseded for the app icon by the review fixes (2026-11-05): that test's model left out the bloom; the icon is now
+  measured on its drawn pixels and the rule is the light's core against the plate past the bloom ("Brand apply review
+  fixes").
+- **Every brand colour is 34.8 or more from Claude's orange `#D97757`** (CIEDE2000): the rim
+  `#F7DC7F` is the nearest, the plate and holding greens 46 to 52. **Verified** (script).
+
+### Brand screen session: what Windows shows
+
+2026-11-05 15:55 to 16:44, on the test laptop with only its own screen (1920x1200, 125%), on battery, a local x64
+release build installed per user at Medium and uninstalled after. Every step by automation from the agent shell (UI
+Automation, injected keys and clicks, `CopyFromScreen`); pictures `docs/research/img/brand/screen-*.png` (the two Task
+Manager captures are not kept, since they show the old icon).
+
+- **SmartScreen shows for a downloaded `Setup.exe`, and nothing shows without the download mark.** A copy with a
+  `Zone.Identifier` stream (`ZoneId=3`) opened by `explorer.exe` got "Windows protected your PC" in the Windows
+  accent colour, with More info giving "App: HaikAsatryan.Wakeshot-win-x64-Setup.exe, Publisher: Unknown publisher"
+  and Run anyway. The same file without the stream started Setup at once. **Seen.**
+- **Velopack's progress window stays up about half a second.** Class `#32770`, title "Wakeshot Setup", Windows'
+  blue information icon, "Installing Wakeshot", "Setting up Wakeshot 0.1.0, please wait...", a green bar and an OK
+  button; drawn light while Windows was in dark mode. Grabbed at 16:37:41.755 (empty bar) and 16:37:42.017 (bar a
+  third along); the install hook ended 16:37:42.102. **Seen** (window loop every 150 ms).
+- **The first-run banner can come seconds after the tray logs it.** First install: logged 16:02:39.29, on screen
+  from 16:02:39.58. Second install: logged 16:37:42.22, on screen only from 16:37:48.18. Cause **not verified**.
+- **Tray icon placement now matches Windows' own glyphs** (ink centre in the taskbar, pixels 40 levels or more from
+  the taskbar colour, script): 150% holding 35.9 of 72 (OneDrive 35.6, chevron 35.3); 125% holding 29.7 of 60
+  (OneDrive 29.6); 100% holding 23.4 of 48 (OneDrive 23.6). Idle sits 0.4 to 1 px lower, by design.
+- **The tray glyph follows each switch with no restart**: dark, light, Desert (`hcwhite.theme`, dark grey glyph),
+  Night sky (white glyph) and the scale changes 125 to 150, 150 to 100, 100 to 125. **Seen.**
+- **Closing the tray menu with Esc leaves a focus box on the icon** (light grey on the light taskbar, the contrast
+  highlight colour in Night sky) until something else on the taskbar is clicked. **Seen.**
+- **High contrast menu text is `COLOR_BTNTEXT`**: in Night sky every item and the status line are yellow `#FFEE32`
+  (`GetSysColor`: `BTNTEXT` `#FFEE32`, `WINDOWTEXT` and `MENUTEXT` `#FFFFFF`, `GRAYTEXT` `#A6A6A6`). WinUI's secondary
+  text in contrast themes is `WindowText` (answered later the same day: "High contrast status line in `WindowText`").
+- **Task Manager shows an older build's icon** for the installed exes on Processes and Startup apps, while Start,
+  Settings, Explorer, the taskbar button and the notices show the current Moss icon. `SHGetFileInfo` (small) and
+  `ExtractAssociatedIcon` on the same exe both return Moss (average colours 120,158,88 and 124,158,86). So Task
+  Manager keeps its own icon cache per path; this path held older builds. That a sign-out clears it: **not
+  verified**.
+- **Turning a contrast theme off re-applies `Custom.theme`**: after Light was chosen in Settings and Desert, Night
+  sky, then None applied, Windows came back in Dark, because `Custom.theme` still said `SystemMode=Dark`. A later
+  Light choice did rewrite `Custom.theme` (`SystemMode=Light`, new `ThemeId`), and the Dark choice after it did not.
+  Contrast also set `Control Panel\Colors` `Hilight` and `MenuHilight` to the theme's defaults and left the
+  `HighContrast` key naming "High Contrast White". **Seen** (registry and file reads before and after).
+- **Viewing Settings > Apps > Startup or Task Manager's Startup apps writes `StartupApproved\Run`**: a `02` value for
+  each enabled Run entry that had none, and Docker's disabled `01` form became `03`. **Seen** (before and after
+  reads; the earlier `01` bytes found by hashing).
+- **A scale change makes `Control Panel\Desktop\PerMonitorSettings\<monitor id>`** with `DpiValue` 0 when set back
+  to the recommended 125%. **Seen.**
+- **A throwaway Edge profile on the test laptop pulls in the user's extensions**: `msedge --user-data-dir=<scratch>`
+  opened Bitwarden's "Getting Started" page and grew to 188 MB in under two minutes (deleted after). Signed in by
+  Windows' account or synced otherwise: **not verified**.
+- **`--blink-settings=preferredColorScheme=1` forces light** in Edge 2026 (the page drew light in dark Windows);
+  `=0` forces dark. A second launch on the same profile joins the running browser and ignores its own flags.
+  **Seen.**
+
+### Brand apply review fixes
+
+Checked 2026-11-05, fixes after a review (code `crates/wakeshot-windows/src/tray/art.rs`; pictures
+`docs/research/img/brand/apply-*.png`, before and after in `apply-fixes.png`; the scripts named below are not kept).
+Offline renders only.
+
+- **The app icon is measured as drawn.** `app_icon_contrast` reads the pixels of `app_icon(size)` at all 14 frames:
+  every pixel a shape covers whole, against the first plain plate pixel (plate whole, clear of the light and the bar)
+  one or two steps up, down, left or right; and the light's core, the drawn pixel at its centre, against every plain
+  plate pixel in the 1 px ring just past the bloom's end. Plain WCAG 2 and under Machado 2009 protan, deutan and tritan
+  at full strength in linear sRGB, the simulated colour not rounded to whole levels (the colour-blind simulation's
+  script rounded it: its numbers differ by up to 0.03). The half rule takes the simulations too: a pixel counts when it
+  keeps 3:1 plain, and under all three for the colour-blind share. **Verified** (test output below).
+- **Before the fix, drawn** (a numpy port of `draw_plated`, `proto.py`, equal to the ICO's 14 frames within 1
+  level): the bar against the plate above it 3.27 to 3.36 at 30 to 60 px, 3.05 at 36, 2.78 to 2.95 from 64 px up;
+  colour-blind 2.73 at worst, 2.98 already at 36. The light's core against the plate past the old bloom (1.9 light
+  radii) 3.25 to 3.76, colour-blind 3.16 or more. The model the old test used (the plate without the bloom) gave the
+  bar 3.46 to 4.15. **Verified**; the same as the review's own reads.
+- **Why the bloom, and the end picked.** The bloom painted `#FFEA9C` at 0.14 to 0.18 over the plate just above the
+  bar, which sits 1.42 to 1.5 light radii from the light's centre. Painting the bar over the bloom alone gave 2.85 at
+  64 px. Keeping the bloom's 0.44 at the light's edge and squeezing its tail to end at E radii: E 1.75 bar 2.96, 1.7
+  3.00, 1.65 3.05 (colour-blind 2.98), 1.6 3.12 (3.05), 1.5 3.27. Scaling the whole bloom to 1.6 changed the icon
+  more (mean 4.3 levels, max 25) than squeezing the tail (mean 3.0, max 17). Picked: stops in light radii (0, 0.8),
+  (1.0, 0.44), (1.28, 0.144), (1.6, 0). Against the frames approved earlier the lit frames now differ by 3.5
+  to 5.0 levels of 255 on average (2 to 3 before this fix). **Verified** (port and the Rust test agree).
+- **After the fix, test output** (`app_icon_contrast`, `half_the_icon_keeps_3_to_1_on_start`,
+  `glyph_contrast_on_taskbars`):
+
+  | Pair, as drawn | Plain | Colour-blind | Needs |
+  |---|---|---|---|
+  | Bar on the plate next to it, 16 to 24 px / 30 to 60 / 64 to 256 | 4.34 / 3.46 to 3.74 / 3.12 to 3.25 | 4.19 to 4.20 / 3.36 to 3.63 / 3.05 to 3.17 | 3.0 |
+  | Light's edge on the plate next to it, flat frames 16 to 24 | 3.75 to 3.95 | 3.53 to 3.76 | 3.0 |
+  | Light's core on the plate past the bloom, 30 to 60 / 64 to 256 | 3.50 to 3.60 / 3.11 to 3.15 | 3.39 to 3.48 / 3.03 to 3.08 | 3.0 |
+  | Lit light's edge on the plate next to it (its soft edge) | 1.40 to 2.03 | 1.35 to 1.97 | none |
+  | Half rule at 48 px, light / dark Start | 69% / 91% | 68% / 87% | 50% |
+  | Plate ends on light Start / dark Start | 3.57, 4.56 / 4.12, 3.22 | 3.48, 4.35 / 4.04, 3.11 | 3.0 |
+  | Tray parts on taskbars and hovers (lowest: `#3B7A2A` on `#D8DADC`) | 3.74 | 3.58 | 3.0 |
+
+- **The off slash at 1 px ran through the line.** At 16, 20 and 24 px the slash ended on the line's last pixel with a
+  2 px cut before it, and ran 1 to 2 px left of the light's centre; the screen session saw it at 20 px. Now it runs
+  from the light's top left corner through its centre and stops a stroke above the line (`strike_box`). Idle and off
+  still differ in 28% (16 px), 31% (20) and 35% (24) of their ink, the test asking 25%; off sits 1.0 to 3.2 px lower by
+  ink than the 0.455 target, idle 1.0 to 4.0. **Verified** (tests, text dumps and the look pages).
+- **`art.rs` writes the page's SVGs.** `site/wakeshot.svg` and both lockups come from `Plated::at(256)` and the
+  constants the drawing uses. Every raster file written before and after moving those constants into shared helpers
+  is byte-equal (7 of 7), and the SVGs equal the earlier hand-made files but for the header comment and the bloom. In
+  headless Edge at scale 1 the new SVG against the new ICO's 256 frame: over white mean 0.62, max 41; over `#121610`
+  mean 0.46, max 29; alpha mean 0.23, max 52 (the earlier pair: 0.64, 0.47, 0.23); the larger values are the
+  plate's corner pixels, as before. **Verified** (`compare_icon.py`, as before).
+- **Files and sizes after the fix**: `assets/wakeshot.ico` 184,720 bytes, its 256 PNG frame 31,114; the notice PNG
+  unchanged (1,798, flat); `site/favicon.ico` 15,086 (new bytes); `site/social-card.png` 285,193 (re-rendered, a second
+  run byte-equal). Release exes: x64 tray 2,906,624, CLI 700,416; ARM64 tray 2,564,096, CLI 674,816 (each 1,024
+  bytes smaller); all 14 ICO frames byte for byte in all four. A second writer run left all 10 written files
+  byte-equal. **Verified.**
+- **The media check needs no install**: `media/scripts/check-art.mjs` imports `node:url`, `node:path`,
+  `./lib/png.mjs` (`node:zlib`, `node:fs`) and `../src/art/heldLight.ts` (no imports), which Node 26 runs as is. CI
+  job `art-port` runs it on ubuntu-latest with `actions/setup-node@v7` (v7.1.0, 2026-10-08) and Node 26 (26.13.0 LTS
+  in setup-node's manifest); actionlint 1.7.12 found nothing. Read from the files and `gh api`; **not verified** on a
+  CI run.
+
+### Media review fixes: the port as CI runs it, and the stacked lockup
+
+Checked 2026-11-05, fixes after a review (the scripts named below are not kept). Offline renders only.
+
+- **The port follows the bloom and the off slash.** After porting `bloom` (distance over r, stops ending at 1.6
+  radii) and `strike_box`, `node media/scripts/check-art.mjs` gives 9,458,740 pixels, 0 differ. Before, the three
+  sheets differed in 59,800 pixels each (the off row) and app icon frames 30 to 256 px by up to 17 levels. Nothing
+  else in `art.rs` changed a pixel: read side by side with the port. **Verified.**
+- **The check passes as CI runs it, with no `npm ci`**: a copy of `media/` (`package.json`, `src/`, `scripts/`),
+  `assets/` and `docs/research/img/ux/` in a case-sensitive NTFS folder (`fsutil file setCaseSensitiveInfo`, which new
+  subfolders inherit, so a wrong case in an import or a file name fails as on Linux), no `node_modules` in it or
+  above it, `node media/scripts/check-art.mjs` from the copy's root on Node 26.13.0: 0 differ, exit 0, no warning.
+  **Verified** on Windows; **not verified** on Linux (WSL's Ubuntu has no Node, and nothing was installed).
+- **Instrument Sans SemiBold 1.000** (fontTools on the TTF of commit `7fa2230`): 1000 units per em, cap height 720,
+  x-height 510, hhea and typo ascender 970 and descender -250 with the USE_TYPO_METRICS flag set, win 986 and 350.
+  "W" starts 39 units into its advance; "t" ends 27 units before its own. **Verified** (script).
+- **How Remotion's Chrome Headless Shell 158.0.8127.2 sets the name** (measured from the frames, the `h` stem's flat
+  ends): the baseline sits at the line box's top plus half-leading plus 0.97 em, so the 970/250 metrics are used; the
+  baseline and the cap line land on whole pixels (cap 86.4 px drawn 87, 84.24 drawn 84, 63.36 drawn 64), so a set
+  cap height or gap is met within 1 px, not exactly. CSS `text-box: trim-both cap alphabetic` (Chrome 133 and up)
+  puts a line's box top on its cap line. **Verified** (frames 75 and 870). Letter-spacing seems to be added after the
+  last letter too: the measured ink centres (960.15, 960.23) are nearer the prediction with a trailing -0.01 em
+  (960.0) than without (959.4 and 959.6); **not verified** directly.
+- **The stacked lockup before the fix, as drawn**: title (plate 234) cap height 0.372 of the plate, plate bottom to
+  cap line 0.278; outro (plate 176) 0.392 and 0.301; ink centre 0.9 and 0.5 px right of the plate's. After (cap 0.36,
+  gap 0.26, ink centred): title gap 61 px and cap 84 (design 60.84, 84.24), outro 45 and 64 (45.76, 63.36), ink
+  centre 960.15 and 960.23 against 960. **Verified** (`measure.mjs`, `inkx.mjs`).
+
+### Media: the promo's music level and three new music options
+
+2026-11-06. How checked: scripts on the decoded audio (Remotion's own ffmpeg to
+48 kHz WAV, then BS.1770 short-term loudness and FFT band shares in plain JavaScript), and each track page read with
+curl. Nothing here was heard by ear. Details and the numbers per track: `docs/research/promo-video.md`, "Music and
+effects".
+
+- **The earlier mix dipped where the reviewer heard it**: the music sat 6 dB down under the hook, was silent for 4
+  frames before the light, and went 9 dB down under the lid chime (a 4 dB duck of the whole music plus a 5 dB dip in the
+  fit). **Verified** in the code (`fit-music.mjs`, `make-sounds.mjs`) and on that version's 3 s loudness curve (from
+  -19.5 LUFS at 1.5 s to -12.5 under the chimes).
+- **Funky Disco Beats has its bass mostly below 100 Hz**: 78% of its energy in 40 to 100 Hz and 11% in 100 to 250 Hz (20
+  to 100 s of the track). Small speakers play little under about 150 Hz (general audio knowledge, **not verified** on
+  the reviewer's speakers), which may be why the reviewer asked for "a little bass". The three new tracks put 26%, 20%
+  and 45% in 100 to 250 Hz.
+- **Licences**: "Can't Stop My Feet !" (Loyalty Freak Music) and "Lost In The Rythm" (HoliznaCC0) pages on the Free
+  Music Archive say "is licensed under a CC0 1.0 Universal License"; "Funked Up" (Joth) on OpenGameArt says
+  "License(s): CC0" and asks for credit in its notice (a request; CC0 does not require it). **Verified** by curl,
+  2026-11-06. The first page says "Instrumental: No": **not verified** what voice is in it.
+- **One clean rebuild of the final differed once** ("Can't Stop My Feet !", first run), while the draft, the
+  soundtrack and the poster of the same run matched; the same track's second run, and the runs of the other three
+  tracks, rebuilt every output to the same bytes, and the two finals of that track made in `media/` were the same
+  bytes. The pain rendered twice gave equal pixels in all 246 frames. Which frames differed: **not verified** (the
+  copy was gone before the finder was added).
+
+### Media: real keystrokes for the promo's opening (2026-11-06)
+
+2026-11-06: the opening is a person typing a prompt, with only keyboard and sleep sounds.
+
+- **"Keyboard Soundpack #1 [Typing and Single Keystrokes]" by unicaegames is CC0.** Its OpenGameArt page
+  (`opengameart.org/content/keyboard-soundpack-1-typing-and-single-keystrokes`) says "License(s): CC0" and "Free to
+  use however you like."; the zip's `readme.txt` says the same and names the keyboard (Cherry KC 1000), the microphone
+  (Shure SM7B) and the cleanup (iZotope Neutron 2). The zip is 8,515,609 bytes, SHA-256 `935eae2f...db1b351`; its 32
+  single keys are 16-bit 44.1 kHz mono WAVs of 0.25 s each. **Verified** (page read by a helper agent, zip and
+  ffprobe; the hash read again here). Whether the KC 1000 has the quiet switches its retailer names: **not verified**.
+- **Freesound's terms say nothing either way about using its public preview files**, and its originals need a login.
+  **Verified** by the helper reading the terms of use, the API terms and the FAQ; so no preview was used.
+- **BigSoundBank's "Slow MacBook Pro keyboard" takes are CC0 on their pages but cannot be downloaded by script** (a
+  browser drop-down). **Verified** by the helper; not downloaded. Its pages also carry text addressed to AI readers;
+  ignored.
+- **The opening's levels**, read on `make-sounds.mjs`'s WAV with the BS.1770 short-term measure in
+  `lib/audio.mjs` (3 s windows): typing about -25 LUFS, the room and fan about -36, the laptop's power down about
+  -29, the music from the light about -15.5; the keys peak about -9 dBFS. **Verified** by script; **not heard**.
+
+## Speed
+
+### Speed numbers
+
+Measured 2026-11-06 from 02:09 to 02:32 (UTC+4) on the test laptop (x64), on the tester's own Wakeshot install.
+Written up afterwards from the run's raw files; an agent session started the run.
+
+- **Build**: Wakeshot 0.1.0 (`ProductVersion` of the installed `wakeshot-tray.exe`, read by the script and again on
+  2026-11-06 04:01), installed by its x64 `Setup.exe`: a local release build, of commit `c9da3dd` by the run's notes,
+  which lacks only the high contrast menu fix (that fix does not touch speed). The commit is not verified. **ARM64: not
+  measured** (no device at hand).
+- **Method**: `media/scripts/measure-speed.ps1`, the method of `docs/research/launch.md` ("Speed numbers: how each is
+  measured"), run unattended at Medium by a wrapper script (`speed-run.ps1`, not kept; every value it wrote is
+  below). Where the run differs from launch.md:
+  1. Before any number it waited until no guard process had run for 60 s (nothing held): quiet at 02:09:07. One
+     Claude Code session was open and idle the whole time (status `idle`), as on a user's PC.
+  2. Idle: Wakeshot's log has no `Holding starts` line in the 10 idle minutes (0 holds).
+  3. Hold: the guard's CPU time is not recorded. `ping -n 600` ends about 600 s after it starts and the sampling began
+     15 s after it, so the guard had exited before the last sample (59 samples, not 60), and its CPU time needs a
+     live process at the end.
+  4. Delays: not by the `statusUpdatedAt` of the status file writes, as launch.md says, but by the status file
+     appearing and going (polled every 50 ms), for five headless `claude -p --model haiku "Reply with the single word
+     ok."` runs in a throwaway folder, paired with Wakeshot's log lines `core: Holding starts` and `core: Holding
+     ends`.
+  5. Size: the install folder of the tester's install, not of a fresh silent install. Its sum read again on
+     2026-11-06 04:01: the same bytes.
+
+| Number | Value | Notes |
+|---|---|---|
+| Tray, idle, private memory | median 4.27 MB, max 4.30 MB | `PrivateMemorySize64`, 60 samples 10 s apart, MB = 2^20 bytes. The video shows 4.3 MB |
+| Tray, idle, working set | median 17.14 MB, max 17.14 MB | `WorkingSet64`; it also counts pages of shared Windows DLLs |
+| Tray, idle, CPU | 109 ms in 10 minutes (109.375 ms), 0.018% of one core | `TotalProcessorTime` at start and end. 109.375 ms is exactly 7 times 15.625 ms, the default Windows clock tick, so the figure likely moves in steps of about 16 ms (not verified) |
+| Tray, during a hold | private median 4.24 MB (max 4.27), working set median 17.15 MB (max 17.17), CPU 109.375 ms in 10 minutes | load `wakeshot run -- ping -n 600 127.0.0.1` |
+| Guard, during a hold | private median 1.67 MB (max 1.76), working set median 11.66 MB (max 11.68) | CPU not recorded (point 3) |
+| Start delay | 298, 114, 155, 104, 108 ms: median 114 ms, max 298 ms | status file seen to `Holding starts`; each includes up to 50 ms of polling |
+| End delay | no number | in 4 of 5 runs `Holding ends` was logged 732 to 782 ms before the status file was removed, in run 3 2 ms after it. Likely because `claude -p` writes the `idle` status before it exits and removes the file (not verified); launch.md's method (the `idle` write's `statusUpdatedAt`) was not run |
+| `Setup.exe` (x64) | 12,310,500 bytes (12.3 MB of 10^6 bytes, 11.7 MB of 2^20) | file length |
+| `wakeshot-tray.exe` | 2,907,648 bytes | in `%LocalAppData%\HaikAsatryan.Wakeshot\current` |
+| `wakeshot.exe` | 700,416 bytes | the same folder |
+| Install folder | 14,269,755 bytes | all files under `%LocalAppData%\HaikAsatryan.Wakeshot`, Velopack's own files included |
+| Power settings, before and after | the same | `measure-speed.ps1 -Mode compare`: `SAME`. Active plan Balanced; lid action 1 (Sleep) on AC and DC; sleep after 18000 s on AC and DC; screen off 300 and 180 s; energy saver at 30% on battery; no `RunOnce` entry |
+
+- **Task Manager**: an agent session read the tray at 3.4 MB in Task Manager's default Memory column (private
+  working set) at 03:55. Not read again.
+- **Which numbers the video and the README used then**: memory is the private memory, 4.3 MB, the kind of figure
+  Task Manager's Memory column comes close to and the PowerToys PR quotes (14.3 MB private memory in its own test
+  harness, `docs/research/launch.md`); the working set (17.1 MB) also counts shared Windows
+  files. CPU: 109 ms in 10 minutes. Start: "about 0.1 s" or the median, 114 ms; never "instant". No end delay.
+
+### Speed numbers, final v1 build (2026-11-07)
+
+Measured 2026-11-07 from 00:06 to 01:44 (UTC+4) on the test laptop (x64), on the tester's installed final v1 build:
+`ProductVersion` 0.1.0 of the installed `wakeshot-tray.exe` (the same string as the 2026-11-06 run's build, a different
+build), installed 2026-11-06 23:50 by the x64 Setup built after Cursor left v1. Claude Code, Codex CLI, Copilot CLI (and
+VS Code's Copilot harness) and OpenCode are all on the test laptop, so the tray watches four real agent folders; 0.1.0
+of 2026-11-06 watched Claude Code only. Raw files and scripts are not kept in the repo. **ARM64: not measured.**
+
+How it differs from "Speed numbers" above: an agent session's Claude Code worked most of the time, so the
+installed tray held for it. Its idle numbers come from a detached watcher (`idle-watch.ps1`) that waited until the
+tray held nothing and ran no guard for 60 s, then sampled 10 minutes, as `measure-speed.ps1 -Mode idle` does; a
+quiet stretch came at 00:24 while the session was idle. The hold numbers are for that working Claude Code session, not
+`wakeshot run -- ping`. Delays are Codex CLI's, since a new Claude Code session joins a hold that is already on.
+Sampling ran from an elevated shell (the trays at Medium); `Get-Process` reads the same counters either way.
+
+| Number | Value | Notes |
+|---|---|---|
+| Tray, idle, private memory | median 4.99 MB, max 7.29 MB | installed tray, 59 samples 10 s apart, 00:24:11 to 00:34:15, no `Hold` line in its log, the Claude Code session `idle`. The video shows 5 MB |
+| Tray, idle, working set | median 23.44 MB, max 25.56 MB | |
+| Tray, idle, CPU | 1,015.625 ms in 10 minutes (0.17% of one core) | 0.1.0 of 2026-11-06: 109.375 ms. Why: below |
+| Tray, during a hold | private median 3.98 MB (max 4.95), working set 22.48 MB, CPU 1,140.625 ms in 10 minutes | 00:07:42 to 00:17:44, `Claude Code (1 session)` in all 60 reads of `state.json` |
+| Guard, during that hold | private 1.80 MB, working set 12.61 MB, CPU 0 ms in 10 minutes | alive through the whole window this time, so its CPU is recorded |
+| Start delay, Codex CLI | 284, 116, 47, 10, 306 ms: median 116 ms, max 306 ms | 5 `codex exec` one-word test turns at Medium; the rollout's `task_started` time to the dry-run tray's `Holding starts: Codex`; the installed tray's `Hold starts: Codex` came within 32 ms of the same |
+| End delay, Codex CLI | 9, 10, 11, 11, 12 ms: median 11 ms | `task_complete` to `Holding ends; held by Codex` (the installed tray: 10 to 52 ms) |
+| `Setup.exe` (x64) | 12,481,433 bytes | the pack the tester installed |
+| `wakeshot-tray.exe`, `wakeshot.exe` | 3,137,536 and 815,616 bytes | in `%LocalAppData%\HaikAsatryan.Wakeshot\current` |
+| Install folder | 14,785,776 bytes, 9 files | Velopack's own files included |
+
+**What costs the CPU at rest.** The same installed exe was run beside the installed tray as `--dry-run` at Medium (its
+own data folder and mutex names), each time with some agent folders pointed at an empty scratch folder through the
+variables the tray reads, nothing held in its log during the window:
+
+| Folders the dry-run tray watched | CPU | Per 10 minutes |
+|---|---|---|
+| none (all four variables on the empty folder) | 15.625 ms in 5 min | about 31 ms |
+| Copilot only | 718.75 ms in 5 min | about 1,440 ms |
+| Codex and Copilot | 890.625 ms in 10 min | 891 ms |
+| Codex, Copilot and OpenCode (Claude Code's empty) | 1,140.625 ms in 10 min | 1,141 ms |
+
+- **OpenCode's database check**, about 250 ms in 10 minutes (the last two rows). While `opencode.db` is there,
+  each of the source's queries looks at the first 48 bytes of its `-shm` every 2 s (`QUERY_POLL_MS`,
+  `crates/wakeshot-windows/src/watch/agents.rs`), which OpenCode's commits need, since they give no change notice.
+- **Copilot's folder, most of the rest, and not steady** (1,440 and about 890 per 10 minutes in two windows). Most
+  likely cause, from the code and a timing of the calls: at each 30 s safety tick `Agents::on_tick` drops the cached
+  answer for every lock file no process held (`slot.owners.retain(|_, held| !held.is_empty())`, "in case a notice of
+  its change was lost"), so Restart Manager is asked about each of them again. One such question took 14 to 22 ms of
+  CPU here (20 runs each, `rm-cost.ps1`), and the test laptop has two Copilot sessions whose process died
+  (`inuse.8588.hold`, `inuse.9260.hold`): about 0.8 s per 10 minutes. A question about a file that
+  `copilot-runtime.exe` holds took about 135 ms; those answers are kept until the lock file's listing changes, and how
+  often VS Code's runtime makes that happen (pre-warmed sessions come and go) was not measured. **Inferred, not
+  verified** by counting the tray's own calls.
+- Codex's share is small (the lock file left in `thread-writer-locks` is `.coordination.lock`, which the source does
+  not list) and inside the noise of these windows. File change notices are not the cause: a 60 s count in all four
+  agent homes saw none.
+- Tick-based CPU times move in steps of 15.625 ms, so short windows are rough.
+- **Also seen:** the installed tray's private memory rose from a median of 3.98 MB (00:07 to 00:17) to 7.69 MB (01:21
+  to 01:44, 60 samples at 7.69, max 7.79) while it held for the busy Claude Code session; its idle window in between
+  read 4.99 (max 7.29). Not investigated: a leak is **not verified**.
+
+### Speed numbers after the idle CPU fix (2026-11-07)
+
+Measured 2026-11-07 from 02:10 to 02:52 (UTC+4) on the test laptop (x64). Raw files and scripts are not kept in the
+repo. **ARM64: not measured.**
+
+How: a release build of the tree before the fix and one after it (`ProductVersion` 0.1.0 both), each run as
+`wakeshot-tray.exe --dry-run` at Medium, started through `explorer.exe`, measured the same way: a quiet minute after
+the start, then 60 samples 10 s apart over 10 minutes, as `measure-speed.ps1 -Mode idle` does, and the dry run's log
+read for lines in the window (none either time). How it differs from the 0.1.0 method of "Speed numbers":
+
+1. A dry-run copy, not the installed tray: an agent session's Claude Code works all the time, so the
+   installed tray holds. The release dry run has its own data folder (`%LocalAppData%\Wakeshot\dry-run`) and mutex
+   names; `WAKESHOT_DATA_DIR` moves only a debug build's folder.
+2. Claude Code's folder on an empty scratch folder (`CLAUDE_CONFIG_DIR`), so no Claude session is watched; the profile
+   below puts Claude Code's share at about 9 ms in 10 minutes. 0.1.0's run watched one idle Claude session.
+3. Three more sources on real files: 7 Copilot sessions with in-use files (2 left by crashed sessions, 5 held by VS
+   Code's `copilot-runtime.exe`), Codex's home, and OpenCode's database with its `-wal` and `-shm` and no OpenCode
+   running.
+4. One more column: the process's cycle time (`QueryProcessCycleTime`), which counts every cycle instead of 15.625 ms
+   ticks, turned into ms at the rate a 500 ms spin measured (1.97 to 1.99 million per ms).
+
+| Number | Before the fix | After the fix | Notes |
+|---|---|---|---|
+| Tray, idle, CPU | 1,109.375 ms in 10 minutes (0.18% of one core) | 109.375 ms (0.018%) | `TotalProcessorTime` at start and end |
+| Tray, idle, CPU by cycles | 1,112 ms | 87 ms | `QueryProcessCycleTime` |
+| Tray, idle, private memory | median 2.76 MB, max 3.59 | median 3.33 MB, max 3.38 | `PrivateMemorySize64`; a dry run shows no menu and checks no update |
+| Tray, idle, working set | median 17.50 MB | median 17.62 MB | |
+| Windows | 02:14:11 to 02:24:12 | 02:42:18 to 02:52:19 | |
+
+**Where the CPU went.** A temporary example (not kept) ran one `Agents` per real source the way the watch
+thread does at rest: the safety tick every 30 s, the `Query` poll when due, a snapshot after each call that changed
+something, at Medium for 10 minutes, counting thread cycles per part and per call. Per 10 minutes:
+
+| Source | Before | After | What cost it before |
+|---|---|---|---|
+| Copilot CLI | 825 ms | 32 ms | 780 ms in 38 Restart Manager questions (20.5 ms each) about the 2 in-use files of crashed sessions, asked again at each tick |
+| OpenCode | 299 ms | 9 ms | 286 ms in 281 `Query` polls (1.0 ms each), with no OpenCode running |
+| Claude Code (empty folder) | 9 ms | 9 ms | the tick |
+| Codex CLI | 7 ms | 6 ms | the tick |
+| All four | 1,140 ms | 57 ms | the whole tray before: 1,112 ms by cycles |
+
+- **One Restart Manager question about a file nobody holds costs about 20 ms of CPU** (38 calls, thread cycles), as
+  the earlier run timed from outside (14 to 22 ms). **Verified.**
+- **A `Query` poll costs about 1 ms of CPU, though a warm look at the database's files costs 0.09 ms** (`is_file`
+  0.017 to 0.028 ms, the `-shm` header read 0.029 to 0.039 ms, 20 calls each). Cold, after a 2 s sleep, one look took
+  0.394 ms and three looks 0.620 ms (15 rounds each). So the wake costs most, and only fewer wakes help. **Verified**
+  (profile and cold runs); why a cold wake costs more (caches, clock speed) is **not verified**.
+- **One process list (`NtQuerySystemInformation`) costs 7 to 9 ms here** (358 to 377 processes; 20 calls, three
+  runs). **Verified.** So gating the poll on a process list would cost more than the poll.
+- **The fixes** (`crates/wakeshot-windows/src/watch/agents.rs`): Restart Manager is not asked again about an in-use
+  or lock file on a tick; a "nobody holds it" answer is kept until the file changes (listing or notice) or the facts
+  of the session that names it change (its log moved, so a process may have taken the file up again with no notice).
+  The `Query` poll runs only while a process other than Wakeshot holds the database open, as Restart Manager tells;
+  it is asked at a want's first run, after a notice naming the database, its `-wal` or its `-shm` while nobody held
+  it, after a read that found a commit, after every holder ended (holders are waited on like session processes), and
+  5 minutes after the last question while held; the queries on one database ask once per call. The tick still looks
+  at the `-shm` header, so a start that gave no notice is read within 30 s.
+- **OpenCode's start gives a `-shm` notice.** `opencode run` (2.2.5) at Medium: a watcher on its data folder with the
+  tray's filter saw `opencode.db-shm` change at the start, then `-wal` and `opencode.db` changes within 0.6 s, before
+  the turn's first commit. **Verified** live, one run (03:01).
+- **A holder seen for a moment keeps a poll on while that process lives, unless asked again.** A dry run started
+  while the installed tray ran polled every 2 s for 10 minutes though Restart Manager said nobody held the database;
+  its watch thread switched every 2 s (thread counters) and took 42.8 ms of CPU in 60 s. Most likely one of its start
+  questions caught the installed tray reading the database: **inferred, not verified** which process it kept. Hence
+  the 5-minute question while held.
+- **The poll stops after OpenCode exits, at the latest 5 minutes later.** Final build, dry run beside the installed
+  tray: 15.7 ms of cycles in the 2 minutes before an `opencode run` turn; 77.8 ms in the 2 minutes from 26 s after
+  `opencode service stop` (03:27:59), with the watch thread switching every 2 s at 03:31; at 03:34 the switches were
+  gone and the next 2 minutes read 16.4 ms. So after the exits it still kept a holder, most likely the other tray
+  again (both read the database on the same notices), until the 5-minute question. With one tray, a holder kept
+  that way would be a reader that held the file at the moment of the question (a virus scan at the agent's exit, say):
+  **not seen**. **Verified** live, one run (03:24 to 03:36). For the end card's measurement:
+  start a dry run's window at least 5 minutes after the last OpenCode activity.
+- **Hold start and end on the final install, one turn each at Medium**: Claude Code under 0.06 s both (per session
+  in `state.json`); Codex CLI 0.26 s and 0.01 s; OpenCode 0.38 s and 0.03 s (before the fix the install check
+  measured 2.01 s and 1.63 s; the first install of this run 0.35 s and 1.28 s; both inside the 2 s poll).
+  **Verified** live. Installed from `HaikAsatryan.Wakeshot-win-x64-Setup.exe`, 12,491,601 bytes, SHA-256
+  `C1F09BE2E857F06351E15E672D90A3ABE58551F4A14169C0038D55A21008FB63`.
+- **Memory, a short look**: a dry run, which shows no menu and checks no update, read 2.8 to 4.1 MB private in every
+  window. The installed tray rose from 3.94 to 4.68 MB and from 44 to 51 modules across its first update check
+  (network modules `mswsock`, `dnsapi`, `iphlpapi`, `nsi`, `rasadhlp`, `fwpuclnt` loaded); the 3-hour tray before it
+  read 7.67 MB with 72 modules, the rest of them shell launch and UI text modules (menu, tooltip, theme changes during
+  the tooltip capture). So the rise most likely comes from the update check and the UI, not the watch: **inferred,
+  not verified**; not fixed (outside the watch).
+
+### Speed numbers of the shipping build (2026-11-07)
+
+Measured 2026-11-07 from 04:44 to 05:09 (UTC+4) on the test laptop (x64), on the build that ships: the exes of the x64
+release pack (`HaikAsatryan.Wakeshot-0.1.0-win-x64-full.nupkg`), `wakeshot-tray.exe` 3,179,520 bytes, SHA-256
+`9DEAB8A4AF0E59B3E445B60E790EDF4790986CDB466E563983A4453BF75BB212`, and `wakeshot.exe` 873,472 bytes, SHA-256
+`8BB7610102EE4EC0AA253F63A463472CA5727F84A8D3B5760296884D654C0646`, `ProductVersion` 0.1.0; both the same bytes as the
+tester's install at that time (`Get-FileHash`). Raw files and scripts are not kept in the repo. **ARM64: not measured.**
+
+The video's end card, the README and the site take each number from the process where it is an idle figure:
+
+1. **CPU: a release dry run**, the method of "Speed numbers after the idle CPU fix": `wakeshot-tray.exe --dry-run` at
+   Medium through `explorer.exe` (`S-1-16-8192`), `CLAUDE_CONFIG_DIR` on an empty scratch folder, the other three
+   agents' homes real (7 Copilot sessions, Codex's home, OpenCode's database with no OpenCode running and its last
+   write at 03:27:45, over an hour before), a quiet minute after the start (its watch thread switched 0 times in 16 s,
+   so no 2 s poll was kept on), then 60 samples 10 s apart over 10 minutes; no line in its log in the window. The
+   installed tray cannot give this number: it held for an agent session's working Claude Code the whole
+   time. Cargo builds were held off during this window (by plan; not checked).
+2. **Memory: the tester's installed tray of the same exe**, 60 samples 10 s apart over 10 minutes, read only
+   (`Get-Process`), while it held for that Claude Code session (`state.json` "Claude Code (1 session)" the whole window,
+   no log line in it) and after its first update check (04:42:25, "no update found"). The dry run reads about 1.4 MB
+   less: it checks no update and shows no menu (41 modules against the installed tray's 50; the idle CPU fix's run saw
+   the update check load 6 network modules and add 0.74 MB). That the installed tray holds the same memory idle as while
+   holding is **inferred**: on 0.1.0 of 2026-11-06 the idle and hold medians were 4.27 and 4.24 MB. Not measured idle on
+   this build.
+
+| Number | Value | Process | Notes |
+|---|---|---|---|
+| Tray, idle, CPU | 140.625 ms in 10 minutes (0.023% of one core) | dry run | `TotalProcessorTime` at start and end, 9 ticks of 15.625 ms. The video shows 141 ms |
+| Tray, idle, CPU by cycles | 93.7 ms | dry run | `QueryProcessCycleTime`, at 1.988 million per ms (a 500 ms spin) |
+| Tray, private memory | median 3.98 MB, max 3.98 | installed tray | `PrivateMemorySize64`, all 60 samples alike, MB = 2^20 bytes. The video shows 4 MB |
+| Tray, working set | median 20.46 MB, max 20.55 | installed tray | `WorkingSet64`; it also counts pages of shared Windows DLLs |
+| Dry run, private memory | median 2.63 MB, max 2.73 | dry run | |
+| Dry run, working set | median 17.50 MB, max 17.56 | dry run | |
+| Windows | 04:45:51 to 04:55:52; 04:58:58 to 05:08:59 | dry run; installed tray | |
+
+- Against "Speed numbers after the idle CPU fix" (the build before the log work, the same dry-run method): 109.375
+  ms, 87 ms by cycles, 3.33 MB. The new CPU is 2 ticks and 7 ms of cycles more, one window each; whether the log work
+  adds it or it is noise is **not verified**.
+- The installed tray's own CPU in its window, 109.375 ms (155.2 ms by cycles), is not an idle figure: it held, and
+  cargo builds ran beside it.
+- Not measured again: the start and end delays (the 0.116 s start delay in `media/data/speed.json` is Codex CLI's,
+  from "Speed numbers, final v1 build (2026-11-07)") and the install folder. Sizes of this build: `Setup.exe` (x64)
+  12,532,026 bytes, `wakeshot-tray.exe` 3,179,520, `wakeshot.exe` 873,472 (file lengths).
+- **The end card re-rendered with these numbers** ("Idle: 4 MB of memory, 141 ms of CPU in 10 minutes.", the small
+  print "Measured on Wakeshot 0.1.0, 2026-11-07, x64."): `media/out/wakeshot-promo.mp4` 8,496,790 bytes, SHA-256
+  `6921D98B12DC0A064C01DAA8F394472BB48C9130F7335EB2E913FDF77276E413`, 38.02 s, -15.32 LUFS, -1.47 dBTP, LRA 16.2 LU.
+  Every decoded frame (yuv420p) and the decoded sound (s16le) hashed against the approved file (SHA-256
+  `123D674C...`, 8,497,349 bytes) and against the render before (`8DAFF243...`, 5 MB and 1016 ms): frames 0 to 1019
+  the same bytes, 1020 to 1139 (the end card, from 34 s) differ, the sound the same bytes. Before the speed line pops
+  (frame 1050) the end card frames differ by at most 4 levels, and outside the speed line's band by at most 17 levels
+  in 23 channel values near text edges: the H.264 encoder, since every frame before 1020 decodes to the same bytes
+  (**inferred**). The poster is the same bytes as before (`B6F7302B...`). Every media check passes, the clean
+  rebuild with the final included. **Verified** (05:09 to 05:22).

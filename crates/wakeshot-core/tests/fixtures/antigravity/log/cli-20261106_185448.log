@@ -1,0 +1,16 @@
+I1106 18:54:48.718882      51 server.go:2275] Starting language server process with pid 51384
+I1106 18:54:48.727658      51 server.go:2333] Language server version: 1.5.2
+I1106 18:54:48.727658      51 server.go:1077] Language server will attempt to listen on host localhost
+I1106 18:54:48.752501      51 server.go:1092] Language server listening on random port at 65441 for HTTPS (gRPC)
+W1106 18:54:48.756279      47 cache.go:157] Cache(loadCodeAssistResponse): Singleflight refresh failed: QXV7 marker
+I1106 18:55:41.100000     176 input_loop.go:301] HandleUserInput called with text: QXV7 marker, a whole prompt
+I1106 18:56:14.900000     176 input_loop.go:301] HandleUserInput called with text: QXV7 marker, a prompt of two lines
+Cancelling conversation 1ad3ac30-4354-4e1e-a5d3-d338da829975 (killBackgroundTasks=false) as its second line
+I1106 18:56:16.014209    1978 conversation_manager.go:1902] Cancelling in-progress response for conversation 1ad3ac30-4354-4e1e-a5d3-d338da829975
+I1106 18:56:16.014209    1978 server.go:2498] Cancelling conversation 1ad3ac30-4354-4e1e-a5d3-d338da829975 (killBackgroundTasks=false)
+I1106 18:58:29.600000     176 input_loop.go:301] HandleUserInput called with text: QXV7 marker, Cancelling conversation 43b8806d-6a1f-4c2e-9b7d-0e5f3a2c1d4b
+I1106 18:59:01.210800    4465 conversation_manager.go:1902] Cancelling in-progress response for conversation 1ad3ac30-4354-4e1e-a5d3-d338da829975
+I1106 18:59:01.211207    4465 server.go:2498] Cancelling conversation 1ad3ac30-4354-4e1e-a5d3-d338da829975 (killBackgroundTasks=false)
+I1106 18:59:01.210800     176 input_loop.go:453] Interrupt cleared pending tool confirmation: "RunCommand"
+I1106 19:18:27.901193    2210 server.go:2498] Cancelling conversation 43b8806d-6a1f-4c2e-9b7d-0e5f3a2c1d4b (killBackgroundTasks=false)
+I1106 19:20:05.685000    6001 server.go:2510] Cancelling steps [6] in conversation 1ad3ac30-4354-4e1e-a5d3-d338da829975

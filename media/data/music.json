@@ -1,0 +1,9 @@
+{
+  "note": "The music under the video: Haik's pick of 2026-11-06 (option 4 of four new CC0 options; it replaced the pick of 2026-11-05). make-sounds.mjs fits it to the video on every build (scripts/lib/fit-music.mjs) with these numbers; set file to null for the code bed. Licence and source: CREDITS.md.",
+  "file": "music/funky-disco-beats.ogg",
+  "bpm": 110.25,
+  "lift": 45.75,
+  "title": "Funky Disco Beats to Boogie/Woogie to",
+  "author": "Fupi",
+  "page": "https://opengameart.org/content/funky-disco-beats-to-boogiewoogie-to"
+}

@@ -1,0 +1,39 @@
+# Editor settings that match the files as they are, so an editor does not fight rustfmt, git or the checks.
+# https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# The line ending Windows shells expect, as .gitattributes checks these out.
+[*.{ps1,cmd,bat}]
+end_of_line = crlf
+
+# rustfmt keeps code within its default 100 columns and does not read this file; comments are wrapped by hand at 120.
+[*.rs]
+indent_size = 4
+max_line_length = 120
+
+[*.{ps1,py,toml}]
+indent_size = 4
+max_line_length = 120
+
+[*.{yml,yaml,css}]
+max_line_length = 120
+
+# Two trailing spaces are a line break in Markdown, so trimming could change a page (no doc uses one today).
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = 120
+
+# Data captured live from the agents, kept byte for byte: some files have no final newline, as captured.
+[crates/*/tests/fixtures/**]
+charset = unset
+end_of_line = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset

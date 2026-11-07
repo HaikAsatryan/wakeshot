@@ -1,0 +1,19 @@
+# Text files: LF in the repo and on checkout, so every machine and CI see the same bytes.
+* text=auto eol=lf
+
+# Windows shell scripts: CRLF on checkout, the line ending Windows shells expect.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Images, icons, sound, video and fonts: never convert line endings, never show a text diff.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.wav binary
+*.ogg binary
+*.mp4 binary
+*.woff2 binary

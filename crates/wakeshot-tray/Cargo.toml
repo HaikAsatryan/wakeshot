@@ -1,0 +1,34 @@
+[package]
+name = "wakeshot-tray"
+description = "Wakeshot tray app: keeps the PC awake only while something needs it."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+wakeshot-core.workspace = true
+wakeshot-windows.workspace = true
+# The tray only, and only `velo.rs` names it: it brings over 90 packages and needs clang for ARM64 (`ring`), and the
+# CLI needs none of it.
+velopack.workspace = true
+# Never named in code: only the pin matters, it picks the IDNA stub for velopack's `url` (root `Cargo.toml`).
+idna_adapter.workspace = true
+
+# The exe calls Windows only through `wakeshot-windows`, so no feature is added here: feature unification gives it, and
+# its tests, every feature that crate turns on.
+[dependencies.windows]
+workspace = true
+features = ["Win32_Foundation"]
+
+[dev-dependencies]
+wakeshot-core = { workspace = true, features = ["test-support"] }
+wakeshot-windows = { workspace = true, features = ["test-support"] }
+
+[build-dependencies]
+embed-resource.workspace = true

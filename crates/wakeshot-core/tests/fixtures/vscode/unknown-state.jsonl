@@ -1,0 +1,3 @@
+{"kind":0,"v":{"version":3,"creationDate":1793959200000,"initialLocation":"panel","inputState":{"attachments":[],"mode":{"id":"agent","kind":"agent"},"inputText":"a draft that was never sent","selections":[],"contrib":{}},"responderUsername":"GitHub Copilot","sessionId":"0b1c2d3e-0000-4000-8000-000000000001","requests":[],"pendingRequests":[]}}
+{"kind":2,"k":["requests"],"v":[{"requestId":"request_1","timestamp":1793959205000,"message":{"text":"fix the build","parts":[{"kind":"text","text":"fix the build"}]},"variableData":{"variables":[]},"response":[],"agent":{"id":"github.copilot.editsAgent"},"modelId":"copilot/auto","modelState":{"value":0}}]}
+{"kind":1,"k":["requests",0,"modelState"],"v":{"value":9}}

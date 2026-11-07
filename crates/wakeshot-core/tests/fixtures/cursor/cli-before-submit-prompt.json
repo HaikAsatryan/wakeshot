@@ -1,0 +1,12 @@
+{
+  "conversation_id": "e4b7a1c9-2d3f-4a6b-8c9d-1e2f3a4b5c6d",
+  "generation_id": "0c1d2e3f-4a5b-4c6d-8e9f-a0b1c2d3e4f5",
+  "model": "auto",
+  "prompt": "Run the test suite and fix what fails",
+  "attachments": [],
+  "hook_event_name": "beforeSubmitPrompt",
+  "cursor_version": "2026.11.05-86047df",
+  "workspace_roots": ["C:\\Users\\dev\\project"],
+  "user_email": "dev@example.com",
+  "transcript_path": "C:\\Users\\dev\\.cursor\\projects\\C-Users-dev-project\\agent-transcripts\\e4b7a1c9-2d3f-4a6b-8c9d-1e2f3a4b5c6d.jsonl"
+}

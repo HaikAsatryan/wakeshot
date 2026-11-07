@@ -1,0 +1,23 @@
+name: Feature request
+description: Something Wakeshot should do, or do differently.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Some things are left out on purpose. The README's
+        [Limits](https://github.com/HaikAsatryan/wakeshot#limits) section lists them.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you want to do
+      description: The problem first. What are you trying to do, and where does Wakeshot fall short?
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: How Wakeshot could do it, if you have one in mind.

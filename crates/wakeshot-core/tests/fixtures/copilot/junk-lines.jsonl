@@ -1,0 +1,8 @@
+this line is not JSON
+{"id":"00000000-0000-4000-8000-0000000000aa","timestamp":"2026-11-06T09:59:59.000Z","parentId":null,"data":{}}
+{"id":"00000000-0000-4000-8000-000000000001","timestamp":"2026-11-06T10:00:00.000Z","parentId":null,"type":"session.start","data":{"sessionId":"0199c0de-0000-4000-8000-000000000001","version":1,"producer":"copilot-agent","copilotVersion":"1.0.106","startTime":"2026-11-06T10:00:00.000Z","context":{"cwd":"C:\\code\\demo"},"alreadyInUse":false}}
+{"id":"00000000-0000-4000-8000-000000000002","timestamp":"2026-11-06T10:00:00.100Z","parentId":"00000000-0000-4000-8000-000000000001","ephemeral":true,"type":"session.idle","data":{}}
+{"id":"00000000-0000-4000-8000-000000000003","timestamp":"2026-11-06T10:00:00.200Z","parentId":"00000000-0000-4000-8000-000000000002","type":"session.some_future_event","data":{"anything":[1,2,3]}}
+{"id":"00000000-0000-4000-8000-000000000004","timestamp":"2026-11-06T10:00:00.300Z","parentId":"00000000-0000-4000-8000-000000000003","type":"subagent.started","data":{"agentName":"explore"}}
+{"id":"00000000-0000-4000-8000-000000000005","timestamp":"2026-11-06T10:00:01.000Z","parentId":"00000000-0000-4000-8000-000000000004","type":"user.message","data":{"content":"fix the build","transformedContent":"<current_datetime>2026-11-06T10:00:01.000Z</current_datetime>\n\nfix the build","attachments":[],"interactionId":"i-1","delivery":"idle","agentMode":"interactive"}}
+{"id":"00000000-0000-4000-8000-000000000006","timestamp":"2026-11-06T10:00:02.000Z","parentId":"00000000-0000-4000-8000-000000000005","type":"assistant.turn_start","data":{"turnId":"0","interactionId":"i-1"}}

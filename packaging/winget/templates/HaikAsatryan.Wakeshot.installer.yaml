@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.28.0.schema.json
+
+PackageIdentifier: HaikAsatryan.Wakeshot
+PackageVersion: {{VERSION}}
+InstallerType: exe
+Scope: user
+InstallModes:
+- silent
+- silentWithProgress
+InstallerSwitches:
+  Silent: --silent
+  SilentWithProgress: --silent
+UpgradeBehavior: install
+RequireExplicitUpgrade: true
+Commands:
+- wakeshot
+ProductCode: HaikAsatryan.Wakeshot
+ReleaseDate: {{RELEASE_DATE}}
+AppsAndFeaturesEntries:
+- DisplayName: Wakeshot
+  Publisher: Haik Asatryan
+  ProductCode: HaikAsatryan.Wakeshot
+Installers:
+- Architecture: x64
+  InstallerUrl: https://github.com/HaikAsatryan/wakeshot/releases/download/v{{VERSION}}/HaikAsatryan.Wakeshot-win-x64-Setup.exe
+  InstallerSha256: {{X64_SHA256}}
+- Architecture: arm64
+  InstallerUrl: https://github.com/HaikAsatryan/wakeshot/releases/download/v{{VERSION}}/HaikAsatryan.Wakeshot-win-arm64-Setup.exe
+  InstallerSha256: {{ARM64_SHA256}}
+ManifestType: installer
+ManifestVersion: 1.28.0

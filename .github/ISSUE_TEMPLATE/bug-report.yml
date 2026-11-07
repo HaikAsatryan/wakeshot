@@ -1,0 +1,89 @@
+name: Bug report
+description: Wakeshot did something wrong, or did not do what it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. A security problem goes through
+        [SECURITY.md](https://github.com/HaikAsatryan/wakeshot/blob/main/SECURITY.md), not here.
+
+        First, in a terminal, run `wakeshot diagnostics` right after the problem. It saves one text file on your
+        Desktop (or in the folder you give, such as `wakeshot diagnostics C:\Temp`) and shows it in Explorer. The file
+        holds Wakeshot's own logs and settings files only, never your prompts, and your user name and anything that
+        looks like a token are taken out. Nothing is sent: you attach it below.
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics file
+      description: >-
+        Drag the `wakeshot-diagnostics-....txt` file here. Read it first if you like. If you cannot make it, paste
+        the lines around the problem from `%LocalAppData%\Wakeshot\logs\wakeshot.log` in the Log box at the end.
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Wakeshot version
+      description: >-
+        The diagnostics file says it on its first lines. Without it: the log says it each time Wakeshot starts, as
+        `Wakeshot 0.1.0 starts`; `wakeshot log` opens the log.
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: The diagnostics file says it. Without it, run `winver`, or see Settings > System > About.
+      placeholder: Windows 11 Pro 25H2, OS build 26200.xxxx
+    validations:
+      required: true
+
+  - type: dropdown
+    id: cpu
+    attributes:
+      label: CPU
+      options:
+        - x64 (Intel or AMD)
+        - ARM64 (Windows on Arm)
+    validations:
+      required: true
+
+  - type: textarea
+    id: holds
+    attributes:
+      label: What held
+      description: >-
+        What kept the PC awake, or should have: an agent session, `wakeshot run`, a hold file or Keep awake. Paste
+        what `wakeshot status` says, if you can.
+    validations:
+      required: true
+
+  - type: textarea
+    id: saw
+    attributes:
+      label: What you saw
+      description: What you did, and what happened, with the time if you know it. Say if the PC was on battery and if the lid was closed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: >-
+        Only without the diagnostics file: the lines around the problem from
+        `%LocalAppData%\Wakeshot\logs\wakeshot.log`. It holds no prompts or full command lines, but read it first and
+        remove anything private, such as your user name in a path.
+      render: text

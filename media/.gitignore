@@ -1,0 +1,8 @@
+# npm installs these from package-lock.json; Remotion keeps its Chrome download inside.
+node_modules/
+# Remotion's render cache.
+.remotion/
+# Built on every render by scripts/make-sounds.mjs.
+public/sound/
+# Drafts carry placeholder boxes for missing captures and no speed numbers; never published.
+out/draft/

@@ -1,0 +1,35 @@
+[package]
+name = "wakeshot-cli"
+description = "The wakeshot command: hold the PC awake from a terminal or a script."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "wakeshot"
+path = "src/main.rs"
+
+[dependencies]
+wakeshot-core.workspace = true
+wakeshot-windows.workspace = true
+
+# The exe calls Windows only through `wakeshot-windows`, so no feature is added here: feature unification gives it, and
+# its tests, every feature that crate turns on.
+[dependencies.windows]
+workspace = true
+features = ["Win32_Foundation"]
+
+[dev-dependencies]
+wakeshot-core = { workspace = true, features = ["test-support"] }
+wakeshot-windows = { workspace = true, features = ["test-support"] }
+# The property test of `args::run_tail`.
+proptest.workspace = true
+
+[build-dependencies]
+embed-resource.workspace = true

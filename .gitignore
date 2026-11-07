@@ -1,0 +1,25 @@
+# Only files that are local to one machine or one person are listed: everything else in the tree belongs in the repo.
+
+# Cargo build output.
+target/
+
+# Claude Code agent worktrees; its docs say to ignore them, so a left one never gets committed.
+.claude/worktrees/
+
+# Claude Code per-person settings for this project (local permission rules).
+.claude/settings.local.json
+
+# Claude Code per-person instructions for this project; its docs say to ignore the file.
+CLAUDE.local.md
+
+# A Claude Code runtime lock file.
+.claude/scheduled_tasks.lock
+
+# Secret files never belong in the repo; these patterns stop a stray one from being added.
+*.key
+*.pem
+*.pfx
+*.p12
+.env*
+id_rsa*
+id_ed25519*

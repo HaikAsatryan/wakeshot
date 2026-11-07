@@ -1,0 +1,395 @@
+/* The Moss palette (docs/brand.md, "Colours"): a moss green body and a warm cream light, as on the app icon.
+   check_page.py fails the page when a pair here drops below WCAG AA in either theme. */
+:root {
+  color-scheme: light dark;
+  --bg: #fbfcf7;
+  --text: #1a1d17;
+  --muted: #525c49;
+  --panel: #f0f4e8;
+  --line: #d8e0cc;
+  --link: #33701f;
+  --button-bg: #33701f;
+  --button-text: #ffffff;
+  --focus: #33701f;
+  --step: #33701f;
+  --on-step: #ffea9c;
+  --glow-core: rgba(255, 234, 156, 0.45);
+  --glow: rgba(98, 140, 43, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121610;
+    --text: #eef2e8;
+    --muted: #b3bca8;
+    --panel: #1a2017;
+    --line: #2e3829;
+    --link: #b6e05a;
+    --button-bg: #b6e05a;
+    --button-text: #121610;
+    --focus: #ffea9c;
+    --glow-core: rgba(255, 234, 156, 0.1);
+    --glow: rgba(62, 124, 59, 0.26);
+  }
+}
+
+/* The wordmark's face, served from this folder like everything else on the page. SIL OFL 1.1: fonts/OFL.txt. */
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("fonts/InstrumentSans-SemiBold.woff2") format("woff2");
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  /* System fonts only: the page loads nothing from other hosts. */
+  font: 1.0625rem/1.6 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial,
+    sans-serif;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+.wrap {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+h1,
+h2,
+h3 {
+  font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+h2 {
+  font-size: 1.625rem;
+  margin: 0 0 1rem;
+}
+
+h3 {
+  font-size: 1.125rem;
+  margin: 0 0 0.5rem;
+}
+
+p,
+ul,
+ol {
+  margin: 0 0 1rem;
+}
+
+li > ul,
+li > ol {
+  margin: 0.25rem 0;
+}
+
+a {
+  color: var(--link);
+  text-underline-offset: 0.2em;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+code {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 0.9em;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.25rem;
+  padding: 0.05em 0.3em;
+}
+
+pre {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+}
+
+pre code {
+  border: 0;
+  padding: 0;
+}
+
+img,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
+figure {
+  margin: 0;
+}
+
+figcaption {
+  color: var(--muted);
+  font-size: 0.9375rem;
+  margin-top: 0.5rem;
+}
+
+/* Says what is not out yet; build_page.py drops it once it is. */
+.soon {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+}
+
+/* The held light: the warm light glows round the icon, over a faint moss haze along the top. The glow's centre is the
+   icon's: 4rem padding plus half the icon down, and left of the middle by half the lockup's width less half the icon
+   (6.85rem with the brand face; move it with the lockup). */
+.hero {
+  text-align: center;
+  padding: 4rem 0 2.5rem;
+  background:
+    radial-gradient(circle 12rem at calc(50% - 6.85rem) 6.35rem, var(--glow-core), transparent),
+    radial-gradient(ellipse 60rem 22rem at 50% 0, var(--glow), transparent 70%);
+}
+
+/* The lockup, drawn as wakeshot-lockup-*.svg draws it: the word's cap height is 0.46 of the plate (so the icon is
+   1.712em), and the ink starts 0.26 of the plate after it (0.294em, less the icon's margin and the W's side bearing).
+   With a line height of 1 the brand face's cap height sits centred on the icon. Only the wordmark takes the brand
+   face; if it does not load, the other headings' system face stands in. The lockup is 6.7em wide, so on a phone
+   narrower than 340 px it shrinks to keep the page's side padding. */
+.hero .brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.294em;
+  font-family: "Instrument Sans", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "Helvetica Neue",
+    Arial, sans-serif;
+  font-size: min(2.75rem, calc((100vw - 2.5rem) / 6.8));
+  letter-spacing: -0.01em;
+  line-height: 1;
+  margin: 0 0 1.5rem;
+}
+
+.hero .logo {
+  flex: none;
+  width: 1.712em;
+  height: 1.712em;
+}
+
+.lead {
+  font-size: 1.375rem;
+  line-height: 1.45;
+  max-width: 36rem;
+  margin-left: auto;
+  margin-right: auto;
+  text-wrap: balance;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin: 1.75rem 0 1rem;
+}
+
+.button {
+  display: inline-block;
+  padding: 0.75rem 1.25rem;
+  border: 2px solid var(--button-bg);
+  border-radius: 0.5rem;
+  background: var(--button-bg);
+  color: var(--button-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.button.secondary {
+  background: transparent;
+  color: var(--link);
+}
+
+.fine {
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+/* The promo closes the hero: it shows in a glance what the sections below say in words. The ratio holds the box
+   before the poster loads, so nothing below jumps. */
+.video {
+  margin: 2rem 0 0;
+}
+
+.video video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000000;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+}
+
+section {
+  padding: 2.5rem 0 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 1rem;
+  margin: 0 0 1.25rem;
+}
+
+.cards article {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+}
+
+.cards article p {
+  margin: 0;
+}
+
+/* The steps of a night: each number is the cream light on a moss disc, a small echo of the icon. */
+.steps {
+  list-style: none;
+  counter-reset: step;
+  padding: 0;
+}
+
+.steps li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 3rem;
+  margin-bottom: 1rem;
+}
+
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--step);
+  color: var(--on-step);
+  font-weight: 600;
+  line-height: 2rem;
+  text-align: center;
+}
+
+.table {
+  overflow-x: auto;
+  margin: 0 0 1.25rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+th {
+  font-weight: 600;
+}
+
+/* On a wide screen the setting and its value stay on one line; on a phone they wrap so the reason keeps room. */
+@media (min-width: 40rem) {
+  .settings th:nth-child(-n + 2),
+  .settings td:nth-child(-n + 2) {
+    white-space: nowrap;
+  }
+}
+
+/* The tray icons at the tray's own size, 16 px, from 32 px files: sharp on a 200% screen. */
+.states picture,
+.states img {
+  display: block;
+}
+
+.states td:first-child {
+  width: 1px;
+  padding-top: 0.8rem;
+}
+
+.shots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  /* 1rem across, so the menu and the tooltip fit side by side in the text column. */
+  gap: 1.5rem 1rem;
+  margin: 1.5rem 0;
+  text-align: center;
+}
+
+.shots img {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+}
+
+/* Row labels in plain weight, so the rows only Wakeshot has stand out in bold, as in the README. On a phone the table
+   scrolls sideways inside its box rather than squeezing the cells to a word a line. */
+.compare tbody th {
+  font-weight: 400;
+  min-width: 12rem;
+}
+
+.compare tr.only th {
+  font-weight: 600;
+}
+
+.compare td {
+  min-width: 7rem;
+}
+
+/* Only where the comparison is wider than the column: a phone hides its scroll bar until a swipe. */
+@media (min-width: 46rem) {
+  .scroll-hint {
+    display: none;
+  }
+}
+
+.ticks {
+  padding-left: 1.25rem;
+}
+
+.ticks li {
+  margin-bottom: 0.5rem;
+}
+
+footer {
+  border-top: 1px solid var(--line);
+  padding: 2rem 0 3rem;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+footer ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+}
