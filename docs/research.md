@@ -6192,3 +6192,102 @@ something, at Medium for 10 minutes, counting thread cycles per part and per cal
   read 7.67 MB with 72 modules, the rest of them shell launch and UI text modules (menu, tooltip, theme changes during
   the tooltip capture). So the rise most likely comes from the update check and the UI, not the watch: **inferred,
   not verified**; not fixed (outside the watch).
+
+## winget upgrade over a running Wakeshot (2026-11-07)
+
+Card `p6-winget-upgrade-restart`. Read with `gh api` on 2026-11-07: Velopack tag `1.2.161` (our pin and still the
+latest release) and winget-cli `master` (latest release v1.29.380). Source reads only; not tested.
+
+- winget passes our `SilentWithProgress` switch (`--silent`) on a plain upgrade, `Silent` with `-h`, and only the
+  `Interactive` switch (we have none, so no switch) with `-i` (`ShellExecuteInstallerHandler.cpp`,
+  `GetInstallerArgsTemplate`). It waits only on the Setup process handle, no job object. Verified (source).
+- Velopack Setup over an install: `force_stop_package`, folder swap, install hook, uninstall entry, and starts the app
+  only when not silent (`src/bins/src/commands/install.rs`); there is no switch to start it after a silent install
+  (`setup.rs`). So a by-name upgrade leaves the tray off. Verified (source); the kill and no start are also tested
+  ("Velopack checks for Wakeshot", point 7).
+- `--all` skips Wakeshot only when winget installed it (`PinnedByManifest` in `PackageTrackingCatalog.cpp`, skip in
+  `UpdateFlow.cpp`); a GitHub install is upgraded. Verified (source), as in `docs/research/launch.md`.
+- Velopack starts hooks with `CreateProcess` and no job object (`src/lib-rust/src/process_win.rs`) and on timeout kills
+  only the hook process (`src/bins/src/windows/util.rs` `run_hook`), so a process the install hook starts outlives
+  it. Verified (source); not tested.
+
+## Pages page: release state, winget path, heading ids (2026-11-07)
+
+Card `docs/tasks/p6-pages.md`, 03:47 to 04:10, by `gh api` and headless Edge 156 on this laptop.
+
+- **Nothing is out yet**: `repos/HaikAsatryan/wakeshot/releases` is empty, `.../pages` gives 404 (Pages off), and
+  the repo has no environments. Every media file the page shows (`media/out/`, the `readme-*` shots in
+  `media/public/shots/`) is on `main` (contents API). **Verified.**
+- **winget-pkgs keeps a package under `manifests/<first letter>/<publisher>/<name>/`**:
+  `manifests/m/Microsoft/PowerToys` lists version folders (`0.100.0` ...); `manifests/h/HaikAsatryan/Wakeshot` gives
+  404 today. `site/build_page.py` shows the winget line only once that folder exists. **Verified** (contents API).
+  Whether the workflow's `GITHUB_TOKEN` may read `microsoft/winget-pkgs` contents: **not verified** until the first
+  Pages run (a 404 there only hides the winget line).
+- **GitHub's heading ids match `check_page.py`'s rule** (lower case, punctuation dropped, spaces to hyphens, a repeat
+  gets `-1`): the README rendered by GitHub (`gh api repos/HaikAsatryan/wakeshot/readme`, HTML) has the same 17
+  `user-content-` heading ids the script computes from `README.md`, plus one id `------------` the script does not
+  make (cause not checked). `gh api markdown` gives no ids, so it cannot be used for this. **Verified.**
+- **Headless Edge follows the Windows mode**: with Windows dark, a plain `--headless=new --screenshot` render showed
+  the page dark. `--blink-settings=preferredColorScheme=1` gave light, `=0` dark. The first `msedge.exe` process exits
+  before the picture is written, so a script must wait for the file and for the profile's processes. **Seen.**
+- **SmartScreen words on the page** come from "Brand screen session: what Windows shows" above (seen 2026-11-05 on a
+  local build with a download mark); the real GitHub download may differ (reputation): **not verified** until the
+  first release.
+
+Checked 2026-11-04 for `pages.yml` (the card's "Facts checked", moved here):
+
+- **No workflow from a `GITHUB_TOKEN` event**: GitHub docs ("Triggering a workflow", WebFetch): "events triggered by
+  the `GITHUB_TOKEN` will not create a new workflow run"; `workflow_dispatch` and `repository_dispatch` always do.
+  `release.yml` publishes with that token, so `pages.yml` runs on `workflow_run` of Release. **Verified** (docs).
+- **`workflow_run`** (docs, "Events that trigger workflows"): fires only if the workflow file is on the default
+  branch; its `GITHUB_SHA` is the last commit on the default branch; at most three levels of chaining.
+  `release: published` also fires for pre-releases. For a run started by a tag push, the run's `head_branch` is the
+  tag name (`gh api` on `BurntSushi/ripgrep` `15.2.0` and `rhysd/actionlint` `v1.7.12` runs). **Verified.**
+- **Action versions** (`gh api` releases and `action.yml` at the major tag): `actions/upload-pages-artifact` v5.0.0
+  (inputs `name`, `path`, `retention-days`, `include-hidden-files`; leaves out dotfiles by default),
+  `actions/deploy-pages` v5.0.1 (output `page_url`, Node 24), `actions/checkout` v7.0.1. `actions/configure-pages`
+  is not needed for a plain HTML site. **Verified.**
+- **Permissions** (docs, "Using custom workflows with GitHub Pages"): the deploy job needs `pages: write` and
+  `id-token: write`; the default environment is `github-pages`. **Verified** (docs).
+- **The `github-pages` environment refusing a run on a tag**: reported by users (community discussion 39054), not in
+  GitHub's docs. **Not verified.**
+- **REST "Create a GitHub Pages site"**: `build_type` is `legacy` or `workflow`; the caller must be an admin or
+  maintainer. Whether `source` may be left out with `workflow`: the docs do not say. **Not verified** until the
+  command runs.
+- **Visitor IPs** (docs, "What is GitHub Pages"): "When a GitHub Pages site is visited, the visitor's IP address is
+  logged and stored for security purposes." Project site address `https://<owner>.github.io/<repository>`.
+  **Verified** (docs); the live address **not verified** until Pages is on.
+- **Release links** (docs, "Linking to releases"): `/releases/latest` and `/releases/latest/download/<asset>`. That
+  `vpk upload` assets work there: **not verified** until the first stable release (`build_page.py` checks the
+  latest release has each Setup the page links).
+- **actionlint 1.7.12 limits**: it flags a bad permission scope, but not a wrong `upload-pages-artifact@v5` input or
+  a wrong `github.event.workflow_run` field (broken copies passed). **Verified** (broken copies).
+- **Python on the runner**: the `actions/runner-images` readme for Ubuntu 24.04 (image 20261026) lists Python 3.12.3.
+  Which Ubuntu `ubuntu-latest` maps to: **not checked**; Python 3 is on both. The page scripts need 3.8.
+- **Headless Edge at phone width**: `--window-size=390,...` did not narrow the page (the shot was cut on the right); a
+  390 px iframe in a wider window did. **Seen**; the cause is not verified.
+
+## Claude Desktop app, read without input (2026-11-07)
+
+Card `p4-live-claude-desktop`, 03:47 to 04:10. Claude Desktop 4.23118.0 (Windows x64, per user). Read: folder names,
+JSON shapes, the app's logs, `powercfg /requests`, and the app's own code in `resources\app.asar` (unpacked to a
+scratch folder, nothing run). Details: `research/claude-code-signals.md`, "Claude Desktop (2026-11-07)".
+
+- **Code tab sessions are Claude Code sessions**: the app downloads its own Claude Code (2.1.317 here) to
+  `%APPDATA%\Claude\claude-code\` and starts it through the Agent SDK with `CLAUDE_CODE_ENTRYPOINT=claude-desktop`,
+  without `CLAUDECODE`, `CLAUDE_CODE_CHILD_SESSION` or a `CLAUDE_CONFIG_DIR` of its own. So they should write
+  `~/.claude/sessions/<pid>.json` and the usual transcript. **Verified (code)**; a live session waits for Haik.
+- **Cowork** runs Claude Code in the app's Linux VM with `CLAUDE_CONFIG_DIR=/sessions/<id>/mnt/.claude`: nothing on
+  the Windows side. The VM is "not supported" on this laptop (`cowork_vm_node.log`). **Verified (code, log)**.
+- **Plain chats** leave no local file or process, and the app's code has no keep-awake claim for them. **Verified
+  (code)**.
+- **The app's own keep-awake** is one Electron `prevent-app-suspension` blocker. `powercfg /requests` at 04:05 showed
+  the app's `claude.exe` under EXECUTION only, while `main.log` said `[keep-awake] started (claims=remote_tools)`.
+  **Verified (live)**. Its settings are in `%APPDATA%\Claude\claude_desktop_config.json` `preferences`:
+  `keepAwakeEnabled` (default false), `ccKeepAwakeWhileWorking` (default true), `ccKeepAwakeOnBattery` (default
+  true). **Verified (code, disk)**. It also holds by itself for 5 minutes at each credential rotation of its remote
+  device link (03:04 and 04:00 here). **Verified (log)**.
+- **Desktop scheduled tasks** now keep their schedule in
+  `%APPDATA%\Claude\claude-code-sessions\<account>\<org>\scheduled-tasks.json` (`cronExpression` or `fireAt`,
+  `enabled`, ...). Each run is a fresh session, a fixed few minutes late (docs; the rule is not documented).
+  **Verified (code, disk, docs)**.

@@ -499,3 +499,92 @@ All on the SDK path, where `open_tasks` counts:
   says. Seen for all 12 test sessions (names only); Wakeshot reads none of them.
 - Not run: the VS Code UI (waits for Haik, "Live tests still open"), the Desktop app, an MCP or WebSocket Monitor
   stopped from the UI, a Monitor end across a PC sleep, `claude --continue`.
+
+## Claude Desktop (2026-11-07)
+
+Card `docs/tasks/p4-live-claude-desktop.md`. Claude Desktop 4.23118.0 for Windows x64, installed per user in
+`%LocalAppData%\AnthropicClaude` (Squirrel updated it from 2.42304.2 within a minute of the install, by the folder
+times), signed in with a
+Claude account. Read on 2026-11-07 between 03:47 and 04:10 without any input in the app: its folders (names and JSON
+shapes only, never values), its logs, `powercfg /requests`, and its main process code (`resources\app.asar`, unpacked
+to a scratch folder and read, nothing run). Minified names change with every release; quoted log strings and setting
+keys are what the next version is checked against. No Code session, prompt or click ran tonight: the live part waits
+for Haik (card, "Morning steps"). This section supersedes the "Desktop app" section above where they differ.
+
+Marks: **verified (code)** means read in the app's code; **verified (disk)** or **(live)** means seen on this laptop;
+**not verified** means inferred or not run.
+
+### What the app runs
+
+| Part | What it is | Writes the files the Claude source reads | Mark |
+|---|---|---|---|
+| Code tab, local session | The app downloads its own Claude Code (`%APPDATA%\Claude\claude-code\<version>\<hash>\claude.exe`; 2.1.317 here, at the first start after sign-in, `main.log` "[CCD] Installed at ...") and starts it through the Agent SDK (stream-json, the SDK path). Env: `CLAUDE_CODE_ENTRYPOINT=claude-desktop` (`claude-desktop-3p` with a third-party provider), `CLAUDECODE` and `CLAUDE_CODE_CHILD_SESSION` removed, no `CLAUDE_CONFIG_DIR` of its own, `CLAUDE_CODE_DISABLE_CRON` empty unless the organization turns scheduled tasks off | Yes by the code: `~/.claude/sessions/<pid>.json` with `entrypoint: claude-desktop`, and `~/.claude/projects/<folder>/<sessionId>.jsonl` (the app itself reads and copies transcripts in `<Claude folder>\projects`). So the Claude source applies as for any non-terminal session (rule 3 transcript tasks) | verified (code); live: needs Haik |
+| Code tab, helper runs | Short `claude.exe` runs for titles, usage probes, one-shot sampling and sign-in, all with `persistSession: false` (no transcript); some with a `CLAUDE_CONFIG_DIR` of their own | If one writes a status file, it holds only while it runs (seconds) | verified (code); status file not verified |
+| Cowork (`local-agent`) | Runs Claude Code inside the app's Linux VM: `CLAUDE_CONFIG_DIR=/sessions/<id>/mnt/.claude` | No: nothing in the Windows Claude folder. Here `cowork_vm_node.log` says "workspace VM not supported (status=unsupported)" | verified (code, disk) |
+| Plain chats (Chat tab) | The claude.ai web app in the app's window; replies are made on Anthropic's servers | No file, no process per chat, and no keep-awake claim for chats in the app's code | verified (code); a live chat: needs Haik |
+| SSH and cloud sessions | Run on another machine or in the cloud | No local signal needed or given | verified (docs) |
+
+Other processes: the app's own Electron processes (all named `claude.exe`, in the app folder: renderers, GPU,
+utilities) and one idle `powershell.exe` under a Node utility process (started with the app; most likely its terminal
+or shell path helper, not verified). None is a Claude Code session; the Claude source never looks at processes, only
+at status files and their pids.
+
+### The app's own keep-awake
+
+All of it goes through one Electron `powerSaveBlocker.start("prevent-app-suspension")`, taken while any claim is held.
+Claims in the code: `keepAwakeEnabled` (the "Keep computer awake" switch), `code_turn` and `code_turn:<id>` (while
+Code sessions work), `code_session:<id>` (a session's own keep-awake switch), `remote_tools` (its remote device link),
+`wake_hold:<id>` and `wake_scheduler_approval_pending` (its wake scheduler). **Verified (code)**.
+
+- Live: at 04:00:01 `main.log` wrote `[keep-awake] started (id=1, claims=remote_tools)` (a credential rotation of
+  the remote device link; the same at 03:04:37, let go after 300 s), and `powercfg /requests` showed the app's
+  `claude.exe` under EXECUTION only ("Electron"), not under SYSTEM. So its keep-awake is an execution request. On
+  Modern Standby that alone does not stop idle sleep (Microsoft docs; not tested by us; issue #103669 says the same).
+- Settings live in `%APPDATA%\Claude\claude_desktop_config.json`, key `preferences` (the keys in Haik's file match the
+  app's preference schema): `keepAwakeEnabled` (default false), `ccKeepAwakeWhileWorking` ("Keep computer awake
+  while Claude works", default true: "Prevents idle sleep only; a closed lid still sleeps"), `ccKeepAwakeOnBattery`
+  (default true), `wakeSchedulerEnabled` (default false). None is set in Haik's file, so the defaults apply. Wakeshot
+  tests never change them. **Verified (code, disk)**.
+- The while-working hold: taken while any Code session runs a turn, or has background tasks or loops (those count up
+  to 2 hours after the last turn); let go 30 s after the work ends; a session stops counting after 1 hour with no
+  progress (3 hours with background work it could lose) and after 24 hours in all. Timer values read from the code;
+  **not verified** live.
+- So by default the app already asks Windows to stay awake while its Code sessions work, with timers and an execution
+  request only; it does nothing for the lid, for Claude Code in a terminal or for other agents.
+
+### Scheduled tasks
+
+- Local tasks of the Code tab: `%APPDATA%\Claude\claude-code-sessions\<account id>\<org id>\scheduled-tasks.json`,
+  `{scheduledTasks: [...], recordedSkips, ...}`; a task has `id`, `cronExpression` or `fireAt`, `enabled`,
+  `filePath`, `cwd`, `lastRunAt`, `lastScheduledFor`, `disableJitter` and more. The prompt is in
+  `~/.claude/scheduled-tasks/<name>/SKILL.md` (docs). Cowork tasks: the same file under `local-agent-mode-sessions`.
+  Both empty here. **Verified (code, disk, docs)**. The "Timers" table above says the schedule is not readable: in
+  this version it is, in that file.
+- Docs (desktop-scheduled-tasks, read 2026-11-07): the app checks every minute while it runs and starts a fresh
+  session per run; each task runs a fixed few minutes late ("deterministic"); a run the PC sleeps through is skipped,
+  and at start or wake the app makes one catch-up run for the latest missed time; Claude can set intervals down to 1
+  minute, the forms only hourly. The delay rule itself is not documented.
+- A run is a Code session (docs: "starts a fresh session"), so it should write a status file like any Code session:
+  **not verified** (needs a run). Waiting for the next run is not held by Wakeshot: it would need a new reader of this
+  file and the app's undocumented delay.
+
+### Quit, close and crash, from the code
+
+- Quit: "[CCD] Stopping N active session(s) on quit", then "quit: ... stopped N local session(s)"; armed work (loops)
+  is saved and restored at the next launch. How a session process ends (exit or kill) is **not verified**; either
+  way Wakeshot sees it by the pid wait (rule 2).
+- Closing the window: not read; expected to leave the app in the tray with sessions running (needs Haik).
+- A crash of the app: not run (it would mean killing Haik's app). If its `claude.exe` dies, the pid wait ends the
+  hold; if it lives, the SDK path runs its work to the end and exits when its input closes ("Phase 4 live shapes",
+  fixture 12). Both are checks already tested live for the CLI and SDK; not run with the app.
+- A `CLAUDE_CONFIG_DIR` set only in the app (a saved local environment) moves its sessions to that folder, which the
+  tray does not watch. One set as a Windows user variable is seen by both (docs: "A local session gets Desktop's
+  value whether you set yours in your shell profile, your Windows user or system variables, ...").
+
+### Other facts
+
+- The app reads CLI transcripts too: `main.log` "[CCD] /stats (worker) scanned 320/320 transcript files". It writes
+  nothing to `~/.claude/sessions` by itself (only the two CLI sessions' files were there tonight). **Verified (log,
+  disk)**.
+- `remote-control.log`: the app's own Remote Control host is `off` here. Whether its Code sessions get a
+  `bridgeSessionId` (which makes `waiting` hold, rule 4) is **not verified**.
