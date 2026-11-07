@@ -57,6 +57,25 @@ pub enum Answer {
 /// Windows' own SQLite.
 pub const DLL: &str = "winsqlite3.dll";
 
+/// The error word of a Windows whose SQLite cannot be used.
+pub const NO_SQLITE: &str = "no_sqlite";
+
+/// Every error word an [`Answer::Json`] can carry.
+const ERROR_KINDS: [&str; 6] = [NO_SQLITE, "open", "prepare", "step", "type", "size"];
+
+/// The error word of an answer, for a log line; `None` for rows. A word not in [`ERROR_KINDS`] reads as `other`, so
+/// nothing else from the bytes can reach a log.
+pub fn error_kind(bytes: &[u8]) -> Option<&'static str> {
+    let answer = serde_json::from_slice::<Value>(bytes).ok()?;
+    let kind = answer.get("error")?.as_str();
+    Some(
+        ERROR_KINDS
+            .into_iter()
+            .find(|&k| kind == Some(k))
+            .unwrap_or("other"),
+    )
+}
+
 /// SQLite 3.22.0: the first that reads a WAL database read only (sqlite.org/wal.html, "Read-Only Databases").
 pub const MIN_VERSION: c_int = 3_022_000;
 
@@ -218,7 +237,7 @@ fn api() -> Option<&'static Api> {
 
 fn read(api: Option<&Api>, db: &Path, sql: &str) -> Answer {
     let Some(api) = api else {
-        return error("no_sqlite");
+        return error(NO_SQLITE);
     };
     if !open_by_agent(db) {
         return Answer::Busy;
@@ -723,6 +742,19 @@ mod tests {
             read(None, &db, TABLES.sql),
             json(r#"{"error":"no_sqlite"}"#)
         );
+    }
+
+    #[test]
+    fn an_error_answer_gives_only_a_word_of_this_module() {
+        assert_eq!(error_kind(br#"{"error":"no_sqlite"}"#), Some(NO_SQLITE));
+        assert_eq!(error_kind(br#"{"error":"prepare"}"#), Some("prepare"));
+        assert_eq!(
+            error_kind(br#"{"error":"no such column: prompt"}"#),
+            Some("other")
+        );
+        assert_eq!(error_kind(br#"{"error":7}"#), Some("other"));
+        assert_eq!(error_kind(br#"{"rows":[["ses_1",1]]}"#), None);
+        assert_eq!(error_kind(b"{\"rows\""), None);
     }
 
     #[test]
@@ -1320,7 +1352,11 @@ mod tests {
                 assert!(!text.contains(leak), "{leak:?} in {text:?}");
             }
         }
-        assert_eq!(watch_lines, ["OpenCode: format problem in opencode.db"]);
+        assert_eq!(
+            watch_lines,
+            ["OpenCode: format problem in opencode.db; a query of its database failed (prepare)"],
+            "the error word only, never SQLite's own text"
+        );
         assert!(
             core_lines
                 .iter()

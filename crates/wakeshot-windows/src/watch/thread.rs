@@ -23,7 +23,9 @@ use wakeshot_core::holds::HoldFacts;
 use wakeshot_core::process::ProcessRef;
 use wakeshot_core::sources::AgentSource;
 use wakeshot_core::view::MenuCommand;
-use windows::Win32::Foundation::{ERROR_INVALID_WINDOW_HANDLE, HANDLE, WAIT_OBJECT_0};
+use windows::Win32::Foundation::{
+    ERROR_FILE_NOT_FOUND, ERROR_INVALID_WINDOW_HANDLE, ERROR_PATH_NOT_FOUND, HANDLE, WAIT_OBJECT_0,
+};
 use windows::Win32::System::Threading::{CreateEventW, SetEvent, WaitForSingleObject};
 
 use crate::WinError;
@@ -203,6 +205,13 @@ fn raw(handle: &OwnedHandle) -> HANDLE {
     HANDLE(handle.as_raw_handle())
 }
 
+/// A folder that is not there (yet), as `FolderWatch` gives it: an HRESULT.
+fn not_made_yet(e: &WinError) -> bool {
+    [ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND]
+        .iter()
+        .any(|code| e.code == code.to_hresult().0 as u32)
+}
+
 /// Everything the thread owns. Fields drop in order: the exit waits before the folder watch, so no callback can wake
 /// a thread whose watch is being taken down.
 struct Watcher {
@@ -322,10 +331,23 @@ impl Watcher {
     }
 
     fn first_round(&mut self) {
-        // Each folder is watched before its first full read, so a change in between is not lost. Two adds to an
-        // empty watch cannot pass its limit, and a missing folder waits on its retry list.
-        for dir in [self.root.clone(), self.holds_dir.clone()] {
-            let _ = self.watch.add(&dir, false);
+        // Each folder is watched before its first full read, so a change in between is not lost. A folder that cannot
+        // be opened waits on the retry list; one not made yet (`holds\` before the first hold file) is the normal
+        // case and says nothing.
+        let own = [
+            (self.root.clone(), "the data folder"),
+            (self.holds_dir.clone(), "the holds folder"),
+        ];
+        for (dir, name) in own {
+            let e = match self.watch.add(&dir, false) {
+                Ok(State::Watching) => continue,
+                Ok(State::Missing(e)) if not_made_yet(&e) => continue,
+                Ok(State::Missing(e)) | Err(e) => e,
+            };
+            self.warn(&format!(
+                "{name} is not watched ({} error {}), so its changes are read on each tick",
+                e.call, e.code
+            ));
         }
         self.sync_folders(false);
         let retries = self.agents.on_tick();
@@ -1085,6 +1107,30 @@ mod tests {
         fs::remove_file(&path).unwrap();
         let took = rig.wait_for(at, |e| count(e, is_holds) == 3);
         assert!(took < ONE_SECOND, "{took:?}");
+    }
+
+    /// A data folder that cannot be watched is read only on the tick, so a hold file waits up to 30 s: said once. A
+    /// `holds\` not made yet is the normal state until the first hold file.
+    #[test]
+    fn a_data_folder_that_cannot_be_watched_is_logged_and_one_not_made_yet_is_not() {
+        let mut missing = Rig::new("holds-missing");
+        fs::remove_dir(missing.dir.holds()).unwrap();
+        missing.started(Config::default(), 2);
+        let mut file = Rig::new("holds-file");
+        fs::remove_dir(file.dir.holds()).unwrap();
+        fs::write(file.dir.holds(), b"").unwrap();
+        file.started(Config::default(), 2);
+        missing.settled();
+        file.settled();
+
+        assert!(missing.lines().is_empty(), "{:?}", missing.lines());
+        let lines = file.lines();
+        let watch: Vec<&String> = lines.iter().filter(|l| l.contains("not watched")).collect();
+        assert_eq!(watch.len(), 1, "{lines:?}");
+        assert!(
+            watch[0].starts_with("the holds folder is not watched (ReadDirectoryChangesW error "),
+            "{lines:?}"
+        );
     }
 
     #[test]

@@ -233,18 +233,39 @@ impl Tail {
     }
 }
 
-/// The files `root\<depth folder levels>\*<name_suffix>`, newest folders first, names compared without case. Folder
-/// links (symlinks, junctions) are not followed, so a link loop cannot trap the walk. An unreadable folder counts as
-/// empty.
-pub fn find(root: &Path, depth: u8, name_suffix: &str) -> Vec<PathBuf> {
-    let mut found = Vec::new();
-    walk(root, depth, &name_suffix.to_lowercase(), &mut found);
-    found
+/// What a walk found, and whether a folder on its way could not be listed: the first such error's code (`Some(None)`
+/// for one without a code). A missing folder is no error.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Walked<T> {
+    pub found: T,
+    pub unlisted: Option<Option<i32>>,
 }
 
-fn walk(dir: &Path, depth: u8, suffix: &str, found: &mut Vec<PathBuf>) {
-    let Ok(mut entries) = list(dir) else {
-        return;
+impl<T> Walked<T> {
+    /// Keeps the first listing error but a missing folder's.
+    fn note(&mut self, e: &io::Error) {
+        if e.kind() != io::ErrorKind::NotFound && self.unlisted.is_none() {
+            self.unlisted = Some(e.raw_os_error());
+        }
+    }
+}
+
+/// The files `root\<depth folder levels>\*<name_suffix>`, newest folders first, names compared without case. Folder
+/// links (symlinks, junctions) are not followed, so a link loop cannot trap the walk. An unreadable folder counts as
+/// empty, and its error goes to `unlisted`.
+pub fn find(root: &Path, depth: u8, name_suffix: &str) -> Walked<Vec<PathBuf>> {
+    let mut walked = Walked::default();
+    walk(root, depth, &name_suffix.to_lowercase(), &mut walked);
+    walked
+}
+
+fn walk(dir: &Path, depth: u8, suffix: &str, out: &mut Walked<Vec<PathBuf>>) {
+    let mut entries = match list(dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            out.note(&e);
+            return;
+        }
     };
     entries.sort_by(|a, b| {
         b.modified
@@ -254,10 +275,10 @@ fn walk(dir: &Path, depth: u8, suffix: &str, found: &mut Vec<PathBuf>) {
     for entry in entries {
         if depth == 0 {
             if entry.is_file && entry.name.to_lowercase().ends_with(suffix) {
-                found.push(entry.path);
+                out.found.push(entry.path);
             }
         } else if entry.is_dir {
-            walk(&entry.path, depth - 1, suffix, found);
+            walk(&entry.path, depth - 1, suffix, out);
         }
     }
 }
@@ -272,17 +293,21 @@ struct Entry {
 }
 
 /// Every file at `depth` folder levels under `dir`, from the listings alone.
-fn walk_files(dir: &Path, depth: u8, found: &mut Vec<Entry>) {
-    let Ok(entries) = list(dir) else {
-        return;
+fn walk_files(dir: &Path, depth: u8, out: &mut Walked<Vec<Entry>>) {
+    let entries = match list(dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            out.note(&e);
+            return;
+        }
     };
     for entry in entries {
         if depth == 0 {
             if entry.is_file {
-                found.push(entry);
+                out.found.push(entry);
             }
         } else if entry.is_dir {
-            walk_files(&entry.path, depth - 1, found);
+            walk_files(&entry.path, depth - 1, out);
         }
     }
 }
@@ -318,7 +343,7 @@ fn list(dir: &Path) -> io::Result<Vec<Entry>> {
 #[derive(Debug, Default)]
 pub struct Finder {
     found: HashMap<(PathBuf, u8, String), Vec<PathBuf>>,
-    walks: HashMap<(PathBuf, u8), Vec<Entry>>,
+    walks: HashMap<(PathBuf, u8), Walked<Vec<Entry>>>,
 }
 
 impl Finder {
@@ -327,22 +352,24 @@ impl Finder {
     }
 
     /// Of the files `root\<depth folder levels>\<name>` with `matches(name)`, the newest by modified time (from the
-    /// listing), the greater name on a tie. Folder links are not followed; an unreadable folder counts as empty.
+    /// listing), the greater name on a tie. Folder links are not followed; an unreadable folder counts as empty, and
+    /// its error goes to `unlisted`.
     pub fn newest(
         &mut self,
         root: &Path,
         depth: u8,
         matches: impl Fn(&str) -> bool,
-    ) -> Option<PathBuf> {
-        let files = self
+    ) -> Walked<Option<PathBuf>> {
+        let walk = self
             .walks
             .entry((root.to_path_buf(), depth))
             .or_insert_with(|| {
-                let mut files = Vec::new();
-                walk_files(root, depth, &mut files);
-                files
+                let mut walk = Walked::default();
+                walk_files(root, depth, &mut walk);
+                walk
             });
-        files
+        let found = walk
+            .found
             .iter()
             .filter(|e| matches(&e.name))
             .max_by(|a, b| {
@@ -350,7 +377,11 @@ impl Finder {
                     .cmp(&b.modified)
                     .then_with(|| a.name.cmp(&b.name))
             })
-            .map(|e| e.path.clone())
+            .map(|e| e.path.clone());
+        Walked {
+            found,
+            unlisted: walk.unlisted,
+        }
     }
 
     /// Drops the walks [`newest`](Self::newest) keeps, so the next call lists the folders again.
@@ -358,20 +389,24 @@ impl Finder {
         self.walks.clear();
     }
 
-    pub fn find(&mut self, root: &Path, depth: u8, name_suffix: &str) -> Vec<PathBuf> {
+    /// [`find`], or the cached paths with no walk and so no `unlisted`.
+    pub fn find(&mut self, root: &Path, depth: u8, name_suffix: &str) -> Walked<Vec<PathBuf>> {
         let key = (root.to_path_buf(), depth, name_suffix.to_lowercase());
         if let Some(paths) = self.found.get(&key)
             && !paths.is_empty()
             && paths.iter().all(|p| p.is_file())
         {
-            return paths.clone();
+            return Walked {
+                found: paths.clone(),
+                unlisted: None,
+            };
         }
-        let paths = find(root, depth, name_suffix);
+        let walked = find(root, depth, name_suffix);
         if self.found.len() >= FINDER_CAP && !self.found.contains_key(&key) {
             self.found.clear();
         }
-        self.found.insert(key, paths.clone());
-        paths
+        self.found.insert(key, walked.found.clone());
+        walked
     }
 }
 
@@ -869,8 +904,30 @@ mod tests {
         set_modified(&dir.path().join("C--old-project"), days_ago(9));
         set_modified(&dir.path().join("C--new-project"), days_ago(1));
 
-        assert_eq!(find(dir.path(), 1, sid), vec![new, old]);
-        assert!(find(&dir.path().join("missing"), 1, sid).is_empty());
+        assert_eq!(find(dir.path(), 1, sid).found, vec![new, old]);
+        assert_eq!(
+            find(&dir.path().join("missing"), 1, sid),
+            Walked::default(),
+            "a missing folder is no error"
+        );
+    }
+
+    #[test]
+    fn a_walk_tells_a_folder_it_could_not_list() {
+        let dir = TempDir::new("find-unlisted");
+        let file = dir.write("not-a-folder", b"");
+        let walked = find(&file, 1, "s.jsonl");
+        assert!(walked.found.is_empty());
+        assert!(matches!(walked.unlisted, Some(Some(_))), "{walked:?}");
+
+        let mut finder = Finder::new();
+        let newest = finder.newest(&file, 3, |_| true);
+        assert_eq!(newest.found, None);
+        assert_eq!(newest.unlisted, walked.unlisted);
+        assert_eq!(
+            finder.newest(&dir.path().join("missing"), 3, |_| true),
+            Walked::default()
+        );
     }
 
     #[test]
@@ -887,9 +944,9 @@ mod tests {
         set_modified(&dir.path().join("2026/10"), days_ago(3));
         set_modified(&dir.path().join("2026/11"), days_ago(0));
 
-        assert_eq!(find(dir.path(), 3, id), vec![newer, older]);
+        assert_eq!(find(dir.path(), 3, id).found, vec![newer, older]);
         assert!(
-            find(dir.path(), 2, id).len() == 1,
+            find(dir.path(), 2, id).found.len() == 1,
             "depth 2 sees only the decoy one level up"
         );
     }
@@ -898,22 +955,25 @@ mod tests {
     fn finder_walks_again_only_when_not_found_or_gone() {
         let dir = TempDir::new("finder");
         let mut finder = Finder::new();
-        assert!(finder.find(dir.path(), 1, "s.jsonl").is_empty());
+        assert!(finder.find(dir.path(), 1, "s.jsonl").found.is_empty());
 
         let first = dir.write("a/s.jsonl", b"");
         assert_eq!(
-            finder.find(dir.path(), 1, "s.jsonl"),
+            finder.find(dir.path(), 1, "s.jsonl").found,
             vec![first.clone()],
             "not found walks again"
         );
 
         // A second match appears; the cached answer still stands, so the walk is skipped.
         let second = dir.write("b/s.jsonl", b"");
-        assert_eq!(finder.find(dir.path(), 1, "S.JSONL"), vec![first.clone()]);
+        assert_eq!(
+            finder.find(dir.path(), 1, "S.JSONL").found,
+            vec![first.clone()]
+        );
 
         fs::remove_file(&first).unwrap();
         assert_eq!(
-            finder.find(dir.path(), 1, "s.jsonl"),
+            finder.find(dir.path(), 1, "s.jsonl").found,
             vec![second],
             "a gone path walks again"
         );
@@ -928,7 +988,7 @@ mod tests {
             finder.find(dir.path(), 1, &format!("{n}.jsonl"));
         }
         assert!(finder.found.len() <= FINDER_CAP);
-        assert_eq!(finder.find(dir.path(), 1, "s.jsonl"), vec![path]);
+        assert_eq!(finder.find(dir.path(), 1, "s.jsonl").found, vec![path]);
     }
 
     #[test]

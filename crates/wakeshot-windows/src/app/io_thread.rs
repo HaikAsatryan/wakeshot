@@ -239,8 +239,20 @@ impl Runner {
             }
             Command::DeleteHold(id) => {
                 let result = hold_path(&self.dir, id).and_then(|path| remove_file(&path));
+                match result {
+                    Ok(true) => self.note(Level::Info, &format!(r"holds\{:?} deleted", id.0)),
+                    Ok(false) => {
+                        self.note(Level::Info, &format!(r"holds\{:?} was already gone", id.0));
+                    }
+                    Err(_) => {}
+                }
                 let failed = format!(r"holds\{:?} not deleted", id.0);
-                self.file_done(FileKind::Hold(id.clone()), result, &failed, command);
+                self.file_done(
+                    FileKind::Hold(id.clone()),
+                    result.map(drop),
+                    &failed,
+                    command,
+                );
             }
             Command::FinishRestoreRequest(state) => {
                 let result = self.finish_request(serde_json::to_vec_pretty(state));
@@ -421,9 +433,9 @@ fn write_json(path: &Path, bytes: serde_json::Result<Vec<u8>>) -> Result<(), Fai
     store::write_atomic(path, &bytes).map_err(Failure::from)
 }
 
-/// A file that is already gone counts as removed.
-fn remove_file(path: &Path) -> Result<(), Failure> {
-    store::remove(path).map(drop).map_err(Failure::from)
+/// A file that is already gone counts as removed. `true`: it was there.
+fn remove_file(path: &Path) -> Result<bool, Failure> {
+    store::remove(path).map_err(Failure::from)
 }
 
 fn failure_text(f: Failure) -> String {
@@ -946,6 +958,31 @@ mod tests {
             vec![written(FileKind::Hold(id("run-7.json")), Ok(())); 2]
         );
         assert!(rig.io_lines(Level::Warn).is_empty());
+    }
+
+    /// A hold file whose process ended goes without a word otherwise: the core's line says it stopped counting, not
+    /// that the file went.
+    #[test]
+    fn each_hold_delete_is_logged_whether_the_file_was_there_or_not() {
+        let rig = Rig::new("delete-logged");
+        store::write_atomic(&rig.data().holds().join("run-42.json"), b"{}").unwrap();
+
+        let events = rig.run(vec![
+            Command::DeleteHold(id("run-42.json")),
+            Command::DeleteHold(id("run-42.json")),
+        ]);
+
+        assert_eq!(
+            events,
+            vec![written(FileKind::Hold(id("run-42.json")), Ok(())); 2]
+        );
+        assert_eq!(
+            rig.io_lines(Level::Info),
+            [
+                r#"holds\"run-42.json" deleted"#,
+                r#"holds\"run-42.json" was already gone"#
+            ]
+        );
     }
 
     #[test]

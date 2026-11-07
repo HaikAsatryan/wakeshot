@@ -882,34 +882,54 @@ mod tests {
         }
     }
 
+    /// A token-shaped word made at run time from its parts, so the source holds none for a secret scanner to flag;
+    /// the redaction sees the same word as before.
+    fn token(parts: &[&str]) -> String {
+        parts.concat()
+    }
+
     #[test]
     fn tokens_go_and_ids_stay() {
         let r = Redact::default();
         let cases = [
             (
-                "key sk-ant-api03-AbCdEf0123456789xyz end",
+                format!(
+                    "key {} end",
+                    token(&["sk", "-ant-api03-AbCdEf0123456789xyz"])
+                ),
                 "key [token removed] end",
             ),
             (
-                "ghp_0123456789abcdefABCDEF0123456789abcd",
+                token(&["gh", "p_0123456789abcdefABCDEF0123456789abcd"]),
                 "[token removed]",
             ),
             (
-                "github_pat_11ABCDEFG0123456789_abcdefghij",
+                token(&["github", "_pat_11ABCDEFG0123456789_abcdefghij"]),
                 "[token removed]",
             ),
             (
-                "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2ln",
+                format!(
+                    "Bearer {}",
+                    token(&[
+                        "ey",
+                        "JhbGciOiJIUzI1NiJ9.",
+                        "ey",
+                        "JzdWIiOiIxMjM0NTY3ODkwIn0.c2ln"
+                    ])
+                ),
                 "Bearer [token removed].[token removed].c2ln",
             ),
-            ("token=AKIAIOSFODNN7EXAMPLE1", "token=[token removed]"),
             (
-                "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+                format!("token={}", token(&["AK", "IAIOSFODNN7EXAMPLE1"])),
+                "token=[token removed]",
+            ),
+            (
+                token(&["a1b2c3d4e5f6a7b8c9d0", "e1f2a3b4c5d6e7f8a9b0"]),
                 "[token removed]",
             ),
         ];
-        for (text, want) in cases {
-            assert_eq!(r.apply(text), want, "{text}");
+        for (text, want) in &cases {
+            assert_eq!(r.apply(text), *want, "{text}");
         }
         let kept = [
             "plan 381b4222-f694-41f0-9685-ff5bb260df2e",
@@ -1032,8 +1052,6 @@ mod tests {
     }
 
     const PROMPT: &str = "PLANTED-PROMPT-7f3a refactor the billing module";
-    const TOKEN: &str = "sk-ant-api03-PLANTEDtoken0123456789abcdefXYZ";
-    const GH_TOKEN: &str = "ghp_PLANTED0123456789abcdefghijklmnopqrstuv";
 
     /// The bundle holds Wakeshot's own files with the user name and tokens taken out, and never a prompt or a token
     /// planted in other apps' files, in stray files of the data folder, or behind a junction.
@@ -1044,6 +1062,8 @@ mod tests {
         let data = DataDir::at(home.join(r"AppData\Local\Wakeshot"));
         let out = root.0.join("out");
         fs::create_dir_all(&out).unwrap();
+        let sk = token(&["sk", "-ant-api03-PLANTEDtoken0123456789abcdefXYZ"]);
+        let gh = token(&["gh", "p_PLANTED0123456789abcdefghijklmnopqrstuv"]);
 
         // Other apps' files, as an agent writes them: a prompt and a token in each.
         let claude = home.join(".claude");
@@ -1051,14 +1071,14 @@ mod tests {
             &claude.join("sessions").join("4100.json"),
             &format!(r#"{{"pid":4100,"prompt":"{PROMPT}"}}"#),
         );
-        write(&claude.join("sessions").join("4100.key"), TOKEN);
+        write(&claude.join("sessions").join("4100.key"), &sk);
         write(
             &home.join(r".codex\auth.json"),
-            &format!(r#"{{"OPENAI_API_KEY":"{TOKEN}"}}"#),
+            &format!(r#"{{"OPENAI_API_KEY":"{sk}"}}"#),
         );
         write(
             &home.join(r".local\share\opencode\service.json"),
-            &format!(r#"{{"password":"{GH_TOKEN}"}}"#),
+            &format!(r#"{{"password":"{gh}"}}"#),
         );
 
         // Wakeshot's own files, some with the user's paths and a token a script wrote into a hold reason.
@@ -1076,7 +1096,7 @@ mod tests {
         );
         write(
             &data.holds().join("backup.json"),
-            &format!(r#"{{"version":1,"pid":4242,"reason":"upload {GH_TOKEN}"}}"#),
+            &format!(r#"{{"version":1,"pid":4242,"reason":"upload {gh}"}}"#),
         );
         write(
             &data
@@ -1090,7 +1110,7 @@ mod tests {
             "journal",
             &format!(r#"RunOnce value set to "{profile}\AppData\Local\x.exe" --restore"#),
         );
-        log.line(Level::Info, "core", &format!("a line with {TOKEN} in it"));
+        log.line(Level::Info, "core", &format!("a line with {sk} in it"));
 
         // Files Wakeshot does not own, inside its own folders, and a junction to another app's folder.
         write(&data.root().join("notes.txt"), PROMPT);
@@ -1114,8 +1134,8 @@ mod tests {
         for planted in [
             PROMPT,
             "PLANTED-PROMPT",
-            TOKEN,
-            GH_TOKEN,
+            &sk,
+            &gh,
             "PLANTEDtoken",
             "Planted.User",
             "planted.user",

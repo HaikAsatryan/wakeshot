@@ -1383,7 +1383,13 @@ Log:
   waiting hour over, the process ended, its file does not read, gone from the agent's files, Automatic off); the same
   for each hold file by its bare name; each request change, each settings write and restore with old and new values,
   each user change, lock, each hibernate check, each notice and sound, each format problem (at most once a minute per
-  source). Never logged: prompts, transcript text, full command lines, `.key` file names.
+  source). The watch also says, once while it lasts and in that same line: why a session whose files show work counts
+  as ended (no process of its image holds its lock file, with the other holders' exe names; or no process of its
+  images runs, or none started before it), a folder on the way to a transcript or rollout that cannot be listed while
+  the file is not found, a query's error word (`no_sqlite`: Windows' own SQLite is not usable), and a database another
+  process has open without its `-wal`. Each hold file the tray deletes, or finds gone already; the data folder or
+  `holds\` when it cannot be watched (not when `holds\` is just not made yet). Never logged: prompts, transcript text,
+  full command lines, `.key` file names.
 - "Open log" opens the file with the default app (`ShellExecuteW` "open"). The log never leaves the PC by itself.
 - Bug reports: `wakeshot diagnostics [folder]` writes one text file, `wakeshot-diagnostics-<local time>.txt`, to the
   folder or the Desktop (`FOLDERID_Desktop`), never over a file, and shows it in Explorer

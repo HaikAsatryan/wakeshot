@@ -47,8 +47,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use wakeshot_core::event::Event;
 use wakeshot_core::process::{Alive, ProcessRef};
 use wakeshot_core::sources::{
-    self, AgentSource, Fed, Feed, FileId, FormatHealth, IMAGE_SINCE_SLACK_MS, SessionFacts,
-    SessionKey, SourceId, WantedFile,
+    self, Activity, AgentSource, Fed, Feed, FileId, FormatHealth, IMAGE_SINCE_SLACK_MS,
+    SessionFacts, SessionKey, SourceId, WantedFile,
 };
 use wakeshot_core::time::Now;
 
@@ -376,7 +376,8 @@ impl Agents {
     }
 
     /// Every source's sessions, each checked once through `liveness`, as events for the sources whose snapshot
-    /// changed. Logs format and read problems, at most one line per source per minute of `now.mono_ms`.
+    /// changed. Logs format and read problems, and why a session whose files show work counts as ended, each once while
+    /// it lasts, at most one line per source per minute of `now.mono_ms`.
     pub fn snapshots(&mut self, liveness: &dyn Liveness, now: Now) -> Snapshots {
         let mut out = Snapshots::default();
         let lock_owners = &*self.io.owners;
@@ -414,7 +415,9 @@ impl Agents {
                             // A process can take up a lock file a crash left with no notice (Codex reopens it and
                             // writes nothing), but its turn writes the session's log, which changes these facts.
                             if before.get(&session.key) != Some(&&session)
-                                && known.get(lock_file).is_some_and(Vec::is_empty)
+                                && known
+                                    .get(lock_file)
+                                    .is_some_and(|held| held.counted.is_empty())
                             {
                                 known.remove(lock_file);
                             }
@@ -422,27 +425,52 @@ impl Agents {
                                 image,
                                 path: lock_file,
                             };
-                            any_process(
+                            let alive = any_process(
                                 liveness,
                                 lock_owners,
                                 &mut known,
                                 &lock,
                                 &mut problems,
                                 &mut out.live,
-                            )
+                            );
+                            // No answer kept means Restart Manager failed, which has its own line.
+                            if alive == Alive::Gone
+                                && shows_work(&session)
+                                && let Some(held) = known.get(lock_file)
+                            {
+                                problems.insert(Problem::Ended {
+                                    session: short_id(&session.key.id),
+                                    why: Ended::NotHeld {
+                                        image,
+                                        named: named_pid(lock_file).is_some(),
+                                        others: held.others.clone(),
+                                    },
+                                });
+                            }
+                            alive
                         }
                         sources::Liveness::ImageSince {
                             images,
                             since_wall_ms,
                         } => {
                             let list = processes.get_or_insert_with(|| liveness.list().ok());
-                            image_since(
+                            let alive = image_since(
                                 list.as_deref(),
                                 images,
                                 *since_wall_ms,
                                 &mut problems,
                                 &mut out.live,
-                            )
+                            );
+                            if alive == Alive::Gone && shows_work(&session) {
+                                problems.insert(Problem::Ended {
+                                    session: short_id(&session.key.id),
+                                    why: Ended::NoImage {
+                                        images,
+                                        since: since_wall_ms.is_some(),
+                                    },
+                                });
+                            }
+                            alive
                         }
                     };
                     match session.format {
@@ -503,6 +531,37 @@ struct LockFile<'a> {
     path: &'a Path,
 }
 
+/// What Restart Manager last said about one lock file.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Holders {
+    /// The holders that keep the session alive; empty when none did.
+    counted: Vec<ProcessRef>,
+    /// The images of the other holders, sorted, at most [`MAX_OTHERS`]: an agent whose exe got a new name shows here
+    /// in the log instead of never holding without a word.
+    others: Vec<String>,
+}
+
+/// The most other holders' images a log line names.
+const MAX_OTHERS: usize = 4;
+
+/// The session's files show work that holds while it lives (a turn, a wait, a timer, a background task), so a
+/// liveness of `Gone` is what keeps it from holding. An idle session's liveness changes nothing, so it gets no line.
+fn shows_work(facts: &SessionFacts) -> bool {
+    facts.activity != Activity::Idle || facts.open_tasks > 0 || !facts.timers.is_empty()
+}
+
+/// A session id as the core's log lines show it: a pid as it is, any other id as 8 hex digits of its FNV-1a hash, so
+/// a line here and the core's lines name one session the same way, and no id that is a file name reaches the log.
+fn short_id(id: &str) -> String {
+    if (1..=10).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_digit()) {
+        return id.to_owned();
+    }
+    let hash = id.bytes().fold(0x811c_9dc5_u32, |hash, byte| {
+        (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
+    });
+    format!("{hash:08x}")
+}
+
 /// `Yes` while a process running the image, or the process the lock file's name gives ([`named_pid`]), holds the lock
 /// file open; its holders go to `live`. The holders found are kept in `known` until the lock file changes
 /// ([`Slot::forget_owners`], a listing that feeds it) or all of them are gone, so Restart Manager is asked once per
@@ -514,17 +573,20 @@ struct LockFile<'a> {
 fn any_process(
     liveness: &dyn Liveness,
     owners: &dyn LockOwners,
-    known: &mut BTreeMap<PathBuf, Vec<ProcessRef>>,
+    known: &mut BTreeMap<PathBuf, Holders>,
     lock: &LockFile<'_>,
     problems: &mut BTreeSet<Problem>,
     live: &mut Vec<ProcessRef>,
 ) -> Alive {
     if let Some(held) = known.get(lock.path) {
-        if held.is_empty() {
+        if held.counted.is_empty() {
             return Alive::Gone;
         }
-        let answers: Vec<(ProcessRef, Alive)> =
-            held.iter().map(|&p| (p, liveness.check(p))).collect();
+        let answers: Vec<(ProcessRef, Alive)> = held
+            .counted
+            .iter()
+            .map(|&p| (p, liveness.check(p)))
+            .collect();
         let yes: Vec<ProcessRef> = answers
             .iter()
             .filter(|(_, alive)| *alive == Alive::Yes)
@@ -545,25 +607,27 @@ fn any_process(
     let counts = |e: &ProcessEntry| of_image(e) || named == Some(e.pid);
     match owners.holders(lock.path) {
         Ok(holders) => {
-            let held: Vec<ProcessRef> = if holders.is_empty() {
-                holders
-            } else {
+            let mut held = Holders::default();
+            if !holders.is_empty() {
                 let Ok(list) = liveness.list() else {
                     problems.insert(Problem::LivenessUnknown);
                     return Alive::Unknown;
                 };
-                holders
-                    .into_iter()
-                    .filter(|h| {
-                        list.iter()
-                            .any(|e| e.pid == h.pid && e.start == h.start && counts(e))
-                    })
-                    .collect()
-            };
-            let alive = if held.is_empty() {
+                for h in holders {
+                    match list.iter().find(|e| e.pid == h.pid && e.start == h.start) {
+                        Some(e) if counts(e) => held.counted.push(h),
+                        Some(e) => held.others.push(e.image.clone()),
+                        None => {}
+                    }
+                }
+                held.others.sort_unstable();
+                held.others.dedup();
+                held.others.truncate(MAX_OTHERS);
+            }
+            let alive = if held.counted.is_empty() {
                 Alive::Gone
             } else {
-                live.extend(&held);
+                live.extend(&held.counted);
                 Alive::Yes
             };
             known.insert(lock.path.to_path_buf(), held);
@@ -972,8 +1036,8 @@ struct Slot {
     queries: BTreeMap<QueryKey, QueryState>,
     tails: BTreeMap<TailKey, TailState>,
     finder: Finder,
-    /// The holders found for each lock file an `AnyProcess` session names; an empty list: nobody held it.
-    owners: BTreeMap<PathBuf, Vec<ProcessRef>>,
+    /// The holders found for each lock file an `AnyProcess` session names.
+    owners: BTreeMap<PathBuf, Holders>,
     /// Who holds each `Query` database open; none for a database not asked about yet.
     hosts: BTreeMap<PathBuf, Hosts>,
     posted: Option<Vec<(SessionFacts, Alive)>>,
@@ -1025,6 +1089,10 @@ struct QueryState {
     /// the header differs, as only a commit changes it.
     header: Option<Option<[u8; sqlite::HEADER_LEN]>>,
     fed: QueryFed,
+    /// The fixed word of the last answer when it was an error, until rows come or the database closes.
+    failed: Option<&'static str>,
+    /// At the last run the database was there without its `-wal`, so it was not read.
+    no_wal: bool,
 }
 
 /// The last feed of one query, so an unchanged answer is not fed again and `Gone` is fed once.
@@ -1041,6 +1109,9 @@ struct TailState {
     /// The last poll found the file, so its going is fed once as `Gone`.
     present: bool,
     unread: Option<Option<i32>>,
+    /// A `FindTail` or `FindNewest` found no file and a folder on its way could not be listed, so the file may be
+    /// there unseen.
+    unlisted: Option<Option<i32>>,
 }
 
 impl Slot {
@@ -1224,6 +1295,8 @@ impl Slot {
                     noticed: false,
                     header: None,
                     fed: QueryFed::Nothing,
+                    failed: None,
+                    no_wal: false,
                 })
                 .sql = sql;
         }
@@ -1454,9 +1527,11 @@ impl Slot {
         wal.push("-wal");
         // The `-wal` file lives while the agent has the database open, and a read without it could make one.
         let open = there && Path::new(&wal).is_file();
+        state.no_wal = there && !open;
         let feed = if !open {
             state.header = None;
             state.noticed = false;
+            state.failed = None;
             matches!(state.fed, QueryFed::Answer(_)).then_some(Feed::Gone)
         } else if !state.noticed && state.header == Some(sqlite::wal_index_header(&key.db)) {
             // No commit since the last read: the same rows. Files a stopped agent left are so read once, not on each
@@ -1476,6 +1551,7 @@ impl Slot {
                 // The header is kept from before, so the next look reads again.
                 sqlite::Answer::Busy => None,
                 sqlite::Answer::Json(bytes) => {
+                    state.failed = sqlite::error_kind(&bytes);
                     // After the read: on files a stopped agent left, the read itself rebuilt the header.
                     state.header = Some(sqlite::wal_index_header(&key.db));
                     let same = matches!(&state.fed, QueryFed::Answer(last) if *last == bytes);
@@ -1712,7 +1788,10 @@ impl Slot {
                 depth,
                 suffix,
             } => {
-                let found = self.finder.find(root, *depth, suffix);
+                let walked = self.finder.find(root, *depth, suffix);
+                // A folder that could not be listed matters only while it may hide the one file wanted.
+                state.unlisted = walked.found.is_empty().then_some(walked.unlisted).flatten();
+                let found = walked.found;
                 // The file found first stays the one tailed while it is still found, so a second match never splits
                 // a source's lines across two files.
                 let kept = state
@@ -1747,7 +1826,9 @@ impl Slot {
                 let Some(matches) = matches else {
                     return;
                 };
-                let newest = self.finder.newest(root, *depth, |name| matches(name, of));
+                let walked = self.finder.newest(root, *depth, |name| matches(name, of));
+                state.unlisted = walked.found.is_none().then_some(walked.unlisted).flatten();
+                let newest = walked.found;
                 let kept = state
                     .tail
                     .as_ref()
@@ -1828,14 +1909,22 @@ impl Slot {
             let unread = r.unread.values().map(|code| Problem::Unread(*code));
             unread.chain(r.unlisted.map(Problem::Unlisted))
         });
-        let tails = self
-            .tails
-            .values()
-            .filter_map(|t| t.unread.map(Problem::Unread));
+        let tails = self.tails.values().flat_map(|t| {
+            let unread = t.unread.map(Problem::Unread);
+            unread.into_iter().chain(t.unlisted.map(Problem::Unlisted))
+        });
+        let queries = self.queries.iter().flat_map(|(key, q)| {
+            // Only while another process has the database open: with nobody there a missing `-wal` is the normal
+            // state of a closed database.
+            let held = matches!(self.hosts.get(&key.db), Some(Hosts::Held(..)));
+            let no_wal = (q.no_wal && held).then_some(Problem::NoWal);
+            q.failed.map(Problem::QueryFailed).into_iter().chain(no_wal)
+        });
         folders
             .chain(listings)
             .chain(recents)
             .chain(tails)
+            .chain(queries)
             .collect()
     }
 
@@ -1863,8 +1952,8 @@ impl Slot {
     }
 }
 
-/// What one log line can name: field names, fixed texts and error codes, never file content or a path (a path holds
-/// the user's name; a `.key` name must never reach the log).
+/// What one log line can name: field names, fixed texts, error codes, short session ids and exe names, never file
+/// content or a path (a path holds the user's name; a `.key` name must never reach the log).
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Problem {
     Unreadable(&'static str),
@@ -1878,6 +1967,63 @@ enum Problem {
     LivenessUnknown,
     Unlisted(Option<i32>),
     Unread(Option<i32>),
+    /// A session whose files show work counts as ended, so it does not hold. `session` is its short id.
+    Ended {
+        session: String,
+        why: Ended,
+    },
+    /// A query answered with this error word ([`sqlite::error_kind`]).
+    QueryFailed(&'static str),
+    /// A database another process has open has no `-wal`, so it is not read.
+    NoWal,
+}
+
+/// Why a session counts as ended.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Ended {
+    /// `AnyProcess`: no holder that counts. `named`: the lock file's name gives a pid, which would count too. `others`:
+    /// the images of the holders that do not count.
+    NotHeld {
+        image: &'static str,
+        named: bool,
+        others: Vec<String>,
+    },
+    /// `ImageSince`: no process of the images runs, or `since`, none that started early enough.
+    NoImage {
+        images: &'static [&'static str],
+        since: bool,
+    },
+}
+
+impl Ended {
+    fn text(&self) -> String {
+        match self {
+            Ended::NotHeld {
+                image,
+                named,
+                others,
+            } => {
+                let who = if *named {
+                    format!("neither {image} nor the process its name gives holds its lock file")
+                } else {
+                    format!("no {image} holds its lock file")
+                };
+                if others.is_empty() {
+                    who
+                } else {
+                    format!("{who}, only {}", others.join(", "))
+                }
+            }
+            Ended::NoImage { images, since } => {
+                let images = images.join(" or ");
+                if *since {
+                    format!("no {images} that started before it runs")
+                } else {
+                    format!("no {images} runs")
+                }
+            }
+        }
+    }
 }
 
 impl Problem {
@@ -1910,6 +2056,21 @@ impl Problem {
             }
             Problem::Unread(code) => {
                 format!("a file it reads could not be read ({})", code_text(*code))
+            }
+            Problem::Ended { session, why } => {
+                format!(
+                    "session {session} shows work but counts as ended: {}",
+                    why.text()
+                )
+            }
+            Problem::QueryFailed(sqlite::NO_SQLITE) => {
+                "Windows' own SQLite (winsqlite3.dll) is missing, older than 3.22.0 or not usable, so its database is \
+                 not read"
+                    .to_owned()
+            }
+            Problem::QueryFailed(kind) => format!("a query of its database failed ({kind})"),
+            Problem::NoWal => {
+                "its database is open but has no -wal file, so it is not read".to_owned()
             }
         }
     }
@@ -2998,6 +3159,67 @@ mod tests {
         assert!(snapshots.live.is_empty());
     }
 
+    /// The same short id as the core's lines (`core::holds`), FNV-1a 32 values from the published algorithm.
+    #[test]
+    fn short_ids_are_a_pid_as_it_is_or_8_hex_digits() {
+        assert_eq!(short_id("20636"), "20636");
+        assert_eq!(short_id("a"), "e40c292c");
+        assert_eq!(short_id("foobar"), "bf9cf968");
+        assert_eq!(short_id("12345678901"), "3605f02f", "too long for a pid");
+        assert_eq!(short_id("ses_1"), "4a856782");
+    }
+
+    /// A working session that counts as ended says why, once: an agent whose exe got a new name would otherwise never
+    /// hold without a word.
+    #[test]
+    fn a_working_lock_file_session_that_counts_as_ended_says_why_once() {
+        let lock = PathBuf::from(r"C:\Users\x\.codex\thread-writer-locks\t1.lock");
+        let (mut agents, log, source, owners) = lock_agents(&lock);
+        let live = FakeLiveness::default();
+        let (scanner, renamed, gone) = (process(8), process(9), process(10));
+        owners.answer(Ok(vec![renamed, scanner, gone]));
+        live.processes.lock().unwrap().extend([
+            entry(scanner, "MsMpEng.exe"),
+            entry(renamed, "codex-next.exe"),
+        ]);
+        assert_eq!(only_alive(&agents.snapshots(&live, START)), Alive::Gone);
+        for _ in 0..3 {
+            agents.on_tick();
+            agents.snapshots(&live, START);
+        }
+        assert_eq!(
+            lines(&log),
+            [
+                "Codex CLI: session 1ad7a9dc shows work but counts as ended: no codex.exe holds its lock file, only \
+                 MsMpEng.exe, codex-next.exe"
+            ]
+        );
+
+        // Idle, its liveness decides nothing, so nothing more is said.
+        log.lines.lock().unwrap().clear();
+        source.set(|f| f.sessions[0].activity = Activity::Idle);
+        assert_eq!(only_alive(&agents.snapshots(&live, START)), Alive::Gone);
+        assert!(lines(&log).is_empty());
+    }
+
+    #[test]
+    fn a_working_session_whose_named_lock_nobody_holds_says_so() {
+        let lock = PathBuf::from(r"C:\Users\x\.copilot\session-state\s1\inuse.8588.hold");
+        let (mut agents, log, _source, _owners) = lock_agents_for(copilot_session(&lock));
+        assert_eq!(
+            only_alive(&agents.snapshots(&FakeLiveness::default(), START)),
+            Alive::Gone
+        );
+        assert_eq!(
+            lines(&log),
+            [format!(
+                "Copilot CLI: session {} shows work but counts as ended: neither copilot.exe nor the process its \
+                 name gives holds its lock file",
+                short_id("0199c0de-0000-4000-8000-000000000001")
+            )]
+        );
+    }
+
     #[test]
     fn a_change_notice_or_a_listing_of_the_lock_file_asks_again() {
         let dir = TempDir::new("agents-lock-owners");
@@ -3714,6 +3936,42 @@ mod tests {
         assert_eq!(source.fed(), [gone(&new), appended(&old, b"a\n")]);
     }
 
+    /// A transcript or rollout in a folder that cannot be listed is never found: said, instead of a session that
+    /// silently never reads its file.
+    #[test]
+    fn a_find_whose_folder_cannot_be_listed_says_so_while_nothing_is_found() {
+        let root = TempDir::new("agents-find-no-list");
+        let transcript = root.write(r"projects\C--work\s1.jsonl", b"{\"s\":1}\n");
+        let rollout = root.write(r"sessions\2026\11\06\t1.jsonl", b"a\n");
+        let claude = Shared::new(SourceId::ClaudeCode);
+        claude.set(|f| f.wanted = vec![find_tail(&root.path().join("projects"), "s1.jsonl")]);
+        let codex = Shared::new(SourceId::Codex);
+        codex.set(|f| f.wanted = vec![newest(&root.path().join("sessions"), "t1")]);
+        let (mut agents, log) = agents(&[&claude, &codex]);
+
+        let no_backup = NoBackup::on();
+        let denied = [
+            NoListing::on(&root.path().join(r"projects\C--work")),
+            NoListing::on(&root.path().join(r"sessions\2026\11\06")),
+        ];
+        agents.on_tick();
+        assert!(claude.fed().is_empty() && codex.fed().is_empty());
+        agents.snapshots(&FakeLiveness::default(), START);
+        assert_eq!(
+            lines(&log),
+            [
+                "Claude Code: a folder it reads could not be listed (error 5)",
+                "Codex CLI: a folder it reads could not be listed (error 5)"
+            ]
+        );
+
+        drop(denied);
+        drop(no_backup);
+        agents.on_tick();
+        assert_eq!(claude.fed(), [appended(&transcript, b"{\"s\":1}\n")]);
+        assert_eq!(codex.fed(), [appended(&rollout, b"a\n")]);
+    }
+
     #[test]
     fn folders_watch_a_recent_root_and_a_query_database_folder() {
         let root = TempDir::new("agents-new-folders");
@@ -3900,6 +4158,7 @@ mod tests {
         fake: Arc<Mutex<FakeDb>>,
         clock: Arc<Mutex<Instant>>,
         owners: Owners,
+        log: Arc<MemoryLog>,
     }
 
     /// The agent process that holds the rig's database open.
@@ -3940,7 +4199,8 @@ mod tests {
                 now: Box::new(move || *now.lock().unwrap()),
                 ..AgentIo::default()
             };
-            let agents = Agents::with_io(vec![source.boxed()], Arc::new(MemoryLog::default()), io);
+            let log = Arc::new(MemoryLog::default());
+            let agents = Agents::with_io(vec![source.boxed()], log.clone(), io);
             Self {
                 dir,
                 db,
@@ -3949,6 +4209,7 @@ mod tests {
                 fake,
                 clock,
                 owners,
+                log,
             }
         }
 
@@ -4033,6 +4294,65 @@ mod tests {
             [(FileId(rig.id()), Feed::Whole(ROWS.to_vec()))],
             "back: the answer is fed again"
         );
+    }
+
+    /// Windows without a usable SQLite, and a database an agent has open without its `-wal`, give no signal and no
+    /// notice, so each is said once while it lasts.
+    #[test]
+    fn a_query_error_and_a_held_database_without_its_wal_are_logged() {
+        let mut rig = QueryRig::new("agents-query-log");
+        let live = FakeLiveness::default();
+        live.alive
+            .lock()
+            .unwrap()
+            .push((process(AGENT), Alive::Yes));
+        let minute = |n: u64| Now {
+            mono_ms: START.mono_ms + n * LOG_EVERY_MS,
+            ..START
+        };
+        rig.open();
+        rig.answer(sqlite::Answer::Json(br#"{"error":"no_sqlite"}"#.to_vec()));
+        rig.agents.on_tick();
+        rig.agents.snapshots(&live, minute(0));
+        rig.agents.snapshots(&live, minute(1));
+        assert_eq!(
+            lines(&rig.log),
+            [
+                "OpenCode: Windows' own SQLite (winsqlite3.dll) is missing, older than 3.22.0 or not usable, so its \
+                 database is not read"
+            ]
+        );
+
+        // Rows again: over, and nothing more is said.
+        rig.log.lines.lock().unwrap().clear();
+        rig.answer(sqlite::Answer::Json(ROWS.to_vec()));
+        rig.later(1_000);
+        rig.change(&["opencode.db-wal"]);
+        assert_eq!(rig.runs(), 2);
+        rig.agents.snapshots(&live, minute(2));
+        assert!(lines(&rig.log).is_empty());
+
+        // The agent still has it open, but the `-wal` went: it is not read.
+        fs::remove_file(rig.dir.path().join("opencode.db-wal")).unwrap();
+        rig.later(1_000);
+        rig.agents.on_tick();
+        rig.agents.snapshots(&live, minute(3));
+        assert_eq!(
+            lines(&rig.log),
+            ["OpenCode: its database is open but has no -wal file, so it is not read"]
+        );
+    }
+
+    /// A closed database has no `-wal`: that is the normal state of an agent that is not running.
+    #[test]
+    fn a_database_nobody_holds_without_its_wal_says_nothing() {
+        let mut rig = QueryRig::new("agents-query-closed");
+        rig.owners.answer(Ok(vec![]));
+        rig.dir.write("opencode.db", b"");
+        rig.agents.on_tick();
+        rig.agents.snapshots(&FakeLiveness::default(), START);
+        assert_eq!(rig.runs(), 0);
+        assert!(lines(&rig.log).is_empty());
     }
 
     #[test]
@@ -4527,13 +4847,64 @@ mod tests {
             "every live process started after the row: a crash leftover"
         );
         assert!(live.checked.lock().unwrap().is_empty(), "no handle check");
-        assert!(lines(&log).is_empty());
+        assert_eq!(
+            lines(&log),
+            [format!(
+                "OpenCode: session {} shows work but counts as ended: no opencode.exe or opencode-cli.exe that \
+                 started before it runs",
+                short_id("ses_1")
+            )],
+            "said once, when it ends a working session"
+        );
 
+        log.lines.lock().unwrap().clear();
         *live.list_error.lock().unwrap() = Some(RM_FAILED);
-        assert_eq!(alive_for(&mut agents, None), (Alive::Unknown, vec![]));
+        source.set(|f| f.sessions = vec![opencode_session(None)]);
+        let later = Now {
+            mono_ms: START.mono_ms + LOG_EVERY_MS,
+            ..START
+        };
+        let snapshots = agents.snapshots(&live, later);
+        assert_eq!(
+            (only_alive(&snapshots), snapshots.live),
+            (Alive::Unknown, vec![])
+        );
         assert_eq!(
             lines(&log),
             ["OpenCode: a session's process could not be checked, so its liveness is unknown"]
+        );
+    }
+
+    #[test]
+    fn image_since_says_nothing_of_an_idle_session_or_no_image_at_all() {
+        let source = Shared::new(SourceId::OpenCode);
+        let (mut agents, log) = agents(&[&source]);
+        let live = FakeLiveness::default();
+        let idle = SessionFacts {
+            activity: Activity::Idle,
+            ..opencode_session(None)
+        };
+        source.set(|f| f.sessions = vec![idle]);
+        assert_eq!(only_alive(&agents.snapshots(&live, START)), Alive::Gone);
+        assert!(
+            lines(&log).is_empty(),
+            "an idle session holds nothing either way"
+        );
+
+        // A schedule's entry: any start counts, and no process of the image runs at all.
+        let timer = SessionFacts {
+            activity: Activity::Idle,
+            timers: vec![START.wall_ms + 60_000],
+            ..opencode_session(None)
+        };
+        source.set(|f| f.sessions = vec![timer]);
+        assert_eq!(only_alive(&agents.snapshots(&live, START)), Alive::Gone);
+        assert_eq!(
+            lines(&log),
+            [format!(
+                "OpenCode: session {} shows work but counts as ended: no opencode.exe or opencode-cli.exe runs",
+                short_id("ses_1")
+            )]
         );
     }
 
