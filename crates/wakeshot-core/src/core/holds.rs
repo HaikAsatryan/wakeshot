@@ -8,10 +8,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::nearest;
 use crate::command::Command;
 use crate::holds::{HoldFacts, HoldKind};
+use crate::policy::sessions::{TIMER_LEAD_MS, TIMER_MARGIN_MS};
 use crate::policy::{hold_files, sessions};
 use crate::present::{self, Holder};
 use crate::process::Alive;
-use crate::sources::{FormatHealth, SessionFacts, SourceId};
+use crate::sources::{Activity, FormatHealth, SessionFacts, SourceId};
 use crate::state::{FileHold, KeepAwakeMemo, Session, State};
 use crate::time::{Deadline, Now};
 use crate::view::KeepAwake;
@@ -36,6 +37,9 @@ pub(super) struct Found {
     /// When the answer next changes on its own: a timer window, the waiting hour, an `expires`, the next minute of
     /// Keep awake's time left.
     pub next: Option<Deadline>,
+    /// One log line per session or hold file that started or stopped holding at this `Now`, with the reason
+    /// (architecture section 8).
+    pub lines: Vec<String>,
 }
 
 /// A full snapshot of one source replaces the last one. A session keeps its memory while it stays in the snapshots
@@ -48,6 +52,7 @@ pub(super) fn take_sources(
     out: &mut Vec<Command>,
 ) {
     let mut old = state.sessions.remove(&source).unwrap_or_default();
+    let seen_before = old.len();
     let mut problems = BTreeSet::new();
     let mut label = None;
     let mut new = BTreeMap::new();
@@ -56,18 +61,46 @@ pub(super) fn take_sources(
             problems.insert(problem);
             label = Some(facts.label);
         }
-        let memory = old.remove(&facts.key).map(|s| s.memory).unwrap_or_default();
+        let (memory, held) = old
+            .remove(&facts.key)
+            .map(|s| (s.memory, s.held))
+            .unwrap_or_default();
         new.insert(
             facts.key.clone(),
             Session {
                 facts,
                 alive,
                 memory,
+                held,
             },
         );
     }
+    // How many sessions the agent's files show, at each change: a session that never holds gets no line of its own,
+    // and "was it seen at all" is the first question about an agent that did not hold.
+    if new.len() != seen_before {
+        let agent = new
+            .values()
+            .chain(old.values())
+            .next()
+            .map(|s| s.facts.label);
+        let count = match new.len() {
+            1 => "1 session".to_owned(),
+            n => format!("{n} sessions"),
+        };
+        out.push(Command::Log(format!(
+            "{}: {count} in its files",
+            agent.unwrap_or("An agent")
+        )));
+    }
     if !new.is_empty() {
         state.sessions.insert(source, new);
+    }
+    // A session that leaves the snapshot while it holds gets its end line here: `evaluate` no longer sees it.
+    for session in old.values().filter(|s| s.held) {
+        out.push(Command::Log(format!(
+            "{} stops holding: it is gone from the agent's files",
+            session_name(&session.facts)
+        )));
     }
     let Some(label) = label else {
         return;
@@ -108,10 +141,10 @@ pub(super) fn take_files(
 ) {
     let mut new = BTreeMap::new();
     for facts in snapshot {
-        let last = state
+        let (last, counted) = state
             .files
             .get(&facts.id)
-            .map_or(Alive::Unknown, |f| f.alive);
+            .map_or((Alive::Unknown, false), |f| (f.alive, f.counted));
         let answer = hold_files::decide(&facts, last, state.automatic, now);
         let ours = facts.kind == HoldKind::KeepAwake && state.keep_awake_written;
         if answer.delete && !ours && state.deleting.insert(facts.id.clone()) {
@@ -122,10 +155,19 @@ pub(super) fn take_files(
             FileHold {
                 facts,
                 alive: answer.alive,
+                counted,
             },
         );
     }
     state.deleting.retain(|id| new.contains_key(id));
+    for (id, file) in &state.files {
+        if file.counted && !new.contains_key(id) {
+            out.push(Command::Log(format!(
+                "Hold file {} stops counting: the file is gone",
+                id.0
+            )));
+        }
+    }
     state.files = new;
 }
 
@@ -139,11 +181,21 @@ pub(super) fn evaluate(state: &mut State, now: Now) -> Found {
         keep_awake: KeepAwake::Off,
         update: Vec::new(),
         next: None,
+        lines: Vec::new(),
     };
     let agents = hold_files::kind_counts(HoldKind::Agent, automatic);
     for session in state.sessions.values_mut().flat_map(BTreeMap::values_mut) {
         let answer = sessions::decide(&session.facts, session.alive, &session.memory, now);
         session.memory = answer.memory;
+        let holds = agents && answer.holds;
+        if holds != session.held {
+            session.held = holds;
+            let why = session_why(&session.facts, session.memory.alive, holds, agents, now);
+            let verb = if holds { "holds" } else { "stops holding" };
+            found
+                .lines
+                .push(format!("{} {verb}: {why}", session_name(&session.facts)));
+        }
         if !agents {
             continue;
         }
@@ -162,6 +214,16 @@ pub(super) fn evaluate(state: &mut State, now: Now) -> Found {
     for file in state.files.values_mut() {
         let answer = hold_files::decide(&file.facts, file.alive, automatic, now);
         file.alive = answer.alive;
+        if answer.counts != file.counted {
+            file.counted = answer.counts;
+            found.lines.push(file_line(
+                &file.facts,
+                answer.alive,
+                answer.counts,
+                automatic,
+                now,
+            ));
+        }
         if answer.counts {
             found.holders.push(Holder {
                 kind: answer.kind,
@@ -203,4 +265,83 @@ pub(super) fn keep_awake_check(state: &State, expires_wall_ms: Option<i64>, now:
         Some(memo) if memo.expires_wall_ms == expires_wall_ms => memo.choice,
         _ => present::keep_awake_choice(expires_wall_ms, now),
     }
+}
+
+/// A session as its log lines name it: the agent's label and a short id (`short_id`). Never a prompt, a title or a path.
+fn session_name(facts: &SessionFacts) -> String {
+    format!("{} session {}", facts.label, short_id(&facts.key.id))
+}
+
+/// A session id as the log shows it: a pid (Claude Code's id) as it is, any other id as 8 hex digits of its FNV-1a
+/// hash. Enough to follow one session from line to line; the hash keeps out an id that is a file name or a path
+/// piece (OWASP Logging Cheat Sheet: hash session ids that are logged).
+fn short_id(id: &str) -> String {
+    if (1..=10).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_digit()) {
+        return id.to_owned();
+    }
+    let hash = id.bytes().fold(0x811c_9dc5_u32, |hash, byte| {
+        (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
+    });
+    format!("{hash:08x}")
+}
+
+/// Why a session holds or stopped holding, from the facts `policy::sessions::decide` used: field names and states only.
+/// `alive` is the policy's memory, the last `Yes` or `Gone`.
+fn session_why(facts: &SessionFacts, alive: Alive, holds: bool, agents: bool, now: Now) -> String {
+    if holds {
+        let timer = facts.timers.iter().any(|&due| {
+            due.saturating_sub(TIMER_LEAD_MS) <= now.wall_ms
+                && now.wall_ms < due.saturating_add(TIMER_MARGIN_MS)
+        });
+        return match (&facts.format, facts.activity) {
+            (FormatHealth::UnknownValue(field, _), _) => {
+                format!("an unknown {field}, counted as working")
+            }
+            (_, Activity::Working) => "working".to_owned(),
+            _ if facts.open_tasks > 0 => format!("{} background tasks open", facts.open_tasks),
+            _ if timer => "a timer is due within the hour".to_owned(),
+            _ => "waiting with Remote Control, for up to an hour".to_owned(),
+        };
+    }
+    if !agents {
+        return "Automatic is off".to_owned();
+    }
+    match alive {
+        Alive::Gone => return "its process ended".to_owned(),
+        Alive::Unknown => return "its process is not checked yet".to_owned(),
+        Alive::Yes => {}
+    }
+    match (&facts.format, facts.activity) {
+        (FormatHealth::Unreadable(what), _) => format!("cannot read {what}"),
+        (_, Activity::Waiting { remote: false, .. }) => "waiting for the user".to_owned(),
+        (_, Activity::Waiting { remote: true, .. }) => "the waiting hour is over".to_owned(),
+        _ => "idle".to_owned(),
+    }
+}
+
+/// A hold file's start or end line: its bare file name, never a path, and why.
+fn file_line(facts: &HoldFacts, alive: Alive, counts: bool, automatic: bool, now: Now) -> String {
+    let name = &facts.id.0;
+    if counts {
+        let why = match facts.expires_wall_ms {
+            Some(expires) => format!(
+                "its process runs; it expires in {} min",
+                u64::try_from(expires.saturating_sub(now.wall_ms))
+                    .unwrap_or(0)
+                    .div_ceil(60_000)
+            ),
+            None => "its process runs".to_owned(),
+        };
+        return format!("Hold file {name} counts: {why}");
+    }
+    let why = if !hold_files::kind_counts(facts.kind, automatic) {
+        "Automatic is off"
+    } else if alive == Alive::Gone {
+        "its process ended"
+    } else if alive == Alive::Unknown {
+        "its process is not checked yet"
+    } else {
+        "it expired"
+    };
+    format!("Hold file {name} stops counting: {why}")
 }

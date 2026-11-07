@@ -249,6 +249,8 @@ pub(crate) struct Session {
     pub facts: SessionFacts,
     pub alive: Alive,
     pub memory: SessionMemory,
+    /// It held at the last `evaluate`, so its start and end each get one log line.
+    pub held: bool,
 }
 
 /// One hold file of the last snapshot, and its last `Yes` or `Gone` (`policy::hold_files`, `last_alive`).
@@ -256,6 +258,8 @@ pub(crate) struct Session {
 pub(crate) struct FileHold {
     pub facts: HoldFacts,
     pub alive: Alive,
+    /// It counted at the last `evaluate`, for its log lines, as `Session::held`.
+    pub counted: bool,
 }
 
 /// The `keep-awake.json` whose `expires` is this one stands for `choice`, so the menu checks the length the user

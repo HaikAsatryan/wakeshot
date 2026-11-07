@@ -24,7 +24,7 @@ mod view;
 
 use std::collections::BTreeSet;
 
-use crate::command::{Command, FileKind, HibernateEnd, Outcome, RestoreWhy};
+use crate::command::{Command, Failure, FileKind, HibernateEnd, Outcome, RestoreWhy};
 use crate::event::Event;
 use crate::files::{Config, HoldFile};
 use crate::holds::file::{format_expires, parse_expires};
@@ -231,19 +231,24 @@ impl Core {
     fn done(&mut self, now: Now, outcome: Outcome, out: &mut Vec<Command>) {
         match outcome {
             Outcome::Requests(Ok(())) => self.state.requests_failed = false,
-            // A failed release keeps nothing awake that a notice could explain.
-            Outcome::Requests(Err(_)) if self.state.requests.system => {
-                self.state.requests_failed = true;
-                let first = self
-                    .state
-                    .episode
-                    .as_mut()
-                    .is_some_and(|e| !std::mem::replace(&mut e.cannot_hold_shown, true));
-                if first {
-                    self.notify(Notice::CannotHold, out);
+            Outcome::Requests(Err(Failure { call, code })) => {
+                // Logged either way: a failed release leaves a request set that nothing else in the log shows.
+                out.push(Command::Log(format!(
+                    "Power request change failed ({call}, code {code})"
+                )));
+                // A failed release keeps nothing awake that a notice could explain.
+                if self.state.requests.system {
+                    self.state.requests_failed = true;
+                    let first = self
+                        .state
+                        .episode
+                        .as_mut()
+                        .is_some_and(|e| !std::mem::replace(&mut e.cannot_hold_shown, true));
+                    if first {
+                        self.notify(Notice::CannotHold, out);
+                    }
                 }
             }
-            Outcome::Requests(Err(_)) => {}
             // A failed `FinishRestoreRequest` may have failed at its `state.json` write: write it again.
             Outcome::Written {
                 file: FileKind::State | FileKind::RestoreRequest,
@@ -287,7 +292,7 @@ impl Core {
     /// Everything that follows from the facts at `now`, in the order the runners need: requests before the apply
     /// at a hold start, and before the restore at a hold end (architecture section 3, "Episode flow").
     fn settle(&mut self, now: Now, resumed: bool, tick: bool, out: &mut Vec<Command>) {
-        let found = holds::evaluate(&mut self.state, now);
+        let mut found = holds::evaluate(&mut self.state, now);
         for &agent in &found.update {
             if self.state.update_shown.insert(agent) {
                 self.notify(Notice::UpdateWakeshot { agent }, out);
@@ -312,6 +317,12 @@ impl Core {
             self.state.requests_failed = false;
         }
 
+        // Each session's own line before the lines that sum up every hold.
+        out.extend(
+            std::mem::take(&mut found.lines)
+                .into_iter()
+                .map(Command::Log),
+        );
         let holding: BTreeSet<Held> = found.holders.iter().map(held).collect();
         match self.state.episode.as_mut() {
             None if !holding.is_empty() => self.holding_starts(holding, out),

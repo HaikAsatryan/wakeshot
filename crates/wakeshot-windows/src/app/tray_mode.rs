@@ -49,6 +49,7 @@ use super::window::LoopWindow;
 use super::{Ack, Flow, LoopHandler};
 use crate::WinError;
 use crate::clock::{self, SystemClock};
+use crate::diagnostics;
 use crate::io_queue::IoQueue;
 use crate::localtime::SystemZone;
 use crate::log::{self, Level, Log, LogWriter, Proc};
@@ -156,6 +157,8 @@ pub fn run(dry_run: bool, updates: Updates) -> ExitCode {
         boot.tray.pid
     );
     log.line(Level::Info, AREA, &text);
+    // Before the startup restore, so a value a dead tray left shows in the header and its restore in the lines after.
+    log_start_header(&*log);
     if tray_lock.abandoned() {
         log.line(
             Level::Info,
@@ -179,6 +182,18 @@ pub fn run(dry_run: bool, updates: Updates) -> ExitCode {
     );
     drop(tray_lock);
     ExitCode::from(code)
+}
+
+/// The start header: one line per fact of this PC (`diagnostics::machine_facts`), area `start`, so the rest of the log
+/// reads alone (architecture section 8).
+fn log_start_header(log: &dyn Log) {
+    for fact in diagnostics::machine_facts() {
+        log.line(
+            Level::Info,
+            "start",
+            &format!("{}: {}", fact.name, fact.value),
+        );
+    }
 }
 
 /// Every Windows object that writes, locks or hibernates comes in a real and a dry-run form (architecture section 4,
@@ -1321,6 +1336,50 @@ mod tests {
             .iter()
             .map(|(level, _, text)| (*level, text.clone()))
             .collect()
+    }
+
+    /// The start header has one line per fact of this PC, read for real, in area `start` (architecture section 8).
+    #[test]
+    fn the_start_header_names_this_pc() {
+        let log = MemoryLog::default();
+        log_start_header(&log);
+        let got = log.lines.lock().unwrap().clone();
+        let names: Vec<&str> = got
+            .iter()
+            .map(|(_, area, text)| {
+                assert_eq!(*area, "start", "{text}");
+                text.split_once(": ").map_or("", |(name, _)| name)
+            })
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "Wakeshot",
+                "Windows",
+                "Processor",
+                "PC",
+                "Sleep",
+                "Power",
+                "Power plan",
+                "Elevated"
+            ]
+        );
+        let text = |name: &str| {
+            got.iter()
+                .find(|(_, _, t)| t.starts_with(&format!("{name}: ")))
+                .map(|(_, _, t)| t.clone())
+                .unwrap_or_default()
+        };
+        assert!(
+            text("Wakeshot").contains(env!("CARGO_PKG_VERSION")),
+            "{got:?}"
+        );
+        assert!(text("Windows").contains(", version 10.0."), "{got:?}");
+        assert!(
+            text("Sleep").starts_with("Sleep: Modern Standby "),
+            "{got:?}"
+        );
+        assert!(text("Power plan").contains("lidAc "), "{got:?}");
     }
 
     fn hibernator(

@@ -253,7 +253,11 @@ fn busy_session_holds_and_ends() {
     let out = sim.send(working(20636));
     let trace = sim.trace();
     assert_eq!(count(&out, &SYSTEM), 1, "{trace}");
-    assert_eq!(logs(&out), 1, "hold start log\n{trace}");
+    assert_eq!(
+        logs(&out),
+        3,
+        "the session count, the session's line and the hold start\n{trace}"
+    );
     assert_eq!(view(&sim), &expected(&sim, vec![agent()], KeepAwake::Off));
 
     let out = sim.run(HOUR);
@@ -266,8 +270,146 @@ fn busy_session_holds_and_ends() {
     let out = sim.send(idle(20636));
     let trace = sim.trace();
     assert_eq!(count(&out, &OFF), 1, "{trace}");
-    assert_eq!(logs(&out), 1, "hold end log\n{trace}");
+    assert_eq!(
+        logs(&out),
+        2,
+        "the session's line and the hold end\n{trace}"
+    );
     assert_eq!(view(&sim).icon, IconState::Idle, "{trace}");
+}
+
+fn log_lines(commands: &[Command]) -> Vec<&str> {
+    commands
+        .iter()
+        .filter_map(|c| match c {
+            Command::Log(text) => Some(text.as_str()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A Claude Code session with the facts of another agent whose id is no pid, as Codex's thread ids are.
+fn other_agent(id: &str, activity: Activity) -> SessionFacts {
+    let mut facts = claude(9, activity);
+    facts.key.id = id.to_owned();
+    facts.label = "Codex";
+    facts
+}
+
+/// One line per session at each start and end of its hold, with a short id and the reason (architecture section 8),
+/// before the lines that sum up every hold; a second session of the same agent gets its own lines too.
+#[test]
+fn each_session_gets_its_own_start_and_end_line() {
+    let mut sim = started();
+    let both = |a: Activity, b: Activity, alive_b: Alive| {
+        sim::sources(vec![
+            (claude(4100, a), Alive::Yes),
+            (claude(4200, b), alive_b),
+        ])
+    };
+    let out = sim.send(both(Activity::Working, Activity::Idle, Alive::Yes));
+    assert_eq!(
+        log_lines(&out),
+        [
+            "Claude Code: 2 sessions in its files",
+            "Claude Code session 4100 holds: working",
+            "Holding starts: Claude Code"
+        ],
+        "{}",
+        sim.trace()
+    );
+    let out = sim.send(both(Activity::Working, Activity::Working, Alive::Yes));
+    assert_eq!(
+        log_lines(&out),
+        ["Claude Code session 4200 holds: working"],
+        "the summed-up holds did not change\n{}",
+        sim.trace()
+    );
+    let waiting = Activity::Waiting {
+        since_wall_ms: None,
+        remote: false,
+    };
+    let out = sim.send(both(waiting, Activity::Working, Alive::Yes));
+    assert_eq!(
+        log_lines(&out),
+        ["Claude Code session 4100 stops holding: waiting for the user"],
+        "{}",
+        sim.trace()
+    );
+    let out = sim.send(both(waiting, Activity::Working, Alive::Gone));
+    assert_eq!(
+        log_lines(&out),
+        [
+            "Claude Code session 4200 stops holding: its process ended",
+            "Holding ends; held by Claude Code"
+        ],
+        "{}",
+        sim.trace()
+    );
+
+    // An id that is not a pid shows as a hash: never the id, which can be a path with the user's name.
+    let id = r"C:\Users\someone\.codex\sessions\2026\11\07\rollout-019a.jsonl";
+    let out = sim.send(sim::sources(vec![(
+        other_agent(id, Activity::Working),
+        Alive::Yes,
+    )]));
+    let lines = log_lines(&out);
+    assert_eq!(
+        lines.first().copied(),
+        Some("Codex: 1 session in its files")
+    );
+    let first = lines.get(1).copied().unwrap_or_default();
+    let hash = first
+        .strip_prefix("Codex session ")
+        .and_then(|rest| rest.strip_suffix(" holds: working"))
+        .unwrap_or_else(|| panic!("{lines:?}"));
+    assert!(
+        hash.len() == 8 && hash.bytes().all(|b| b.is_ascii_hexdigit()),
+        "{first}"
+    );
+    assert!(
+        !lines
+            .iter()
+            .any(|l| l.contains("someone") || l.contains("Users")),
+        "{lines:?}"
+    );
+    // The session leaves the snapshot while it holds: its end line, with the same short id.
+    let out = sim.send(sim::sources(vec![]));
+    let lines = log_lines(&out);
+    let gone = format!("Codex session {hash} stops holding: it is gone from the agent's files");
+    assert_eq!(
+        lines[..2],
+        ["Codex: 0 sessions in its files", gone.as_str()],
+        "{lines:?}"
+    );
+
+    // Hold files: the bare file name and why.
+    let out = sim.send(Event::Holds(vec![hold("run-4242.json", Alive::Yes)]));
+    assert_eq!(
+        log_lines(&out),
+        [
+            "Hold file run-4242.json counts: its process runs",
+            "Holding starts: wakeshot run"
+        ],
+        "{}",
+        sim.trace()
+    );
+    let out = sim.send(Event::Holds(vec![hold("run-4242.json", Alive::Gone)]));
+    assert_eq!(
+        log_lines(&out)[..1],
+        ["Hold file run-4242.json stops counting: its process ended"],
+        "{}",
+        sim.trace()
+    );
+
+    // Automatic off ends an agent session's hold with that reason.
+    sim.send(working(4300));
+    let out = sim.send(Event::Menu(MenuCommand::Automatic(false)));
+    assert!(
+        log_lines(&out).contains(&"Claude Code session 4300 stops holding: Automatic is off"),
+        "{}",
+        sim.trace()
+    );
 }
 
 #[test]
@@ -873,7 +1015,13 @@ fn format_problem_logs_at_most_once_a_minute_per_source() {
         out.extend(sim.send(unreadable.clone()));
         sim.run(10 * SECOND);
     }
-    assert_eq!(logs(&out), 2, "at 0 s and 60 s\n{}", sim.trace());
+    let problems = log_lines(&out)
+        .into_iter()
+        .filter(|l| l.contains("format problem"))
+        .count();
+    assert_eq!(problems, 2, "at 0 s and 60 s\n{}", sim.trace());
+    // Besides those, only the one line that counts the session at its first sight.
+    assert_eq!(logs(&out), 3, "{}", sim.trace());
 }
 
 #[test]
@@ -934,6 +1082,11 @@ fn a_failed_release_shows_no_notice() {
     let out = sim.send(Event::Done(Outcome::Requests(Err(FAILED))));
     assert!(sim.notices().is_empty(), "{}", sim.trace());
     assert!(out.iter().all(|c| !matches!(c, Command::Notify(_))));
+    // No notice, but the log shows the request that may still be set.
+    assert_eq!(
+        log_lines(&out),
+        ["Power request change failed (PowerSetRequest, code 5)"]
+    );
 }
 
 #[test]

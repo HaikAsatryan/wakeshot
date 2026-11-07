@@ -129,9 +129,9 @@ pub fn try_settings(boot: &Boot) -> Option<SettingsLock> {
     mutex.take(0).ok().flatten().map(SettingsLock)
 }
 
-/// Step 5: rolls the log when it is over 1 MB (three files kept), then opens it for process `tray`. A failed roll is
-/// logged and the log grows until a later start rolls it. A log that cannot be opened gives a log that drops every
-/// line: keeping the PC awake and restoring settings must not depend on the log.
+/// Step 5: rolls the log when it is over 1 MiB and drops old rolled files (`LogWriter::roll`), then opens it for
+/// process `tray`. A failed roll is logged; the next line over the size tries again. A log that cannot be opened gives
+/// a log that drops every line: keeping the PC awake and restoring settings must not depend on the log.
 pub fn open_log(boot: &Boot) -> Arc<dyn Log> {
     let logs = boot.dir.logs();
     let rolled = LogWriter::roll(&logs);
@@ -140,7 +140,7 @@ pub fn open_log(boot: &Boot) -> Arc<dyn Log> {
     };
     if let Err(e) = rolled {
         let text = format!(
-            "log not rolled: {} failed with {}; it grows until a later start rolls it",
+            "log not rolled: {} failed with {}; the next line over the size tries again",
             e.call, e.code
         );
         writer.line(Level::Warn, AREA, &text);
@@ -1119,7 +1119,9 @@ mod tests {
         log.line(Level::Info, "test", "first line after the roll");
         drop(log);
 
-        assert_eq!(fs::read(logs.join("wakeshot.1.log")).unwrap(), old);
+        let files = crate::log::log_files(&logs);
+        assert_eq!(files.len(), 2, "{files:?}");
+        assert_eq!(fs::read(&files[0]).unwrap(), old);
         let text = fs::read_to_string(logs.join("wakeshot.log")).unwrap();
         assert_eq!(text.lines().count(), 1, "{text}");
         assert!(

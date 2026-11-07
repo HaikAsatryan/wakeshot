@@ -1,6 +1,9 @@
 //! What the command line asks for, as `args::parse` gives it.
 //!
-//! Owner: contracts card. Frozen: the sources track's CLI cards build against it.
+//! Owner: contracts card. Frozen: the sources track's CLI cards build against it. `Diagnostics` added by
+//! `p6-logs-diagnostics`, run alone.
+
+use std::ffi::OsString;
 
 use wakeshot_core::view::KeepAwake;
 
@@ -10,7 +13,8 @@ pub struct Global {
     pub dry_run: bool,
 }
 
-/// One command. `Bad` carries the reason, worded for the user.
+/// One command. `Bad` carries the reason, worded for the user. `Diagnostics`: the folder to save the bundle in, the
+/// Desktop when `None`.
 ///
 /// `Hook`: `wakeshot hook <agent> <event> [--checked <value>...]`, which an agent's hook runs (`docs/agent-hooks.md`,
 /// "The hook command"); not in the help. Its form is frozen: every later version takes it, and any words after `hook`
@@ -28,6 +32,7 @@ pub enum Command {
     Status,
     Restore,
     Log,
+    Diagnostics(Option<OsString>),
     Hook {
         agent: String,
         event: String,

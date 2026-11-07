@@ -446,6 +446,7 @@ Commands:
   status                                     Show what Wakeshot is doing
   restore                                    Restore your power settings
   log                                        Open the log
+  diagnostics [folder]                       Save a file for a bug report
 
 'keep-awake on' lasts until you turn it off. '--screen' keeps the screen on too.
 
@@ -465,6 +466,8 @@ Test aid:
 - `status`: what holds, what is changed, and whether Wakeshot runs at all.
 - `restore`: the same as Restore my power settings.
 - `log`: opens the log.
+- `diagnostics`: saves one text file for a bug report on your Desktop, or in the folder you give, and shows it in
+  Explorer. It holds Wakeshot's own files only, with your user name and anything that looks like a token taken out.
 - Words match in any case, as in Windows' own commands.
 
 For your own lengths and labels, write a hold file: [docs/hold-files.md](docs/hold-files.md).
@@ -484,9 +487,12 @@ For your own lengths and labels, write a hold file: [docs/hold-files.md](docs/ho
   sound.
 - A failed check or download waits for the next check, with no notice. Pre-releases are skipped.
 - The only network calls are those update checks and downloads, to GitHub, with no account and no token.
-- No telemetry. The log stays on your PC: `%LocalAppData%\Wakeshot\logs\wakeshot.log`, plain English, rolled over at
-  start once it passes 1 MB, three files kept. It never holds your prompts, transcript text or full command lines;
-  `wakeshot run` keeps only the program's name.
+- No telemetry. The log stays on your PC: `%LocalAppData%\Wakeshot\logs\wakeshot.log`, plain English, rolled over
+  once it passes 1 MB; older files go after 30 days, and all of them together stay under 8 MB. It never holds your
+  prompts, transcript text or full command lines; `wakeshot run` keeps only the program's name.
+- To report a bug, run `wakeshot diagnostics`. It saves one text file on your Desktop with Wakeshot's own logs and
+  settings files, and your user name and anything that looks like a token taken out; nothing is sent. Attach it to a
+  [bug report](https://github.com/HaikAsatryan/wakeshot/issues/new?template=bug-report.yml).
 - Wakeshot only reads the files each agent keeps. OpenCode's database it opens read only and queries only its session
   and schedule tables, never the ones with OpenCode's login.
 - Lightweight: at idle the tray app uses 5 MB of private memory and 1 s of CPU in 10 minutes (0.17% of one core),

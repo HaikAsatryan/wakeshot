@@ -33,7 +33,7 @@ fails because it sits under the workspace root).
 | `wakeshot-core` | lib | events, state, policies, holds, settings ownership, file formats, source parsers, view models | `serde`, `serde_json` |
 | `wakeshot-windows` | lib | every Windows call: power requests and settings, OS events, processes, folder watch, files and registry, tray, notices, sounds | `wakeshot-core`, `windows`, `serde_json` (the IO thread reads and writes the files) |
 | `wakeshot-tray` | bin `wakeshot-tray.exe`, GUI subsystem | the mode dispatch (`main`, `mode`), guard mode (`guard`), restore mode (`restore`), the Velopack wiring (`velo`, the only file that names `velopack`), and the tray-mode call into `wakeshot_windows::app::tray_mode::run`; no wiring logic | both libs, `windows`; `velopack` in Phase 6 |
-| `wakeshot-cli` | bin `wakeshot.exe`, console | the `wakeshot` command: the dispatch (`main`, `command`), argument parsing (`args`), one file per command (`run`, `keep_awake`, `automatic`, `status`, `restore`, `open_log`, and `hook`, which agents' hooks run and the help does not show) | both libs, `windows` |
+| `wakeshot-cli` | bin `wakeshot.exe`, console | the `wakeshot` command: the dispatch (`main`, `command`), argument parsing (`args`), one file per command (`run`, `keep_awake`, `automatic`, `status`, `restore`, `open_log`, `diagnostics`, and `hook`, which agents' hooks run and the help does not show) | both libs, `windows` |
 
 Both bins depend on both libs and on `windows` from `p1-contracts`, so no track changes `Cargo.lock`; `velopack`
 comes in Phase 6 through a card the orchestrator runs alone. The bins call Windows only through `wakeshot-windows`.
@@ -93,7 +93,8 @@ lists end up the same. macOS and Linux later add an adapter crate next to `wakes
 | `store` | `DataDir` and `DataFile` (data folder paths), `local_app_data`, `write_atomic` (temp files `CREATE_NEW`, `temp_target` names their shape), `read_whole`, `remove`, `Names` and `NamedMutex` (the three mutexes), `AutoStart` (Run and RunOnce values) |
 | `sink` | trait `EventSink`, how off-loop threads post events to the loop; `FakeEventSink`. The real sink is `app::window::WindowSink` |
 | `tray` | `Anchor`, `IconIdentity`, trait `MenuView`; `icon` (`TrayIcon`, its own hidden window), `menu` (`OwnerDrawnMenu`), `menu_paint`, `theme`, `art` (icon art as code) |
-| `notify`, `sound`, `log` | trait `Notifier` with `BalloonNotifier`; trait `SoundPlayer` with the WASAPI player; trait `Log` with `LogWriter` and `MemoryLog` |
+| `notify`, `sound`, `log` | trait `Notifier` with `BalloonNotifier`; trait `SoundPlayer` with the WASAPI player; trait `Log` with `LogWriter` and `MemoryLog`, `log_files` (every log file, oldest first) |
+| `diagnostics` | `machine_facts` (the start header's facts), `Redact`, `write_bundle` and `desktop` for `wakeshot diagnostics` (section 8, "Log"; `p6-logs-diagnostics`) |
 | `install`, `hooks`, `update` | the CLI folder in the user Path (the Run value is `store::AutoStart`'s); what each Velopack hook does (`HookEnv`); update check, download and apply (`UpdateFeed`) |
 | `app` | the tray mode's wiring: `window` (the loop's hidden top-level window, the pump, its one timer, `WindowSink`), `dispatch` (`Dispatcher`: the core in the loop, the runner for each command, the tick, end of session, quit), `io_thread` (the IO thread loop over `IoQueue`), `startup` (startup steps 3 to 7 and `Started`), `tray_mode` (the composition root) |
 | `testing` | the fakes in one place (re-exports) and `FakeMenuView` (test-support) |
@@ -644,7 +645,7 @@ Every decision in `product.md`, by section. Phase numbers are from `plan.md`.
 | Tray: `wakeshot-tray.exe` | Run value at sign-in; Start menu; restore mode or guard after a failed restore | the user session | everything |
 | Guard: `wakeshot-tray.exe --guard <pid> <start> <stop event>` | the tray, before its first settings write, outside the tray's process tree (section 5) | while settings are overridden; the tray starts a new one if it ends | wait on the tray; restore if it dies |
 | Restore: `wakeshot-tray.exe --restore` | RunOnce at the next sign-in (the Velopack hooks run the restore routine in their own process, section 6) | seconds; up to 2 minutes when the restore fails | restore if a journal exists and its owner is dead |
-| CLI: `wakeshot.exe` | the user | one command | run, Keep awake, Automatic, status, restore, open log |
+| CLI: `wakeshot.exe` | the user | one command | run, Keep awake, Automatic, status, restore, open log, diagnostics |
 
 - One tray per session: mutex `Local\Wakeshot.Tray`. One settings owner per machine, because power plans are
   machine-wide: mutex `Global\Wakeshot.Settings`. A tray that cannot take it (another session owns it, or the open is
@@ -738,7 +739,8 @@ file kind it does not start, such as `.ps1`, or a failed start); in both cases n
 the child (the wait failed; the hold file stays, and the tray deletes it once the process is gone). From
 `wakeshot-cli/src/run.rs`. It ignores Ctrl+C itself; the child gets it from the console. Keep awake and Automatic
 write their files; `restore` is in the table above; `status` reads `state.json` and says "not running" when the tray's
-pid and start time are not alive. `hook <agent> <event>` is what agents' hooks run (section 12), not in the help:
+pid and start time are not alive. `diagnostics [folder]` writes the bug report bundle (section 8, "Log") to the
+folder or the Desktop and shows it in Explorer. `hook <agent> <event>` is what agents' hooks run (section 12), not in the help:
 whatever follows `hook`, it never gives the help or exit 2 (Cursor's block code); until `p4-cursor-source` it only
 answers `{}` with exit 0.
 
@@ -1390,13 +1392,43 @@ Log:
   with its UTC offset, monotonic seconds, process (tray, guard, restore, cli, hook), level, area, text. Wall time is
   read for every line, never derived from a start time plus a counter: the tray spike's millisecond counter drifted
   16 s from the wall clock (research, "The spike's log clock drifted 16 s").
-- The tray rolls it at start when it is over 1 MB and keeps three files. Every process appends one `WriteFile` per
-  line to a handle opened for append; such lines never mix, tested on a local NTFS disk with four writers (research,
-  "Log writer checks"). Network shares, FAT and ReFS: not verified.
-- Logged: each hold start and end with its label, each request change, each settings write and restore with old and
-  new values, each user change, lock, each hibernate check, each notice and sound, each format problem (at most once
-  a minute per source). Never logged: prompts, transcript text, full command lines, `.key` file names.
-- "Open log" opens the file with the default app (`ShellExecuteW` "open"). The log never leaves the PC.
+- Every line opens the file for append (`FILE_APPEND_DATA` without `FILE_WRITE_DATA`, all sharing), writes it with one
+  `WriteFile` and closes it, in every process (tray, guard, restore mode, CLI, hook). Such lines never mix, tested on
+  a local NTFS disk with four writer processes, also with a roll every 64 KiB while they write (research, "Log writer
+  checks" and "Logs that clean themselves"). Network shares, FAT and ReFS: not verified.
+- Clean-up (`p6-logs-diagnostics`): a writer that finds the file over 1 MiB after its line rolls it, in any process:
+  it checks the size and renames the file on one handle to `wakeshot.<UTC time>.log`, so two writers never roll twice
+  and no lock is needed; a process mid-line keeps writing to the renamed file, so no line is lost. After a roll, and at
+  each tray start, the prune deletes rolled files last written over 30 days ago, and the oldest ones while all logs
+  take more than 8 MiB. The current file always stays; a file another program holds without delete sharing waits for
+  the next prune. Older builds' `wakeshot.1.log` and `wakeshot.2.log` count as the oldest rolled files. A reader that
+  holds `wakeshot.log` without delete sharing stops the roll until it lets go; each later line tries again.
+- Start header: right after `Wakeshot <version> starts`, one `start` line each for Wakeshot (version, build arch),
+  Windows (name, edition, release, version with build and revision), the processor (name, logical processors, native
+  arch), the PC (maker, family, model, firmware), sleep (Modern Standby, S3, hibernate, lid, battery), power (AC or
+  battery, percent), the active power plan with every value Wakeshot reads (lid actions in words, timeouts in
+  seconds, the energy saver threshold), and whether the tray runs elevated (`diagnostics::machine_facts`). Read before
+  the startup restore, so a leftover value shows. The lines after it name each watched agent and its folder.
+- Logged: each hold start and end with its label; one line per agent session at each start and end of its hold, with
+  a short id (a pid as is, any other id as 8 hex digits of its FNV-1a hash, never the id, a prompt, a title or a path)
+  and the reason (working, background tasks, a timer due, waiting with Remote Control, idle, waiting for the user, the
+  waiting hour over, the process ended, its file does not read, gone from the agent's files, Automatic off); the same
+  for each hold file by its bare name; each request change, each settings write and restore with old and new values,
+  each user change, lock, each hibernate check, each notice and sound, each format problem (at most once a minute per
+  source). Never logged: prompts, transcript text, full command lines, `.key` file names.
+- "Open log" opens the file with the default app (`ShellExecuteW` "open"). The log never leaves the PC by itself.
+- Bug reports: `wakeshot diagnostics [folder]` writes one text file, `wakeshot-diagnostics-<local time>.txt`, to the
+  folder or the Desktop (`FOLDERID_Desktop`), never over a file, and shows it in Explorer
+  (`SHOpenFolderAndSelectItems`). It holds the machine facts of the start header, whether the tray runs, the list of
+  Wakeshot's files, then each file whole: the data folder's own files (`config.json`, `state.json`, the journal and
+  its set-aside copies, `restore-request.json`, `agent-hooks.json`), `holds\*.json`, `agents\<agent>\*.json` and the
+  log files, oldest first. Files are found by these names only, and a link or junction in their place is skipped, so
+  no other app's file and no prompt can get in. Before it is written, the whole text goes through `Redact`: the
+  profile folder becomes `%USERPROFILE%`, any `Users\<name>` path piece and the user name as a whole path segment
+  become `<user>`, and every word that looks like a token (a known prefix such as `sk-`, `ghp_`, `AKIA`, `eyJ`, or 32
+  or more letters and digits that are not a GUID) becomes `[token removed]`. Nothing is sent; the user attaches the
+  file to the GitHub bug form. A text file, not a zip, so the user can read what they send. A tray menu item for it:
+  not in v1 (change it when users without a terminal report bugs).
 
 ## 9. Testing
 

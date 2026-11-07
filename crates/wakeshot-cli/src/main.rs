@@ -1,11 +1,12 @@
 //! The `wakeshot` command (architecture section 4, "CLI"). This dispatch is the contracts card's and stays as it is;
 //! each command's file has its own owner.
 //!
-//! Owner: contracts card.
+//! Owner: contracts card; `diagnostics` added by `p6-logs-diagnostics`, run alone.
 
 mod args;
 mod automatic;
 mod command;
+mod diagnostics;
 mod hook;
 mod keep_awake;
 mod open_log;
@@ -27,6 +28,7 @@ fn main() -> ExitCode {
         Command::Status => status::main(&global),
         Command::Restore => restore::main(&global),
         Command::Log => open_log::main(&global),
+        Command::Diagnostics(folder) => diagnostics::main(&global, folder.as_deref()),
         Command::Hook {
             agent,
             event,

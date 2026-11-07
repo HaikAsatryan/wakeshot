@@ -4,12 +4,13 @@
 //! real, dry run, or a fake from the `testing` module (feature `test-support`). Each module's doc names the card that
 //! owns the file in its `Owner:` line.
 //!
-//! Owner: contracts card (this module list).
+//! Owner: contracts card (this module list); `diagnostics` added by `p6-logs-diagnostics`, run alone.
 
 pub mod agent_hooks;
 pub mod app;
 pub mod child;
 pub mod clock;
+pub mod diagnostics;
 pub mod error;
 pub mod hooks;
 pub mod install;

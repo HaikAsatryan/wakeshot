@@ -58,6 +58,8 @@ features = [
     "Win32_UI_HiDpi",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
+    # `ILCreateFromPathW` and `SHOpenFolderAndSelectItems` for `shell::show_in_folder` (`p6-logs-diagnostics`).
+    "Win32_UI_Shell_Common",
     "Win32_UI_Shell_PropertiesSystem",
     "Win32_UI_WindowsAndMessaging",
 ]

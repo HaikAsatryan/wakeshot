@@ -6291,3 +6291,60 @@ scratch folder, nothing run). Details: `research/claude-code-signals.md`, "Claud
   `%APPDATA%\Claude\claude-code-sessions\<account>\<org>\scheduled-tasks.json` (`cronExpression` or `fireAt`,
   `enabled`, ...). Each run is a fresh session, a fixed few minutes late (docs; the rule is not documented).
   **Verified (code, disk, docs)**.
+
+## Logs that clean themselves and a bug report bundle (2026-11-07)
+
+`p6-logs-diagnostics`. Sources read on 2026-11-07; tests run on the test laptop.
+
+- **How others take bug reports.** PowerToys: "Report Bug" in the tray menu (and in Settings) runs a bug report tool
+  that saves `PowerToys_Report_<date>_<time>.zip` on the Desktop with logs, settings, Windows version and more, and
+  "redacts certain types of private information" (user-specific paths, machine names, some module data); the user
+  attaches it to a GitHub issue ([PowerToys bug report tool](https://microsoft.github.io/PowerToys/tools/bug-report-tool/),
+  [PowerToys general settings](https://learn.microsoft.com/en-us/windows/powertoys/general)). Wakeshot follows the
+  same shape (Desktop, one file, paths taken out, attach to the form) with a text file the user can read. **Read
+  (docs)**; the PowerToys tool's code was not read, so how it finds user names is not verified.
+- **What a log must not hold.** OWASP Logging Cheat Sheet: access tokens and passwords are never recorded as they are;
+  session ids "consider replacing with a hashed value if needed to track session specific events"; file paths and
+  personal data may need special handling ([cheat sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html)).
+  Hence the 8-hex FNV-1a hash for agent session ids in log lines (a pid stays as it is: it names a process, not a
+  person). **Read (docs)**.
+- **Size and age caps elsewhere.** Serilog's file sink: 1 GB per file and 31 files by default, a roll on the size
+  limit, an optional age limit, and `shared: true` for many processes on one file
+  ([serilog-sinks-file README](https://github.com/serilog/serilog-sinks-file/blob/dev/README.md)). A tray app needs far
+  less: Haik's installed log grew 250 KB in about 2 days (file listed 2026-11-07 about 03:50), so a 1 MiB file is about
+  a week and 8 MiB with a 30-day age limit is about a month of history. **Read (docs, disk)**.
+- **GitHub attachments.** Issues take `.txt`, `.log` and `.zip`, up to 25 MB for such files
+  ([Attaching files](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files)).
+  The bundle is at most about 8 MiB of logs plus small files, so it always fits. **Read (docs)**.
+- **Explorer with the file selected.** `SHOpenFolderAndSelectItems` with a count of 0 and the item's full id list
+  opens the parent folder and selects the item; COM must be initialized first
+  ([Microsoft](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shopenfolderandselectitems)).
+  In windows-rs 0.62.2 `ILCreateFromPathW` and `SHOpenFolderAndSelectItems` need the `Win32_UI_Shell_Common` feature
+  (read in the crate source); a feature adds no crate, so `Cargo.lock` stays. Whether the window really opens: not
+  verified by a test (the tests pass a fake), checked once by hand after the install update if the Result says so.
+- **Modern Standby or S3.** `CallNtPowerInformation(SystemPowerCapabilities)` fills `SYSTEM_POWER_CAPABILITIES`;
+  `AoAc` is "supports the S0 low power idle model" (Modern Standby), `SystemS3` and `SystemS4` the sleep and hibernate
+  states, plus `HiberFilePresent`, `LidPresent`, `SystemBatteriesPresent`
+  ([Microsoft](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-system_power_capabilities)). On the
+  test laptop: "Modern Standby yes, S3 no, hibernate yes, hibernation file yes, lid yes, battery yes", as `CLAUDE.md`
+  "Test laptop" says (Modern Standby). **Verified** (`real_machine_facts_all_read`).
+- **Windows version without shims.** The facts read `CurrentMajorVersionNumber`, `CurrentMinorVersionNumber`,
+  `CurrentBuildNumber`, `UBR`, `DisplayVersion` and `EditionID` under
+  `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion` (64-bit view). `ProductName` there still says Windows 10 on Windows 11, so the name comes from the build: 22000 and
+  later is Windows 11 (Microsoft's release information; not fetched this session, **not verified** here). On the test
+  laptop: "Windows 11 Professional 26H2, version 10.0.26300.9711", which matches the OS version this session reports
+  (10.0.26300). **Verified**.
+- **Rolling with four writers.** Every line opens, appends and closes; a writer over 1 MiB checks the size and renames
+  the file on one handle (`DELETE | FILE_READ_ATTRIBUTES`, `FileRenameInfo` without replace). Four processes wrote 2000
+  lines each at once (lines up to 5 KB): with a 1 MiB roll 2 files, with a 64 KiB roll 32 files; in both runs every
+  line came back whole, exactly once and in its writer's order when the files are read in name order, with about
+  7950 switches between writers. A reader that opened `wakeshot.log` without delete sharing made the rename fail
+  (`CreateFileW` 32) and lost no line; a second roller finds the new small file and does nothing; two rolls in the
+  same millisecond meet `ERROR_ALREADY_EXISTS`, and the second skips. **Verified** (`log::tests`, 2026-11-07 04:06).
+- **What the bundle can hold.** Files found by name only (an allow list) and links or junctions skipped: a test plants a
+  prompt and two tokens in agents' files, in stray files inside Wakeshot's folders, in a hold reason, in a log line
+  and behind two junctions; none reaches the bundle, and the planted user name never shows
+  (`the_bundle_never_holds_a_planted_prompt_or_token`). The token rule is best effort: a secret with separators such
+  as `+`, `/` or `=` in it is cut at them, and a short one without a known prefix stays. Wakeshot's own files hold no
+  tokens by design, so the rule is a second line. **Verified** (test); the token patterns themselves are from common
+  service formats, **not verified** against each service's docs.

@@ -23,6 +23,7 @@ Commands:
   status                                     Show what Wakeshot is doing
   restore                                    Restore your power settings
   log                                        Open the log
+  diagnostics [folder]                       Save a file for a bug report
 
 'keep-awake on' lasts until you turn it off. '--screen' keeps the screen on too.
 
@@ -81,6 +82,7 @@ fn command(word: &OsStr, rest: &[OsString]) -> Command {
         Some("status") => alone(rest, "status", Command::Status),
         Some("restore") => alone(rest, "restore", Command::Restore),
         Some("log") => alone(rest, "log", Command::Log),
+        Some("diagnostics") => diagnostics(rest),
         _ if is_option(word) => wrong(format!("unknown option '{}'", shown(word))),
         _ => wrong(format!("unknown command '{}'", shown(word))),
     }
@@ -176,6 +178,18 @@ fn hook(rest: &[OsString]) -> Command {
         agent: word(0),
         event: word(1),
         values,
+    }
+}
+
+/// `diagnostics [folder]`: the Desktop without a folder. The folder is kept as given; the command checks it exists.
+fn diagnostics(rest: &[OsString]) -> Command {
+    match rest {
+        [] => Command::Diagnostics(None),
+        [option] if is_option(option) => {
+            wrong(format!("'diagnostics' has no option '{}'", shown(option)))
+        }
+        [folder] => Command::Diagnostics(Some(folder.clone())),
+        _ => wrong("'diagnostics' takes one folder at most"),
     }
 }
 
@@ -379,6 +393,32 @@ mod tests {
         assert_eq!(parsed(&["status"]), Command::Status);
         assert_eq!(parsed(&["restore"]), Command::Restore);
         assert_eq!(parsed(&["log"]), Command::Log);
+        assert_eq!(parsed(&["diagnostics"]), Command::Diagnostics(None));
+        assert_eq!(
+            parsed(&["Diagnostics", "D:/Bug Reports"]),
+            Command::Diagnostics(Some(OsString::from("D:/Bug Reports")))
+        );
+    }
+
+    #[test]
+    fn diagnostics_takes_one_folder() {
+        assert_eq!(
+            bad_text(&["diagnostics", "a", "b"]),
+            "'diagnostics' takes one folder at most"
+        );
+        assert_eq!(
+            bad_text(&["diagnostics", "--zip"]),
+            "'diagnostics' has no option '--zip'"
+        );
+        assert_eq!(parsed(&["diagnostics", "--help"]), Command::Help);
+        assert!(matches!(
+            parsed(&["diagnostics", "--dry-run"]),
+            Command::Bad(_)
+        ));
+        assert_eq!(
+            parse(&args(&["--dry-run", "diagnostics"])),
+            (DRY, Command::Diagnostics(None))
+        );
     }
 
     #[test]
@@ -640,6 +680,7 @@ mod tests {
             "status",
             "restore",
             "log",
+            "diagnostics [folder]",
             "--dry-run",
         ] {
             assert!(USAGE.contains(word), "{word}");

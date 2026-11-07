@@ -227,6 +227,20 @@ fn read_value(plan: Guid, setting: PlanSetting) -> Result<u32, WinError> {
     Ok(value)
 }
 
+/// Each value of [`PlanSetting::ALL`] with its own read result.
+pub type SettingReads = Vec<(PlanSetting, Result<u32, WinError>)>;
+
+/// The active plan and every value in [`PlanSetting::ALL`], read now and each on its own, so one failed read still
+/// shows the rest. Reads only: for the tray's start header and the diagnostics bundle (`p6-logs-diagnostics`).
+pub fn active_values() -> Result<(Guid, SettingReads), WinError> {
+    let plan = get_active()?;
+    let values = PlanSetting::ALL
+        .iter()
+        .map(|&setting| (setting, read_value(plan, setting)))
+        .collect();
+    Ok((plan, values))
+}
+
 /// Takes only a `SettingKey`, so nothing but its keys can be written (decision 17).
 fn write_value(plan: Guid, key: SettingKey, value: u32) -> Result<(), WinError> {
     let setting = PlanSetting::from(key);

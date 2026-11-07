@@ -19,7 +19,8 @@ Tell me:
 
 What I most want to hear about: a way to make the updater install something that is not a Wakeshot release; a way for
 another user account to change your power settings or Wakeshot's files in `%LocalAppData%\Wakeshot`; private data in
-the log, such as prompts, transcript text or full command lines.
+the log or in the file `wakeshot diagnostics` saves, such as prompts, transcript text, full command lines, tokens or
+your user name.
 
 ## What to expect
 

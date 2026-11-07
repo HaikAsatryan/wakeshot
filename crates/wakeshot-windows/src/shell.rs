@@ -1,19 +1,21 @@
-//! Open a file or an `ms-settings:` URI with the default app.
+//! Open a file or an `ms-settings:` URI with the default app, or show a file in Explorer.
 //!
-//! Owner: `p4-cli-commands`. The signature is contract: the tray opens the log and the first-run Settings page with
-//! it (`docs/phases/05-tray-ux.md`), and `wakeshot log` opens the log.
+//! Owner: `p4-cli-commands`; `show_in_folder` by `p6-logs-diagnostics`. The signature is contract: the tray opens the
+//! log and the first-run Settings page with it (`docs/phases/05-tray-ux.md`), and `wakeshot log` opens the log.
 
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
+use std::path::Path;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Duration;
 
-use windows::Win32::Foundation::{ERROR_INVALID_PARAMETER, ERROR_TIMEOUT};
+use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_INVALID_PARAMETER, ERROR_TIMEOUT};
 use windows::Win32::System::Com::{
     COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE, CoInitializeEx, CoUninitialize,
 };
 use windows::Win32::UI::Shell::{
-    SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW, ShellExecuteExW,
+    ILCreateFromPathW, ILFree, SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW,
+    SHOpenFolderAndSelectItems, ShellExecuteExW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{ASFW_ANY, AllowSetForegroundWindow, SW_SHOWNORMAL};
 use windows::core::{PCWSTR, w};
@@ -56,6 +58,66 @@ pub fn open_with_default_app(target: &OsStr) -> Result<(), WinError> {
             code: NO_WIN32_CODE,
         }),
     }
+}
+
+/// Opens an Explorer window on `file`'s folder with `file` selected (`SHOpenFolderAndSelectItems`), for the
+/// diagnostics bundle. Same thread, COM and wait as [`open_with_default_app`]: Microsoft asks for COM before the call.
+pub fn show_in_folder(file: &Path) -> Result<(), WinError> {
+    let target = wide(file.as_os_str())?;
+    let (answer, wait) = mpsc::channel();
+    std::thread::Builder::new()
+        .name("wakeshot-shell".to_owned())
+        .spawn(move || {
+            let _ = answer.send(select_here(&target));
+        })
+        .map_err(|e| WinError {
+            call: "CreateThread",
+            code: e.raw_os_error().map_or(NO_WIN32_CODE, |c| c as u32),
+        })?;
+    match wait.recv_timeout(Duration::from_millis(OPEN_WAIT_MS)) {
+        Ok(result) => result,
+        Err(RecvTimeoutError::Timeout) => Err(WinError {
+            call: "SHOpenFolderAndSelectItems",
+            code: ERROR_TIMEOUT.0,
+        }),
+        Err(RecvTimeoutError::Disconnected) => Err(WinError {
+            call: "SHOpenFolderAndSelectItems",
+            code: NO_WIN32_CODE,
+        }),
+    }
+}
+
+/// `target` is NUL-terminated.
+fn select_here(target: &[u16]) -> Result<(), WinError> {
+    // SAFETY: a new thread with no COM yet; no reserved pointer.
+    let init = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) };
+    if init.is_err() {
+        return Err(WinError {
+            call: "CoInitializeEx",
+            code: init.0 as u32,
+        });
+    }
+    // SAFETY: as in `open_here`.
+    let _ = unsafe { AllowSetForegroundWindow(ASFW_ANY) };
+    // SAFETY: `target` is NUL-terminated and lives for the call.
+    let item = unsafe { ILCreateFromPathW(PCWSTR(target.as_ptr())) };
+    let shown = if item.is_null() {
+        Err(WinError {
+            call: "ILCreateFromPathW",
+            code: ERROR_FILE_NOT_FOUND.0,
+        })
+    } else {
+        // A count of 0 with the item's full id list opens its folder and selects it (Microsoft).
+        // SAFETY: `item` is a live id list from the shell.
+        let shown = unsafe { SHOpenFolderAndSelectItems(item, None, 0) }
+            .map_err(|e| win32_of("SHOpenFolderAndSelectItems", &e));
+        // SAFETY: `item` came from `ILCreateFromPathW` and is freed once, after its last use.
+        unsafe { ILFree(Some(item)) };
+        shown
+    };
+    // SAFETY: pairs the successful `CoInitializeEx` above, on the same thread.
+    unsafe { CoUninitialize() };
+    shown
 }
 
 /// NUL-terminated; a NUL inside would cut the name short and open something else.
