@@ -283,7 +283,7 @@ Sizes are estimates; real use runs 2 to 3 times higher.
 
 | Card | Does | Size | Needs Haik | Runs after | Status |
 |---|---|---|---|---|---|
-| `p8-polish-core-engine` | `wakeshot-core`: state machine, policies, events, commands, files, text | 150K | no | `p6-logs-diagnostics`, any open Rust fix card | running since 04:58 |
+| `p8-polish-core-engine` | `wakeshot-core`: state machine, policies, events, commands, files, text | 150K | no | `p6-logs-diagnostics`, any open Rust fix card | done (05:17): comments in 26 files; no code change by the check; 931 tests; candidate for `p8-repo-config`: split `core/lid.rs` |
 | `p8-polish-core-sources` | `wakeshot-core`: agent sources and the core's integration tests and fixtures | 150K | no | same | ready |
 | `p8-polish-windows-power` | `wakeshot-windows`: power layer, recovery, process, session, `power_check` | 150K | no | same | done (05:16): comments in 16 files, 154 SAFETY comments kept, 3 private renames; no code change by the check |
 | `p8-polish-windows-watch` | `wakeshot-windows`: folder watch, agent IO, hooks install, SQLite, Restart Manager | 140K | no | same | ready |
