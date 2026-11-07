@@ -414,3 +414,9 @@ non-blank characters are `//`, `#` or `/*`):
   them from the index and lists them in `.git/info/exclude` (local only, never pushed), so they stay on this laptop and
   later sessions can still run `/orchestrate`; the history bundle and an archive copy keep them too.
   `p8-final-cleanup` therefore fixes pointers and writes the short `CLAUDE.md` but deletes none of them.
+- 2026-11-07 04:45 (orchestrator): `p6-logs-diagnostics` done. Group 1 changes, for Haik's review: two Rust fix cards
+  run first beside two polish cards that own other files: `p6-winget-upgrade-restart-fix`, `p6-log-silent-decisions`
+  (log lines the logs audit found missing), `p8-polish-core-engine`, `p8-polish-windows-power`. `p8-polish-core-sources`
+  and `p8-polish-windows-watch` move to group 2 (the log card owns `sources/` and `watch/` until it ends). Every
+  build waits about 20 minutes first, so `p6-end-card-numbers` measures idle CPU on a quiet laptop. `p8-docs-design`
+  also takes one `product.md` line: `wakeshot diagnostics` is a CLI-only support command, like `run`.
