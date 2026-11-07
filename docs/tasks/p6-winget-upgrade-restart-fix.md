@@ -7,7 +7,7 @@ Runs after: `p6-winget-upgrade-restart` (the research, done), `p6-logs-diagnosti
 Runs alone among Rust cards if it changes a contract (a file format in `docs/architecture.md`); otherwise beside cards
 that own other files.
 Build folder: `CARGO_TARGET_DIR=<scratchpad>\p6-winget-upgrade-restart-fix\target`; delete it when done.
-Owns (2026-11-07 04:55): `crates/wakeshot-windows/src/hooks.rs`, `store.rs`, `app/` except `app/io_thread.rs`, the tray's Quit code wherever it lives in `wakeshot-windows`, `crates/wakeshot-tray/src/velo.rs` if needed, `packaging/e2e.ps1`, the README winget limit line, hook lines in `docs/architecture.md`. Beside it run `p6-log-silent-decisions`, `p8-polish-core-engine` and `p8-polish-windows-power`: a build failure in a file it does not own is reported, never fixed. If the fix needs a contract change (a type in `wakeshot-core` other cards use, or a file format other code reads), stop and reply to the orchestrator before making it.
+Owns (2026-11-07 04:43): `crates/wakeshot-windows/src/hooks.rs`, `store.rs`, `app/` except `app/io_thread.rs`, the tray's Quit code wherever it lives in `wakeshot-windows`, `crates/wakeshot-tray/src/velo.rs` if needed, `packaging/e2e.ps1`, the README winget limit line, hook lines in `docs/architecture.md`. Beside it run `p6-log-silent-decisions`, `p8-polish-core-engine` and `p8-polish-windows-power`: a build failure in a file it does not own is reported, never fixed. If the fix needs a contract change (a type in `wakeshot-core` other cards use, or a file format other code reads), stop and reply to the orchestrator before making it.
 
 ## Goal
 
