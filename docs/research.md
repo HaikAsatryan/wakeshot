@@ -6297,3 +6297,59 @@ scratch folder, nothing run). Details: `research/claude-code-signals.md`, "Claud
   as `+`, `/` or `=` in it is cut at them, and a short one without a known prefix stays. Wakeshot's own files hold no
   tokens by design, so the rule is a second line. **Verified** (test); the token patterns themselves are from common
   service formats, **not verified** against each service's docs.
+
+## Speed numbers of the shipping build (2026-11-07)
+
+Measured 2026-11-07 from 04:44 to 05:09 (UTC+4) for card `docs/tasks/p6-end-card-numbers.md`, on the test laptop
+(x64), on the build that ships: the exes of the x64 pack of `p6-logs-diagnostics`
+(`HaikAsatryan.Wakeshot-0.1.0-win-x64-full.nupkg`), `wakeshot-tray.exe` 3,179,520 bytes, SHA-256
+`9DEAB8A4AF0E59B3E445B60E790EDF4790986CDB466E563983A4453BF75BB212`, and `wakeshot.exe` 873,472 bytes, SHA-256
+`8BB7610102EE4EC0AA253F63A463472CA5727F84A8D3B5760296884D654C0646`, `ProductVersion` 0.1.0; both the same bytes as
+Haik's install at that time (`Get-FileHash`). Raw files and scripts: the card's scratch folder,
+`p6-end-card-numbers\speed\` (not kept in the repo). **ARM64: not measured.**
+
+The video's end card, the README and the site take each number from the process where it is an idle figure:
+
+1. **CPU: a release dry run**, the method of "Speed numbers after the idle CPU fix": `wakeshot-tray.exe --dry-run` at
+   Medium through `explorer.exe` (`S-1-16-8192`), `CLAUDE_CONFIG_DIR` on an empty scratch folder, the other three
+   agents' homes real (7 Copilot sessions, Codex's home, OpenCode's database with no OpenCode running and its last
+   write at 03:27:45, over an hour before), a quiet minute after the start (its watch thread switched 0 times in 16 s,
+   so no 2 s poll was kept on), then 60 samples 10 s apart over 10 minutes; no line in its log in the window. The
+   installed tray cannot give this number: it held for the orchestrator's working Claude Code session the whole
+   time. Cargo builds were held off during this window (the orchestrator's note; not checked).
+2. **Memory: Haik's installed tray of the same exe**, 60 samples 10 s apart over 10 minutes, read only
+   (`Get-Process`), while it held for that Claude Code session (`state.json` "Claude Code (1 session)" the whole
+   window, no log line in it) and after its first update check (04:42:25, "no update found"). The dry run reads about
+   1.4 MB less: it checks no update and shows no menu (41 modules against the installed tray's 50; `p4-idle-cpu` saw
+   the update check load 6 network modules and add 0.74 MB). That the installed tray holds the same memory idle as
+   while holding is **inferred**: on 0.1.0 of 2026-11-06 the idle and hold medians were 4.27 and 4.24 MB. Not
+   measured idle on this build.
+
+| Number | Value | Process | Notes |
+|---|---|---|---|
+| Tray, idle, CPU | 140.625 ms in 10 minutes (0.023% of one core) | dry run | `TotalProcessorTime` at start and end, 9 ticks of 15.625 ms. The video shows 141 ms |
+| Tray, idle, CPU by cycles | 93.7 ms | dry run | `QueryProcessCycleTime`, at 1.988 million per ms (a 500 ms spin) |
+| Tray, private memory | median 3.98 MB, max 3.98 | installed tray | `PrivateMemorySize64`, all 60 samples alike, MB = 2^20 bytes. The video shows 4 MB |
+| Tray, working set | median 20.46 MB, max 20.55 | installed tray | `WorkingSet64`; it also counts pages of shared Windows DLLs |
+| Dry run, private memory | median 2.63 MB, max 2.73 | dry run | |
+| Dry run, working set | median 17.50 MB, max 17.56 | dry run | |
+| Windows | 04:45:51 to 04:55:52; 04:58:58 to 05:08:59 | dry run; installed tray | |
+
+- Against "Speed numbers after the idle CPU fix" (the build before the log work, the same dry-run method): 109.375
+  ms, 87 ms by cycles, 3.33 MB. The new CPU is 2 ticks and 7 ms of cycles more, one window each; whether the log work
+  adds it or it is noise is **not verified**.
+- The installed tray's own CPU in its window, 109.375 ms (155.2 ms by cycles), is not an idle figure: it held, and
+  cargo builds ran beside it.
+- Not measured again: the start and end delays (the 0.116 s start delay in `media/data/speed.json` is Codex CLI's,
+  from "Speed numbers, final v1 build (2026-11-07)") and the install folder. Sizes of this build: `Setup.exe` (x64)
+  12,532,026 bytes, `wakeshot-tray.exe` 3,179,520, `wakeshot.exe` 873,472 (file lengths).
+- **The end card re-rendered with these numbers** ("Idle: 4 MB of memory, 141 ms of CPU in 10 minutes.", the small
+  print "Measured on Wakeshot 0.1.0, 2026-11-07, x64."): `media/out/wakeshot-promo.mp4` 8,496,790 bytes, SHA-256
+  `6921D98B12DC0A064C01DAA8F394472BB48C9130F7335EB2E913FDF77276E413`, 38.02 s, -15.32 LUFS, -1.47 dBTP, LRA 16.2 LU.
+  Every decoded frame (yuv420p) and the decoded sound (s16le) hashed against Haik's approved file (SHA-256
+  `123D674C...`, 8,497,349 bytes) and against the render before (`8DAFF243...`, 5 MB and 1016 ms): frames 0 to 1019
+  the same bytes, 1020 to 1139 (the end card, from 34 s) differ, the sound the same bytes. Before the speed line pops
+  (frame 1050) the end card frames differ by at most 4 levels, and outside the speed line's band by at most 17 levels
+  in 23 channel values near text edges: the H.264 encoder, since every frame before 1020 decodes to the same bytes
+  (**inferred**). The poster is the same bytes as before (`B6F7302B...`). Every `p6-media` check passes, the clean
+  rebuild with the final included. **Verified** (`p6-end-card-numbers` Log, 05:09 to 05:22).

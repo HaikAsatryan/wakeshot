@@ -495,8 +495,8 @@ For your own lengths and labels, write a hold file: [docs/hold-files.md](docs/ho
   [bug report](https://github.com/HaikAsatryan/wakeshot/issues/new?template=bug-report.yml).
 - Wakeshot only reads the files each agent keeps. OpenCode's database it opens read only and queries only its session
   and schedule tables, never the ones with OpenCode's login.
-- Lightweight: at idle the tray app uses 5 MB of private memory and 1 s of CPU in 10 minutes (0.17% of one core),
-  measured on the v1 build, x64, on 2026-11-07 ([how](docs/research.md#speed-numbers-final-v1-build-2026-11-07)).
+- Lightweight: at idle the tray app uses 4 MB of private memory and 141 ms of CPU in 10 minutes (0.023% of one core),
+  measured on the v1 build, x64, on 2026-11-07 ([how](docs/research.md#speed-numbers-of-the-shipping-build-2026-11-07)).
 
 </details>
 
