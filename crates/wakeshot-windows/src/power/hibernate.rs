@@ -1,10 +1,8 @@
-//! The hibernate thread: the last check, the going to sleep sound, the lid once more, `SetSuspendState`. Since
-//! `p2-6-sleep-route` it also runs the sleep check: the same check and sound with no hibernate, before the core sets
-//! the 1-minute sleep and screen timeouts ([`run_sleep_check`]).
+//! The hibernate thread: the last check, the going to sleep sound, the lid once more, `SetSuspendState`. It also runs
+//! the sleep check: the same check and sound with no hibernate, before the core sets the 1-minute sleep and screen
+//! timeouts ([`run_sleep_check`]).
 //!
-//! Owner: `p3-hibernate`, then `p2-6-sleep-route`.
-//!
-//! The integration runs [`run_hibernate`] on a new thread for each `Command::Hibernate` and posts what it returns as
+//! The tray runs [`run_hibernate`] on a new thread for each `Command::Hibernate` and posts what it returns as
 //! `Event::Done(Outcome::Hibernate(..))`. When the hibernate works, the call returns only after the PC resumed
 //! (research, "Lid and sleep spike"), so the thread lives through the hibernate.
 
@@ -40,11 +38,9 @@ const AREA: &str = "hibernate";
 pub const LID_WAIT_MS: u64 = 2_000;
 
 /// What the last check reads and the calls after it, so the order and every fallback are tested without Windows
-/// doing anything. `Send + Sync`, so the integration can keep one `Arc<dyn HibernateDeps>` and hand it to each
-/// hibernate thread.
-///
-/// Owner: power track (Phase 3). `Win32Hibernate` is the real one, `DryRunHibernate` reads the real values and only
-/// logs the two calls that change something, `FakeHibernate` (feature `test-support`) is scripted.
+/// doing anything. `Send + Sync`, so the tray can keep one `Arc<dyn HibernateDeps>` and hand it to each hibernate
+/// thread. `Win32Hibernate` is the real one, `DryRunHibernate` reads the real values and only logs the two calls that
+/// change something, `FakeHibernate` (feature `test-support`) is scripted.
 pub trait HibernateDeps: Send + Sync {
     /// `Some(true)` closed, `Some(false)` open, `None` unknown.
     fn lid_closed(&self) -> Option<bool>;
@@ -76,8 +72,8 @@ pub trait HibernateDeps: Send + Sync {
 /// 7. the lid once more, as in step 1, so a lid opened while the sound played skips the hibernate;
 /// 8. `SetSuspendState(TRUE, FALSE, FALSE)`: an error is `Failed`, a return after resume is `Resumed`.
 ///
-/// An agent turn that starts during the sound is not seen: only the core knows of it, and nothing stops this thread
-/// (power safety review finding 6). Every failure is the safe side: no hibernate. The settings are already restored when the core sends `Hibernate`,
+/// An agent turn that starts during the sound is not seen: only the core knows of it, and nothing stops this thread.
+/// Every failure is the safe side: no hibernate. The settings are already restored when the core sends `Hibernate`,
 /// so the core's answer to a skip or a failure is a notice or another countdown, never a running laptop it holds.
 pub fn run_hibernate(
     reason: CountdownReason,
@@ -128,8 +124,7 @@ pub fn run_hibernate(
         )),
     }
 
-    // The sound plays for seconds (`p3-hibernate` Found outside scope 3): a user who hears it may open the lid to stop
-    // the sleep.
+    // The sound plays for seconds: a user who hears it may open the lid to stop the sleep.
     if let Err(skip) = check_lid(deps, log, true) {
         return HibernateEnd::Skipped(skip);
     }
@@ -148,11 +143,11 @@ pub fn run_hibernate(
     }
 }
 
-/// The hibernate thread's run for `Command::SleepCheck` (`p2-6-sleep-route`): steps 1 to 3, 6 and 7 of
-/// [`run_hibernate`], with no privilege, no hibernate check and no call. So the going to sleep sound plays right before
-/// the core sets the 1-minute timeouts, and a user who hears it can still open the lid. An unknown lid does not stop
-/// it: it is logged, and the core's own lid reading decides (`Command::SleepCheck`). `Ok`: the core writes the short
-/// timeouts next. A failed sound is logged and the check goes on, as before a hibernate.
+/// The hibernate thread's run for `Command::SleepCheck`: steps 1 to 3, 6 and 7 of [`run_hibernate`], with no
+/// privilege, no hibernate check and no call. So the going to sleep sound plays right before the core sets the
+/// 1-minute timeouts, and a user who hears it can still open the lid. An unknown lid does not stop it: it is logged,
+/// and the core's own lid reading decides (`Command::SleepCheck`). `Ok`: the core writes the short timeouts next. A
+/// failed sound is logged and the check goes on, as before a hibernate.
 pub fn run_sleep_check(
     reason: CountdownReason,
     floor_pct: u8,
@@ -452,9 +447,9 @@ fn win_error(call: &'static str, error: &windows::core::Error) -> WinError {
     }
 }
 
-/// The dry run (track note 8): the reads are `reads`' own, so the checks run on real values, and the two calls that
-/// change something, the privilege and `SetSuspendState`, are only logged. It never hibernates: a run whose checks
-/// all pass answers `Resumed` at once.
+/// The dry run: the reads are `reads`' own, so the checks run on real values, and the two calls that change
+/// something, the privilege and `SetSuspendState`, are only logged. It never hibernates: a run whose checks all pass
+/// answers `Resumed` at once.
 pub struct DryRunHibernate<D = Win32Hibernate> {
     reads: D,
     log: Arc<dyn Log>,
@@ -1004,7 +999,7 @@ mod tests {
         }
     }
 
-    /// Power safety review finding 6: the lid is read once more after the sound, right before the call.
+    /// The lid is read once more after the sound, right before the call.
     #[test]
     fn lid_opened_during_the_sound_skips() {
         for (after, skip, level, line) in [
@@ -1342,7 +1337,7 @@ mod tests {
         assert_eq!(Win32Hibernate.hibernate_allowed(), allowed, "a second read");
     }
 
-    // The sleep check (`p2-6-sleep-route`).
+    // The sleep check.
 
     fn check_with(
         reason: CountdownReason,

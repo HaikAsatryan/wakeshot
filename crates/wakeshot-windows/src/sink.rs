@@ -1,8 +1,7 @@
 //! How threads off the loop hand events to the core: the IO thread, system callbacks, the hibernate, watch and sound
 //! threads, and the menu (architecture section 4, "Tray threads").
 //!
-//! Owner: contracts card. The real sink (boxed events posted to the loop's window) comes with the integration step,
-//! which owns the loop and its window, so one place boxes and unboxes an `Event`.
+//! The real sink is `app::window::WindowSink`: the loop owns its window, so one place boxes and unboxes an `Event`.
 
 #[cfg(any(test, feature = "test-support"))]
 use std::sync::Mutex;
@@ -18,8 +17,6 @@ pub trait EventSink: Send + Sync {
 }
 
 /// Records every event posted; `fail_with` makes every post fail.
-///
-/// Owner: contracts card.
 #[cfg(any(test, feature = "test-support"))]
 #[derive(Debug, Default)]
 pub struct FakeEventSink {

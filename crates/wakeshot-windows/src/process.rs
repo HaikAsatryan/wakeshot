@@ -1,8 +1,7 @@
 //! Process identity and liveness, exit waits, the system process list, and spawns outside the tray's process tree
 //! (architecture section 5, "Liveness" and "Guard").
 //!
-//! Owner: power track (`p3-process`). The signatures and `FakeLiveness` are contract: the sources track checks
-//! sessions and hold files through `Liveness`, and the ship track's hooks check the journal owner.
+//! `Liveness` and `FakeLiveness` are a seam: the watch thread, the hooks and the CLI check processes through them.
 
 use std::ffi::{OsStr, OsString, c_void};
 use std::mem::offset_of;
@@ -115,7 +114,6 @@ pub fn liveness(process: ProcessRef) -> Alive {
     }
 }
 
-/// This process.
 pub fn current() -> Result<ProcessRef, WinError> {
     // SAFETY: plain calls; the pseudo handle needs no close.
     let (pid, me) = unsafe { (GetCurrentProcessId(), GetCurrentProcess()) };
@@ -125,7 +123,6 @@ pub fn current() -> Result<ProcessRef, WinError> {
     })
 }
 
-/// This process's session id.
 pub fn current_session() -> Result<u32, WinError> {
     let mut session = 0;
     // SAFETY: plain call with a local out value.
@@ -290,7 +287,7 @@ fn integrity_rid(token: HANDLE) -> Result<u32, WinError> {
 
 /// From here on this process loads DLLs from System32 only (`SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32)`),
 /// never from its working folder or `PATH`: an agent's hook runs with a repo the user may not trust as its working
-/// folder (review finding 13 of `p4-hooks-design-security`).
+/// folder.
 pub fn harden_dll_search() -> Result<(), WinError> {
     // SAFETY: plain call; it changes only this process's search path.
     unsafe { SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32) }
@@ -426,9 +423,9 @@ pub struct Spawned {
 ///
 /// `exe` is a full path: it is passed as the application name too, so a space in it never runs another exe. The
 /// parent is the shell's Explorer (`GetShellWindow`); the child then also takes Explorer's token (checked: an
-/// elevated caller gets a Medium child) and job (Microsoft docs; not tested). No shell
-/// window, a failed open of Explorer, or a failed start under it: a normal child, `outside_tree: false`, so the caller
-/// logs it (track note 9). The child gets no console window and inherits no handles.
+/// elevated caller gets a Medium child) and job (Microsoft docs; not tested). No shell window, a failed open of
+/// Explorer, or a failed start under it: a normal child, `outside_tree: false`, so the caller logs it. The child gets
+/// no console window and inherits no handles.
 pub fn spawn_outside_tree(exe: &Path, args: &[OsString]) -> Result<Spawned, WinError> {
     let line = command_line(exe.as_os_str(), args)?;
     if let Some(shell) = shell_process()
@@ -847,8 +844,6 @@ fn push_arg(line: &mut Vec<u16>, arg: &OsStr) {
 
 /// Liveness answers the test sets, and a record of every check. A process not in `alive` is `Gone`; a pid not in
 /// `starts` is `NotRunning`; `list` returns `processes`, or `list_error` when it is set.
-///
-/// Owner: power track (`p3-process`); first version from the contracts card.
 #[cfg(any(test, feature = "test-support"))]
 #[derive(Debug, Default)]
 pub struct FakeLiveness {
@@ -1073,8 +1068,8 @@ mod tests {
     }
 
     /// Runs `f` with this thread on this process's token minus every privilege but SeChangeNotify, so the opens in
-    /// `f` meet the DACL as an ordinary caller's do: a runner may hold SeDebugPrivilege turned on (this laptop's
-    /// elevated shell does), and that passes any DACL.
+    /// `f` meet the DACL as an ordinary caller's do: a runner may hold SeDebugPrivilege turned on (an elevated shell
+    /// does), and that passes any DACL.
     fn without_privileges<T>(f: impl FnOnce() -> T) -> T {
         struct Revert;
         impl Drop for Revert {
@@ -1268,7 +1263,7 @@ mod tests {
         let child = locked.end_and_close();
         assert_eq!(without_privileges(|| liveness(child)), Alive::Gone);
 
-        // The card's example, csrss.exe: recorded with both tokens; alive either way.
+        // csrss.exe, a System process: recorded with both tokens; alive either way.
         let csrss: Vec<Listed> = system_list()
             .unwrap()
             .into_iter()

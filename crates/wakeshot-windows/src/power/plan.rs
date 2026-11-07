@@ -1,8 +1,6 @@
 //! Power plan reads and writes: `Win32Power` and `DryRunPower`, the Windows forms of the core's
 //! `ownership::io::PlanIo` (architecture section 5, "Power settings"), and, with `test-support`, the throwaway plan
 //! copy every real plan test uses (`TestPlan`, `CopyAsActive`; architecture section 9).
-//!
-//! Owner: power track (`p3-power-plan`).
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -53,8 +51,6 @@ const MAX_PLANS: u32 = 4096;
 
 /// A plan value the IO thread reads or writes. Wider than `SettingKey` because `PlanValues` also needs the energy
 /// saver threshold, which Wakeshot reads but never writes.
-///
-/// Owner: power track (Phase 3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PlanSetting {
     LidAc,
@@ -151,7 +147,7 @@ fn take_guid(call: &'static str, rc: WIN32_ERROR, p: *mut GUID) -> Result<Guid, 
     Ok(Guid(guid.to_u128()))
 }
 
-fn get_active() -> Result<Guid, WinError> {
+fn active_scheme() -> Result<Guid, WinError> {
     let mut p: *mut GUID = std::ptr::null_mut();
     // SAFETY: `p` is a live out pointer; the reserved root key is null as the docs require.
     let rc = unsafe { PowerGetActiveScheme(None, &mut p) };
@@ -231,9 +227,9 @@ fn read_value(plan: Guid, setting: PlanSetting) -> Result<u32, WinError> {
 pub type SettingReads = Vec<(PlanSetting, Result<u32, WinError>)>;
 
 /// The active plan and every value in [`PlanSetting::ALL`], read now and each on its own, so one failed read still
-/// shows the rest. Reads only: for the tray's start header and the diagnostics bundle (`p6-logs-diagnostics`).
+/// shows the rest. Reads only: for the tray's start header and the diagnostics bundle.
 pub fn active_values() -> Result<(Guid, SettingReads), WinError> {
-    let plan = get_active()?;
+    let plan = active_scheme()?;
     let values = PlanSetting::ALL
         .iter()
         .map(|&setting| (setting, read_value(plan, setting)))
@@ -478,7 +474,7 @@ impl fmt::Debug for Win32Power {
 
 impl PlanIo for Win32Power {
     fn active_plan(&mut self) -> Result<Guid, Failure> {
-        Ok(get_active()?)
+        Ok(active_scheme()?)
     }
 
     fn plans(&mut self) -> Result<Vec<Guid>, Failure> {
@@ -506,7 +502,7 @@ impl PlanIo for Win32Power {
     }
 
     fn values(&mut self) -> Result<PlanValues, Failure> {
-        let active = get_active()?;
+        let active = active_scheme()?;
         self.values_of(active)
     }
 
@@ -522,10 +518,10 @@ struct Overlaid {
     value: u32,
 }
 
-/// Reads from `P`, keeps writes in memory, and never calls `P::write` or `P::set_active` (track note 8). Reads
-/// return the dry-run value while the real stored value is still the one it was written over; once that changes
-/// (the user in Settings), the real value wins and the dry-run value is dropped, as a real write would be
-/// overwritten. Each write makes one read of `P` for that real value, so a script on `P` counts it.
+/// Reads from `P`, keeps writes in memory, and never calls `P::write` or `P::set_active`. Reads return the dry-run
+/// value while the real stored value is still the one it was written over; once that changes (the user in Settings),
+/// the real value wins and the dry-run value is dropped, as a real write would be overwritten. Each write makes one
+/// read of `P` for that real value, so a script on `P` counts it.
 ///
 /// `set_active` is logged and recorded, and `active_plan` still answers from `P`: the routines call `set_active` only
 /// with the plan `active_plan` just returned, and a real plan switch must stay visible. Change it when a caller
@@ -673,7 +669,7 @@ mod copies {
         }
 
         pub fn new() -> Result<Self, WinError> {
-            let source = GUID::from_u128(get_active()?.0);
+            let source = GUID::from_u128(active_scheme()?.0);
             let mut p: *mut GUID = std::ptr::null_mut();
             // SAFETY: a null `p` asks Windows to allocate the new GUID (Microsoft, `PowerDuplicateScheme`);
             // `take_guid` frees it.
@@ -690,13 +686,12 @@ mod copies {
             self.plan
         }
 
-        /// Deletes the copies earlier test runs left: named "Wakeshot test <pid>", that pid not running, and not
-        /// the active plan. Returns the deleted ones. Only `real_` tests and the harness's `power_check cleanup`
-        /// call it, and both run one at a time across all cards (review M7: a sweep must never delete a copy
-        /// another card is walking). A pid now reused by another process keeps its copy until that process ends,
-        /// which errs on the side of keeping.
+        /// Deletes the copies earlier test runs left: named "Wakeshot test <pid>", that pid not running, and not the
+        /// active plan. Returns the deleted ones. Only `real_` tests and `power_check cleanup` call it, and both run
+        /// one at a time, since a sweep must never delete a copy another run is walking. A pid now reused by another
+        /// process keeps its copy until that process ends, which errs on the side of keeping.
         pub fn sweep() -> Result<Vec<Guid>, WinError> {
-            let active = get_active()?;
+            let active = active_scheme()?;
             let mut named = Vec::new();
             for plan in plan_list(enumerate_at)? {
                 // A plan whose name cannot be read is not known to be a test copy, so it stays.
@@ -718,7 +713,7 @@ mod copies {
     impl Drop for TestPlan {
         fn drop(&mut self) {
             // Windows refuses to delete the active plan (research, "Plan copy"); say so instead of failing later.
-            if get_active() == Ok(self.plan) {
+            if active_scheme() == Ok(self.plan) {
                 eprintln!("TestPlan: {} is the active plan, so it is kept", self.plan);
                 return;
             }
@@ -981,18 +976,18 @@ mod tests {
     }
 
     #[test]
-    fn setting_guids_match_the_spike() {
-        // The spike's literals (`spikes/power-settings/src/power.rs`), which its write and copy tests used.
+    fn setting_guids_match_the_checked_literals() {
+        // Literals checked by real writes in a throwaway test program, not kept.
         const SUB_BUTTONS: u128 = 0x4f971e89_eebd_4455_a8de_9e59040e7347;
         const LIDACTION: u128 = 0x5ca83367_6e45_459f_a27b_476b1d01c936;
         const SUB_SLEEP: u128 = 0x238c9fa8_0aad_41ed_83f4_97be242c8f20;
         const STANDBYIDLE: u128 = 0x29f6c1db_86da_48c5_9fdb_f2b67b1f44da;
         const SUB_ENERGYSAVER: u128 = 0xde830923_a562_41af_a086_e3a2c6bad2da;
         const ESBATTTHRESHOLD: u128 = 0xe69653ca_cf7f_4f05_aa73_cb833fa90ad4;
-        // Not in the spike: `powercfg /aliases` on the test laptop, 2026-11-04 (`p2-6-sleep-route`).
+        // From `powercfg /aliases` on the test laptop, 2026-11-04.
         const SUB_VIDEO: u128 = 0x7516b95f_f776_4464_8c53_06167f40cc99;
         const VIDEOIDLE: u128 = 0x3c0bc021_c8a8_4e07_a973_6b14cbcb2b7e;
-        let spike = [
+        let checked = [
             (PlanSetting::LidAc, SUB_BUTTONS, LIDACTION, true),
             (PlanSetting::LidDc, SUB_BUTTONS, LIDACTION, false),
             (PlanSetting::SleepAc, SUB_SLEEP, STANDBYIDLE, true),
@@ -1006,11 +1001,11 @@ mod tests {
             (PlanSetting::VideoIdleAc, SUB_VIDEO, VIDEOIDLE, true),
             (PlanSetting::VideoIdleDc, SUB_VIDEO, VIDEOIDLE, false),
         ];
-        for (setting, sub, id, ac) in spike {
+        for (setting, sub, id, ac) in checked {
             let (s, i) = setting.ids();
             assert_eq!((s.to_u128(), i.to_u128(), setting.on_ac()), (sub, id, ac));
         }
-        assert_eq!(spike.map(|(s, ..)| s), PlanSetting::ALL);
+        assert_eq!(checked.map(|(s, ..)| s), PlanSetting::ALL);
         let keys = KEYS.map(PlanSetting::from);
         assert_eq!(
             keys,
@@ -1406,7 +1401,7 @@ mod tests {
         }
 
         assert_eq!(
-            get_active(),
+            active_scheme(),
             Ok(before.active),
             "the copy never became active"
         );
@@ -1429,7 +1424,7 @@ mod tests {
     #[test]
     #[ignore = "real laptop: makes a plan copy that is never active"]
     fn real_plan_list_ends_with_259() {
-        let active = get_active().unwrap();
+        let active = active_scheme().unwrap();
         let mut before = plan_list(enumerate_at).unwrap();
         println!("plans: {before:?}");
         assert!(before.contains(&active));
@@ -1547,8 +1542,8 @@ mod tests {
             let want = match key {
                 SettingKey::LidAc | SettingKey::LidDc => Some(registry),
                 SettingKey::SleepDc => Some(MODERN_STANDBY_SLEEP_DC),
-                // The reset takes the sleep route's 1-minute timeouts back too (`p2-6-sleep-route-fixes`): their
-                // defaults are read and shown, not pinned, since nothing measured them before.
+                // The reset takes the sleep route's 1-minute timeouts back too: their defaults are read and shown, not
+                // pinned, since nothing measured them before.
                 SettingKey::SleepAc | SettingKey::VideoIdleAc | SettingKey::VideoIdleDc => None,
             };
             if let Some(want) = want {
@@ -1596,7 +1591,7 @@ mod tests {
         assert_eq!(io.set_active_count(), 1);
 
         assert_eq!(
-            get_active(),
+            active_scheme(),
             Ok(before.active),
             "Windows never switched plans"
         );
@@ -1658,7 +1653,7 @@ mod tests {
         }
 
         assert_eq!(
-            get_active(),
+            active_scheme(),
             Ok(before.active),
             "Windows never switched plans"
         );

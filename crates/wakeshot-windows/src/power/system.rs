@@ -1,7 +1,5 @@
 //! Lid, AC, battery, active plan, suspend and resume notifications.
 //!
-//! Owner: `p3-system-events`.
-//!
 //! The callbacks may run on any thread, so they only decode and post (architecture section 4, "Tray threads").
 //! Microsoft's pages for `PowerSettingUnregisterNotification` and `PowerUnregisterSuspendResumeNotification` (read
 //! 2026-11-03) say nothing about a callback that runs during or after the unregister. So a callback never follows a
@@ -255,7 +253,7 @@ unsafe extern "system" fn on_setting(
 ) -> u32 {
     if kind == PBT_POWERSETTINGCHANGE && !setting.is_null() {
         // SAFETY: for PBT_POWERSETTINGCHANGE Windows passes a POWERBROADCAST_SETTING, alive for this call, whose
-        // `DataLength` is the size of `Data` (Microsoft's page for the struct; read this way in the lid spike).
+        // `DataLength` is the size of `Data` (Microsoft's page for the struct).
         let (guid, data) = unsafe { read_setting(setting) };
         deliver(context.addr(), Raw::Setting { guid, data });
     }
@@ -485,7 +483,7 @@ fn decode_lid(data: &[u8]) -> Option<bool> {
 }
 
 /// `Some(true)` on AC. 1 is the battery and 2 a short-term source such as a UPS (`SYSTEM_POWER_CONDITION`); 2 counts
-/// as battery, since it does not last either (track note 9).
+/// as battery, since it does not last either.
 fn decode_acdc(data: &[u8]) -> Option<bool> {
     match dword(data)? {
         0 => Some(true),

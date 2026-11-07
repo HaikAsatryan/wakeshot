@@ -1,9 +1,14 @@
-//! A harness that plays the tray's power side by hand, so the agent and Haik can run the manual checks of the power
-//! track before integration (architecture section 9; `docs/tasks/p3-harness.md`). It drives the real executor,
-//! journal, power requests and notifications on a plan copy; the guard and restore mode it starts are the real tray
-//! exe's.
+//! Plays the tray's power side by hand, to check the power layer on a real laptop (architecture section 9): requests
+//! and notifications across lid, sleep and resume (`hold`), the journal, RunOnce value and guard of a killed tray
+//! (`fake-tray`), the restore inside the end-session messages (`end-session`), session notices (`session-watch`),
+//! apply and restore cycles (`cycles`) and the integrity level (`medium-probe`). It drives the real executor,
+//! journal, requests and notifications; the guard and restore mode it starts are the real tray exe's.
 //!
-//! Owner: power track (`p3-harness`).
+//! To run it safely: quit Wakeshot from its tray and any other keep-awake app first, since they change the same
+//! settings; it stops with exit code 3 while a real Wakeshot runs or left a journal or RunOnce value. Plan writes go
+//! to a throwaway copy of the active plan that every way out deletes. `--plan-only` prints what a command would do
+//! and how to undo it, and `cleanup` puts back what a killed run left. `fake-tray` and `end-session` share the real
+//! RunOnce value: run one at a time.
 //!
 //! Build: `cargo build --locked -p wakeshot-windows --features test-support --example power_check`, and
 //! `cargo build --locked -p wakeshot-tray` (same target and profile) for the guard. Then `power_check --help`.
@@ -64,7 +69,7 @@ use window::Window;
 
 const AREA: &str = "harness";
 
-/// The tray's tick (the spike's hold ran 5 s ticks too, so the gap lines compare with its logs).
+/// The tray's tick.
 const TICK_MS: i64 = 5_000;
 
 /// The tray's ownership check period while anything is owned (architecture section 5, "Ownership").
@@ -296,7 +301,7 @@ fn real_signs(cmd: &Cmd) -> Vec<RealSign> {
 
 fn default_dir(cmd: &Cmd, home: &Home) -> Result<PathBuf, String> {
     match cmd {
-        // Check 5 runs restore mode at sign-in, which reads only the real folder.
+        // The restore mode a sign-in runs reads only the real folder.
         Cmd::FakeTray => Ok(DataDir::real().map_err(win_text)?.root().to_path_buf()),
         _ => Ok(home.data_dir(cmd.name())),
     }
@@ -702,7 +707,7 @@ fn tray(ctx: &Ctx, guard: Option<&Path>, with_window: bool) -> Result<(), String
         .to_str()
         .map(|path| format!("\"{path}\" --restore"))
         .ok_or("the tray exe path is not valid Unicode")?;
-    // A guard inherits this environment, and a debug guard reads its data folder from it (`p3-recovery` Result).
+    // A guard inherits this environment, and a debug guard reads its data folder from it.
     // SAFETY: always sound on Windows, also with other threads (std docs; research, "Recovery checks").
     unsafe { std::env::set_var("WAKESHOT_DATA_DIR", ctx.dir.root()) };
     let record = ctx.save(&ctx.run_record(cmd.name(), Some(run_once.clone()), None))?;
@@ -807,7 +812,7 @@ fn tray_executor(
     ))
 }
 
-/// Check 6: the restore runs inside the end-session messages, before Windows ends the process.
+/// The restore runs inside the end-session messages, before Windows ends the process.
 fn end_session_handler(rig: Rc<RefCell<TrayRig>>) -> window::Handler {
     Box::new(move |msg: u32, wparam: WPARAM, lparam: LPARAM| {
         let Ok(mut rig) = rig.try_borrow_mut() else {
@@ -1611,7 +1616,7 @@ mod window {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Each step's time, for check 6 and check 15
+// Each step's time, for the end-session and cycles timings
 
 /// Logs every plan and safety net call with its time; keeps each `set_active` time.
 struct Timed<T> {
@@ -1706,7 +1711,7 @@ impl<T: PlanIo> PlanIo for Timed<T> {
     }
 
     // Without it the trait's default answers "not supported", so a lost journal's reset through this wrapper would
-    // reset nothing (`p2-6-record-lost` Found outside scope 2).
+    // reset nothing.
     fn read_default(&mut self, plan: Guid, key: SettingKey) -> Result<u32, Failure> {
         let started = Instant::now();
         let result = self.inner.read_default(plan, key);
@@ -2783,8 +2788,7 @@ mod text {
 }
 
 mod ticks {
-    //! The tick and gap lines of the lid spike (`spikes/lid-sleep/src/ticks.rs`), ported: a gap is named by its
-    //! start (research, "Lid and sleep spike", morning results).
+    //! The tick and gap lines: a gap is named by its start (research, "Lid and sleep spike", morning results).
 
     use wakeshot_core::time::Now;
     use wakeshot_windows::WinError;
@@ -3076,9 +3080,9 @@ mod tidy {
 }
 
 mod guard {
-    //! Whether a command may run beside a real Wakeshot (`docs/tasks/p6-real-install-guard.md`). Two Wakeshots fight
-    //! over the same power values, journal and RunOnce value, also with separate names, so a command that changes any
-    //! of them stops before its first change. Decided from the signs alone, so the rules are tested without an install.
+    //! Whether a command may run beside a real Wakeshot. Two Wakeshots fight over the same power values, journal and
+    //! RunOnce value, also with separate names, so a command that changes any of them stops before its first change.
+    //! Decided from the signs alone, so the rules are tested without an install.
 
     use wakeshot_windows::power::journal::RUN_ONCE_NAME;
     use wakeshot_windows::store::RealSign;
@@ -3410,7 +3414,7 @@ mod tests {
         undo_lines(&undo_for(cmd, Some(BALANCED), copy, Path::new(r"C:\d"))).join("\n")
     }
 
-    /// The dry pass the card asks for: every command's plan and undo lines, as `--plan-only` prints them.
+    /// A dry pass: every command's plan and undo lines, as `--plan-only` prints them.
     #[test]
     fn plan_only_text_for_every_command() {
         let all = [
@@ -3519,7 +3523,7 @@ mod tests {
     }
 
     #[test]
-    fn gaps_are_classified_like_the_spike() {
+    fn gaps_are_classified_by_unbiased_time() {
         assert_eq!(classify(5000, 5000, 5000), None);
         assert_eq!(classify(5000, 6999, 6999), None);
         assert_eq!(classify(5000, 571_000, 4_900), Some(Gap::Slept));

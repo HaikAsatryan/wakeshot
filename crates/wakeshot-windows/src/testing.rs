@@ -1,8 +1,7 @@
 //! Fakes for this crate's boundary traits, so the core, the loop and the IO thread are tested without Windows doing
 //! anything. Built for this crate's tests and for other crates through the `test-support` feature (dev-dependencies
-//! only). Each fake lives beside its trait; this module gathers them in one place.
-//!
-//! Owner: contracts card. The plan seam's fake is the core's `ownership::fake::FakePlans`.
+//! only). Each fake lives beside its trait; this module gathers them in one place. The plan seam's fake is the core's
+//! `ownership::fake::FakePlans`.
 
 pub use crate::log::MemoryLog;
 pub use crate::notify::FakeNotifier;
@@ -14,9 +13,8 @@ use wakeshot_core::view::MenuModel;
 
 use crate::tray::{Anchor, MenuView};
 
-/// Records each menu shown, so a test can check the model and then post the pick itself.
-///
-/// Owner: tray track (Phase 5). Stands in for the owner-drawn Win32 menu.
+/// Records each menu shown, so a test can check the model and then post the pick itself. Stands in for the owner-drawn
+/// Win32 menu.
 #[derive(Debug, Default)]
 pub struct FakeMenuView {
     pub shown: Vec<(MenuModel, Anchor)>,

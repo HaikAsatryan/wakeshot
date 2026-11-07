@@ -1,7 +1,5 @@
 //! Power requests: create, set, clear, retake; real and dry run.
 //!
-//! Owner: `p3-requests`.
-//!
 //! One request object per tray (architecture section 5, "Power requests"). `PowerSetRequest` adds one to a count per
 //! type and `PowerClearRequest` takes one off (Microsoft docs), so every type here is set at most once: a second set
 //! would need a second clear before Windows lets the PC sleep again. `PowerRequests`, `DryRunRequests` and the tests
@@ -32,14 +30,12 @@ const AREA: &str = "power";
 
 const REASON: &str = "Wakeshot: keeping the PC awake for running work";
 
-/// The tray's power requests, run by the loop thread for `Command::Requests` and `Command::Retake`. The runner answers
-/// both with `Outcome::Requests(result.map_err(Failure::from))` (review m7).
+/// The tray's power requests, run by the loop thread for `Command::Requests` and `Command::Retake`. The runner
+/// answers both with `Outcome::Requests(result.map_err(Failure::from))`.
 ///
 /// A call that fails part way clears what it set and returns the error. What it cleared stays cleared, and a type
 /// whose clear failed still counts as on, so the next call or the drop clears it again: on a failure the PC holds
 /// less, never more.
-///
-/// Owner: power track (Phase 3).
 pub trait RequestApi {
     /// `system` sets or clears SYSTEM and EXECUTION together, `display` sets or clears DISPLAY; only what differs from
     /// what is on is changed. Clears run first, all of them even when one fails; sets run only after every clear
@@ -326,8 +322,7 @@ impl Calls for DryRunCalls {
     }
 }
 
-/// Logs each call `PowerRequests` would make, under the same rules, and makes none (track note 8). Every call
-/// succeeds.
+/// Logs each call `PowerRequests` would make, under the same rules, and makes none. Every call succeeds.
 pub struct DryRunRequests(Engine<DryRunCalls>);
 
 impl DryRunRequests {

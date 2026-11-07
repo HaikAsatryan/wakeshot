@@ -1,8 +1,8 @@
 //! Guard mode, restore mode and the tray's guard control (architecture section 5: "Restore routine" step 7, "Guard",
 //! "Logon restore").
 //!
-//! Owner: `p3-recovery`. The tray exe's mode files (`--guard`, `--restore`) build the real parts and call
-//! [`run_guard`] and [`run_restore_mode`]; the tray's `FileNet` takes a [`TrayGuard`]. Both modes restore only through
+//! The tray exe's mode files (`--guard`, `--restore`) build the real parts and call [`run_guard`] and
+//! [`run_restore_mode`]; the tray's `FileNet` takes a [`TrayGuard`]. Both modes restore only through
 //! `power::journal::restore_locked`.
 
 use std::ffi::{OsStr, OsString};
@@ -34,7 +34,7 @@ use crate::store::{DataDir, Names};
 /// A failed restore is tried again this often (architecture section 5, restore step 7).
 pub const RETRY_EVERY_MS: u64 = 10_000;
 
-/// Tries go on this long after the first; then the tray is started (Phase 1 Question 12, Haik 2026-11-03 18:09).
+/// Tries go on this long after the first; then the tray is started.
 pub const RETRY_FOR_MS: u64 = 120_000;
 
 /// Every guard's stop event name starts with this; `<tray pid>.<n>` follows.
@@ -444,7 +444,7 @@ impl TrayGuard {
         );
         self.note(Level::Info, &text);
         if !spawned.outside_tree {
-            // Track note 9: the log says so, because End task on the tray's group then ends both.
+            // Logged, because End task on the tray's group then ends both.
             let text = format!(
                 "guard pid {} runs as the tray's own child: Explorer is missing, or its open or the start under it \
                  failed",
@@ -482,7 +482,7 @@ impl GuardControl for TrayGuard {
             if !old.ended() {
                 self.leaving.push(old);
             } else if !old.told_to_stop() {
-                // Task Manager's End task, or a crash: the case manual check 4 looks for.
+                // Task Manager's End task, or a crash.
                 let code = old
                     .exit_code()
                     .map_or_else(|| "unknown".to_owned(), |c| c.to_string());
@@ -620,8 +620,8 @@ pub fn run_restore_mode<P: PlanIo, N: SafetyNet>(
     end
 }
 
-/// The give-up step, the one place both modes end a restore that keeps failing (Phase 1 Question 12: the default,
-/// Haik 2026-11-03 18:09): start the tray, which retries on each safety tick and shows the warning.
+/// The give-up step, the one place both modes end a restore that keeps failing: start the tray, which retries on each
+/// safety tick and shows the warning.
 pub fn give_up(os: &dyn RecoveryOs, log: &dyn Log) -> Result<TrayStarted, WinError> {
     let started = os.start_tray();
     match started {
@@ -953,7 +953,7 @@ mod tests {
         ]
     }
 
-    /// An entry a newer version wrote (correction 12): it stays in the file untouched.
+    /// An entry a newer version wrote, with a key this version does not know: it stays in the file untouched.
     fn sleep_ac() -> JournalFileEntry {
         JournalFileEntry {
             plan: P1,
@@ -1671,9 +1671,9 @@ mod tests {
         assert!(run.has_line(Level::Warn, "journal.json.corrupt"));
     }
 
-    /// Track note 4 for one run: a stop at each of its calls, then the next start's restore, first with one of that
-    /// restore's calls failing (each in turn), then whole. `fresh` builds the world with the run's own scripted
-    /// failures; `after_stop` is the first point of the note.
+    /// The stop-point walk for one run: a stop at each of its calls, then the next start's restore, first with one of
+    /// that restore's calls failing (each in turn), then whole. `fresh` builds the world with the run's own scripted
+    /// failures; `after_stop` checks what every stop must leave.
     fn walk_stops(
         case: &str,
         fresh: &dyn Fn() -> FakePlans,
@@ -1714,8 +1714,8 @@ mod tests {
                     "{case}: guard not told to stop"
                 );
             } else {
-                // A stop after the file is gone (walk R6): RunOnce or the guard may be left, and both find no
-                // journal, so they do nothing.
+                // A stop after the file is gone: RunOnce or the guard may be left, and both find no journal, so they
+                // do nothing.
                 assert_eq!(s.journal, FakeJournal::Missing, "{case}");
             }
             let next_calls = s.calls.len() - base;

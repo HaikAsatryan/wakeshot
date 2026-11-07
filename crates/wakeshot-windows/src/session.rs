@@ -1,9 +1,7 @@
 //! Session notifications, the console check, `lock()`; real and dry run.
 //!
-//! Owner: `p3-session`.
-//!
-//! The loop window's owner (integration) calls `register` once its hidden top-level window exists and `decode` for
-//! each message it gets; this module has no window procedure (architecture section 4, "Tray threads").
+//! The loop window's owner calls `register` once its hidden top-level window exists and `decode` for each message it
+//! gets; this module has no window procedure (architecture section 4, "Tray threads").
 
 #[cfg(any(test, feature = "test-support"))]
 use std::cell::Cell;
@@ -32,8 +30,6 @@ const AREA: &str = "session";
 
 /// `WM_WTSSESSION_CHANGE` for this session, while it lives. Drop it before the window is destroyed: the docs ask for
 /// the unregister first.
-///
-/// Owner: power track (Phase 3).
 #[derive(Debug)]
 pub struct SessionNotifications {
     hwnd: HWND,
@@ -114,9 +110,8 @@ pub fn on_console() -> Result<bool, WinError> {
     Ok(console == own)
 }
 
-/// This session's lock state now (`WTSSessionInfoEx`, `SessionFlags`; a port of the lid spike's `session_locked`).
-/// `None` when the query fails or the state is unknown. Integration feeds `Session(Locked)` right after `Started` on
-/// `Some(true)`.
+/// This session's lock state now (`WTSSessionInfoEx`, `SessionFlags`). `None` when the query fails or the state is
+/// unknown. Tray startup feeds `Session(Locked)` right after `Started` on `Some(true)`.
 pub fn locked_now() -> Option<bool> {
     let mut buffer = PWSTR::null();
     let mut bytes = 0u32;
@@ -160,8 +155,6 @@ fn lock_state(flags: i32) -> Option<bool> {
 
 /// Locks this session, for `Command::Lock`; the loop thread runs it and answers `Outcome::Locked(result.map_err(
 /// Failure::from))`.
-///
-/// Owner: power track (Phase 3).
 pub trait Locker {
     fn lock(&self) -> Result<(), WinError>;
 }
@@ -178,7 +171,7 @@ impl Locker for Win32Locker {
     }
 }
 
-/// Logs the lock it would make and never locks (track note 8).
+/// Logs the lock it would make and never locks.
 pub struct DryRunLocker {
     log: Arc<dyn Log>,
 }
@@ -308,7 +301,6 @@ mod tests {
             "a wparam past u32 is no code"
         );
 
-        // Other messages.
         for msg in [WM_TIMER, WM_POWERBROADCAST, WM_APP, 0] {
             assert_eq!(
                 decode(msg, WPARAM(WTS_SESSION_LOCK as usize), LPARAM(1)),
@@ -379,8 +371,7 @@ mod tests {
         assert_eq!(fake.locks.get(), 2);
     }
 
-    /// Real: true when run from Haik's desktop. Ignored, since a CI runner's console session is not verified (review
-    /// M9).
+    /// Real: true when run from the PC's own desktop. Ignored, since a CI runner's console session is not verified.
     #[test]
     #[ignore = "real: needs this session on the PC's own screen"]
     fn real_on_console_here() {
@@ -394,7 +385,7 @@ mod tests {
         assert_eq!(locked_now(), Some(false));
     }
 
-    /// Real: locks Haik's screen. Only `p3-haik-checks` runs it, with Haik there to sign in again.
+    /// Real: locks the screen. Run it only by hand, with someone there to sign in again.
     #[test]
     #[ignore = "real: locks the screen; p3-haik-checks only"]
     fn real_lock_locks() {

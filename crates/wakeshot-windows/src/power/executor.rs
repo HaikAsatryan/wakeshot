@@ -1,9 +1,8 @@
 //! Runs `ReadPlan`, `Apply` and `Restore` on the IO thread, and the restore at tray startup (architecture section 4,
 //! "Tray threads" and "Tray startup" step 6).
 //!
-//! Owner: `p3-power-io`. The signatures are contract: the IO thread (`p6-int-io-thread`) calls `run`, the tray's
-//! startup (`p6-int-startup`) calls `startup`, and the harness (`p3-harness`) drives both. The ownership routines are
-//! called only through `power::journal`'s locked entry points.
+//! The IO thread calls `run`, tray startup calls `startup`, and the test harness drives both. The ownership routines
+//! are called only through `power::journal`'s locked entry points.
 
 use std::sync::Arc;
 
@@ -73,7 +72,7 @@ pub struct Startup {
 /// - `Restore { why: Leftover }` runs only when the journal's owner is Gone or this tray; otherwise it answers a failed
 ///   `Restored` (`OWNER_ALIVE`, `OWNER_UNKNOWN`) with the file's known entries, so the core retries on the tick;
 /// - a restore that sets a corrupt journal aside answers `Done(Restored)`, then `JournalCorrupt`, and the file is
-///   renamed `journal.json.corrupt.seen` (track note 7).
+///   renamed `journal.json.corrupt.seen`.
 pub struct PowerExecutor<P, N> {
     plans: P,
     net: N,
@@ -85,7 +84,7 @@ pub struct PowerExecutor<P, N> {
 }
 
 // The tray builds the executor for the startup restore and then moves it to the IO thread, so the forms it ships must
-// be `Send`. `FileNet<TrayGuard>` is `p3-recovery`'s to keep `Send`.
+// be `Send`. With a guard, `FileNet<TrayGuard>`, that rests on `recovery::TrayGuard` staying `Send`.
 const _: () = {
     const fn is_send<T: Send>() {}
     is_send::<PowerExecutor<Win32Power, FileNet<NoGuard>>>();
@@ -126,9 +125,8 @@ impl<P: PlanIo, N: SafetyNet> PowerExecutor<P, N> {
 
     /// One command from the IO queue, and the events to post for it, in order.
     ///
-    /// - `ReadPlan`: `Plan` with the active plan's values (`Err` when that read fails), then one `UserChanged` per entry
-    ///   the ownership check dropped. An entry whose read fails is kept and logged, and `Plan` is still `Ok` (track
-    ///   note 10).
+    /// - `ReadPlan`: `Plan` with the active plan's values (`Err` when that read fails), then one `UserChanged` per
+    ///   entry the ownership check dropped. An entry whose read fails is kept and logged, and `Plan` is still `Ok`.
     /// - `Apply`: `Done(Applied)`.
     /// - `Restore`: `Done(Restored)`, then `JournalCorrupt` when this run set a corrupt journal aside.
     /// - `ResetLost`: `Done(ResetLost)`.
@@ -240,16 +238,15 @@ impl<P: PlanIo, N: SafetyNet> PowerExecutor<P, N> {
 
     /// Keeps the safety net of a journal that holds a known entry: the RunOnce value whatever its owner, and a guard
     /// when the owner is this tray. The value is set again because Windows deletes it when it runs it: Explorer runs
-    /// RunOnce once per sign-in, after every Run entry, so a hold that started before that pass loses it to a restore
-    /// mode that finds this tray alive and exits (`p3-haik-checks`, Found outside scope 2). Another owner's leftover
-    /// that this tray could not restore yet gets the value too, so the next sign-in still restores it if this tray
-    /// dies first (review of `p2-6-runonce-keep`, finding 6); restore mode checks the owner, so for a live or Unknown
-    /// one the value costs only a start that exits. It gets no guard: a guard waits on this tray and restores only a
-    /// journal that names this tray as owner (`recovery`), so it would never act, and an apply that takes the journal
-    /// over starts one in its own step 3. A journal that does not read gets neither, as nothing is known of it
-    /// (architecture section 5, "Gap left"). A failed write or start is logged and the command still runs: the other
-    /// half of the net still covers most cases, and the next command tries again. Returns the journal as read, for the
-    /// `Leftover` check.
+    /// RunOnce once per sign-in, after every Run entry (seen on the test laptop), so a hold that started before that
+    /// pass loses it to a restore mode that finds this tray alive and exits. Another owner's leftover that this tray
+    /// could not restore yet gets the value too, so the next sign-in still restores it if this tray dies first; restore
+    /// mode checks the owner, so for a live or Unknown one the value costs only a start that exits. It gets no guard: a
+    /// guard waits on this tray and restores only a journal that names this tray as owner (`recovery`), and an apply
+    /// that takes the journal over starts one in its own step 3. A journal that does not read gets neither, as nothing
+    /// is known of it (architecture section 5, "Gap left"). A failed write or start is logged and the command still
+    /// runs: the other half of the net still covers most cases, and the next command tries again. Returns the journal
+    /// as read, for the `Leftover` check.
     fn keep_guard(&mut self, what: &str) -> JournalRead {
         let read = self.net.load_journal();
         let (known, mine) = match &read {
@@ -405,12 +402,11 @@ impl<P: PlanIo, N: SafetyNet> PowerExecutor<P, N> {
         )
     }
 
-    /// The notice shows once per corrupt file, so the file is renamed once it is reported (track note 7). `true`: a
+    /// The notice shows once per corrupt file, so the file is renamed once it is reported. `true`: a
     /// `journal.json.corrupt` was there to report. A rename that fails still reports it, since the values it named may
-    /// be in force and only the reset takes them back; the file is then deleted instead, as nothing can read it
-    /// anyway, so later starts do not report it, and reset, again, by then maybe over the user's own values
-    /// (`p2-6-sleep-route-fixes`, review minor 6 and its verify). A delete that fails too is logged: the next start
-    /// reports it again.
+    /// be in force and only the reset takes them back; the file is then deleted instead, as nothing can read it anyway,
+    /// so later starts do not report it and reset again, by then maybe over the user's own values. A delete that fails
+    /// too is logged: the next start reports it again.
     fn mark_seen(&self) -> bool {
         let e = match mark_corrupt_seen(&self.dir) {
             Ok(found) => return found,
@@ -663,7 +659,7 @@ mod tests {
         }
     }
 
-    /// An entry a newer version wrote (track note 5).
+    /// An entry a newer version wrote, with a key this version does not know.
     fn unknown_entry() -> JournalFileEntry {
         JournalFileEntry {
             plan: BALANCED,
@@ -1128,9 +1124,8 @@ mod tests {
         assert_eq!(rig.fake.state().guard, FakeGuard::None);
     }
 
-    /// `p3-haik-checks` Found outside scope 2: Explorer's RunOnce pass of a sign-in ran restore mode while this tray
-    /// lived, so Windows deleted the value. Each command sets it again before its own work, and says so only when it
-    /// was missing.
+    /// Explorer's RunOnce pass of a sign-in ran restore mode while this tray lived, so Windows deleted the value. Each
+    /// command sets it again before its own work, and says so only when it was missing.
     #[test]
     fn run_once_set_again_while_owned() {
         let commands = [
@@ -1383,9 +1378,9 @@ mod tests {
         assert_eq!(calls.iter().filter(|c| **c == Call::SetRunOnce).count(), 1);
     }
 
-    /// Review of `p2-6-runonce-keep`, finding 6: a leftover of another owner that this tray cannot restore yet (owner
-    /// alive or of unknown liveness, or a restore that keeps failing) gets the RunOnce value back, so the next sign-in
-    /// still restores it if this tray dies first. It gets no guard: a guard waits on this tray, not on the owner.
+    /// A leftover of another owner that this tray cannot restore yet (owner alive or of unknown liveness, or a restore
+    /// that keeps failing) gets the RunOnce value back, so the next sign-in still restores it if this tray dies first.
+    /// It gets no guard: a guard waits on this tray, not on the owner.
     #[test]
     fn another_owners_leftover_gets_the_value_not_a_guard() {
         let commands = [
@@ -1545,8 +1540,8 @@ mod tests {
         assert_left_alone(Alive::Yes);
     }
 
-    /// Power safety review finding 3: a journal that does not read is left as it is and said so, for the core's
-    /// `Leftover` retry; every other answer of the read is not `unread`.
+    /// A journal that does not read is left as it is and said so, for the core's `Leftover` retry; every other answer
+    /// of the read is not `unread`.
     #[test]
     fn startup_says_when_the_journal_does_not_read() {
         let rig = Rig::new("start-not-read");
@@ -1633,8 +1628,8 @@ mod tests {
 
     #[test]
     fn a_corrupt_file_it_cannot_mark_seen_is_reported_once_then_deleted() {
-        // Review minor 6 of `p2-6-sleep-route` and its verify: the values the file named may be in force, so the first
-        // report still goes out; a report at every start would reset at every start, so the file goes instead.
+        // The values the file named may be in force, so the first report still goes out; a report at every start would
+        // reset at every start, so the file goes instead.
         use std::os::windows::fs::OpenOptionsExt;
         use windows::Win32::Storage::FileSystem::FILE_SHARE_READ;
 
@@ -1788,8 +1783,8 @@ mod tests {
             has_unknown: false,
         },
         WalkStart {
-            // One entry alone on the active plan, so a dropped one cannot hide behind another's `set_active`
-            // (`p2-ownership-apply` Found outside scope 8); one more on an inactive plan.
+            // One entry alone on the active plan, so a dropped one cannot hide behind another's `set_active`; one more
+            // on an inactive plan.
             name: "one entry on the active plan, one on another",
             set: |fake| {
                 fake.add_plan(user_values(OTHER));
@@ -1810,7 +1805,7 @@ mod tests {
         rig
     }
 
-    /// Track note 4, first point: every value we wrote that is still stored or in force has an entry with the user's
+    /// The walk's first point: every value we wrote that is still stored or in force has an entry with the user's
     /// original, and RunOnce is set while a known entry exists. A startup never starts a guard.
     fn assert_reachable(rig: &Rig, start: &WalkStart, case: &str) {
         let s = rig.fake.state();
@@ -1834,9 +1829,9 @@ mod tests {
         }
     }
 
-    /// Track note 4, second point: after a restore that worked, every key equals the user's value, stored on every plan
+    /// The walk's second point: after a restore that worked, every key equals the user's value, stored on every plan
     /// and in force on the active one; no known entry is left; RunOnce is gone unless a stop came between the journal's
-    /// delete and its clear (walk R6: the next start finds no journal, harmless).
+    /// delete and its clear (harmless: the next start finds no journal).
     fn assert_restored(rig: &Rig, start: &WalkStart, startup: &Startup, case: &str) {
         assert_eq!(
             *startup,

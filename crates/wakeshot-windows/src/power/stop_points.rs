@@ -1,11 +1,9 @@
 //! The stop-point walk against the real parts: a plan copy and `FileNet` in a temp folder (test only).
 //!
-//! Owner: `p3-stop-points`.
-//!
-//! Track note 4 (`docs/phases/03-windows-power.md`): the core walks every stop point against its fake; this walk runs
-//! the same routines through the real `PlanIo` and `SafetyNet`. `CopyAsActive` over a `TestPlan` stands in for the
-//! user's plan and is never active, so no write reaches the user's own plan. The `real_` tests run alone on the
-//! real laptop: `cargo test --locked -p wakeshot-windows real_stop_points -- --ignored --test-threads=1`.
+//! The core walks every stop point against its fake; this walk runs the same routines through the real `PlanIo` and
+//! `SafetyNet`. `CopyAsActive` over a `TestPlan` stands in for the user's plan and is never active, so no write
+//! reaches the user's own plan. The `real_` tests run alone on a real laptop:
+//! `cargo test --locked -p wakeshot-windows real_stop_points -- --ignored --test-threads=1`.
 
 use std::cell::RefCell;
 use std::fs;
@@ -245,7 +243,7 @@ fn quiet_stops() {
     });
 }
 
-/// How one key stands when a case starts (walk notation of `p1-design-verify-fixes`, Log 16:35).
+/// How one key stands when a case starts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Held {
     /// No entry: the user's value stored and in force.
@@ -262,7 +260,7 @@ enum Held {
 
 #[derive(Clone, Copy, Debug)]
 enum Routine {
-    /// Each key to the target. A journaled key not named is released (track note 6).
+    /// Each key to the target. A journaled key not named is released.
     Apply(&'static [SettingKey]),
     /// `one_plan`: `Restore { plan: Some(copy) }`, else `None`.
     Restore {
@@ -277,7 +275,7 @@ struct Start {
     keys: [Held; 3],
     /// An entry on a plan that is not listed, beside the copy's.
     deleted_plan: bool,
-    /// An entry with a key this version does not know (correction 12).
+    /// An entry with a key this version does not know.
     unknown: bool,
     routine: Routine,
 }
@@ -388,8 +386,7 @@ fn apply_starts(unknown: bool) -> Vec<Start> {
     use Held::*;
     [
         Start::new("fresh apply", [Free, Free, Free], Routine::Apply(&KEYS)),
-        // `p2-ownership-apply` Found outside scope 8: with E2 or E3 beside it, their `set_active` would hide a
-        // dropped E1.
+        // With E2 or E3 beside it, their `set_active` would hide a dropped E1.
         Start::new(
             "apply over E1 alone",
             [E1, Free, Free],
@@ -494,7 +491,7 @@ struct Next {
     found_file: bool,
 }
 
-/// What one start's walk counted, for the card.
+/// What one start's walk counted, for the test output.
 struct Tally {
     calls: usize,
     next_calls: usize,
@@ -785,7 +782,7 @@ impl Rig {
         }
     }
 
-    /// Track note 4, first point: every value Wakeshot still holds, stored or in force, has a known entry with the
+    /// The walk's first point: every value Wakeshot still holds, stored or in force, has a known entry with the
     /// user's original; while a known entry exists, RunOnce is set, the guard runs, and the next start's restore
     /// did not tell it to stop. An unknown key's entry is never touched.
     fn assert_reachable(&self, start: &Start, w: &mut World, next_guard: &[GuardCall], case: &str) {
@@ -833,7 +830,7 @@ impl Rig {
         }
     }
 
-    /// Track note 4, second point: after the next restore succeeded, every key, stored and in force, is the user's
+    /// The walk's second point: after the next restore succeeded, every key, stored and in force, is the user's
     /// value (or the user's later change) and no known entry is left; the keys Wakeshot never writes are as they
     /// were; an unknown key's entry stays in the file as it was.
     fn assert_back(&self, start: &Start, w: &mut World, next: &Next, case: &str) {
@@ -870,11 +867,11 @@ impl Rig {
         }
     }
 
-    /// Track note 4's release: a next restore that finds a journal clears RunOnce and tells the guard to stop. It
-    /// finds none only after a stop between the clean-up's journal delete and its last call (walk R6,
-    /// `p2-ownership-restore` Found outside scope 2), after a clean run that cleaned up itself, or after a fresh
-    /// apply stopped before its first journal save; it then does nothing, and what the stopped run had added or not
-    /// yet cleared stays with no journal, which is harmless: RunOnce and the guard find nothing to do.
+    /// The walk's release: a next restore that finds a journal clears RunOnce and tells the guard to stop. It finds
+    /// none only after a stop between the clean-up's journal delete and its last call, after a clean run that cleaned
+    /// up itself, or after a fresh apply stopped before its first journal save; it then does nothing, and what the
+    /// stopped run had added or not yet cleared stays with no journal, which is harmless: RunOnce and the guard find
+    /// nothing to do.
     fn assert_released(
         &self,
         start: &Start,
@@ -930,7 +927,7 @@ impl Rig {
     }
 
     /// After a failed next restore and its retry: the retry released the safety net whenever it found a journal.
-    /// With none left (the stop or the failed run got past the delete: walk R6) it made no other call.
+    /// With none left (the stop or the failed run got past the delete) it made no other call.
     fn assert_retry_released(&self, retry: &Next, case: &str) {
         match retry.found_file {
             true => {
@@ -975,7 +972,7 @@ fn users_values() -> PlanValues {
 }
 
 /// Runs each start's walk on one plan copy, then checks that the user's plan and values are as before and the copy
-/// is gone. Prints N and the time of each start, for the card.
+/// is gone. Prints N and the time of each start, for the test output.
 fn real_walk(test: &str, starts: &[Start]) {
     let before = users_values();
     let began = Instant::now();
@@ -1028,8 +1025,8 @@ fn real_stop_points_check() {
     real_walk("real_stop_points_check", &check_starts(false));
 }
 
-/// Correction 12: every start of the three walks again, each with an unknown key's entry, which no stop and no
-/// failure touches and which never blocks the clean-up.
+/// Every start of the three walks again, each with an unknown key's entry, which no stop and no failure touches and
+/// which never blocks the clean-up.
 #[test]
 #[ignore = "real laptop: walks a plan copy that is never active"]
 fn real_stop_points_unknown_key() {

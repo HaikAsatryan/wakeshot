@@ -1,8 +1,8 @@
 //! The journal file, the RunOnce value and the guard as the core's `SafetyNet` (`FileNet`, real and dry run), and the
 //! locked entry points every caller of the ownership routines goes through.
 //!
-//! Owner: power track (`p3-journal`). The three signatures below are contract: the IO thread, the guard, restore mode,
-//! the CLI (`wakeshot restore`) and the Velopack hooks call them, never `wakeshot_core::ownership` directly.
+//! The IO thread, the guard, restore mode, the CLI (`wakeshot restore`) and the Velopack hooks call the locked entry
+//! points below, never `wakeshot_core::ownership` directly.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -30,7 +30,7 @@ use crate::store::{self, AutoStart, DataDir, DataFile, NamedMutex, Names, StartK
 /// The RunOnce value's name (architecture section 5, "Logon restore"); the uninstall hook removes it by this name.
 pub const RUN_ONCE_NAME: &str = "WakeshotRestore";
 
-/// How long a caller waits for `Local\Wakeshot.Journal` (track note 9, signed off by Haik 2026-11-03 18:09).
+/// How long a caller waits for `Local\Wakeshot.Journal`.
 pub const JOURNAL_WAIT_MS: u32 = 10_000;
 
 const AREA: &str = "journal";
@@ -79,9 +79,9 @@ pub fn apply_locked(
     apply_within(plans, net, me, plan, writes, lock)
 }
 
-/// `ownership::reset::reset_lost` under `Local\Wakeshot.Journal` (`p2-6-record-lost`), with one log line per key: its
-/// old and new value, or why it was left. A lock not taken within the wait comes back as a failed `result`, and nothing
-/// was done; `journal` then holds the file's known entries, read without the lock.
+/// `ownership::reset::reset_lost` under `Local\Wakeshot.Journal`, with one log line per key: its old and new value,
+/// or why it was left. A lock not taken within the wait comes back as a failed `result`, and nothing was done;
+/// `journal` then holds the file's known entries, read without the lock.
 pub fn reset_locked(
     plans: &mut impl PlanIo,
     net: &mut impl SafetyNet,
@@ -257,9 +257,7 @@ fn entries_unlocked(net: &mut impl SafetyNet) -> Vec<JournalEntry> {
 }
 
 /// Starts and stops the guard process (architecture section 5, "Guard") for `FileNet`, so only the tray ever starts
-/// one and tests record the calls instead.
-///
-/// Owner: power track (`p3-journal`) for the trait; `p3-recovery` implements it for the tray as `TrayGuard`.
+/// one and tests record the calls instead. The tray's implementation is `recovery::TrayGuard`.
 pub trait GuardControl {
     /// Starts a guard if none runs or the current one's stop event is set (it is leaving). `true`: this call started
     /// one.
@@ -363,9 +361,9 @@ enum RunOnce {
 /// The core's `SafetyNet` over the data folder, the RunOnce value and a `GuardControl`, in the form each process
 /// needs: [`FileNet::tray`], [`FileNet::dry_run`], [`FileNet::restore_only`].
 ///
-/// Owner: power track (`p3-journal`). Callers may rely on: the journal is `journal.json` in `dir`, written only
-/// through `store::write_atomic`; a dry run never touches the registry or a guard; `restore_only` never sets RunOnce.
-/// It takes no lock itself: callers go through `restore_locked`, `apply_locked` and `check_locked`.
+/// Callers may rely on: the journal is `journal.json` in `dir`, written only through `store::write_atomic`; a dry run
+/// never touches the registry or a guard; `restore_only` never sets RunOnce. It takes no lock itself: callers go
+/// through `restore_locked`, `apply_locked` and `check_locked`.
 pub struct FileNet<G> {
     dir: DataDir,
     run_once: RunOnce,
@@ -420,8 +418,8 @@ impl<G: GuardControl> FileNet<G> {
         self.log.line(level, AREA, text);
     }
 
-    /// Correction 12: the entries stay in the file for the version that wrote them; the log is where a user on a
-    /// downgraded PC finds which setting stays overridden.
+    /// Entries with a key this version does not know stay in the file for the newer version that wrote them; the log is
+    /// where a user on a downgraded PC finds which setting stays overridden.
     fn note_unknown(&mut self, file: &JournalFile) {
         let unknown: Vec<JournalFileEntry> = file
             .entries
@@ -484,7 +482,7 @@ impl<G: GuardControl> SafetyNet for FileNet<G> {
     fn save_journal(&mut self, journal: &JournalFile) -> Result<(), Failure> {
         let mut file = journal.clone();
         if file.version != JournalFile::VERSION {
-            // Review m2: a newer version reads an older file, never the reverse.
+            // A newer version reads an older file, never the reverse.
             let text = format!(
                 "journal save got version {}; written as version {}",
                 file.version,
@@ -528,8 +526,8 @@ impl<G: GuardControl> SafetyNet for FileNet<G> {
             self.path(DataFile::JournalCorrupt),
         )
         .map_err(|e| Failure::from(io_error("MoveFileExW", &e)))?;
-        // The tray's reset puts what looks like Wakeshot's back to Windows' defaults (`p2-6-record-lost`); a guard,
-        // restore mode or a hook leaves that to the tray's next start.
+        // The tray's reset puts what looks like Wakeshot's back to Windows' defaults; a guard, restore mode or a hook
+        // leaves that to the tray's next start.
         self.note(
             Level::Warn,
             "journal.json moved to journal.json.corrupt; the journal saves earlier in this log name the values it \
@@ -600,7 +598,7 @@ impl<G: GuardControl> SafetyNet for FileNet<G> {
 }
 
 /// Renames `journal.json.corrupt` to `journal.json.corrupt.seen`, replacing an older one, once the tray has shown the
-/// notice for it (track note 7). `true`: there was one.
+/// notice for it. `true`: there was one.
 pub fn mark_corrupt_seen(dir: &DataDir) -> Result<bool, WinError> {
     let renamed = std::fs::rename(
         dir.file(DataFile::JournalCorrupt),
@@ -1095,7 +1093,7 @@ mod tests {
             )
         );
 
-        // Whatever version the caller passes, the file gets this version (review m2).
+        // Whatever version the caller passes, the file gets this version.
         let newer = JournalFile {
             version: 2,
             ..file.clone()
