@@ -1,11 +1,11 @@
-//! Tray menu harness (`p5-menu-view` Part B): the demo icon with the real owner-drawn menu, for pictures, keyboard and
-//! screen reader checks.
+//! Tray menu harness: the demo icon with the real owner-drawn menu, for pictures, keyboard and screen reader checks.
 //!
 //! `ux_menu [--contrast] [--minutes N]`
 //!
-//! Start it at Medium (track note 4). It prints each event and each menu note with the wall time, and quits after N
-//! minutes (default 10) or on `WM_CLOSE` (`taskkill /PID <pid>` without `/F`), removing its icon either way. A pick
-//! is only printed: the menu shows the same sample view every time, as the core would decide what a pick does.
+//! Start it at Medium, as a user's tray runs (`explorer.exe <launch .cmd>` from an elevated shell). It prints each
+//! event and each menu note with the wall time, and quits after N minutes (default 10) or on `WM_CLOSE`
+//! (`taskkill /PID <pid>` without `/F`), removing its icon either way. A pick is only printed: the menu shows the same
+//! sample view every time, as the core would decide what a pick does.
 
 use std::sync::Arc;
 

@@ -1,7 +1,5 @@
 //! The WASAPI player (architecture section 2, `SoundPlayer`; section 4, "Tray threads", Sound row): one short thread
 //! per sound, a shared-mode stream on the device the rule picks, the "No sounds" scheme honored.
-//!
-//! Owner: `p5-sounds`. The stream code is ported from `spikes/lid-sleep/src/sound.rs` (`play_chime_inner`).
 
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -33,8 +31,8 @@ use crate::WinError;
 use crate::log::{Level, Log};
 use crate::sink::EventSink;
 
-/// How long `play_and_wait` waits: the slowest stream start seen here (0.8 s) plus the longest chime (under 1.2 s),
-/// with room to spare. The design leaves this value to Phase 5 (architecture section 5, "Lock and hibernate").
+/// How long `play_and_wait` waits: the slowest stream start seen on the test laptop (0.8 s) plus the longest chime
+/// (under 1.2 s), with room to spare (architecture section 5, "Lock and hibernate").
 pub(super) const WAIT_LIMIT: Duration = Duration::from_secs(3);
 
 /// `play_and_wait`'s error when the limit passed: the chime may still be starting or playing.
@@ -49,7 +47,7 @@ const STALL_MS: u32 = 2_000;
 const POLL: Duration = Duration::from_millis(10);
 
 /// The engine may give a smaller buffer than asked; the feed loop tops it up. The whole chime plus this margin is
-/// asked, so on this laptop one write is enough.
+/// asked, so on the test laptop one write is enough.
 const BUFFER_MARGIN_MS: u32 = 200;
 
 const AREA: &str = "sound";
@@ -233,8 +231,8 @@ fn failed_text(error: WinError) -> String {
     }
 }
 
-/// The key name of the "No Sounds" scheme. On this PC `HKCU\AppEvents\Schemes\Names\.None` is `@mmres.dll,-801`,
-/// which loads as "No Sounds" (research, "Tray UX: chimes"). Case is ignored, as registry names are.
+/// The key name of the "No Sounds" scheme. On the test laptop `HKCU\AppEvents\Schemes\Names\.None` is
+/// `@mmres.dll,-801`, which loads as "No Sounds" (research, "Tray UX: chimes"). Case is ignored, as registry names are.
 const NO_SOUNDS: &str = ".None";
 
 /// True when the scheme is "No sounds". A scheme that cannot be read plays: only a clear No sounds keeps quiet.
@@ -316,7 +314,6 @@ impl Drop for Com {
     }
 }
 
-/// The real thing.
 struct Wasapi;
 
 impl Audio for Wasapi {
@@ -354,7 +351,7 @@ impl Drop for MixFormat {
     }
 }
 
-/// The format the spike played at both lid closes: 16-bit mono, 48 kHz, converted by the engine.
+/// The format played at both tested lid closes: 16-bit mono, 48 kHz, converted by the engine.
 const FALLBACK: Layout = Layout {
     rate: 48_000,
     channels: 1,

@@ -1,8 +1,6 @@
 //! The device rule (architecture section 2, `SoundPlayer`): the default playback device, unless it is a screen's
 //! audio (HDMI or DisplayPort, which often has no speakers); then the speakers. Headphones and headsets stay as they
 //! are, so someone wearing them gets no sound out loud.
-//!
-//! Owner: `p5-sounds`. Ported from `spikes/lid-sleep/src/sound.rs` (`pick`, the form factor reads).
 
 use windows::Win32::Devices::FunctionDiscovery::PKEY_Device_FriendlyName;
 use windows::Win32::Foundation::{ERROR_NOT_FOUND, PROPERTYKEY, WIN32_ERROR};

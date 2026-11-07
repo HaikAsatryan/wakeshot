@@ -1,18 +1,16 @@
 //! Icon art as code: the held light as tray glyphs and as the app icon, and the ICO and PNG writers.
 //!
-//! Owner: `p5-icon-art`, then `p5-haik-check`, `p6-brand-cleanup` and `p6-brand-apply-art`.
-//!
 //! No Windows API here, so the file could move to the core. Shapes and colours use plain arithmetic and `sqrt` only,
 //! never `sin`, `cos`, `exp`, `powf` or `ln`: those may differ in the last bit between x64 and ARM64, and the golden
 //! tests compare exactly. The soft shadow is integer box blurs, exact everywhere.
 //!
-//! The mark is the held light in Moss (Haik, 2026-11-05): a round light held over a line. In the tray the light is
-//! filled while holding, the same light as an outline when idle, and the outline struck through when off, as Windows
-//! marks its own off states. The tray icon draws `tray_mask` at the size the taskbar wants and colours it with
-//! `colorize`: the line and the outline in Windows' glyph colour, the light in Moss while holding, every part in the
-//! text colour in high contrast. The app icon is the same mark lit, on a Moss plate. This file is the one source of the
-//! drawing: its writer makes the ICO, the notice picture, the favicon and the page's SVG icon and lockups, and the
-//! media's port (`media/src/art/heldLight.ts`) must draw the same pixels (`media/scripts/check-art.mjs`). The brand:
+//! The mark is the held light in Moss: a round light held over a line. In the tray the light is filled while holding,
+//! the same light as an outline when idle, and the outline struck through when off, as Windows marks its own off
+//! states. The tray icon draws `tray_mask` at the size the taskbar wants and colours it with `colorize`: the line and
+//! the outline in Windows' glyph colour, the light in Moss while holding, every part in the text colour in high
+//! contrast. The app icon is the same mark lit, on a Moss plate. This file is the one source of the drawing: its writer
+//! makes the ICO, the notice picture, the favicon and the page's SVG icon and lockups, and the media's port
+//! (`media/src/art/heldLight.ts`) must draw the same pixels (`media/scripts/check-art.mjs`). The brand:
 //! `docs/brand.md`; what was measured and how: `docs/research.md`, "Brand apply: the held light in art.rs" and "Brand
 //! apply review fixes".
 
@@ -65,7 +63,7 @@ pub const APP_ICON_SIZES: [u32; 14] = [16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 7
 /// The frames of `site/favicon.ico`: a browser tab at 100% and 200%, and 48 for the places that want a larger one.
 pub const FAVICON_SIZES: [u32; 3] = [16, 32, 48];
 
-// Measured in this laptop's screenshots (research "Tray UX: icon art"). The taskbar is translucent, so its colour
+// Measured in the test laptop's screenshots (research "Tray UX: icon art"). The taskbar is translucent, so its colour
 // moves a few steps with the wallpaper.
 
 /// Windows' own tray glyph colour on a dark taskbar.
@@ -77,9 +75,7 @@ pub const GLYPH_ON_LIGHT: [u8; 3] = [0x1a, 0x1a, 0x1a];
 pub const HOLDING_ON_DARK: [u8; 3] = [0xb6, 0xe0, 0x5a];
 /// The light while holding, on a light taskbar: Moss's deep green.
 pub const HOLDING_ON_LIGHT: [u8; 3] = [0x3b, 0x7a, 0x2a];
-/// The dark taskbar behind the tray.
 pub const TASKBAR_DARK: [u8; 3] = [0x20, 0x20, 0x21];
-/// The light taskbar behind the tray.
 pub const TASKBAR_LIGHT: [u8; 3] = [0xd8, 0xda, 0xdc];
 /// The plate under a tray icon the mouse rests on, dark taskbar.
 pub const HOVER_DARK: [u8; 3] = [0x2d, 0x2d, 0x2e];
@@ -97,7 +93,7 @@ pub const ON_LIGHT: GlyphColours = GlyphColours {
     light: HOLDING_ON_LIGHT,
 };
 
-// The app icon's colours: Moss (`docs/research/brand-directions-2.md`, the Moss column; Haik's pick 2026-11-05).
+// The app icon's colours: Moss (`docs/brand.md`, "Colours").
 
 /// The plate's ramp runs from this leaf green at the top left to `PLATE_DARK` at the bottom right.
 const PLATE_LIGHT: [u8; 3] = [0x62, 0x8c, 0x2b];
@@ -107,7 +103,7 @@ const PLATE_DEEP: [u8; 3] = [0x2c, 0x5a, 0x26];
 /// The light is near white in the middle and warm at its edge; its glow on the plate is the edge colour.
 const LIGHT_CORE: [u8; 3] = [0xff, 0xfb, 0xe8];
 const LIGHT_EDGE: [u8; 3] = [0xff, 0xea, 0x9c];
-/// The lit light's rim, round 2's `#F7DC7F`, so the lit light keeps a warm edge.
+/// The lit light's rim, so the lit light keeps a warm edge.
 const LIGHT_RIM: [u8; 3] = [0xf7, 0xdc, 0x7f];
 const WHITE: [u8; 3] = [0xff; 3];
 
@@ -152,8 +148,8 @@ impl Held {
         let gap = (size + 4) / 8;
         let width = size - 2 * (size / 8);
         // The light goes where the filled glyph's ink centre sits at 0.455 of the box, level with the next app's icon
-        // on the taskbar (`brand-review.md` T4). The outline keeps that place, so the light does not jump between
-        // states; its own ink centre sits lower, since a ring weighs less than a disc.
+        // on the taskbar. The outline keeps that place, so the light does not jump between states; its own ink centre
+        // sits lower, since a ring weighs less than a disc.
         let (fd, ft) = (d as f32, t as f32);
         let disc = std::f32::consts::FRAC_PI_4 * fd * fd;
         let line = (width * t) as f32;
@@ -202,8 +198,8 @@ impl Held {
 }
 
 /// The 1 px outlines of the 8 and 10 px lights (16 and 20 px glyphs), drawn by hand: a curve on its own leaves grey
-/// pixels that make the ring look fainter than the line (`brand-review.md` T2). Whole pixels (`X`), and a
-/// quarter-covered pixel (`s`) softening each step so it still reads round.
+/// pixels that make the ring look fainter than the line. Whole pixels (`X`), and a quarter-covered pixel (`s`)
+/// softening each step so it still reads round.
 const RING_8: [&str; 8] = [
     ".sXXXXs.", "sX....Xs", "X......X", "X......X", "X......X", "X......X", "sX....Xs", ".sXXXXs.",
 ];
@@ -220,7 +216,6 @@ const RING_10: [&str; 10] = [
     "..sXXXXs..",
 ];
 
-/// The tray glyph for `state`.
 pub fn tray_mask(state: IconState, size: u32) -> Mask {
     let h = Held::at(size);
     let n = (size * size) as usize;
@@ -260,9 +255,9 @@ pub fn tray_mask(state: IconState, size: u32) -> Mask {
 }
 
 /// The square the off slash crosses: from the light's top left corner through its centre, down to a stroke above the
-/// line. So the slash strikes the light, stays inside the glyph's own box (`brand-review.md` T7) and leaves the line
-/// whole: a slash that ran on to the line's end cut a gap into it, which read as the slash running through the line
-/// (the brand screen session, 20 px).
+/// line. So the slash strikes the light, stays inside the glyph's own box, as Windows' own struck glyphs do, and
+/// leaves the line whole: a slash that ran on to the line's end cut a gap into it, which read as the slash running
+/// through the line (seen at 20 px).
 fn strike_box(h: Held, size: u32) -> (u32, u32, u32, u32) {
     let left = (size - h.d) / 2;
     let bottom = h.line_y - h.t;
@@ -503,9 +498,9 @@ impl Plated {
     }
 
     /// The drop shadow's alpha under the plate: the plate moved down by a 96th of the icon and blurred to a deviation
-    /// of a 64th, so most of it fades inside the margin (5% black on the icon's last row at 48 px, 1% at 256). Round
-    /// 2's larger shadow (a 48th down, deviation 1.2 px at 48 px) ran past the icon's edge and was cut there, 9% black
-    /// on the last row, a hard grey line under the icon on light Start.
+    /// of a 64th, so most of it fades inside the margin (5% black on the icon's last row at 48 px, 1% at 256). A
+    /// larger shadow (a 48th down, deviation 1.2 px at 48 px) ran past the icon's edge and was cut there, 9% black on
+    /// the last row, a hard grey line under the icon on light Start.
     fn shadow(self) -> Vec<u8> {
         let mut alpha = raster(self.size, self.size, &self.plate(self.shadow_drop()));
         let (width, passes) = self.shadow_blur();
@@ -544,9 +539,8 @@ const SHADE: f32 = 0.35;
 /// the second, the rim at the edge.
 const LIT_RAMP: [f32; 2] = [0.5, 0.86];
 
-/// The light's bloom, alpha by distance from its centre in light radii: round 2's bloom, 0.44 at the light's edge,
-/// with its tail ending at `BLOOM_END` instead of 1.9. The longer tail lay over the plate just above the bar and took
-/// the bar under 3:1 from 64 px up.
+/// The light's bloom, alpha by distance from its centre in light radii: 0.44 at the light's edge, its tail ending at
+/// `BLOOM_END`. A tail out to 1.9 lay over the plate just above the bar and took the bar under 3:1 from 64 px up.
 const BLOOM: [(f32, f32); 4] = [(0.0, 0.8), (1.0, 0.44), (1.28, 0.144), (BLOOM_END, 0.0)];
 
 /// Where the bloom ends. The bar's top sits 1.42 to 1.5 radii out, where the bloom is down to 0.08 or less, so the
@@ -1750,8 +1744,8 @@ fn app_icon_svg() -> String {
 
 /// "Wakeshot" in Instrument Sans SemiBold 1.000 as outlines, set beside the 256 px plate (margin 11, side 234): cap
 /// height 0.46 of the plate's side and centred on it, the ink starting 0.26 of the side after the plate, tracking
-/// -0.01em as on the page. `p6-brand-apply-web` shaped it with HarfBuzz and drew the font's outlines with fontTools
-/// (its Log); the outlines change only with the font, those ratios or the plate, and are then made again that way.
+/// -0.01em as on the page. Shaped with HarfBuzz and drawn from the font's outlines with fontTools; the outlines change
+/// only with the font, those ratios or the plate, and are then made again that way.
 #[cfg(test)]
 const WORDMARK: &str = concat!(
     "M336.79 181.82 305.84 74.18H325.57L348.9 161.94L370.57 74.18H393L414.38 162.09",
@@ -2039,8 +2033,8 @@ mod tests {
 
     #[test]
     fn the_light_sits_level_with_the_next_icon() {
-        // The filled glyph's ink centre within 0.5 px of 0.455 of the box (`brand-review.md` T4); idle and off keep
-        // the light where it is, so their centres are printed only.
+        // The filled glyph's ink centre within 0.5 px of 0.455 of the box; idle and off keep the light where it is,
+        // so their centres are printed only.
         for size in TRAY_SIZES {
             let target = 0.455 * size as f32;
             let at = |state| ink_centre(&tray_mask(state, size).alpha, size) - target;
@@ -2092,7 +2086,7 @@ mod tests {
 
     #[test]
     fn the_slash_stays_inside_the_idle_glyph() {
-        // T7: off is no larger than idle; the slash runs inside the glyph's own box.
+        // Off is no larger than idle; the slash runs inside the glyph's own box.
         for size in TRAY_SIZES {
             let idle = ink_box(&tray_mask(IconState::Idle, size).alpha, size);
             let off = ink_box(&tray_mask(IconState::Off, size).alpha, size);
@@ -2146,7 +2140,7 @@ mod tests {
 
     #[test]
     fn no_loose_pixels_at_small_sizes() {
-        // A4 and T1: a lone pixel at 100% to 150% reads as a speck.
+        // A lone pixel at 100% to 150% reads as a speck.
         for size in [16, 20, 24] {
             for state in STATES {
                 let mask = tray_mask(state, size);
@@ -2185,7 +2179,7 @@ mod tests {
     }
 
     /// Protan, deutan and tritan at full strength, applied in linear sRGB (Machado, Oliveira and Fernandes 2009),
-    /// the brand's colour-blind check since round 1.
+    /// the brand's colour-blind check.
     const MACHADO: [[[f64; 3]; 3]; 3] = [
         [
             [0.152286, 1.052583, -0.204868],

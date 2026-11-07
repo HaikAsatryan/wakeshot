@@ -1,14 +1,13 @@
-//! Wakeshot's three chimes, made in code at the stream's own rate, so there is no WAV resource and no resampling
-//! (track note 3.7).
+//! Wakeshot's three chimes, made in code at the stream's own rate, so there is no WAV resource and no resampling.
 //!
-//! Owner: `p5-sounds`. Shapes: the card's Result; Haik judges them by ear in `p5-haik-check`.
+//! `media/scripts/make-sounds.mjs` reads the `Shape` constants with regular expressions: keep their layout.
 
 use std::f32::consts::PI;
 
 use wakeshot_core::view::Cue;
 
 /// A codec that wakes on the first sample may swallow the start of a short sound; this silence takes that hit
-/// instead of the tone. The chime Haik heard at two lid closes had it; whether it is needed was not tested (research,
+/// instead of the tone. The chime tested at two real lid closes had it; whether it is needed was not tested (research,
 /// "Lid-close sound").
 pub(super) const LEAD_MS: u32 = 150;
 
@@ -39,8 +38,8 @@ pub(super) struct Shape {
     pub release_ms: f32,
 }
 
-/// Rising, so it reads as "still going". The chime Haik heard at two lid closes (`p1-lid-sound`), unchanged but
-/// for its peak, now set to exactly -6 dBFS.
+/// Rising, so it reads as "still going". The chime tested at two real lid closes, with its peak set to exactly
+/// -6 dBFS.
 const LID_CLOSED_HOLDING: Shape = Shape {
     notes: &[
         Note {
@@ -64,8 +63,7 @@ const LID_CLOSED_HOLDING: Shape = Shape {
 };
 
 /// The lid chime turned around, so the pair reads as "stays on" and "goes off". Softer: 3 dB lower and gentler
-/// edges, since it may play at night with nobody near. Short, because a lid opened while it plays still hibernates
-/// (`p3-hibernate`).
+/// edges, since it may play at night with nobody near. Short, because a lid opened while it plays still hibernates.
 const GOING_TO_SLEEP: Shape = Shape {
     notes: &[
         Note {
@@ -316,7 +314,7 @@ mod tests {
 
     #[test]
     fn chimes_fit_the_wait_limit() {
-        // The slowest stream start seen on this laptop (research, "Lid-close sound").
+        // The slowest stream start seen on the test laptop (research, "Lid-close sound").
         const START_MS: u32 = 800;
         for cue in CUES {
             let ms = length_ms(cue);

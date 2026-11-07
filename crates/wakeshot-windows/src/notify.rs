@@ -1,15 +1,12 @@
 //! The notice seam (architecture section 5, "Tray, notices, sounds"): `BalloonNotifier`.
 //!
-//! Owner: tray track (`p5-notices`), then `p6-brand-apply-art` (the notice icon). The trait and `FakeNotifier` are
-//! contract.
-//!
 //! A notice is a balloon on Wakeshot's own tray icon: Windows 11 shows it as a banner with no app registration and
 //! does not keep it in the notification centre (research, "Balloon on Windows 11"; `Shell_NotifyIconW` Remarks). The
 //! balloon changes only the info fields of the icon `TrayIcon` owns, so the icon and its tooltip stay as they are.
 //!
 //! The banner's header (name and picture) comes from the app id Windows files the balloon under. An installed tray
-//! has Velopack's id, whose key the hooks write ([`NoticeAppId`]); without that key the header showed a plain white
-//! square (`docs/tasks/p6-notice-app-icon.md`).
+//! has Velopack's id, whose key the hooks write ([`NoticeAppId`]); without that key the header shows a plain white
+//! square.
 
 #[cfg(any(test, feature = "test-support"))]
 use std::cell::RefCell;
@@ -46,16 +43,13 @@ use crate::tray::{IconIdentity, art};
 
 /// Shows one notice, so a later move from balloons to registered toasts changes only the implementation.
 ///
-/// Owner: tray track (Phase 5). `Send`: it runs on the IO thread. The IO thread may rely on: `show` returns once
-/// Windows took the notice or refused it; the result becomes `Outcome::Notified`. `Ok` never proves the user saw it
-/// (architecture section 5).
+/// `Send`: it runs on the IO thread. Callers may rely on: `show` returns once Windows took the notice or refused it;
+/// the result becomes `Outcome::Notified`. `Ok` never proves the user saw it (architecture section 5).
 pub trait Notifier: Send {
     fn show(&self, notice: &Notice) -> Result<(), WinError>;
 }
 
 /// Records each notice; `fail_with` makes every `show` fail, to test the `Notified(Err)` path.
-///
-/// Owner: tray track (`p5-notices`); first version from the contracts card.
 #[cfg(any(test, feature = "test-support"))]
 #[derive(Debug, Default)]
 pub struct FakeNotifier {
@@ -85,19 +79,18 @@ pub enum IconChoice {
 }
 
 impl IconChoice {
-    /// The product's pick until `p5-notices` Part B compares both on the banner, light and dark.
+    /// The app icon names the sender; the info "i" adds nothing the text does not say. Both read clearly on the
+    /// banner, light and dark.
     pub const PRODUCT: IconChoice = IconChoice::App;
 }
 
 /// `Shell_NotifyIconW(NIM_MODIFY)`, behind a seam so no test shows a balloon.
 type Shell = dyn Fn(&NOTIFYICONDATAW) -> Result<(), WinError> + Send + Sync;
 
-/// The wait before a refused notice is tried again. Seen once (2026-11-05 11:24:39): right after a resume and a lid
-/// open, the shell refused the second of two notices sent 6 ms apart (1462, "Incorrect size argument"), while the same
-/// pair 21 ms apart at an earlier resume both showed, and every other notice of two screen sessions showed at once
-/// (research, "Notice retry"). So the refusal is short-lived; 1 s is well past both gaps, and is the settle time the
-/// icon gives display and theme broadcasts. It holds up the IO thread only after a refusal. Change it when a log shows
-/// a second refusal after the wait.
+/// The wait before a refused notice is tried again. Right after a resume the shell once refused the second of two
+/// notices sent 6 ms apart (1462, "Incorrect size argument"), while a pair 21 ms apart showed (research, "Notice
+/// retry"). 1 s is well past both gaps, and is the settle time the icon gives display and theme broadcasts. It holds
+/// up the IO thread only after a refusal. Change it when a log shows a second refusal after the wait.
 const RETRY_AFTER: Duration = Duration::from_secs(1);
 
 const AREA: &str = "notify";
@@ -266,7 +259,7 @@ impl BalloonNotifier {
     }
 }
 
-/// The IO thread owns one clone and the balloon click hook another (Phase 5 track note 5).
+/// The IO thread owns one clone and the balloon click hook another.
 impl Notifier for Arc<BalloonNotifier> {
     fn show(&self, notice: &Notice) -> Result<(), WinError> {
         (**self).show(notice)
@@ -300,7 +293,7 @@ fn info_flags(text: &NoticeText, choice: IconChoice) -> NOTIFY_ICON_INFOTIP_FLAG
         (false, IconChoice::App) => NIIF_USER,
         (false, IconChoice::Info) => NIIF_INFO,
     };
-    // A notice that comes with a chime is silent, so two sounds never overlap (track note 3.5).
+    // A notice that comes with a chime is silent, so two sounds never overlap.
     let sound = if text.silent { NIIF_NOSOUND } else { NIIF_NONE };
     icon | NIIF_LARGE_ICON | sound
 }
@@ -406,12 +399,11 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// The app id Windows files the installed tray's balloons under. `VelopackApp::run` gives every start of an installed
-/// exe this explicit id, from the Start menu, the Run value or a restart after an update: "velopack." and the pack id,
-/// the id of its Start menu shortcut too (velopack 1.2.161 `app.rs` and `locator.rs`; research "Velopack checks for
-/// Wakeshot", AUMID). It changes only if `pack.ps1` names an AUMID or Velopack changes its rule; `packaging/e2e.ps1`
-/// checks the installed shortcut's id against it. A build run from `target\` has no explicit id, so the shell files
-/// its balloons under its own `NotifyIconGeneratedAumid_<id>` and this key plays no part.
+/// The app id Windows files the installed tray's balloons under: "velopack." and the pack id, which `VelopackApp::run`
+/// gives every start of an installed exe and which its Start menu shortcut carries too (velopack 1.2.161 `app.rs` and
+/// `locator.rs`; research "Velopack checks for Wakeshot", AUMID). It changes only if `pack.ps1` names an AUMID or
+/// Velopack changes its rule; `packaging/e2e.ps1` checks the installed shortcut's id against it. A build run from
+/// `target\` has no explicit id, so the shell files its balloons under its own `NotifyIconGeneratedAumid_<id>`.
 pub const NOTICE_APP_ID: &str = "velopack.HaikAsatryan.Wakeshot";
 
 /// The picture of the notice header: the app icon as a PNG, which `packaging/pack.ps1` ships beside the tray exe, so
@@ -432,20 +424,17 @@ pub(crate) fn notice_icon_png() -> Vec<u8> {
     art::png(&art::app_icon_flat(NOTICE_ICON_SIZE))
 }
 
-/// The name in the notice header.
 pub const NOTICE_NAME: &str = "Wakeshot";
 
 /// `HKCU\Software\Classes\AppUserModelId\velopack.HaikAsatryan.Wakeshot`: the name and picture Windows shows in the
-/// header of each notice filed under [`NOTICE_APP_ID`]. Without it the header showed a plain white square
-/// (`p6-int-haik-checks` finding 5): Windows' default picture for an id with no `IconUri` (Windows App SDK
-/// `AppNotificationUtility.cpp`, "the OS will render a default icon"). The hooks are its one writer: install and
-/// updated write it, uninstall removes it.
+/// header of each notice filed under [`NOTICE_APP_ID`]. Without it the header shows a plain white square: Windows'
+/// default picture for an id with no `IconUri` (Windows App SDK `AppNotificationUtility.cpp`, "the OS will render a
+/// default icon"). The hooks are its one writer: install and updated write it, uninstall removes it.
 ///
-/// The values are the two Windows itself writes for the shell's generated balloon ids and that the Windows App SDK
-/// writes for unpackaged apps, both `REG_EXPAND_SZ` as Microsoft's page ("Send a local toast notification from other
-/// types of unpackaged apps", now removed from Learn) shows them. Its `IconBackgroundColor` and `CustomActivator` are
-/// left out: neither of those writers sets a background colour, and a balloon click reaches the tray's own window,
-/// not a COM activator.
+/// Both values are `REG_EXPAND_SZ`, as Windows writes them for the shell's generated balloon ids and the Windows App
+/// SDK for unpackaged apps (Microsoft's page "Send a local toast notification from other types of unpackaged apps",
+/// since removed from Learn). `IconBackgroundColor` and `CustomActivator` are left out: neither writer sets a
+/// background colour, and a balloon click reaches the tray's own window, not a COM activator.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NoticeAppId {
     key: String,
@@ -881,7 +870,7 @@ mod tests {
         assert_eq!(n.take_click(), NoticeClick::OpenTaskbarSettings);
     }
 
-    /// The code the shell gave at the lost closed-lid report (`p6-screen-reruns`, 2026-11-05 11:24:39).
+    /// The code the shell gave when it refused a closed-lid report (2026-11-05).
     const REFUSED: WinError = WinError {
         call: "Shell_NotifyIconW",
         code: 1462,

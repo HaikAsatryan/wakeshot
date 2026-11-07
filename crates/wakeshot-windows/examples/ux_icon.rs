@@ -1,9 +1,10 @@
-//! Tray icon harness (`p5-tray-icon` Part B): the demo icon on the real taskbar, for pictures and click checks.
+//! Tray icon harness: the demo icon on the real taskbar, for pictures and click checks.
 //!
 //! `ux_icon [--state holding|idle|off] [--cycle] [--pattern] [--contrast] [--minutes N]`
 //!
-//! Start it at Medium (track note 4). It prints each event with the wall time, and quits after N minutes (default 10)
-//! or on `WM_CLOSE` (`taskkill /PID <pid>` without `/F`), removing its icon either way.
+//! Start it at Medium, as a user's tray runs (`explorer.exe <launch .cmd>` from an elevated shell). It prints each
+//! event with the wall time, and quits after N minutes (default 10) or on `WM_CLOSE` (`taskkill /PID <pid>` without
+//! `/F`), removing its icon either way.
 
 use wakeshot_core::view::{IconState, MenuCommand, MenuItem, MenuModel, TrayView};
 use wakeshot_windows::tray::icon::{IconKind, TrayIcon};
@@ -101,7 +102,7 @@ fn view(state: IconState) -> TrayView {
     }
 }
 
-/// The sample high contrast pair `p5-icon-art` measured: yellow text on black.
+/// A sample high contrast pair: yellow text on black.
 fn contrast_theme() -> Theme {
     let black = Rgb::new(0, 0, 0);
     let yellow = Rgb::new(0xff, 0xff, 0);

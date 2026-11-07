@@ -1,11 +1,9 @@
 //! `OwnerDrawnMenu`, the `MenuView` the product uses.
 //!
-//! Owner: `p5-menu-view`, then `p5-haik-check` (the menu opens above the taskbar, Haik's check).
-//!
-//! The Phase 1 pick (`docs/research/tray-menu-look.md`, "Pick"): a classic Win32 popup menu, so Windows keeps the menu
-//! loop, keyboard, access keys, light dismiss, placement, submenus and screen readers, with every item owner-drawn by
-//! `menu_paint` and each menu window rounded by DWM. Every open builds a fresh `HMENU` with the theme and the DPI of
-//! that moment, so a theme switch shows at the next open without a restart.
+//! A classic Win32 popup menu (`docs/research/tray-menu-look.md`, "Pick"), so Windows keeps the menu loop, keyboard,
+//! access keys, light dismiss, placement, submenus and screen readers, with every item owner-drawn by `menu_paint` and
+//! each menu window rounded by DWM. Every open builds a fresh `HMENU` with the theme and the DPI of that moment, so a
+//! theme switch shows at the next open without a restart.
 //!
 //! The state of one open sits in a `RefCell` that the hidden owner window reaches through an `Rc`. `show` holds no
 //! borrow while `TrackPopupMenuEx` runs its modal loop, which sends the owner-draw messages to that window.
@@ -67,7 +65,7 @@ const FALLBACK_THEME: Theme = Theme {
 pub enum Note {
     /// The menu opened at `dpi` with `theme`. `foreground`: what `SetForegroundWindow` returned; without it the menu
     /// may not close on an outside click. `frame`: the classic frame got the same mode (uxtheme had both calls).
-    /// `at`: the point the menu was aligned to, after the taskbar rule ([`placement`]).
+    /// `at`: the point the menu was aligned to, after the taskbar rule (`placement`).
     Opened {
         dpi: u32,
         theme: Theme,
@@ -94,7 +92,6 @@ pub enum StyledAt {
     Idle,
 }
 
-/// Called with each `Note`.
 pub type NoteHook = Box<dyn FnMut(&Note)>;
 
 /// The tray menu, on the loop thread only (`Rc` keeps it off other threads).
@@ -325,7 +322,7 @@ impl Shared {
         let Some(data) = open.data(dis.itemData) else {
             return false;
         };
-        // The earliest point DWM takes the menu window: at `HCBT_CREATEWND` it answered "handle is invalid" (Phase 1).
+        // The earliest point DWM takes the menu window: at `HCBT_CREATEWND` it answered "handle is invalid".
         // SAFETY: the DC Windows gave for this paint.
         self.style_with(open, unsafe { WindowFromDC(dis.hDC) }, StyledAt::FirstPaint);
         let state = ItemState::from_ods(dis.itemState.0);
@@ -381,12 +378,12 @@ impl Shared {
             }
             styled.push(key);
         }
-        // Without the call an owner-drawn menu loses Windows' rounding and gets a light square border (Phase 1).
+        // Without the call an owner-drawn menu loses Windows' rounding and gets a light square border.
         let corners = set_attribute(window, DWMWA_WINDOW_CORNER_PREFERENCE, &DWMWCP_ROUND);
         let border = set_attribute(
             window,
             DWMWA_BORDER_COLOR,
-            &COLORREF(open.palette.border.colorref()),
+            &COLORREF(open.palette.border.to_colorref()),
         );
         self.note(&Note::Styled {
             at,
@@ -455,7 +452,7 @@ impl Open {
             styled: RefCell::new(Vec::new()),
         };
         // SAFETY: plain call; the brush is deleted when `Open` drops, after the menu that uses it.
-        open.brush = unsafe { CreateSolidBrush(COLORREF(palette.background.colorref())) };
+        open.brush = unsafe { CreateSolidBrush(COLORREF(palette.background.to_colorref())) };
         if open.brush.is_invalid() {
             return Err(last_error("CreateSolidBrush"));
         }
@@ -574,8 +571,8 @@ impl Drop for Open {
 struct ItemData {
     msaa: MSAAMENUINFO,
     /// The menu text as given, access key marks included, with an end mark. Windows' accessibility proxy drops the
-    /// marks itself: Phase 1 gave it "&Keep awake" and the screen reader read "Keep awake". Stripping them here too
-    /// would drop a literal `&` (a status line's `&&`).
+    /// marks itself: given "&Keep awake", the screen reader read "Keep awake". Stripping them here too would drop a
+    /// literal `&` (a status line's `&&`).
     text: Vec<u16>,
     item: MenuItem,
     layout: Layout,
@@ -700,10 +697,10 @@ struct Placement {
 
 /// Where the menu opens. A click or key select on a taskbar icon gives a point on the taskbar, outside the work area;
 /// the menu then sits against the work area's edge that faces the taskbar, as Windows 11's own tray menus do, so it
-/// never hides taskbar icons (Haik's check, 2026-11-04). Along that edge it stays at the anchor, and Windows keeps it
-/// inside the monitor. A point inside the work area (the overflow flyout, or an auto-hidden taskbar, whose work area
-/// is the whole monitor) is used as it is: the menu goes above it in the lower half of the monitor, else below it.
-/// Left or right of the point follows `SM_MENUDROPALIGNMENT`, as Microsoft's notification icon sample does.
+/// never hides taskbar icons. Along that edge it stays at the anchor, and Windows keeps it inside the monitor. A point
+/// inside the work area (the overflow flyout, or an auto-hidden taskbar, whose work area is the whole monitor) is used
+/// as it is: the menu goes above it in the lower half of the monitor, else below it. Left or right of the point follows
+/// `SM_MENUDROPALIGNMENT`, as Microsoft's notification icon sample does.
 fn placement(drop_right: bool, anchor: Anchor, area: MonitorArea) -> Placement {
     let MonitorArea { monitor, work } = area;
     let horizontal = if drop_right {
@@ -771,7 +768,7 @@ fn monitor_at(anchor: Anchor) -> (u32, MonitorArea) {
 }
 
 /// `PreferredAppMode` (uxtheme, undocumented): the 1903 and later values from `ysc3839/win32-darkmode` `DarkMode.h`,
-/// which Phase 0 matched on build 26300 (research, "Dark menus").
+/// which matched on build 26300 (research, "Dark menus").
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 enum AppMode {
@@ -816,8 +813,8 @@ impl UxTheme {
         let by_ordinal =
             |n: usize| unsafe { GetProcAddress(dll, PCSTR(std::ptr::without_provenance(n))) };
         Self {
-            // SAFETY: on Windows 11 ordinal 135 is `SetPreferredAppMode(PreferredAppMode) -> PreferredAppMode`
-            // (Phase 0 saw it return the previous mode).
+            // SAFETY: on Windows 11 ordinal 135 is `SetPreferredAppMode(PreferredAppMode) -> PreferredAppMode` (seen
+            // returning the previous mode).
             set_mode: by_ordinal(135).map(|f| unsafe {
                 std::mem::transmute::<unsafe extern "system" fn() -> isize, SetPreferredAppMode>(f)
             }),
@@ -1206,7 +1203,7 @@ mod tests {
         }
     }
 
-    /// Haik's DELL at 150%: 3840 by 2160, the taskbar 72 px high at the bottom.
+    /// The test laptop's external screen at 150%: 3840 by 2160, the taskbar 72 px high at the bottom.
     const DELL: MonitorArea = MonitorArea {
         monitor: RECT {
             left: 0,
@@ -1224,8 +1221,8 @@ mod tests {
 
     #[test]
     fn a_bottom_taskbar_menu_sits_on_the_taskbar_top_edge() {
-        // A click in the middle of the icon (Haik's run): the menu's bottom goes on the taskbar's top edge, not on
-        // the click, so it covers no taskbar icon. The key select's anchor (`p5-tray-icon`) gets the same.
+        // A click in the middle of the icon: the menu's bottom goes on the taskbar's top edge, not on the click, so
+        // it covers no taskbar icon. The key select's anchor gets the same.
         assert_eq!(
             placement(false, Anchor { x: 3336, y: 2124 }, DELL),
             at(3336, 2088, TPM_LEFTALIGN | TPM_BOTTOMALIGN)

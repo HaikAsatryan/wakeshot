@@ -1,5 +1,5 @@
-//! Haik's check of the whole tray UX (`p5-haik-check`): the demo icon with the real menu, notices, chimes, the
-//! first-run click and Open log in one run.
+//! A hands-on check of the whole tray UX: the demo icon with the real menu, notices, chimes, the first-run click and
+//! Open log in one run.
 //!
 //! `ux_all [--minutes N] [--logs <dir>]`
 //!
@@ -10,9 +10,10 @@
 //! `HKCU\Software\Classes\AppUserModelId\NotifyIconGeneratedAumid_<id>`; delete that key after a run without the
 //! resource, so the name is read again.
 //!
-//! Start it at Medium (Phase 5 track note 4). The menu is the product's, built by `present::build` from a sample
-//! state, and a pick acts as the product would look: Automatic and Keep awake change the icon and the status line,
-//! Restore shows its notice, Open log opens the sample log, Quit quits. Keys in the console window:
+//! Start it at Medium, as a user's tray runs (`explorer.exe <launch .cmd>` from an elevated shell). The menu is the
+//! product's, built by `present::build` from a sample state, and a pick acts as the product would look: Automatic and
+//! Keep awake change the icon and the status line, Restore shows its notice, Open log opens the sample log, Quit
+//! quits. Keys in the console window:
 //!
 //! - `n`: the next notice, every kind in turn; `f`: the first-run notice, whose click opens the taskbar settings.
 //! - `1`, `2`, `3`: the lid-close, going-to-sleep and battery-floor chimes.
@@ -317,7 +318,7 @@ fn read_keys(inbox: Inbox) {
     }
 }
 
-/// The sample state the menu shows and changes. No Windows call, so the tests check what each of Haik's steps shows.
+/// The sample state the menu shows and changes. No Windows call, so the tests check what each step of the check shows.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Sample {
     automatic: bool,
@@ -689,7 +690,8 @@ fn main() {
     say!("icon removed");
 }
 
-/// What Haik's steps say each pick shows (`cargo test --example ux_all`). The words come from `text`, never literals.
+/// What the check's steps say each pick shows (`cargo test --example ux_all`). The words come from `text`, never
+/// literals.
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;

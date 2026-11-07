@@ -1,7 +1,5 @@
 //! `TrayIcon`: its own hidden window, the notify icon, clicks, re-add, theme and display changes.
 //!
-//! Owner: `p5-tray-icon`, then `p6-brand-apply-art` (the glyph's two colours).
-//!
 //! Every piece of state sits in one `Shared` behind `Cell` and `RefCell`, reached from the window procedure through an
 //! `Rc`, and no borrow is held across a call that can run other code: `Shell_NotifyIconW` (sent messages such as a
 //! theme broadcast are dispatched while it waits on Explorer), `MenuView::show` (a modal loop that dispatches this
@@ -47,7 +45,7 @@ use crate::WinError;
 const WM_TRAY: u32 = WM_APP + 0x10;
 
 /// `NIF_GUID` identifies the icon; the id only comes back in the callback's high word, and 0 is right whether Windows
-/// echoes the `uID` given or sends 0 for a GUID icon (which one: Part B logs it).
+/// echoes the `uID` given or sends 0 for a GUID icon (which one: not verified).
 const ICON_UID: u32 = 0;
 
 /// `windows` 0.62.2 has no `NIN_KEYSELECT`.
@@ -75,8 +73,7 @@ pub enum IconKind {
 }
 
 impl IconKind {
-    /// Made once for `p5-tray-icon` (2026-11-04). Windows keys the icon's settings entry (pinned or not) to it, so a
-    /// GUID never changes once shipped.
+    /// Windows keys the icon's settings entry (pinned or not) to it, so a GUID never changes once shipped.
     pub const fn guid(self) -> u128 {
         match self {
             IconKind::Product => 0x7db9403e_d4b9_4165_a99e_a69b8ea56744,
@@ -89,7 +86,7 @@ impl IconKind {
 /// What a callback message asks for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Input {
-    /// Left click, keyboard select and right click all open the same menu (track note 3.4).
+    /// Left click, keyboard select and right click all open the same menu.
     Open {
         by: OpenBy,
         anchor: Anchor,
@@ -125,7 +122,6 @@ pub enum Note {
     SizeChanged(u32),
 }
 
-/// Called with each `Note`.
 pub type NoteHook = Box<dyn FnMut(&Note)>;
 
 /// The notify icon, on the loop thread only (`Rc` keeps it off other threads).
@@ -894,10 +890,10 @@ pub(crate) fn taskbar_dpi() -> u32 {
     }
 }
 
-/// White on a dark taskbar and near black on a light one, with the light in Moss while holding (Haik's brand
-/// decision, 2026-11-05); in high contrast every part in the window text colour: Microsoft's "Contrast themes" page
-/// has bars use `SystemColorWindowColor` as background, paired with `SystemColorWindowTextColor`. Which colour Windows'
-/// own taskbar uses in a contrast theme: not verified.
+/// White on a dark taskbar and near black on a light one, with the light in Moss while holding (`docs/brand.md`); in
+/// high contrast every part in the window text colour: Microsoft's "Contrast themes" page has bars use
+/// `SystemColorWindowColor` as background, paired with `SystemColorWindowTextColor`. Which colour Windows' own taskbar
+/// uses in a contrast theme: not verified.
 fn glyph_colours(theme: &Theme) -> GlyphColours {
     match theme.contrast {
         Some(c) => GlyphColours::one(c.window_text.into()),

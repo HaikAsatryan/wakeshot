@@ -1,7 +1,4 @@
 //! The sound seam (architecture section 2, `SoundPlayer`): Wakeshot's chimes, the device rule, the WASAPI player.
-//!
-//! Owner: tray track (`p5-sounds`). The trait and `FakeSoundPlayer` are contract; `p5-sounds` may add submodules
-//! under `sound/`: `chime` (the PCM), `device` (the device rule), `player` (`WasapiPlayer`).
 
 mod chime;
 mod device;
@@ -22,7 +19,7 @@ use crate::sink::EventSink;
 
 /// Plays one of Wakeshot's chimes on the device the device rule picks.
 ///
-/// Owner: tray track (Phase 5). Callers may rely on:
+/// Callers may rely on:
 ///
 /// - `play` never blocks, so the lid-close lock is never held up by a sound; its result comes back as
 ///   `Event::Done(Outcome::Sound(..))` through the event sink, for the log only;
@@ -35,8 +32,6 @@ pub trait SoundPlayer: Send + Sync {
 
 /// Records each cue in order and plays nothing. With `sink`, `play` posts `Done(Sound(Ok(Played)))` as the real
 /// player does; `wait_error` makes `play_and_wait` fail.
-///
-/// Owner: tray track (`p5-sounds`); first version from the contracts card.
 #[cfg(any(test, feature = "test-support"))]
 #[derive(Default)]
 pub struct FakeSoundPlayer {

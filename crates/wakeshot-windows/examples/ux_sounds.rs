@@ -1,4 +1,4 @@
-//! Chime harness (`p5-sounds` Part B, `p5-haik-check`): plays Wakeshot's chimes through the real player.
+//! Chime harness: plays Wakeshot's chimes through the real player, for a listening check.
 //!
 //! `ux_sounds [--cue lid|sleep|floor] [--all] [--wait]`
 //!

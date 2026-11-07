@@ -1,4 +1,4 @@
-//! Notices harness (`p5-notices` Part B): the demo icon plus `BalloonNotifier`, for banner pictures and click checks.
+//! Notices harness: the demo icon plus `BalloonNotifier`, for banner pictures and click checks.
 //!
 //! `ux_notices [--all | --one <name> | --pair | --list] [--icon user|info] [--cycle] [--minutes N]`
 //!
@@ -9,9 +9,10 @@
 //! - `--cycle`: the icon changes state every 3 s while the notices show, so the loop thread's icon changes and the
 //!   notice thread's balloons run side by side.
 //!
-//! Start it at Medium (Phase 5 track note 4). As in the product, the notices come from a thread of their own and the
-//! icon lives on the main thread. A balloon click prints the action `take_click` gives; nothing is opened. It quits
-//! after N minutes (default 10) or on `WM_CLOSE` (`taskkill /PID <pid>` without `/F`), removing its icon either way.
+//! Start it at Medium, as a user's tray runs (`explorer.exe <launch .cmd>` from an elevated shell). As in the product,
+//! the notices come from a thread of their own and the icon lives on the main thread. A balloon click prints the
+//! action `take_click` gives; nothing is opened. It quits after N minutes (default 10) or on `WM_CLOSE`
+//! (`taskkill /PID <pid>` without `/F`), removing its icon either way.
 
 use std::sync::Arc;
 use std::time::Duration;

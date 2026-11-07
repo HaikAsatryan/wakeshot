@@ -1,10 +1,8 @@
 //! Windows mode, high contrast and its colours.
 //!
-//! Owner: `p5-theme`.
-//!
 //! The icon and the menu follow the Windows mode (`SystemUsesLightTheme`, the taskbar's), not the app mode (product
 //! decision 3). Every read goes to the registry and `GetSysColor`, never to uxtheme's cached state, which lagged a
-//! switch in Phase 0 (`docs/research.md`, "Live theme switch through Settings").
+//! switch when tested (`docs/research.md`, "Live theme switch through Settings").
 
 use std::ffi::c_void;
 
@@ -24,7 +22,6 @@ use windows::core::w;
 
 use crate::WinError;
 
-/// A colour as red, green and blue.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Rgb {
     pub r: u8,
@@ -43,7 +40,7 @@ impl Rgb {
     }
 
     /// As a GDI `COLORREF` (`0x00BBGGRR`).
-    pub const fn colorref(self) -> u32 {
+    pub const fn to_colorref(self) -> u32 {
         self.r as u32 | (self.g as u32) << 8 | (self.b as u32) << 16
     }
 }
@@ -309,7 +306,7 @@ mod tests {
     fn colorref_is_red_in_the_low_byte() {
         let c = Rgb::from_colorref(0x00_33_22_11);
         assert_eq!(c, Rgb::new(0x11, 0x22, 0x33));
-        assert_eq!(c.colorref(), 0x00_33_22_11);
+        assert_eq!(c.to_colorref(), 0x00_33_22_11);
         assert_eq!(<[u8; 3]>::from(c), [0x11, 0x22, 0x33]);
     }
 
