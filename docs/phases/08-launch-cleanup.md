@@ -290,7 +290,7 @@ Sizes are estimates; real use runs 2 to 3 times higher.
 | `p8-polish-core-ownership` | `wakeshot-core`: ownership routines, the simulator, the scenario tests | 150K | no | same | running since 05:17 |
 | `p8-polish-windows-tray` | `wakeshot-windows`: tray icon, art, menu, theme, notices, sounds, `ux_*` examples | 140K | no | same | running since 05:06 |
 | `p8-polish-windows-app` | `wakeshot-windows`: app wiring, store, log, update, install, Velopack hooks | 150K | no | same | ready |
-| `p8-polish-bins` | `wakeshot-cli` and `wakeshot-tray`: sources and tests | 120K | no | same | ready |
+| `p8-polish-bins` | `wakeshot-cli` and `wakeshot-tray`: sources and tests | 120K | no | same | running since 05:18 |
 | `p8-docs-design` | `architecture.md`, `product.md`, `hold-files.md` | 150K | no | `p6-logs-diagnostics` | done (05:09): planning history out of `architecture.md` and `product.md`; `hold-files.md` current; 3 heading renames in its Result |
 | `p8-docs-research-reports` | `docs/research/*.md` (not brand), `agent-hooks.md` | 140K | no | `p6-logs-diagnostics` | done (04:44): 14 files without planning history; 19 heading renames listed in its Result |
 | `p8-docs-research-1` | `research.md` from the top through "Update thread checks" | 150K | no | `p6-logs-diagnostics` | done (04:45): 59 of 78 headings renamed by fact; old and new in its Result |
