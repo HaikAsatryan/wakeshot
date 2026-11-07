@@ -295,8 +295,8 @@ Sizes are estimates; real use runs 2 to 3 times higher.
 | `p8-docs-research-reports` | `docs/research/*.md` (not brand), `agent-hooks.md` | 140K | no | `p6-logs-diagnostics` | done (04:44): 14 files without planning history; 19 heading renames listed in its Result |
 | `p8-docs-research-1` | `research.md` from the top through "Update thread checks" | 150K | no | `p6-logs-diagnostics` | done (04:45): 59 of 78 headings renamed by fact; old and new in its Result |
 | `p8-cleanup` | old-brand history: reports, pictures, `brand.md` | 90K | no | `p6-logs-diagnostics` | done (04:28): 89 files removed (six brand reports, 83 old-art pictures); `brand.md` rewritten with sources; 26 pointers for other cards in its Result |
-| `p8-docs-research-2` | `research.md` from "Tray UX: tray icon" to the end; topic groups and contents | 170K | no | `p8-docs-research-1`, `p6-end-card-numbers` | waits |
-| `p8-repo-hygiene` | `.github/`, `packaging/`, `site/`, community and editor files | 140K | no | `p6-logs-diagnostics`, `p6-pages`, `p6-end-card-numbers`, `p6-winget-upgrade-restart` | waits |
+| `p8-docs-research-2` | `research.md` from "Tray UX: tray icon" to the end; topic groups and contents | 170K | no | `p8-docs-research-1`, `p6-end-card-numbers` | running since 05:24 |
+| `p8-repo-hygiene` | `.github/`, `packaging/`, `site/`, community and editor files | 140K | no | `p6-logs-diagnostics`, `p6-pages`, `p6-end-card-numbers`, `p6-winget-upgrade-restart` | running since 05:24 |
 | `p8-repo-config` | Cargo and build files, `spikes/`, listed renames and moves, whole-workspace checks | 110K | no | the eight `p8-polish-*` cards | waits |
 | `p8-final-cleanup` | planning out, short `CLAUDE.md`, every pointer fixed | 160K | no | every other card, `p4-live-uninstall` and the video upload included | waits |
 
