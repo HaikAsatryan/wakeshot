@@ -1,7 +1,11 @@
 # Phase 8 cleanup: remove or rewrite the old brand's history
 
-Phase: 8. Status: later. Needs Haik: decided when Phase 8 is planned.
-Runs after: the Phase 7 field test. Parallel with: decided when Phase 8 is planned.
+Phase: 8. Status: ready (planned 2026-11-07 by `p8-plan`). Needs Haik: no (his rule of 2026-11-05, "no legacy
+anywhere", and his go of 2026-11-07 02:39; every call is for his review).
+Agent: `wakeshot-worker`. Size: about 90K tokens.
+Runs after: `p6-logs-diagnostics` (the orchestrator's start for Phase 8; this card touches no code). Parallel with:
+every card that does not own these files (group 1; no build).
+Build folder: none.
 
 ## Goal
 
@@ -73,21 +77,59 @@ Not old brand, keep (the search words match for another reason): the chimes' ris
 (`media/src/promo/parts.tsx`); facts about other products (`docs/research.md` "Brand on macOS",
 `docs/research/rivals-others.md`); "golden" tests and macOS "Golden Gate".
 
+## How Phase 8 splits this list
+
+Decided by `p8-plan` (2026-11-07, for Haik's review; phase file `docs/phases/08-launch-cleanup.md`, calls 4 and 12):
+
+- This card: the six reports, the old-art pictures, `docs/brand.md`.
+- `p8-docs-research-2`: the `research.md` lines above. The two Task Manager captures are removed, not retaken, and the
+  notice header colours are not measured again: they stay in `research.md`, marked "measured on 2026-11-04 captures,
+  not kept (they show the old icon)". No screen session tonight.
+- `p8-polish-windows-tray`: the comments in `art.rs` and `menu_paint.rs`.
+- `p8-repo-hygiene`: `site/style.css`.
+- `p8-final-cleanup`: `media/README.md`, `media/src/fonts.ts`, `media/src/theme.ts` (pointers only), and a last
+  repo-wide search for the report and picture names.
+- The done task cards and the dated lines inside `docs/tasks/`, `docs/phases/` and `docs/plan.md`: nothing to do;
+  `p8-final-cleanup` removes those files (the history bundle keeps them).
+
 ## Read first
 
-Written when Phase 8 is planned.
+- `CLAUDE.md`.
+- `docs/phases/08-launch-cleanup.md`: "What stays and what goes", "Pointers between files", "Polish rules" (Docs,
+  Every card), "File ownership", call 4.
+- This card's list above (the source of truth) and `docs/tasks/p6-brand-docs-sweep.md`, deliverable 3 and its Log
+  (the search terms).
+- `docs/brand.md`, whole. The six reports: headings, and a section only where you need to check that a fact still
+  used is in `brand.md`.
+- What points at the reports and the pictures: grep the repo outside `docs/tasks/`, `docs/reviews/`, `docs/phases/`
+  and `docs/plan.md` for each report name and each removed picture name.
 
 ## Deliverables
 
-Written when Phase 8 is planned.
+1. Before deleting a report: every fact from it that a kept file still uses (`brand.md`, a code comment, `media/`,
+   `site/`, `research.md`) is in `docs/brand.md`, short, with its source. Add what is missing.
+2. Delete the six reports and the old-art pictures listed above, the two Task Manager captures included. Keep every
+   picture the list says to keep.
+3. `docs/brand.md`: no pointer to a removed report or picture, no history ("round 1", "the pick", "Haik chose"):
+   today's colours, rules, assets and where each is made. Keep its headings (others may cite them) or record renames.
+4. The pointers in files you do not own: list each (file, line, what it points at, a suggested new target) in the
+   Result, grouped by the card that fixes it (section "How Phase 8 splits this list").
+5. Result: removed files (count, bytes); facts added to `brand.md`; the pointer list; "Heading renames" for
+   `brand.md` (even if empty).
 
 ## Acceptance checks
 
-Written when Phase 8 is planned.
+1. None of the removed files exists; every picture the list keeps still exists (list both counts).
+2. The `p6-brand-docs-sweep` search terms find nothing in `docs/brand.md`.
+3. The internal-name sweep (phase file, "Every card") on `docs/brand.md`: zero hits. No em dash.
+4. Every relative link and picture path in `docs/brand.md` resolves.
+5. A repo-wide grep for the six report names and the removed picture names: every remaining hit is in the Result's
+   pointer list with the card that fixes it, or is inside `docs/tasks/`, `docs/reviews/`, `docs/phases/` or
+   `docs/plan.md`.
 
 ## Out of scope
 
-Written when Phase 8 is planned.
+`docs/research.md`, code, `media/`, `site/`, `README.md`, the kept pictures, the "Not old brand, keep" items. Git.
 
 ## Questions for Haik
 
@@ -98,5 +140,7 @@ Written when Phase 8 is planned.
 - 2026-11-05: card created by `p6-brand-docs-sweep` with the brand history list.
 - 2026-11-05: `p6-brand-apply-art` review fix round (`docs/reviews/p6-brand-apply.md` findings 4 and 5) added the
   2026-11-04 12:07 work log line of `05-tray-ux.md` and the two Task Manager captures.
+- 2026-11-07: Read first, Deliverables, checks and scope written by `p8-plan`; the split across the Phase 8 cards in
+  "How Phase 8 splits this list". Status ready.
 
 ## Result
