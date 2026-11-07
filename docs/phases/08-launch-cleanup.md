@@ -294,7 +294,7 @@ Sizes are estimates; real use runs 2 to 3 times higher.
 | `p8-docs-design` | `architecture.md`, `product.md`, `hold-files.md` | 150K | no | `p6-logs-diagnostics` | ready |
 | `p8-docs-research-reports` | `docs/research/*.md` (not brand), `agent-hooks.md` | 140K | no | `p6-logs-diagnostics` | running since 04:18 |
 | `p8-docs-research-1` | `research.md` from the top through "Update thread checks" | 150K | no | `p6-logs-diagnostics` | running since 04:18 |
-| `p8-cleanup` | old-brand history: reports, pictures, `brand.md` | 90K | no | `p6-logs-diagnostics` | running since 04:18 |
+| `p8-cleanup` | old-brand history: reports, pictures, `brand.md` | 90K | no | `p6-logs-diagnostics` | done (04:28): 89 files removed (six brand reports, 83 old-art pictures); `brand.md` rewritten with sources; 26 pointers for other cards in its Result |
 | `p8-docs-research-2` | `research.md` from "Tray UX: tray icon" to the end; topic groups and contents | 170K | no | `p8-docs-research-1`, `p6-end-card-numbers` | waits |
 | `p8-repo-hygiene` | `.github/`, `packaging/`, `site/`, community and editor files | 140K | no | `p6-logs-diagnostics`, `p6-pages`, `p6-end-card-numbers`, `p6-winget-upgrade-restart` | waits |
 | `p8-repo-config` | Cargo and build files, `spikes/`, listed renames and moves, whole-workspace checks | 110K | no | the eight `p8-polish-*` cards | waits |
