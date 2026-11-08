@@ -11,7 +11,7 @@ An AI agent at work, a long build or any other command, or Keep awake from the t
 PC stays awake, even with the laptop lid closed. When the work is done, your own power settings come back. A small,
 lightweight tray app: no window to learn, nothing else to install. Free and open source (MIT).
 
-<!-- Haik: paste the video URL here. Upload the final promo MP4 (where it is: media/README.md) to GitHub, by dragging it into a comment box on github.com or with `gh issue comment <n> --attach`. Then replace this whole comment with the bare https://github.com/user-attachments/assets/<id> URL on its own line, with a blank line above and below, so GitHub shows a player. Link nothing else for the video. -->
+https://github.com/user-attachments/assets/affe7093-044d-4b3a-841c-9c0eed1705fc
 
 ## Install
 

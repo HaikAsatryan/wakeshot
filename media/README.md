@@ -237,6 +237,7 @@ PowerShell window with no Claude Code session working.
 
 ## Where the video lives
 
-GitHub plays a video inline only as an uploaded attachment: `gh issue comment <n> --attach out/wakeshot-promo.mp4` on
-a pinned "Media" issue; the README holds the bare `github.com/user-attachments` URL. Not uploaded yet; the URL goes
-here once it is.
+GitHub plays a video inline only as an uploaded attachment, so the README holds the bare `github.com/user-attachments`
+URL on its own line. The final `out/wakeshot-promo.mp4` was uploaded on 2026-11-08 with
+`gh issue create --attach` (issue #1, "Promo video", closed): https://github.com/user-attachments/assets/affe7093-044d-4b3a-841c-9c0eed1705fc. A new cut goes up the
+same way, and its URL replaces this one in both places.
