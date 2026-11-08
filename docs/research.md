@@ -2423,6 +2423,32 @@ scratch folder, nothing run). Details: `research/claude-code-signals.md`, "Claud
   `enabled`, ...). Each run is a fresh session, a fixed few minutes late (docs; the rule is not documented).
   **Verified (code, disk, docs)**.
 
+### Claude Desktop app, live (2026-11-08)
+
+08:55 to 09:06, Claude Desktop 4.23118.0 with its Claude Code 2.1.317, Haiku; the tester typed and clicked, an
+`agent-watch` at Medium and the installed tray watched. Details and the case table:
+`research/claude-code-signals.md`, "Claude Desktop live test (2026-11-08)".
+
+- **A Desktop Code session holds exactly while it works**: `~/.claude/sessions/<pid>.json` with `entrypoint:
+  claude-desktop` and the usual transcript; holds at each `busy` write and lets go at each `idle` write (11 to 32 ms
+  after `statusUpdatedAt`; 87 ms for the first turn after a resume), through a Stop, a background shell (held until
+  its notice turn ended, rule 3) and a closed window. **Verified (live)**, by `agent-watch` and the tray's per-session
+  log lines, which agree within 2 ms.
+- **Quit from the tray ends the session process without an `idle` write**; the pid wait ended the hold at 09:02:52.137,
+  about 1 s after `main.log` "Stopping 1 active session(s) on quit". At the next launch the app resumed the cut turn
+  by itself in a new process with the same `sessionId` ("Relaunch auto-resume"), which held while it worked.
+  **Verified (live)**.
+- **The app's helper runs write status files too**: five short runs (`claude-desktop`, `idle`, deleted within 0.5 s,
+  no transcript), never working, no hold. **Verified (live)**.
+- **A plain chat leaves nothing in `~/.claude`**: no status file, no transcript, no keep-awake line. **Verified
+  (live)**.
+- **The approval wait was not seen**: the session ran in auto mode from the tester's own default mode setting
+  (`main.log` `[permissionMode] ... source=settings_default_mode`). Remote Control joined the session
+  (`bridgeSessionId` set, `[rcAutoEnable] ... source=explicit_settings`), so a wait would post `waiting(remote=true)`
+  and hold (rule 4): **not verified**.
+- **The app's own keep-awake let go 30 s after the turn ended** (`main.log` 08:58:14; `powercfg /requests`:
+  EXECUTION only, 08:57:26 to 08:58:16). **Verified (live)**.
+
 ## Tray, menu, notices and sounds
 
 ### Tray, menu and notifications

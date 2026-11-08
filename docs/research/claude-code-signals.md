@@ -534,3 +534,50 @@ Code sessions work), `code_session:<id>` (a session's own keep-awake switch), `r
   (log, disk)**.
 - `remote-control.log`: the app's own Remote Control host is `off` here. Whether its Code sessions get a
   `bridgeSessionId` (which makes `waiting` hold, rule 4) is **not verified**.
+
+## Claude Desktop live test (2026-11-08)
+
+Claude Desktop 4.23118.0 and its own Claude Code 2.1.317, model Haiku, on the test laptop, 08:55 to 09:06 local time
+(UTC+4). Haik typed the prompts and clicked in the app; nothing synthetic. `agent-watch --source claude --raw` ran at
+Medium (started through Explorer, hidden), a `powercfg /requests` loop every 5 s kept request types and file names
+only, and the installed Wakeshot tray (the `p8-final-install-check` build, with per-session log lines) ran as usual.
+Read after, structure only: the `--raw` record, the transcript's line kinds, the app's `main.log`, the tray log. No
+prompt or reply text was read; no `.key` file was opened. Redacted fixture: `crates/wakeshot-core/tests/fixtures/
+claude/live/14-desktop-session.*`, replayed by `the_live_desktop_session_holds_while_it_works`. This section
+supersedes the 2026-11-07 one where they differ.
+
+### What happened, case by case
+
+| Case | Status writes and transcript | What Wakeshot did (tray log times; agent-watch within 2 ms) | Exact |
+|---|---|---|---|
+| Session start | `main.log` "spare ... starting" 08:57:20, then "Using Claude Code binary at ...\claude-code\2.1.317\...": the app starts a spare session process and claims it at the first send. `~/.claude/sessions/60520.json`, `entrypoint: claude-desktop`, `kind: interactive`; first write has no `status` | Session listed, `idle`, no hold | yes |
+| Turn (step 2) | `busy` 08:57:22.281; `bridgeSessionId` set at 08:57:22.77 | holds: working 08:57:22.310 | yes |
+| Stop (step 2) | Stop about 10 s into the command: `tool_result` error 04:57:44.069Z, `idle` 08:57:44.109 | stops holding: idle 08:57:44.127 | yes |
+| Background shell (step 3) | `busy` 08:58:35.777; `run_in_background` result with `backgroundTaskId` at 04:58:38.683Z; `idle` 08:58:44.211 with the shell open; notice `completed` (queue line) 04:59:39.645Z, `busy`, then `idle` 08:59:43.767 | holds 08:58:35.809; the hold stays through the `idle` write (`tasks=1`, rule 3); stops holding 08:59:43.778 | yes |
+| Window closed (step 4) | Window closed with its X during the turn; no log line, the app stays in the tray. `busy` 09:00:05.566 to `idle` 09:00:56.421, the command ran to its end. Window shown again 09:01:35 (`second-instance`) | holds 09:00:05.587 to 09:00:56.434 | yes |
+| App quit (step 5) | `busy` 09:02:37.260; Quit from the tray: `beforeQuit` 09:02:48, "Stopping 1 active session(s) on quit" and "torn down with 1 live task(s)" 09:02:51. The process ended; its file still said `busy` (nothing wrote `idle`) | stops holding: its process ended 09:02:52.137 (the pid wait) | yes |
+| Next launch (step 5) | 09:03:19 start; the stale `60520.json` removed 09:03:22.729 (by the new Claude Code). "Relaunch auto-resume: ran": a new process 21052 with the same `sessionId` wrote an error result for the cut command and a new turn, `busy` 09:03:23.949; the model ran the command again until Haik's Stop (`idle` 09:04:11.618) | holds 09:03:24.036 to 09:04:11.631: real work, so a hold is right | yes |
+| App helper runs | Five short `claude.exe` runs (08:56:52, 09:03:22 two, 09:03:23, 09:04:10), `main.log` "temporary query": each wrote a status file (`claude-desktop`, first no `status`, then `idle`) and deleted it within 0.5 s; no transcript | listed, never working, no hold | yes |
+| Approval wait | Not seen: the session ran in auto mode (`[permissionMode] spawn ... mode=auto source=settings_default_mode`, the tester's own default mode in `~/.claude/settings.json`), so no permission card came | not tested | not tested |
+| Plain chat (step 6) | About 09:04: no status file, no transcript, no `main.log` keep-awake line | nothing, as expected: no local signal | not supported (no signal) |
+| `/loop` | Not run (optional step skipped) | | not tested |
+| App crash | Not run (it means killing the tester's app) | | not tested |
+
+### Other facts
+
+- **Remote Control joins every Desktop Code session here**: `main.log` `[rcAutoEnable] verdict: enable=true
+  source=explicit_settings trigger=first_turn`, and the status file got `bridgeSessionId` in the first turn. So on this
+  laptop a Desktop approval wait would post `waiting(remote=true)` and hold (rule 4). Which setting `explicit_settings`
+  names is **not verified**.
+- **The app's own keep-awake let go 30 s after the turn**: `[keep-awake] code session hold taken (turn,
+  battery=false)` 08:57:21, `released (idle, held 52112ms ...)` 08:58:14, 30 s after the `idle` write; in
+  `powercfg /requests` the app's `claude.exe` was under EXECUTION from 08:57:26 to 08:58:16, never under SYSTEM.
+  From 08:59:43 its `remote_tools` claim kept it until the quit. **Verified (live)**.
+- **Quit leaves the status file**: the session process ends without an `idle` write; the next Claude Code start
+  deletes the stale file. Wakeshot needs only the pid. **Verified (live)**.
+- **A new tail reads the whole transcript**: when the resumed process listed the same `sessionId` after the old
+  file was gone, the watch thread fed the transcript from byte 0 (706091 bytes, the exact sum of all earlier feeds),
+  and the open task count stayed right (the step 3 shell was closed). **Verified (live)**.
+- **The installed tray held the whole time anyway**: an orchestrator CLI session was working, so `wakeshot-tray.exe`
+  stayed under SYSTEM; only the per-session tray lines show this session's holds. A clean test of the PC sleeping
+  after a Desktop turn needs no other agent working. Not run.

@@ -30,6 +30,7 @@ Each case has `NN-name.transcript.jsonl` and `NN-name.status.jsonl`; the `/clear
 | `11-resume-one-shot` | `CronCreate` one-shot (18:34) and daily `0 9 * * *`, `/exit`, resume | creates 35 to 38; `CronList` 40 and 41; written at exit 50 to 54; resumed process from 55; `CronList` 58 and 59; one-shot fire 63 |
 | `12-sdk-close-during-shell` | SDK path, stdin closed while a 150 s shell ran | 4, 5; the process lived on until the shell ended; notification 8, then exit |
 | `13-sdk-resume-kill` | SDK path, hard kill while a 300 s shell ran, then `--resume` over stream-json | task opened 11; resumed process from 15; at start, before any prompt, notification with `<status>stopped</status>` 16 to 18 |
+| `14-desktop-session` | Claude Desktop 4.23118.0 Code session (`entrypoint: claude-desktop`, its own Claude Code 2.1.317, auto mode), 2026-11-08: a turn stopped during its command, a background shell, a turn with the window closed, a turn cut by the app's Quit, then the app's own resume in a new process (pid 21052) until Stop. Five helper processes of the app write status files with no transcript | calls 17, 30, 47, 54, 64; Stop results 18, 65; shell result with `backgroundTaskId` 31, its notification 33 (queue) and 35 (user); written at resume start 55; resumed process's error result for the cut call 58 |
 
 Metadata lines (`bridge-session`, `cost-state`, `last-prompt`, `mode`, `permission-mode`, `session-owner`,
 `atis-latch`, `ai-title`, `tools-used`, `file-history-snapshot`) are kept in cases 09, 10, 11 and 13 only, because
@@ -76,3 +77,15 @@ Done by a script that wrote only redacted text. No key file next to a status fil
   `task-id`, `tool-use-id`, `status`, `command-name` and `command-message` only; every other value is `<str N>`.
 - Kept as they are: pids, `procStart` FILETIMEs, epoch times (`nextFireAt`, `scheduledFor`, `createdAt`,
   `startedAt`), numbers, booleans, `msg_` message ids, and the derived session `name` (the test folder name).
+
+## Case 14 (Claude Desktop) differs
+
+- The transcript follows the rules above, by a new script that wrote only redacted text (not kept). Metadata lines
+  are kept, since the case has a resume; this version adds three kinds: `relocated`, `custom-title`, `agent-name`.
+  Dict keys that look like paths would be `<key N>` (there were none). `hostSessionId` is `local_<fake id>`.
+- The status writes were not polled: they are rebuilt from `agent-watch --raw`, which logged, per write, the time
+  read and the `status`, `entrypoint`, `kind`, `sessionId` start, `statusUpdatedAt` and whether `bridgeSessionId` was
+  there. The other keys and their order are those of the live `21052.json`; `name` is `<str 17>`. Only pid 21052 has
+  its real `procStart` and `startedAt`; for the others both are set 300 ms before the first write, since their files
+  were gone.
+- Pid 21052 has no `gone` line: its process and file were still there when the capture ended.

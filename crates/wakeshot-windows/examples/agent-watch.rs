@@ -31,7 +31,7 @@ use wakeshot_core::sources::cron::LocalOffset;
 use wakeshot_core::sources::opencode::{OpenCodeSource, opencode_db};
 use wakeshot_core::sources::vscode::{VsCodeSource, installs};
 use wakeshot_core::sources::{
-    Activity, AgentSource, Fed, Feed, FileId, FormatHealth, Liveness as Seen, SessionFacts,
+    Activity, AgentSource, Fed, Feed, FileId, FormatHealth, Liveness as Seen, Note, SessionFacts,
     SourceId, WantedFile,
 };
 use wakeshot_core::sources::{antigravity, cursor, hooked};
@@ -499,6 +499,10 @@ impl AgentSource for RawTap {
 
     fn sessions(&self) -> Vec<SessionFacts> {
         self.inner.sessions()
+    }
+
+    fn notes(&self) -> Vec<Note> {
+        self.inner.notes()
     }
 }
 

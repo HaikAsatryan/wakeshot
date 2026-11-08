@@ -155,7 +155,7 @@ fn live(name: &str) -> Live {
     Live { transcripts, steps }
 }
 
-const LIVE: [&str; 13] = [
+const LIVE: [&str; 14] = [
     "01-bg-shell",
     "02-monitor",
     "03-loop-1m",
@@ -169,6 +169,7 @@ const LIVE: [&str; 13] = [
     "11-resume-one-shot",
     "12-sdk-close-during-shell",
     "13-sdk-resume-kill",
+    "14-desktop-session",
 ];
 
 /// What one step saw: the facts of the session that wrote the line, or whose status it was, before and after it.
@@ -498,6 +499,12 @@ fn the_live_open_tasks() {
         ),
         // The killed process's shell was open; the resumed process does not count it, before or after its notice.
         ("13-sdk-resume-kill", false, vec![(11, 1), (16, 0), (18, 0)]),
+        // A Claude Desktop Code session (`claude-desktop`) counts its background shell like an SDK session.
+        (
+            "14-desktop-session",
+            false,
+            vec![(31, 1), (32, 1), (33, 0), (35, 0)],
+        ),
     ];
     for (name, as_sdk, want) in cases {
         let live = live(name);
@@ -572,7 +579,70 @@ fn no_live_transcript_line_is_a_problem() {
         assert_eq!(session.format, FormatHealth::Ok, "{name}");
         read += 1;
     }
-    assert_eq!(read, 14);
+    assert_eq!(read, 15);
+}
+
+/// Live fixture 14, a Claude Desktop Code session: it holds exactly while it works. Each status write of the session
+/// process (and of the process the app started again after its quit) gives the activity and open tasks agent-watch
+/// posted live; the app's short helper processes write status files too, but never work.
+#[test]
+fn the_live_desktop_session_holds_while_it_works() {
+    const SESSION: u32 = 60520;
+    const RESUMED: u32 = 21052;
+    let (working, idle) = (Activity::Working, Activity::Idle);
+    let want = [
+        // First write, before any status; the step 2 turn (Stop during the command), with Remote Control joining.
+        (SESSION, idle, 0),
+        (SESSION, working, 0),
+        (SESSION, working, 0),
+        (SESSION, working, 0),
+        (SESSION, idle, 0),
+        // Step 3: the turn ends with a background shell open, which holds until its notice turn ends.
+        (SESSION, working, 0),
+        (SESSION, idle, 1),
+        (SESSION, working, 0),
+        (SESSION, idle, 0),
+        // Step 4: the window was closed during this turn.
+        (SESSION, working, 0),
+        (SESSION, idle, 0),
+        // Step 5: quit during the turn. The file still says busy when the process ends; the pid ends the hold.
+        (SESSION, working, 0),
+        // After the restart the app resumed the turn by itself, until Stop.
+        (RESUMED, idle, 0),
+        (RESUMED, idle, 0),
+        (RESUMED, idle, 0),
+        (RESUMED, working, 0),
+        (RESUMED, working, 0),
+        (RESUMED, idle, 0),
+    ];
+    let live = live("14-desktop-session");
+    let mut seen_writes = Vec::new();
+    let mut last = Vec::new();
+    Run::new(&live).run(&live.steps, |seen| {
+        for session in &seen.all {
+            let pid: u32 = session.key.id.parse().unwrap();
+            if pid != SESSION && pid != RESUMED {
+                assert_eq!(session.activity, Activity::Idle, "helper {pid}");
+                assert_eq!((session.open_tasks, session.timers.len()), (0, 0));
+            }
+        }
+        if let Step::Status {
+            pid,
+            content: Some(_),
+        } = seen.step
+            && (*pid == SESSION || *pid == RESUMED)
+        {
+            let session = seen.after.expect("a live session");
+            seen_writes.push((*pid, session.activity, session.open_tasks));
+        }
+        last = seen.all;
+    });
+    assert_eq!(seen_writes, want);
+    let [left] = <[SessionFacts; 1]>::try_from(last).unwrap();
+    assert_eq!(
+        (left.key.id, left.activity, left.open_tasks),
+        (RESUMED.to_string(), Activity::Idle, 0)
+    );
 }
 
 /// A resume can take over a transcript while the killed process's leftover status file is still listed (fixture 13:
@@ -1122,7 +1192,7 @@ fn a_transcript_that_reads_gives_no_note() {
         assert_eq!(source.notes(), [], "{name}");
         read += 1;
     }
-    assert_eq!(read, 14);
+    assert_eq!(read, 15);
 }
 
 /// Only the transcript a session names, in a project folder, as appended bytes, reaches its replay.

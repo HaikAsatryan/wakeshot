@@ -197,7 +197,8 @@ fn expected_activity(content: &Value) -> Activity {
 }
 
 /// Every status file write of the 2.1.317 live sessions, in the order seen, one source per case: each write reads,
-/// each delete drops the session, and no session is left at the end.
+/// each delete drops the session, and only the sessions whose file was still there when the capture ended are left
+/// (one, in the Claude Desktop case).
 #[test]
 fn every_live_status_write_reads() {
     let mut writes = 0;
@@ -208,6 +209,7 @@ fn every_live_status_write_reads() {
             continue;
         }
         let mut source = source();
+        let mut listed = BTreeSet::new();
         for line in fs::read_to_string(&path).unwrap().lines() {
             let line: Value = serde_json::from_str(line).unwrap();
             let Some(name) = line["file"].as_str().unwrap().strip_prefix("sessions/") else {
@@ -216,6 +218,7 @@ fn every_live_status_write_reads() {
             let file = FileId(sessions_dir().join(name));
             let pid: u32 = name.strip_suffix(".json").unwrap().parse().unwrap();
             if line["gone"] == true {
+                listed.remove(&pid.to_string());
                 assert_eq!(source.feed(&file, Feed::Gone), Fed::Taken);
                 assert!(
                     source
@@ -226,6 +229,7 @@ fn every_live_status_write_reads() {
                 continue;
             }
             let content = &line["content"];
+            listed.insert(pid.to_string());
             let bytes = serde_json::to_vec(content).unwrap();
             assert_eq!(source.feed(&file, Feed::Whole(bytes)), Fed::Taken);
             let start: u64 = content["procStart"].as_str().unwrap().parse().unwrap();
@@ -244,7 +248,8 @@ fn every_live_status_write_reads() {
             writes += 1;
             seen.insert(format!("{activity:?}"));
         }
-        assert!(source.sessions().is_empty(), "{}", path.display());
+        let left: BTreeSet<String> = source.sessions().into_iter().map(|s| s.key.id).collect();
+        assert_eq!(left, listed, "{}", path.display());
     }
     assert!(writes > 50, "{writes} writes");
     assert!(
