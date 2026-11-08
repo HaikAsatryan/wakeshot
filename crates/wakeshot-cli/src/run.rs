@@ -260,7 +260,7 @@ impl Log for NoLog {
 #[cfg(test)]
 mod tests {
     use std::thread;
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     use wakeshot_core::holds::HoldKind;
     use wakeshot_core::holds::file::{Parsed, kind_of, parse};
@@ -378,15 +378,39 @@ mod tests {
         );
     }
 
-    /// Runs `cmd <rest>` on a thread and checks the hold file while the child runs: its name, kind, pid, start and
-    /// reason. Gives the file's text and the exit code.
-    fn held_while_running(tag: &str, rest: &str) -> (String, i32) {
+    /// The most 1 s rounds the child of [`held_while_running`] waits for its `go` file. The slowest first sighting of
+    /// a hold file measured on the test laptop was 2.9 s (pinned to one CPU under load), so this is about ten times
+    /// that. Change it when a slow runner fails with "ended before its hold file was seen" while the run said nothing.
+    const CHILD_ROUNDS: u32 = 30;
+
+    /// Makes its file when dropped, a panic included, so the scope's join never waits out the child's rounds.
+    struct Go<'a>(&'a Path);
+
+    impl Drop for Go<'_> {
+        fn drop(&mut self) {
+            // Ignored: the child then ends after its rounds with code 3, which the caller sees.
+            let _ = std::fs::write(self.0, b"");
+        }
+    }
+
+    /// Runs `cmd` on a thread with a child that waits for a `go` file, then `<tail>`, and checks the hold file while
+    /// the child runs: its name, kind, pid, start and reason. Gives the file's text and the exit code.
+    ///
+    /// The child runs until these checks are done. A child of fixed length raced them: on a slow runner the hold file
+    /// can come too late to be seen before the child ends (CI run 42446800075, ARM64).
+    fn held_while_running(tag: &str, tail: &str) -> (String, i32) {
         let data = TempData::new(tag);
         tray_running(&data, None);
         let holds = data.dir.holds();
+        let go_path = data.dir.root().join("go");
+        // `cmd /c` drops only the first and the last quote. `ping -n 2` waits about 1 s.
+        let rest = format!(
+            r#"/d /c "(for /l %i in (1,1,{CHILD_ROUNDS}) do @if exist "{}" (exit 0) else ping -n 2 127.0.0.1 >nul) & exit 3{tail}""#,
+            go_path.display()
+        );
         let (text, code) = thread::scope(|scope| {
-            let running = scope.spawn(|| ran(&data, "cmd", rest).code);
-            let deadline = Instant::now() + Duration::from_secs(10);
+            let go = Go(&go_path);
+            let running = scope.spawn(|| ran(&data, "cmd", &rest));
             let (name, bytes) = loop {
                 let found = std::fs::read_dir(&holds).ok().and_then(|entries| {
                     entries.flatten().find_map(|e| {
@@ -402,7 +426,13 @@ mod tests {
                 if let Some(found) = found {
                     break found;
                 }
-                assert!(Instant::now() < deadline, "no hold file within 10 s");
+                if running.is_finished() {
+                    let ran = running.join().unwrap();
+                    panic!(
+                        "the command ended before its hold file was seen: code {}, said {:?}, log {:?}",
+                        ran.code, ran.said, ran.log
+                    );
+                }
                 thread::sleep(Duration::from_millis(20));
             };
             assert_eq!(kind_of(&name), Some(HoldKind::Run), "{name}");
@@ -419,7 +449,9 @@ mod tests {
                 start,
             };
             assert_eq!(SystemLiveness.check(child), Alive::Yes);
-            let code = running.join().unwrap();
+            // The child ends once `go` exists.
+            drop(go);
+            let code = running.join().unwrap().code;
             assert_eq!(SystemLiveness.check(child), Alive::Gone);
             (String::from_utf8(bytes).unwrap(), code)
         });
@@ -429,14 +461,13 @@ mod tests {
 
     #[test]
     fn the_hold_file_exists_while_the_command_runs_and_is_gone_after() {
-        let (_, code) = held_while_running("run-held", r#"/d /c "ping -n 3 127.0.0.1 >nul""#);
+        let (_, code) = held_while_running("run-held", "");
         assert_eq!(code, 0);
     }
 
     #[test]
     fn the_reason_never_holds_the_arguments() {
-        let rest = r#"/d /c "ping -n 2 127.0.0.1 >nul & rem secret-token""#;
-        let (text, _) = held_while_running("run-reason", rest);
+        let (text, _) = held_while_running("run-reason", " & rem secret-token");
         for word in ["secret", "ping", "127.0.0.1", "/d"] {
             assert!(!text.contains(word), "{word} in {text}");
         }

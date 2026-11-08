@@ -3832,6 +3832,34 @@ Checked 2026-11-04 between 01:00 and 01:11 (Windows 11 Pro 10.0.26300, Rust 1.99
   after: the hold file was deleted) and `dry-run\logs\wakeshot.log` with `cli: run: cmd started, pid 32640` and `cli:
   run: cmd exited with 0`. Both and the empty folders were removed after.
 
+### `wakeshot run`: when the hold file appears, and a flaky test (2026-11-08)
+
+Checked 2026-11-08 09:08 to 09:35 (Windows 11 Pro 10.0.26300, x64 debug test build, data folders on `%TEMP%`, elevated
+agent shell; card `p8-flaky-run-reason-test`). Another agent's builds ran during part of it.
+
+- **The hold file comes after the child starts**, so a command shorter than the hold write is never seen as held.
+  A temporary test (removed) ran the real `run()` with `cmd /d /c "ping -n 2 127.0.0.1 >nul & rem secret-token"` and
+  polled `holds\` every 20 ms. Idle: the file was seen 29 ms (median) after the run started and stayed about 1 s.
+  `store::write_atomic` of the hold file, timed in the same order of calls: 4 ms median, 10 ms at most, idle; pinned
+  to one CPU with 8 busy threads and 4 threads writing files, 695 ms at the 99th percentile; with 16 writing threads,
+  1.3 s at most (40 rounds each). Pinned to one CPU the first sighting came up to 2.9 s after the start. The same load
+  slowed the child's own start as much, so here the file was never missed (420 polled rounds) and the write never
+  ended after the child (300 timed rounds).
+- **No write failed under Defender**: 158,489 `write_atomic` calls by the load threads in `%TEMP%`, with real-time
+  protection on and no exclusion (`Get-MpComputerStatus`, `Get-MpPreference`): 0 errors.
+- **The CI failure** (run 42446800075, ARM64, attempt 1): `the_reason_never_holds_the_arguments` polled the whole
+  10 s and never saw the file. That attempt ran the CLI tests about 2 times slower than the passing rerun (both logs
+  read with `gh run view --job`): the failing test started at +5.9 s against about +2.8 s, and
+  `hook::tests::the_marker_in_any_field...` ended at +9.6 s against +3.6 s (0.5 s alone on the test laptop). Which
+  delay hit (a late write, a write that failed, or a stalled poll) is not known: the test did not print the run's
+  warnings and log. Not reproduced here (x64 only; the test laptop cannot run ARM64 code).
+- **A 1.5 s stall before the first poll gives the CI message every time** with the old test and its fixed `ping -n 2`
+  child: "no hold file within 10 s". The tests now keep the child running until they make a `go` file
+  (`run::tests::held_while_running`), and a run that ends first fails at once with its code, warnings and log.
+- **A `cmd /c` line can wait for a file**: `cmd /d /c "(for /l %i in (1,1,N) do @if exist "<path>" (exit 0) else ping
+  -n 2 127.0.0.1 >nul) & exit 3"` ended with 0 within one round after the file appeared and with 3 after N rounds of
+  about 1 s without it, for a path with a space and parentheses (by hand, through `ProcessStartInfo.Arguments`).
+
 ### Registry values and the user Path
 
 Checked 2026-11-04 between 01:15 and 01:28 (Windows 11 Pro 10.0.26300, `windows` 0.62.2, elevated agent shell). Tests
