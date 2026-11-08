@@ -46,10 +46,12 @@ starts Wakeshot right away.
   - start at login, a `Run` value under your user's registry;
   - the `wakeshot` command on your user `Path` (open a new terminal to use it);
   - its own data in `%LocalAppData%\Wakeshot`, kept apart from the app, so updates and reinstalls never touch it.
-- **Not signed yet.** v1 is not code-signed, so Windows SmartScreen may warn you before Setup runs.
-  <!-- todo: the exact SmartScreen words and the steps to go on are not in docs/research.md yet; add them from a capture of the first public pre-release (v0.1.0-rc.1). -->
-  Signing comes through SignPath Foundation's free program once Wakeshot has users; signed builds then show
-  "SignPath Foundation" as the publisher.
+- **Not signed yet.** v1 is not code-signed, so Windows SmartScreen may stop a downloaded Setup with "Windows
+  protected your PC". Click **More info**: it shows "App: HaikAsatryan.Wakeshot-win-x64-Setup.exe" (or the ARM64
+  name) and "Publisher: Unknown publisher". Then click **Run anyway**. We saw this on 2026-11-05 with a local copy of
+  the Setup that carried Windows' mark for downloaded files; the download from Releases may look different. Signing
+  comes through SignPath Foundation's free program once Wakeshot has users; signed builds then show "SignPath
+  Foundation" as the publisher.
 - **Updates.** Wakeshot updates itself, also when winget installed it, so `winget upgrade --all` skips it. More in
   [Updates and privacy](#updates-and-privacy).
 
@@ -144,10 +146,13 @@ Read on each tool's own pages on 2026-11-04, and PowerToys Awake again on 2026-1
 working: no keep-awake request can stop a lid close, only the lid setting can
 ([Windows power facts](docs/research.md#windows-power-facts)), and none of the three changes it.
 
-The Claude desktop app has a
-[Keep computer awake](https://code.claude.com/docs/en/desktop-scheduled-tasks#how-scheduled-tasks-run) setting too. It
-holds for that app's own sessions, not for Claude Code in a terminal, other agents or other programs, and its docs
-say that closing the lid still puts the laptop to sleep.
+The Claude desktop app asks Windows to keep the PC awake for its own Code sessions while they work, not for Claude
+Code in a terminal, other agents or other programs. That is its setting Keep computer awake while Claude works, on by
+default; it lets go 30 seconds after the work ends. It also has a
+[Keep computer awake](https://code.claude.com/docs/en/desktop-scheduled-tasks#how-scheduled-tasks-run) switch that
+asks the same while the app runs. Both take only Windows' execution request, which by Microsoft's docs does not stop
+idle sleep on a Modern Standby laptop, and the app's docs say closing the lid still puts the laptop to sleep
+([what we saw](docs/research/claude-code-signals.md#the-apps-own-keep-awake)).
 
 Where the others lead: years of use and many users. They run on Windows 10 too, and Caffeine and Don't Sleep are tiny
 downloads. Don't Sleep can also block a shutdown and shut the PC down on a schedule. Wakeshot is new, runs on Windows
@@ -217,6 +222,11 @@ logs your prompts, adds no hooks and never edits Claude's settings. A session ho
 A session counts only while its process lives, so a crashed session or a file left behind never holds. If Claude
 Code changes its files and Wakeshot cannot read them, a notice says "Update Wakeshot". Tested live with Claude Code
 2.1.317, in the terminal and through the SDK ([results](docs/research/claude-code-signals.md#end-to-end-2026-11-04)).
+
+Code sessions in the Claude desktop app are Claude Code sessions too: the app runs its own copy of Claude Code, which
+keeps the same files, so the same rules apply. Tested live with Claude Desktop 4.23118.0: turns, Stop, a background
+command, a closed window and Quit ([results](docs/research/claude-code-signals.md#claude-desktop-live-test-2026-11-08)).
+Quit during a turn ends the hold; at its next launch the app picks that turn up again, and Wakeshot holds for it.
 
 **Codex CLI.** Wakeshot lists the lock files Codex CLI keeps for each open thread (in `.codex` of your user folder,
 or the folder `CODEX_HOME` names) and reads that thread's session log for its turns. It reads only the fields it
@@ -557,7 +567,8 @@ hold file.
 
 **Some Claude Code waits do not hold.** Waiting for your answer holds only with Remote Control on, for at most 1
 hour; without it the PC may sleep while Claude waits for you. A scheduled run more than 1 hour away does not hold: the
-PC may sleep, and the job runs once it wakes.
+PC may sleep, and the job runs once it wakes. Nor does the wait for a scheduled task of the Claude desktop app, however
+close its run: the app skips a run the PC sleeps through and makes one catch-up run when it wakes.
 
 **Codex approval waits hold with no limit.** Codex writes nothing while it waits for your answer, so a turn that waits
 holds for as long as `codex.exe` runs. The battery floor still steps back.
@@ -580,15 +591,19 @@ ends a hold on a timer or keeps it on a guess. For these, use Keep awake from th
 - Antigravity: not supported. It leaves no reliable sign when you stop it with Esc.
 - VS Code's own Local chats (Copilot chats that do not run on the Copilot harness): not supported. When you close a
   window mid-turn, VS Code writes nothing that shows the work ended.
+- The Claude desktop app's chats and Cowork tasks: not supported. A chat runs on Anthropic's servers and leaves
+  nothing on the PC that shows a reply ended. Cowork runs inside the app's own virtual machine, with its own Claude
+  folder. The app's Code sessions do hold.
 
 **Not in v1:** agents inside WSL (Wakeshot reads only the Windows side: their files sit in Linux's own home folder,
 and Claude Code's sessions there carry Linux process ids, which Windows cannot check); OpenCode 1.x; rules for any
 app, such as "while ffmpeg runs"; macOS and Linux; languages other than English.
 
-**Not tested live yet:** the Claude Code extension for VS Code and the Desktop app; the Codex desktop app's own
-threads, and its app-server as the process that holds a thread; Copilot CLI's sub-agents, `/after` and cron
-schedules, `--resume` and very long session logs; Copilot in VS Code without admin rights (our tests ran an elevated
-VS Code) and VS Code's Background chats; the OpenCode desktop app, its background jobs and sub-agents.
+**Not tested live yet:** the Claude Code extension for VS Code; in the Claude desktop app, an approval wait, `/loop`,
+a scheduled task's run and a crash; the Codex desktop app's own threads, and its app-server as the process that holds
+a thread; Copilot CLI's sub-agents, `/after` and cron schedules, `--resume` and very long session logs; Copilot in VS
+Code without admin rights (our tests ran an elevated VS Code) and VS Code's Background chats; the OpenCode desktop app,
+its background jobs and sub-agents.
 
 **With the lid closed, no time limit and no heat guard.** Wakeshot holds as long as the work runs. The hardware's own
 protection applies, the same as for a lid set to Do nothing by hand: the CPU slows itself when it gets too hot (not
