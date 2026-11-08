@@ -4,7 +4,9 @@ use std::os::windows::fs::OpenOptionsExt;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use wakeshot_core::process::FileTime;
-use wakeshot_core::sources::{Activity, SessionKey};
+use wakeshot_core::sources::codex::NO_TURN_EVENT;
+use wakeshot_core::sources::opencode::NO_SESSION_TABLE;
+use wakeshot_core::sources::{Activity, KEPT_BACK, SessionKey};
 use wakeshot_core::testing::{FakeClock, FakeSource};
 use wakeshot_core::time::Clock;
 use windows::Win32::Foundation::{CloseHandle, HANDLE, HLOCAL, LUID, LocalFree};
@@ -36,6 +38,7 @@ struct Inner {
     fake: FakeSource,
     after_feed: Option<Hook>,
     asked: usize,
+    notes: Vec<Note>,
 }
 
 /// A `FakeSource` the test still reaches after `Agents` took it, with a hook that runs after each feed, the way a
@@ -49,6 +52,7 @@ impl Shared {
             fake: FakeSource::new(id),
             after_feed: None,
             asked: 0,
+            notes: Vec::new(),
         })))
     }
 
@@ -95,6 +99,10 @@ impl AgentSource for Shared {
 
     fn sessions(&self) -> Vec<SessionFacts> {
         self.inner().fake.sessions()
+    }
+
+    fn notes(&self) -> Vec<Note> {
+        self.inner().notes.clone()
     }
 }
 
@@ -1755,6 +1763,75 @@ fn format_problems_log_at_most_once_a_minute_per_source() {
             .any(|(_, _, text)| text.contains("thinking")),
         "a file's value never reaches the log"
     );
+}
+
+/// A source's notes join its line, each once while it lasts and again after it clears and comes back: a session by
+/// its short id only, a field after the text.
+#[test]
+fn notes_log_once_while_they_last_and_again_when_they_come_back() {
+    let clock = FakeClock::new(START);
+    let thread = "0199aaaa-0000-7000-8000-000000000001";
+    let renamed = Note {
+        session: Some(thread.to_owned()),
+        text: NO_TURN_EVENT,
+        field: None,
+    };
+    let codex = Shared::new(SourceId::Codex);
+    codex.inner().notes = vec![renamed.clone()];
+    let opencode = Shared::new(SourceId::OpenCode);
+    opencode.inner().notes = vec![Note {
+        session: None,
+        text: NO_SESSION_TABLE,
+        field: None,
+    }];
+    let claude = Shared::new(SourceId::ClaudeCode);
+    let mut unreadable = session(1);
+    unreadable.format = FormatHealth::Unreadable("status file");
+    claude.set(|f| f.sessions = vec![unreadable]);
+    claude.inner().notes = vec![Note {
+        session: Some("4242".to_owned()),
+        text: KEPT_BACK,
+        field: Some("cron"),
+    }];
+    let (mut agents, log) = agents(&[&claude, &codex, &opencode]);
+    let live = FakeLiveness::default();
+    let take = |log: &MemoryLog| std::mem::take(&mut *log.lines.lock().unwrap());
+
+    agents.snapshots(&live, clock.now());
+    assert_eq!(
+        lines(&log),
+        [
+            "Claude Code: format problem in status file; session 4242: an unknown value is ignored while the \
+             session is not working (cron)"
+                .to_owned(),
+            format!(
+                "Codex CLI: session {}: its rollout names a turn but has no turn event Wakeshot knows, so it reads \
+                 as idle",
+                short_id(thread)
+            ),
+            "OpenCode: its database has no session_v2 table, so no session is read".to_owned(),
+        ]
+    );
+    assert!(
+        !take(&log).iter().any(|(_, _, text)| text.contains(thread)),
+        "never the id itself"
+    );
+
+    // Still there an hour later: already logged.
+    clock.run(3_600_000);
+    agents.snapshots(&live, clock.now());
+    assert!(lines(&log).is_empty());
+
+    // Cleared, then back: logged again, once the minute since the source's last line is over.
+    codex.inner().notes.clear();
+    agents.snapshots(&live, clock.now());
+    assert!(lines(&log).is_empty(), "a note that clears says nothing");
+    codex.inner().notes = vec![renamed];
+    agents.snapshots(&live, clock.now());
+    assert_eq!(lines(&log).len(), 1);
+    take(&log);
+    agents.snapshots(&live, clock.now());
+    assert!(lines(&log).is_empty());
 }
 
 // `FindNewest`, `Recent`, `Query` and `ImageSince`.

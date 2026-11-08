@@ -25,8 +25,8 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use crate::sources::{
-    Activity, AgentSource, Fed, Feed, FileId, FormatHealth, Liveness, SessionFacts, SessionKey,
-    SourceId, WantedFile,
+    Activity, AgentSource, Fed, Feed, FileId, FormatHealth, Liveness, Note, SessionFacts,
+    SessionKey, SourceId, WantedFile,
 };
 
 /// What the tooltip names an OpenCode session.
@@ -42,6 +42,10 @@ pub const UNREADABLE: &str = "opencode.db";
 /// The key of the one entry that carries a read problem, as no session can be named then. Session ids start with
 /// `ses` and schedule keys with `schedule:`, so it never meets a real key.
 pub const PROBLEM_KEY: &str = "opencode.db";
+
+/// The [`Note`] of a database whose tables answer read but named no `session_v2`: an OpenCode 1.x file, or a 2.x one
+/// whose table got a new name. No notice: an update of Wakeshot mends neither for sure.
+pub const NO_SESSION_TABLE: &str = "its database has no session_v2 table, so no session is read";
 
 /// The longest id taken from a row; OpenCode makes ids of 30 characters.
 const MAX_ID: usize = 128;
@@ -97,6 +101,8 @@ pub fn opencode_db(profile: &Path, xdg_data_home: Option<&OsStr>) -> PathBuf {
 pub struct OpenCodeSource {
     db: PathBuf,
     found: Found,
+    /// The last tables answer read whole, so `found` is what the database holds, not a default.
+    probed: bool,
     working: Vec<(String, i64)>,
     schedules: Vec<Schedule>,
     /// The queries whose last answer was an error or held a row of the wrong shape.
@@ -148,6 +154,7 @@ impl OpenCodeSource {
         Self {
             db,
             found: Found::default(),
+            probed: false,
             working: Vec::new(),
             schedules: Vec::new(),
             unread: BTreeSet::new(),
@@ -178,6 +185,7 @@ impl OpenCodeSource {
                     sessions: names.contains(&"session_v2"),
                     schedules: names.contains(&"schedule"),
                 });
+                self.probed = whole;
                 whole
             }
             Query::Working => {
@@ -211,7 +219,10 @@ impl OpenCodeSource {
 
     fn forget(&mut self, query: Query) {
         match query {
-            Query::Tables => self.set_found(Found::default()),
+            Query::Tables => {
+                self.set_found(Found::default());
+                self.probed = false;
+            }
             Query::Working => self.working.clear(),
             Query::Schedules => self.schedules.clear(),
         }
@@ -370,5 +381,17 @@ impl AgentSource for OpenCodeSource {
             });
         }
         sessions
+    }
+
+    fn notes(&self) -> Vec<Note> {
+        if self.probed && !self.found.sessions {
+            vec![Note {
+                session: None,
+                text: NO_SESSION_TABLE,
+                field: None,
+            }]
+        } else {
+            Vec::new()
+        }
     }
 }

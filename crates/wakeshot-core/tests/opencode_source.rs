@@ -13,11 +13,12 @@ use wakeshot_core::event::Event;
 use wakeshot_core::files::Config;
 use wakeshot_core::process::{Alive, FileTime, ProcessRef};
 use wakeshot_core::sources::opencode::{
-    self, ALL_SQL, IMAGES, OpenCodeSource, PROBLEM_KEY, SCHEDULES, Sql, TABLES, UNREADABLE, WORKING,
+    self, ALL_SQL, IMAGES, NO_SESSION_TABLE, OpenCodeSource, PROBLEM_KEY, SCHEDULES, Sql, TABLES,
+    UNREADABLE, WORKING,
 };
 use wakeshot_core::sources::{
-    Activity, AgentSource, Fed, Feed, FileId, FormatHealth, Liveness, SessionFacts, SessionKey,
-    SourceId, WantedFile,
+    Activity, AgentSource, Fed, Feed, FileId, FormatHealth, Liveness, Note, SessionFacts,
+    SessionKey, SourceId, WantedFile,
 };
 use wakeshot_core::time::Now;
 
@@ -305,6 +306,57 @@ fn a_table_that_goes_takes_its_rows_and_its_problem_with_it() {
     );
     feed(&mut source, TABLES, "tables-none.json");
     assert!(source.sessions().is_empty());
+}
+
+/// A tables answer that reads but names no `session_v2` is a note for the log, while it lasts: no problem entry, so
+/// no notice, since an update of Wakeshot mends neither an OpenCode 1.x file nor a renamed table for sure.
+#[test]
+fn a_database_without_session_v2_is_a_note_only() {
+    let note = [Note {
+        session: None,
+        text: NO_SESSION_TABLE,
+        field: None,
+    }];
+    let mut source = OpenCodeSource::new(db());
+    assert_eq!(source.notes(), [], "no answer yet");
+    feed(&mut source, TABLES, "tables-none.json");
+    assert_eq!(source.notes(), note, "a file only 1.x wrote");
+    assert_eq!(source.sessions(), []);
+    assert_eq!(
+        source.feed(
+            &id(TABLES),
+            Feed::Whole(br#"{"rows":[["schedule"]]}"#.to_vec())
+        ),
+        Fed::Taken
+    );
+    assert_eq!(source.notes(), note, "schedules alone");
+    assert_eq!(wanted(&source), ["tables", "schedules"]);
+
+    feed(&mut source, TABLES, "tables-sessions.json");
+    assert_eq!(source.notes(), []);
+    feed(&mut source, TABLES, "tables-none.json");
+    assert_eq!(source.notes(), note, "back");
+    gone(&mut source, TABLES);
+    assert_eq!(source.notes(), [], "closed");
+
+    // An answer that is no table list says nothing of the tables: its own problem, or no SQLite, tells.
+    for answer in [
+        "error-prepare.json",
+        "error-no-sqlite.json",
+        "not-json.txt",
+        "rows-not-a-list.json",
+    ] {
+        let mut source = OpenCodeSource::new(db());
+        feed(&mut source, TABLES, answer);
+        assert_eq!(source.notes(), [], "{answer}");
+        feed(&mut source, TABLES, "tables-none.json");
+        feed(&mut source, TABLES, answer);
+        assert_eq!(source.notes(), [], "{answer} after a list");
+    }
+    assert_eq!(with_tables().notes(), []);
+    let mut live = OpenCodeSource::new(db());
+    feed_live(&mut live, TABLES, "tables.json");
+    assert_eq!(live.notes(), [], "the live 2.2.5 database");
 }
 
 #[test]

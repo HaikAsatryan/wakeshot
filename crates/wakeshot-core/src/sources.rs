@@ -9,6 +9,8 @@
 //!   field names and values, never file content.
 //! - Every name filter (`accept`, `matches`) runs on bare names before any open, so a source can keep files it must
 //!   never read (Claude's `.key` files) from ever being opened.
+//! - [`Note`]s, like `sessions`, are a full set as of the last `feed`. They feed the log only: no hold, notice or
+//!   [`FormatHealth`] depends on them.
 
 pub mod antigravity;
 pub mod claude;
@@ -112,6 +114,25 @@ pub struct SessionFacts {
     pub format: FormatHealth,
 }
 
+/// Why a source, or one of its sessions, may not hold or is not read, when no notice says so: a state Wakeshot cannot
+/// tell from a normal one, where "update Wakeshot" would be wrong as often as right, or a format problem told only
+/// while the session works. The watch logs each once while it lasts (architecture section 8). Every part is a fixed
+/// text or an id, so no file content can reach the log.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Note {
+    /// The session's own id, as in its [`SessionKey`]; `None` for the whole source. The log shows only a short form,
+    /// since an id can be a file name.
+    pub session: Option<String>,
+    pub text: &'static str,
+    /// The field the text is about, such as `cron`, shown after it.
+    pub field: Option<&'static str>,
+}
+
+/// The [`Note`] text of a format problem a source tells as `UnknownValue` only while the session works, since a
+/// session that does not work must not hold for it (the core counts `UnknownValue` as working). Noted while the
+/// problem stands, working or not, so the log names it once per session, not at each turn.
+pub const KEPT_BACK: &str = "an unknown value is ignored while the session is not working";
+
 /// A file the watch thread feeds to a source, named by its full path.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FileId(pub PathBuf);
@@ -213,6 +234,10 @@ pub trait AgentSource {
     fn wanted(&self) -> Vec<WantedFile>;
     fn feed(&mut self, file: &FileId, data: Feed) -> Fed;
     fn sessions(&self) -> Vec<SessionFacts>;
+    /// Most sources have nothing to say that their sessions do not.
+    fn notes(&self) -> Vec<Note> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]

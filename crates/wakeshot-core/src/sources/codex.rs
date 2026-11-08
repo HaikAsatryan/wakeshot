@@ -32,8 +32,8 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use crate::sources::{
-    Activity, AgentSource, Fed, Feed, FileId, FormatHealth, Liveness, SessionFacts, SessionKey,
-    SourceId, WantedFile,
+    Activity, AgentSource, Fed, Feed, FileId, FormatHealth, Liveness, Note, SessionFacts,
+    SessionKey, SourceId, WantedFile,
 };
 
 /// What the tooltip names a Codex session.
@@ -45,6 +45,15 @@ pub const IMAGE: &str = "codex.exe";
 
 /// What `FormatHealth::UnknownValue` names: a rollout line whose turn event this version cannot read.
 const ROLLOUT: &str = "rollout";
+
+/// The [`Note`] of a rollout with event lines that name a turn (`payload.turn_id`) but no turn event this version
+/// knows: the turn events may have new names, so the session never holds. A note, not a notice, since a turn whose
+/// opening event is still to come looks the same.
+pub const NO_TURN_EVENT: &str =
+    "its rollout names a turn but has no turn event Wakeshot knows, so it reads as idle";
+
+/// The [`Note`] of a rollout with an `event_msg` line that is not JSON, which is skipped: a turn event in it is lost.
+pub const NOT_JSON: &str = "an event line of its rollout is not JSON, so it was skipped";
 
 const LOCKS_DIR: &str = "thread-writer-locks";
 const SESSIONS_DIR: &str = "sessions";
@@ -150,6 +159,14 @@ struct Turns {
     open: bool,
     /// The kind of the last turn event that could not be read; a readable one clears it.
     problem: Option<&'static str>,
+    /// An event line named a turn (`payload.turn_id`), as every line of a turn does; the events before a thread's
+    /// first turn (`thread_settings_applied`) name none.
+    named_turn: bool,
+    /// A turn event this version knows came, readable or not.
+    known_turn: bool,
+    /// An `event_msg` line was not JSON. It stays for the life of the rollout, so a format that writes many such
+    /// lines logs once.
+    not_json: bool,
     partial: Vec<u8>,
     skipping: bool,
 }
@@ -270,6 +287,7 @@ impl Turns {
         }
         // A line that is not JSON is skipped: one torn or foreign line must not end a turn.
         let Ok(value) = serde_json::from_slice::<Value>(line) else {
+            self.not_json = true;
             return;
         };
         if value.get("type").and_then(Value::as_str) != Some("event_msg") {
@@ -282,6 +300,7 @@ impl Turns {
         };
         let turn_id = payload.and_then(|p| p.get("turn_id"));
         let named = turn_id.is_some_and(Value::is_string);
+        self.named_turn |= named;
         let (open, kind, readable) = match kind {
             "task_started" => (true, "task_started", named),
             "turn_started" => (true, "turn_started", named),
@@ -295,8 +314,14 @@ impl Turns {
             ),
             _ => return,
         };
+        self.known_turn = true;
         self.open = open;
         self.problem = (!readable).then_some(kind);
+    }
+
+    fn notes(&self) -> impl Iterator<Item = &'static str> {
+        let no_turn = (self.named_turn && !self.known_turn).then_some(NO_TURN_EVENT);
+        no_turn.into_iter().chain(self.not_json.then_some(NOT_JSON))
     }
 }
 
@@ -359,6 +384,19 @@ impl AgentSource for CodexSource {
         self.threads
             .iter()
             .map(|(id, thread)| thread.facts(id))
+            .collect()
+    }
+
+    fn notes(&self) -> Vec<Note> {
+        self.threads
+            .iter()
+            .flat_map(|(id, thread)| {
+                thread.turns.notes().map(|text| Note {
+                    session: Some(id.clone()),
+                    text,
+                    field: None,
+                })
+            })
             .collect()
     }
 }

@@ -7,10 +7,10 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use wakeshot_core::sources::codex::{self, CodexSource};
+use wakeshot_core::sources::codex::{self, CodexSource, NO_TURN_EVENT, NOT_JSON};
 use wakeshot_core::sources::{
-    Activity, AgentSource, Fed, Feed, FileId, FormatHealth, Liveness, SessionFacts, SessionKey,
-    SourceId, WantedFile,
+    Activity, AgentSource, Fed, Feed, FileId, FormatHealth, Liveness, Note, SessionFacts,
+    SessionKey, SourceId, WantedFile,
 };
 
 const HOME: &str = r"X:\home\.codex";
@@ -617,6 +617,117 @@ fn the_home_folder_is_codex_home_when_set_else_dot_codex() {
     );
 }
 
+// Notes.
+
+fn note(id: &str, text: &'static str) -> Note {
+    Note {
+        session: Some(id.to_owned()),
+        text,
+        field: None,
+    }
+}
+
+fn event(kind: &str, turn_id: Option<&str>) -> Vec<u8> {
+    let turn = turn_id.map_or(String::new(), |id| format!(r#","turn_id":"{id}""#));
+    let mut line = format!(
+        r#"{{"timestamp":"2026-11-06T10:00:05.000Z","type":"event_msg","payload":{{"type":"{kind}"{turn}}}}}"#
+    )
+    .into_bytes();
+    line.push(b'\n');
+    line
+}
+
+/// Of the fixtures, only `junk.jsonl` has an event line that is not JSON (two: a line of words and a torn
+/// `task_complete`); every other one knows its turn events or names no turn.
+#[test]
+fn each_fixture_has_the_notes_of_its_shape() {
+    for (name, _, _) in expected() {
+        let mut source = with_thread();
+        append(&mut source, &rollout(THREAD), &fixture(name));
+        let want = if name == "junk.jsonl" {
+            vec![note(THREAD, NOT_JSON)]
+        } else {
+            vec![]
+        };
+        assert_eq!(source.notes(), want, "{name}");
+    }
+}
+
+/// Event lines that name a turn but no turn event this version knows (a rename) are a note while it lasts, never a
+/// format problem: the session reads as idle and shows no notice. Events before a first turn name none.
+#[test]
+fn turn_lines_without_a_known_turn_event_are_a_note() {
+    let turn = Some("019a0000-0000-7000-8000-000000000101");
+    let mut source = with_thread();
+    append(
+        &mut source,
+        &rollout(THREAD),
+        &event("thread_settings_applied", None),
+    );
+    assert_eq!(source.notes(), [], "no turn named yet");
+    append(&mut source, &rollout(THREAD), &event("turn_begun", turn));
+    append(
+        &mut source,
+        &rollout(THREAD),
+        &event("item_completed", turn),
+    );
+    assert_eq!(source.sessions(), [idle(THREAD)]);
+    assert_eq!(source.notes(), [note(THREAD, NO_TURN_EVENT)]);
+
+    // A turn event it knows, even one it cannot read, ends the note.
+    append(&mut source, &rollout(THREAD), &event("task_complete", None));
+    assert_eq!(
+        source.sessions(),
+        [facts(
+            THREAD,
+            Activity::Idle,
+            FormatHealth::UnknownValue("rollout", "task_complete".to_owned())
+        )]
+    );
+    assert_eq!(source.notes(), []);
+
+    // A new rollout starts over, and a gone lock ends it with its session.
+    source.feed(&rollout(THREAD), Feed::Gone);
+    append(&mut source, &rollout(THREAD), &event("turn_begun", turn));
+    assert_eq!(source.notes(), [note(THREAD, NO_TURN_EVENT)]);
+    source.feed(&lock(THREAD), Feed::Gone);
+    assert_eq!(source.notes(), []);
+}
+
+/// An event line that is not JSON is skipped, so a turn event in it is lost: a note for the rest of the rollout, so a
+/// format that writes many such lines logs once.
+#[test]
+fn an_event_line_that_is_not_json_is_a_note_for_the_rest_of_its_rollout() {
+    let mut source = with_thread();
+    source.feed(&lock(OTHER), Feed::Present);
+    append(
+        &mut source,
+        &rollout(THREAD),
+        &event("task_started", Some("t")),
+    );
+    append(
+        &mut source,
+        &rollout(THREAD),
+        b"{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\"\n",
+    );
+    assert_eq!(source.sessions()[0], working(THREAD), "the turn stays open");
+    assert_eq!(source.notes(), [note(THREAD, NOT_JSON)]);
+    append(
+        &mut source,
+        &rollout(THREAD),
+        &event("task_complete", Some("t")),
+    );
+    assert_eq!(source.notes(), [note(THREAD, NOT_JSON)], "it stays");
+    append(&mut source, &rollout(THREAD), b"not json, no marker\n");
+    assert_eq!(source.notes(), [note(THREAD, NOT_JSON)]);
+
+    // Only that thread's; its rollout gone, the note goes.
+    append(&mut source, &rollout(OTHER), b"[1,\"event_msg\"]\n");
+    assert_eq!(source.notes(), [note(THREAD, NOT_JSON)]);
+    source.feed(&rollout(THREAD), Feed::Gone);
+    assert_eq!(source.notes(), []);
+}
+
 // Live rollouts.
 
 fn live(name: &str) -> Vec<u8> {
@@ -683,6 +794,7 @@ fn live_rollouts_move_the_activity_only_at_their_turn_events() {
                 "{name} line {}",
                 i + 1
             );
+            assert_eq!(source.notes(), [], "{name} line {}", i + 1);
         }
         assert_eq!(now, end, "{name}");
 

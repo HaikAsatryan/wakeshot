@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 use crate::process::FileTime;
 use crate::sources::cron::LocalOffset;
 use crate::sources::{
-    Activity, AgentSource, Fed, Feed, FileId, FormatHealth, Liveness, SessionFacts, SessionKey,
-    SourceId, WantedFile,
+    Activity, AgentSource, Fed, Feed, FileId, FormatHealth, KEPT_BACK, Liveness, Note,
+    SessionFacts, SessionKey, SourceId, WantedFile,
 };
 
 use status::{Entrypoint, Problem, StatusFile};
@@ -276,6 +276,20 @@ impl Slot {
             format,
         })
     }
+
+    /// The field of the problem `facts` tells only while the session holds, as long as the status file reads (its own
+    /// problem says more). Noted whether the session holds or not, so the log names it once, not at each turn.
+    fn kept_back(&self) -> Option<&'static str> {
+        let file = self.last.as_ref()?;
+        if self.unreadable.is_some() || file.unknown_status.is_some() {
+            return None;
+        }
+        if file.session_id_problem.is_some() {
+            return Some(SESSION_ID);
+        }
+        let (field, _) = self.transcript.as_ref()?.replay.problem()?;
+        Some(field)
+    }
 }
 
 /// A process start as wall ms: transcript lines older than it were written by an earlier process.
@@ -332,6 +346,19 @@ impl AgentSource for ClaudeSource {
         self.files
             .iter()
             .filter_map(|(&pid, slot)| slot.facts(pid, &*self.zone))
+            .collect()
+    }
+
+    fn notes(&self) -> Vec<Note> {
+        self.files
+            .iter()
+            .filter_map(|(&pid, slot)| {
+                Some(Note {
+                    session: Some(pid.to_string()),
+                    text: KEPT_BACK,
+                    field: Some(slot.kept_back()?),
+                })
+            })
             .collect()
     }
 }

@@ -41,7 +41,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use wakeshot_core::event::Event;
 use wakeshot_core::process::{Alive, ProcessRef};
 use wakeshot_core::sources::{
-    self, Activity, AgentSource, Fed, Feed, FileId, FormatHealth, IMAGE_SINCE_SLACK_MS,
+    self, Activity, AgentSource, Fed, Feed, FileId, FormatHealth, IMAGE_SINCE_SLACK_MS, Note,
     SessionFacts, SessionKey, SourceId, WantedFile,
 };
 use wakeshot_core::time::Now;
@@ -372,8 +372,8 @@ impl Agents {
     }
 
     /// Every source's sessions, each checked once through `liveness`, as events for the sources whose snapshot
-    /// changed. Logs format and read problems, and why a session whose files show work counts as ended, each once while
-    /// it lasts, at most one line per source per minute of `now.mono_ms`.
+    /// changed. Logs format and read problems, the source's notes, and why a session whose files show work counts as
+    /// ended, each once while it lasts, at most one line per source per minute of `now.mono_ms`.
     pub fn snapshots(&mut self, liveness: &dyn Liveness, now: Now) -> Snapshots {
         let mut out = Snapshots::default();
         let lock_owners = &*self.io.owners;
@@ -482,6 +482,7 @@ impl Agents {
                     (session, alive)
                 })
                 .collect();
+            problems.extend(slot.source.notes().into_iter().map(Problem::of_note));
             known.retain(|path, _| named.contains(path));
             slot.owners = known;
             slot.check_hosts(liveness, &mut out.live);
@@ -1971,6 +1972,12 @@ enum Problem {
     QueryFailed(&'static str),
     /// A database another process has open has no `-wal`, so it is not read.
     NoWal,
+    /// A source's [`Note`], its session as a short id.
+    Note {
+        session: Option<String>,
+        text: &'static str,
+        field: Option<&'static str>,
+    },
 }
 
 /// Why a session counts as ended.
@@ -2022,6 +2029,14 @@ impl Ended {
 }
 
 impl Problem {
+    fn of_note(note: Note) -> Self {
+        Problem::Note {
+            session: note.session.as_deref().map(short_id),
+            text: note.text,
+            field: note.field,
+        }
+    }
+
     fn text(&self) -> String {
         match self {
             Problem::Unreadable(what) => format!("format problem in {what}"),
@@ -2066,6 +2081,20 @@ impl Problem {
             Problem::QueryFailed(kind) => format!("a query of its database failed ({kind})"),
             Problem::NoWal => {
                 "its database is open but has no -wal file, so it is not read".to_owned()
+            }
+            Problem::Note {
+                session,
+                text,
+                field,
+            } => {
+                let text = match session {
+                    Some(session) => format!("session {session}: {text}"),
+                    None => (*text).to_owned(),
+                };
+                match field {
+                    Some(field) => format!("{text} ({field})"),
+                    None => text,
+                }
             }
         }
     }

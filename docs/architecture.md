@@ -105,6 +105,7 @@ pub trait AgentSource {
     fn feed(&mut self, file: &FileId, data: Feed) -> Fed;  // Feed: Whole | Appended | Present | Gone;
                                                            // Fed: Taken | RetryOnce (read again 200 ms later, once)
     fn sessions(&self) -> Vec<SessionFacts>;
+    fn notes(&self) -> Vec<Note> { Vec::new() }           // log only (section 8): Note { session, text, field }
 }
 
 // wakeshot-core::ownership::io. The steps of the apply, the restore routine and the ownership check, one call each,
@@ -1390,9 +1391,15 @@ Log:
   as ended (no process of its image holds its lock file, with the other holders' exe names; or no process of its
   images runs, or none started before it), a folder on the way to a transcript or rollout that cannot be listed while
   the file is not found, a query's error word (`no_sqlite`: Windows' own SQLite is not usable), and a database another
-  process has open without its `-wal`. Each hold file the tray deletes, or finds gone already; the data folder or
-  `holds\` when it cannot be watched (not when `holds\` is just not made yet). Never logged: prompts, transcript text,
-  full command lines, `.key` file names.
+  process has open without its `-wal`. The same goes for each source's notes (`AgentSource::notes`), which change no
+  hold and show no notice: Claude Code and Copilot CLI, a format problem that is told only while its session works
+  (`session 4242: an unknown value is ignored while the session is not working (cron)`, noted while the problem stands,
+  so once per session, not at each turn); OpenCode, a database with no `session_v2` table (an OpenCode 1.x file, or a
+  renamed table); Codex CLI, a rollout that names a turn (`turn_id`) but has no turn event Wakeshot knows (renamed
+  events: a turn whose first event is still to come looks the same), or one with an event line that is not JSON
+  (skipped). Each hold file the tray deletes, or finds gone already; the data folder or `holds\` when it cannot be
+  watched (not when `holds\` is just not made yet). Never logged: prompts, transcript text, full command lines, `.key`
+  file names.
 - "Open log" opens the file with the default app (`ShellExecuteW` "open"). The log never leaves the PC by itself.
 - Bug reports: `wakeshot diagnostics [folder]` writes one text file, `wakeshot-diagnostics-<local time>.txt`, to the
   folder or the Desktop (`FOLDERID_Desktop`), never over a file, and shows it in Explorer

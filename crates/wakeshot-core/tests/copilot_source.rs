@@ -11,8 +11,8 @@ use wakeshot_core::sources::copilot::{
 };
 use wakeshot_core::sources::cron::FixedOffset;
 use wakeshot_core::sources::{
-    Activity, AgentSource, Fed, Feed, FileId, FormatHealth, Liveness, SessionFacts, SessionKey,
-    SourceId, WantedFile,
+    Activity, AgentSource, Fed, Feed, FileId, FormatHealth, KEPT_BACK, Liveness, Note,
+    SessionFacts, SessionKey, SourceId, WantedFile,
 };
 
 const HOME: &str = r"X:\home\.copilot";
@@ -700,6 +700,72 @@ fn junk_lines_are_skipped_and_named_only_while_working() {
         &line("assistant.turn_end", "10:00:03.100", r#"{"turnId":"0"}"#),
     );
     assert_eq!(only(&s), facts(Activity::Idle, vec![], FormatHealth::Ok));
+}
+
+fn kept_back(field: &'static str) -> Vec<Note> {
+    vec![Note {
+        session: Some(ID.to_owned()),
+        text: KEPT_BACK,
+        field: Some(field),
+    }]
+}
+
+/// A problem the facts tell only while the session works is a note for the log by its field only, working or not, so
+/// it is logged once and not at each turn.
+#[test]
+fn a_problem_the_facts_tell_only_while_working_is_a_note() {
+    let mut s = fed_in(&read_fixture("junk-lines.jsonl"), &[]);
+    assert_eq!(only(&s).activity, Activity::Working);
+    assert_eq!(s.notes(), kept_back(EVENT), "the same note while it works");
+    feed_text(
+        &mut s,
+        &line("assistant.turn_end", "10:00:03.100", r#"{"turnId":"0"}"#),
+    );
+    assert_eq!(only(&s), facts(Activity::Idle, vec![], FormatHealth::Ok));
+    assert_eq!(s.notes(), kept_back(EVENT));
+    feed_text(
+        &mut s,
+        &line(
+            "permission.requested",
+            "10:00:04.000",
+            r#"{"requestId":"r"}"#,
+        ),
+    );
+    assert!(matches!(only(&s).activity, Activity::Waiting { .. }));
+    assert_eq!(s.notes(), kept_back(EVENT), "waiting is not working");
+    s.feed(&lock(ID), Feed::Gone);
+    assert_eq!(s.notes(), [], "gone with its session");
+
+    // A bad schedule in an idle session, named by its own field.
+    let mut s = source();
+    s.feed(&lock(ID), Feed::Present);
+    feed_text(&mut s, &line("session.start", "10:00:00.000", "{}"));
+    feed_text(
+        &mut s,
+        &line(
+            "session.schedule_created",
+            "10:00:00.500",
+            r#"{"id":1,"cron":"0 9 * * MON","prompt":"p"}"#,
+        ),
+    );
+    assert_eq!(s.notes(), kept_back("cron"));
+}
+
+/// A log of which no line reads is told by the facts, and a log that reads has nothing to note.
+#[test]
+fn an_unreadable_log_or_one_that_reads_gives_no_note() {
+    let mut s = source();
+    s.feed(&lock(ID), Feed::Present);
+    feed_text(&mut s, "not json\n");
+    assert_eq!(only(&s).format, FormatHealth::Unreadable(UNREADABLE));
+    assert_eq!(s.notes(), []);
+    for name in FIXTURES {
+        let s = fed_in(&read_fixture(name), &[]);
+        if name == "junk-lines.jsonl" {
+            continue;
+        }
+        assert_eq!(s.notes(), [], "{name}");
+    }
 }
 
 #[test]

@@ -38,8 +38,8 @@ use serde_json::Number;
 use crate::holds::file::parse_expires;
 use crate::sources::cron::{Cron, LocalOffset};
 use crate::sources::{
-    Activity, AgentSource, Fed, Feed, FileId, FormatHealth, Liveness, SessionFacts, SessionKey,
-    SourceId, WantedFile,
+    Activity, AgentSource, Fed, Feed, FileId, FormatHealth, KEPT_BACK, Liveness, Note,
+    SessionFacts, SessionKey, SourceId, WantedFile,
 };
 
 /// What the tooltip names a Copilot session.
@@ -238,6 +238,21 @@ impl AgentSource for CopilotSource {
         self.sessions
             .iter()
             .filter_map(|(id, session)| session.facts(id, &*self.zone))
+            .collect()
+    }
+
+    fn notes(&self) -> Vec<Note> {
+        self.sessions
+            .iter()
+            // Only a session `sessions` lists: one with an in-use file.
+            .filter(|(_, session)| !session.locks.is_empty())
+            .filter_map(|(id, session)| {
+                Some(Note {
+                    session: Some(id.clone()),
+                    text: KEPT_BACK,
+                    field: Some(session.log.replay.kept_back()?),
+                })
+            })
             .collect()
     }
 }
@@ -856,6 +871,15 @@ impl Replay {
             }
             Some(_) => FormatHealth::Ok,
         }
+    }
+
+    /// The field of the problem `format` tells only while the session works. Noted whether it works or not, so the
+    /// log names it once, not at each turn.
+    fn kept_back(&self) -> Option<&'static str> {
+        self.problem
+            .as_ref()
+            .filter(|_| self.read)
+            .map(|(field, _)| *field)
     }
 }
 

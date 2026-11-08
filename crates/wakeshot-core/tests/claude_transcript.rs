@@ -14,7 +14,8 @@ use wakeshot_core::holds::file::parse_expires;
 use wakeshot_core::sources::claude::ClaudeSource;
 use wakeshot_core::sources::cron::FixedOffset;
 use wakeshot_core::sources::{
-    Activity, AgentSource, Fed, Feed, FileId, FormatHealth, SessionFacts, WantedFile,
+    Activity, AgentSource, Fed, Feed, FileId, FormatHealth, KEPT_BACK, Note, SessionFacts,
+    WantedFile,
 };
 
 const HOME: &str = r"X:\home";
@@ -1054,6 +1055,74 @@ fn a_session_id_of_another_shape_is_named_while_the_session_holds() {
         FormatHealth::UnknownValue("sessionId", "<string 3>".into())
     );
     assert_eq!(facts("idle"), FormatHealth::Ok);
+}
+
+fn kept_back(field: &'static str) -> Vec<Note> {
+    vec![Note {
+        session: Some(PID.to_string()),
+        text: KEPT_BACK,
+        field: Some(field),
+    }]
+}
+
+/// A transcript problem, which the facts tell only while the session holds, is a note for the log by its field only,
+/// whether the session holds or not, so it is logged once and not at each turn. A status file problem comes first.
+#[test]
+fn a_problem_the_facts_tell_only_while_the_session_holds_is_a_note() {
+    let notes = |status_text: &str| fed("broken-line.jsonl", EARLY, status_text, "cli").notes();
+    assert_eq!(notes("idle"), kept_back("transcript"));
+    assert_eq!(notes("waiting"), kept_back("transcript"));
+    assert_eq!(notes("busy"), kept_back("transcript"), "the same note");
+    assert_eq!(notes("pondering"), [], "the status file's problem is told");
+
+    let mut source = source();
+    source.feed(
+        &status_file(PID),
+        Feed::Whole(status(PID, EARLY, "a/b", "idle", "sdk-cli")),
+    );
+    assert_eq!(source.notes(), kept_back("sessionId"));
+    source.feed(
+        &status_file(PID),
+        Feed::Whole(status(PID, EARLY, "a/b", "busy", "sdk-cli")),
+    );
+    assert_eq!(source.notes(), kept_back("sessionId"));
+    source.feed(&status_file(PID), Feed::Whole(b"{".to_vec()));
+    source.feed(&status_file(PID), Feed::Whole(b"{".to_vec()));
+    assert!(matches!(only(&source).format, FormatHealth::Unreadable(_)));
+    assert_eq!(source.notes(), [], "the status file's problem is told");
+    source.feed(&status_file(PID), Feed::Gone);
+    assert_eq!(source.notes(), [], "gone with its session");
+}
+
+#[test]
+fn a_transcript_that_reads_gives_no_note() {
+    for name in HAND {
+        if ["broken-line.jsonl", "missing-field.jsonl"].contains(&name) {
+            continue;
+        }
+        assert_eq!(fed(name, EARLY, "idle", "cli").notes(), [], "{name}");
+    }
+    assert_eq!(
+        fed("missing-field.jsonl", EARLY, "idle", "cli").notes(),
+        kept_back("transcript")
+    );
+    let mut read = 0;
+    for (name, bytes) in every_transcript() {
+        if !name.ends_with(".transcript.jsonl") {
+            continue;
+        }
+        let session_id = session_of(&bytes);
+        let mut source = source();
+        source.feed(
+            &status_file(PID),
+            Feed::Whole(status(PID, EARLY, &session_id, "idle", "sdk-cli")),
+        );
+        let file = transcript_file("C--Users-USER-wakeshot-test-any", &session_id);
+        source.feed(&file, Feed::Appended(bytes));
+        assert_eq!(source.notes(), [], "{name}");
+        read += 1;
+    }
+    assert_eq!(read, 14);
 }
 
 /// Only the transcript a session names, in a project folder, as appended bytes, reaches its replay.

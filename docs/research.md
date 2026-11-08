@@ -1973,6 +1973,13 @@ test (2026-11-06)".
 - **The CLI's TUI did not start the app-server daemon** in these runs, although `daemon_auto_start` is on (`codex
   features list`). Why the live harness setup saw two more `codex.exe` once is **not verified**. Whether the desktop
   app's own threads write the same files is **not tested live** (the app cannot be driven from the command line).
+- **Event lines before a thread's first turn name no turn; a turn's own lines do** (checked 2026-11-08 by reading the
+  four redacted live rollouts in `crates/wakeshot-core/tests/fixtures/codex/live/` with a Python script): the
+  backtrack's new rollout has two `thread_settings_applied` event lines (keys `thread_id`, `thread_settings`, `type`)
+  at 10:35:35 and 10:36:26 UTC, then `task_started` at 10:36:26.916, so for 51 s it held events but no turn event.
+  `task_started`, `item_completed` and `task_complete` carry `payload.turn_id`; `token_count` and
+  `thread_settings_applied` do not. So the Codex source's "no turn event it knows" note counts only event lines with a
+  `turn_id`. Whether a renamed turn event would still carry `turn_id` is **not verified** (no such Codex exists).
 
 ### Command lines, DLL search, hard links and the `-shm` loop
 
