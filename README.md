@@ -16,9 +16,10 @@ https://github.com/user-attachments/assets/affe7093-044d-4b3a-841c-9c0eed1705fc
 ## Install
 
 > [!NOTE]
-> Not released yet. The first release and the winget package are on the way; until then there is nothing to install.
+> winget does not have the package yet. Until it does, download the Setup from
+> [Releases](https://github.com/HaikAsatryan/wakeshot/releases) (see below).
 
-<!-- release: drop this note once the first release is out and winget has the package. -->
+<!-- winget: drop this note once HaikAsatryan.Wakeshot is merged in winget-pkgs. -->
 
 For Windows 11, x64 and ARM64. It installs for your user only and never asks for admin rights.
 
