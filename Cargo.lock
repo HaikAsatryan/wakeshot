@@ -1078,7 +1078,7 @@ dependencies = [
 
 [[package]]
 name = "wakeshot-cli"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "embed-resource",
  "proptest",
@@ -1089,7 +1089,7 @@ dependencies = [
 
 [[package]]
 name = "wakeshot-core"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "proptest",
  "serde",
@@ -1098,7 +1098,7 @@ dependencies = [
 
 [[package]]
 name = "wakeshot-tray"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "embed-resource",
  "idna_adapter",
@@ -1110,7 +1110,7 @@ dependencies = [
 
 [[package]]
 name = "wakeshot-windows"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "serde_json",
  "wakeshot-core",

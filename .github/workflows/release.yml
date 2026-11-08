@@ -139,7 +139,9 @@ jobs:
         env:
           VPK_TOKEN: ${{ github.token }}
         run: |
-          $pre = if ($env:PRERELEASE -eq 'true') { @('--pre') } else { @() }
+          # The outer @() keeps one item a list: a bare `if` hands back the plain string, and splatting a string
+          # passes it one character at a time (v0.1.0-rc.1 failed so).
+          $pre = @(if ($env:PRERELEASE -eq 'true') { '--pre' })
           vpk download github --repoUrl "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY" --channel win-${{ matrix.cpu }} --outputDir earlier @pre
           if ($LASTEXITCODE -ne 0) { throw "vpk download exited with $LASTEXITCODE" }
 
@@ -197,7 +199,8 @@ jobs:
         run: |
           $repo = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY"
           $tag = "v$env:VERSION"
-          $pre = if ($env:PRERELEASE -eq 'true') { @('--pre') } else { @() }
+          # The outer @() keeps one item a list (see the download step).
+          $pre = @(if ($env:PRERELEASE -eq 'true') { '--pre' })
           vpk upload github --repoUrl $repo --outputDir release-x64 --channel win-x64 --tag $tag @pre
           if ($LASTEXITCODE -ne 0) { throw "vpk upload win-x64 exited with $LASTEXITCODE" }
           vpk upload github --repoUrl $repo --outputDir release-arm64 --channel win-arm64 --tag $tag --merge --publish
